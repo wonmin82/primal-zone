@@ -91,14 +91,14 @@ class Explorer(DefaultCharacter):
         if profile["quest_claimed"]:
             return "통신탑 복구 완료 · 첫 탐사를 완수했습니다."
         if not profile["quest_started"]:
-            return "부두에서 '대화 윤대장'으로 임무를 받으세요."
+            return "부두에서 '윤대장 대화'으로 임무를 받으세요."
         if not profile["record_read"]:
-            return "관리동에서 '조사 정비기록'. 사냥으로 장비와 회수부품 3개를 준비하세요."
+            return "관리동에서 '정비기록 조사'. 사냥으로 장비와 회수부품 3개를 준비하세요."
         if not profile["generator_fixed"]:
-            return "회수부품 3개를 모아 발전실에서 '수리 발전기'."
+            return "회수부품 3개를 모아 발전실에서 '발전기 수리'."
         if not profile["boss_defeated"]:
             return "능선의 우두머리를 처치하세요. 강화 장비와 붕대를 권장합니다."
-        return "부두로 귀환하여 '대화 윤대장'으로 보상을 받으세요."
+        return "부두로 귀환하여 '윤대장 대화'으로 보상을 받으세요."
 
     def at_post_puppet(self, **kwargs):
         from world.bootstrap import get_room

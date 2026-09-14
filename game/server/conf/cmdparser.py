@@ -1,55 +1,41 @@
-"""
-Changing the default command parser
+"""게임 명령은 대상 + 행동으로, 엔진 관리 명령은 기본 문법으로 해석한다."""
 
-The cmdparser is responsible for parsing the raw text inserted by the
-user, identifying which command/commands match and return one or more
-matching command objects. It is called by Evennia's cmdhandler and
-must accept input and return results on the same form. The default
-handler is very generic so you usually don't need to overload this
-unless you have very exotic parsing needs; advanced parsing is best
-done at the Command.parse level.
-
-The default cmdparser understands the following command combinations
-(where [] marks optional parts.)
-
-[cmdname[ cmdname2 cmdname3 ...] [the rest]
-
-A command may consist of any number of space-separated words of any
-length, and contain any character. It may also be empty.
-
-The parser makes use of the cmdset to find command candidates. The
-parser return a list of matches. Each match is a tuple with its first
-three elements being the parsed cmdname (lower case), the remaining
-arguments, and the matched cmdobject from the cmdset.
+from evennia.commands.cmdparser import cmdparser as default_parser
 
 
-This module is not accessed by default. To tell Evennia to use it
-instead of the default command parser, add the following line to
-your settings file:
+def cmdparser(raw_string, cmdset, caller, match_index=None, session=None, **kwargs):
+    text = raw_string.strip()
+    if not text:
+        return []
+    game_commands = [cmd for cmd in cmdset if getattr(cmd, "input_style", None)]
+    if not game_commands:
+        return default_parser(raw_string, cmdset, caller, match_index, session, **kwargs)
 
-    COMMAND_PARSER = "server.conf.cmdparser.cmdparser"
+    # 작은따옴표 이후에는 행동 이름도 모두 대화 내용이다.
+    quoted = text.startswith("'")
+    parts = text.rsplit(None, 1)
+    action = "말" if quoted else parts[-1].lower()
+    args = text[1:].strip() if quoted else parts[0] if len(parts) == 2 else ""
+    candidates = [cmd for cmd in game_commands if action in (cmd.key.lower(), *cmd.aliases)]
+    # 채팅 외의 엔진 명령은 인자 끝에 게임 행동 이름이 있어도 원래 문법을 유지한다.
+    engine_matches = []
+    if not quoted and not any(cmd.input_style == "chat" for cmd in candidates):
+        engine_matches = [
+            match
+            for match in default_parser(text, cmdset, caller, match_index, session, **kwargs)
+            if not getattr(match[2], "input_style", None)
+        ]
+        if engine_matches:
+            return engine_matches
+    if candidates:
+        matches = [
+            (action, args, cmd, len(action), len(action) / len(text), action)
+            for cmd in candidates
+            if (not args or cmd.input_style in ("target", "chat"))
+            and cmd.access(caller, "cmd", session=session)
+        ]
+        if len(matches) > 1 and match_index is not None:
+            return matches[match_index - 1 : match_index] if match_index > 0 else []
+        return matches
 
-"""
-
-
-def cmdparser(raw_string, cmdset, caller, match_index=None, **kwargs):
-    """
-    This function is called by the cmdhandler once it has
-    gathered and merged all valid cmdsets valid for this particular parsing.
-
-    raw_string - the unparsed text entered by the caller.
-    cmdset - the merged, currently valid cmdset
-    caller - the caller triggering this parsing
-    match_index - an optional integer index to pick a given match in a
-                  list of same-named command matches.
-
-    Returns:
-     list of tuples: [(cmdname, args, cmdobj, cmdlen, mratio), ...]
-            where cmdname is the matching command name and args is
-            everything not included in the cmdname. Cmdobj is the actual
-            command instance taken from the cmdset, cmdlen is the length
-            of the command name and the mratio is some quality value to
-            (possibly) separate multiple matches.
-
-    """
-    # Your implementation here
+    return []

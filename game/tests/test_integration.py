@@ -3,8 +3,12 @@ from random import Random
 from unittest.mock import Mock, patch
 
 from commands import gameplay
+from commands.default_cmdsets import CharacterCmdSet, UnloggedinCmdSet
+from evennia import CmdSet, Command
+from evennia.commands.cmdparser import cmdparser as default_parser
 from evennia.typeclasses.models import Attribute
 from evennia.utils.test_resources import EvenniaCommandTest
+from server.conf.cmdparser import cmdparser
 from server.conf.primal_inputfuncs import pz_auth
 from typeclasses.explorers import Explorer
 from world.bootstrap import build_world
@@ -123,6 +127,103 @@ class GameplayIntegrationTests(EvenniaCommandTest):
         before = self.char1.profile()
         self.call(gameplay.Talk(), "윤대장", "통신탑 복구 완료", caller=self.char1)
         self.assertEqual(self.char1.profile(), before)
+
+    def test_raw_commands_purchase_equip_and_quest(self):
+        self.char1.change(lambda data: data.update(credits=200))
+        self.char1.execute_cmd("  강철 마체테   구매  ")
+        self.assertEqual(self.char1.profile()["inventory"]["blade"], 1)
+        self.char1.execute_cmd("강철 마체테 EQUIP")
+        self.assertEqual(self.char1.profile()["equipment"]["weapon"], "blade")
+        self.char1.execute_cmd("윤대장 대화")
+        self.assertTrue(self.char1.profile()["quest_started"])
+        self.char1.location = self.rooms["office"]
+        self.char1.execute_cmd("정비 기록 조사")
+        self.assertTrue(self.char1.profile()["record_read"])
+        self.char1.location = self.rooms["generator"]
+        self.char1.change(lambda data: data["inventory"].update(scrap=9))
+        self.char1.execute_cmd("발전 기 수리")
+        self.assertTrue(self.char1.profile()["generator_fixed"])
+        self.char1.execute_cmd("귀환")
+        self.assertEqual(self.char1.location, self.rooms["dock"])
+        self.char1.execute_cmd("강화조끼 교환")
+        self.assertEqual(self.char1.profile()["inventory"]["armor"], 1)
+
+    def test_raw_attack_resume_and_movement(self):
+        self.char1.execute_cmd("북")
+        self.assertEqual(self.char1.location, self.rooms["grass"])
+        self.char1.execute_cmd("어린 청소룡 사냥")
+        before = self.char1.profile()["encounter"]
+        self.assertEqual(before["enemy"], "scavenger")
+        self.char1.execute_cmd("공격")
+        self.assertEqual(self.char1.profile()["encounter"], before)
+        self.char1.execute_cmd("강타")
+        self.assertEqual(self.char1.profile()["encounter"]["action"], "heavy")
+
+    def test_old_prefix_commands_never_execute(self):
+        for raw in (
+            "공격 어린청소룡", "attack scavenger", "구매 붕대", "buy bandage",
+            "착용 낡은칼", "대화 윤대장", "말 안녕하세요", "say hello",
+            "어린청소룡공격", "어린청소룡 강타", "상태 추가인자", "@say hello",
+        ):
+            with self.subTest(raw=raw), patch.object(self.char2, "msg") as other:
+                before = deepcopy(self.char1.profile())
+                with patch.object(self.char1, "msg") as message:
+                    self.char1.execute_cmd(raw)
+                self.assertIn("대상 뒤에 행동", str(message.call_args_list))
+                self.assertEqual(self.char1.profile(), before)
+                other.assert_not_called()
+
+    def test_raw_chat_preserves_content_and_does_not_execute_actions(self):
+        for raw, expected in (
+            ("  안녕  여러분! 말  ", "안녕  여러분!"),
+            ("'어린청소룡 공격", "어린청소룡 공격"),
+            ("'안녕하세요 말", "안녕하세요 말"),
+            ("할 말이 있어요 말", "할 말이 있어요"),
+            ("'it's fine", "it's fine"),
+            ("hello say", "hello"),
+            ("connect 서버 안내 말", "connect 서버 안내"),
+            ("'{you} { $You()", "{you} { $You()"),
+        ):
+            with self.subTest(raw=raw), patch.object(self.char2, "msg") as other:
+                before = deepcopy(self.char1.profile())
+                self.char1.execute_cmd(raw)
+                self.assertEqual(other.call_args.args[0], f"{self.char1.key}: {expected}")
+                self.assertEqual(self.char1.profile(), before)
+        self.char2.location = self.rooms["grass"]
+        with patch.object(self.char2, "msg") as other:
+            self.char1.execute_cmd("다른 방에는 들리지 않아요 말")
+            other.assert_not_called()
+
+    def test_raw_chat_empty_and_length_boundaries(self):
+        for raw in ("말", "'", "'   ", "   말   ", "'" + "가" * 301, "가" * 301 + " 말"):
+            with self.subTest(raw=raw), patch.object(self.char2, "msg") as other:
+                with patch.object(self.char1, "msg") as message:
+                    self.char1.execute_cmd(raw)
+                self.assertTrue(message.called)
+                other.assert_not_called()
+        for raw in ("'" + "가" * 300, "가" * 300 + " 말"):
+            with self.subTest(raw=raw), patch.object(self.char2, "msg") as other:
+                self.char1.execute_cmd(raw)
+                self.assertEqual(other.call_args.args[0], f"{self.char1.key}: " + "가" * 300)
+
+    def test_parser_preserves_locks_and_management_syntax(self):
+        commands = CharacterCmdSet()
+        locked = gameplay.Attack(locks="cmd:false()")
+        commands.add(locked)
+        self.assertEqual(cmdparser("어린청소룡 공격", commands, self.char1), [])
+        management = Command(key="@관리", locks="cmd:all()")
+        commands.add(management)
+        for args in ("대상", "대상 공격"):
+            matches = cmdparser(f"@관리 {args}", commands, self.char1)
+            self.assertIs(matches[0][2], management)
+            self.assertEqual(matches[0][1].strip(), args)
+        # 캐릭터가 없는 인증·메뉴용 명령 집합은 기본 파서 그대로 사용한다.
+        for commands in (UnloggedinCmdSet(), CmdSet()):
+            for raw in ("connect explorer password", "create explorer password", ""):
+                self.assertEqual(
+                    cmdparser(raw, commands, self.char1),
+                    default_parser(raw, commands, self.char1),
+                )
 
 
 class AuthenticationTests(EvenniaCommandTest):

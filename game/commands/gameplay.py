@@ -9,6 +9,7 @@ from world.content import ENEMIES, EXCHANGE, ITEMS, ROOMS, SHOP, find_id
 
 class GameCommand(Command):
     help_category = "원시구역"
+    input_style = "standalone"
 
     def func(self):
         try:
@@ -26,6 +27,7 @@ class GameCommand(Command):
 
 
 class Look(CmdLook):
+    input_style = "target"
     key = "보기"
     aliases = ["look", "l", "둘러보기"]
 
@@ -42,12 +44,12 @@ class Help(GameCommand):
         self.caller.msg(
             "|g탐사 안내|n\n"
             "이동: 북/남/동/서 (n/s/e/w) · 보기 · 지도\n"
-            "사냥: 공격 대상 · 강타 · 방어 · 회복 · 도주\n"
-            "성장: 상태 · 가방 · 장비 · 착용 장비이름\n"
-            "보급: 귀환 · 휴식 · 상점 · 구매 물건 · 교환 장비\n"
-            "탐험: 임무 · 대화 윤대장 · 조사 대상 · 수리 발전기\n"
-            "교류: 말 내용 · 접속자 · 종료\n\n"
-            "첫 탐사: 대화 윤대장 → 북 → 공격 어린청소룡 → 가방 → 착용 강철마체테\n"
+            "사냥: 대상 공격 · 강타 · 방어 · 회복 · 도주\n"
+            "성장: 상태 · 가방 · 장비 · 장비이름 착용\n"
+            "보급: 귀환 · 휴식 · 상점 · 물건 구매 · 장비 교환\n"
+            "탐험: 임무 · 윤대장 대화 · 대상 조사 · 발전기 수리\n"
+            "교류: 내용 말 또는 '내용 · 접속자 · 종료\n\n"
+            "첫 탐사: 윤대장 대화 → 북 → 어린청소룡 공격 → 가방 → 강철마체테 착용\n"
             "전투 중 강타·방어·회복은 다음 차례에 실행됩니다. 반복 입력해도 공격 속도는 늘지 않습니다.\n"
             "개인 교전은 접속 종료 시 멈추며, 재접속 후 '공격'으로 이어갑니다."
         )
@@ -90,18 +92,20 @@ class Inventory(GameCommand):
 
 
 class Equip(GameCommand):
+    input_style = "target"
     key = "착용"
     aliases = ["equip"]
 
     def run(self):
         item = find_id(ITEMS, self.args.strip())
         if not item:
-            raise rules.RuleError("사용법: 착용 강철마체테")
+            raise rules.RuleError("사용법: 강철마체테 착용")
         self.caller.change(lambda profile: rules.equip(profile, item))
         self.caller.msg(f"{ITEMS[item]['name']} 착용 완료.")
 
 
 class Attack(GameCommand):
+    input_style = "target"
     key = "공격"
     aliases = ["사냥", "attack"]
 
@@ -110,7 +114,7 @@ class Attack(GameCommand):
         current = self.caller.profile()["encounter"]
         enemy = find_id(ENEMIES, name) if name else current["enemy"] if current else None
         if not enemy:
-            raise rules.RuleError("사용법: 공격 어린청소룡 · '보기'로 사냥 대상을 확인하세요.")
+            raise rules.RuleError("사용법: 어린청소룡 공격 · '보기'로 사냥 대상을 확인하세요.")
         self.caller.start_combat(enemy)
 
 
@@ -186,11 +190,12 @@ class Shop(GameCommand):
         for key, price in SHOP.items():
             exchange = f" / 회수부품 {EXCHANGE[key]}개" if key in EXCHANGE else ""
             lines.append(f"{ITEMS[key]['name']}: {price} 크레딧{exchange}")
-        lines.append("구매 붕대 · 구매 강철마체테 · 교환 강화조끼 (한 번에 1개)")
+        lines.append("붕대 구매 · 강철마체테 구매 · 강화조끼 교환 (한 번에 1개)")
         self.caller.msg("\n".join(lines))
 
 
 class Buy(GameCommand):
+    input_style = "target"
     key = "구매"
     aliases = ["buy"]
     exchange = False
@@ -199,7 +204,7 @@ class Buy(GameCommand):
         self.at_dock()
         item = find_id(ITEMS, self.args.strip())
         if not item:
-            raise rules.RuleError("물건 이름을 확인하세요. 예: 구매 붕대")
+            raise rules.RuleError("물건 이름을 확인하세요. 예: 붕대 구매")
         self.caller.change(lambda profile: rules.buy(profile, item, exchange=self.exchange))
         self.caller.msg(f"{ITEMS[item]['name']} 1개를 받았습니다.")
 
@@ -219,12 +224,13 @@ class Quest(GameCommand):
 
 
 class Talk(GameCommand):
+    input_style = "target"
     key = "대화"
 
     def run(self):
         self.at_dock()
         if self.args.strip().replace(" ", "") not in ("윤대장", "대장"):
-            raise rules.RuleError("대화 윤대장")
+            raise rules.RuleError("윤대장 대화")
         profile = self.caller.profile()
         if not profile["quest_started"]:
             self.caller.change(lambda data: data.update(quest_started=True))
@@ -243,6 +249,7 @@ class Talk(GameCommand):
 
 
 class Investigate(GameCommand):
+    input_style = "target"
     key = "조사"
 
     def run(self):
@@ -267,11 +274,12 @@ class Investigate(GameCommand):
 
 
 class Repair(GameCommand):
+    input_style = "target"
     key = "수리"
 
     def run(self):
-        if self.caller.zone != "generator" or self.args.strip() != "발전기":
-            raise rules.RuleError("발전실에서 '수리 발전기'를 입력하세요.")
+        if self.caller.zone != "generator" or self.args.strip().replace(" ", "") != "발전기":
+            raise rules.RuleError("발전실에서 '발전기 수리'를 입력하세요.")
         self.caller.change(rules.fix_generator)
         self.caller.msg("발전기가 돌아갑니다! 경험치 +50. 능선 진입문이 열렸습니다.")
 
@@ -295,16 +303,30 @@ class Map(GameCommand):
 
 
 class Say(GameCommand):
+    input_style = "chat"
     key = "말"
     aliases = ["say"]
 
     def run(self):
-        text = strip_ansi(self.args.strip()).replace("|", "||")
+        text = strip_ansi(self.args.strip())
         if not text:
-            raise rules.RuleError("말 내용")
+            raise rules.RuleError("내용 말 또는 '내용")
         if len(text) > 300:
             raise rules.RuleError("대화는 300자 이하로 입력하세요.")
-        self.caller.location.msg_contents(f"{self.caller.key}: {text}")
+        # msg_contents의 템플릿 해석 없이 중괄호와 $You()도 입력 그대로 전달한다.
+        message = f"{self.caller.key}: {text.replace('|', '||')}"
+        for recipient in self.caller.location.contents:
+            recipient.msg(message)
+
+
+class UnknownCommand(Command):
+    key = "__nomatch_command"
+
+    def func(self):
+        self.caller.msg(
+            "명령을 확인하세요. 대상 뒤에 행동을 입력합니다: 어린청소룡 공격 · 윤대장 대화\n"
+            "채팅: 안녕하세요 말 또는 '안녕하세요 · 전체 안내: 도움말"
+        )
 
 
 COMMANDS = [
@@ -329,4 +351,5 @@ COMMANDS = [
     Repair,
     Map,
     Say,
+    UnknownCommand,
 ]

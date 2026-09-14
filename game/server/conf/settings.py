@@ -56,6 +56,7 @@ AUTH_USERNAME_VALIDATORS = [
     {"NAME": "evennia.server.validators.EvenniaUsernameAvailabilityValidator"},
 ]
 INPUT_FUNC_MODULES = ["evennia.server.inputfuncs", "server.conf.primal_inputfuncs"]
+COMMAND_PARSER = "server.conf.cmdparser.cmdparser"
 
 # Optional PostgreSQL configuration for the private playtest.
 if os.environ.get("PRIMAL_DB_NAME"):

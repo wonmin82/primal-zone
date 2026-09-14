@@ -59,11 +59,11 @@
     byId("xp").max = state.xp_next - state.xp_floor;
     byId("xp").value = state.level >= 10 ? byId("xp").max : state.xp - state.xp_floor;
     byId("exits").replaceChildren(...state.exits.map((direction) => button(direction, direction)));
-    const actions = state.enemies.map((enemy) => button(enemy.name + " 사냥", "공격 " + enemy.name));
-    if (state.zone === "dock") actions.push(button("윤대장과 대화", "대화 윤대장"), button("의무실에서 휴식", "휴식"), button("보급소 보기", "상점"));
-    if (state.zone === "wreck") actions.push(button("보급상자 조사", "조사 보급상자"));
-    if (state.zone === "office") actions.push(button("정비기록 조사", "조사 정비기록"));
-    if (state.zone === "generator") actions.push(button("발전기 수리", "수리 발전기"));
+    const actions = state.enemies.map((enemy) => button(enemy.name + " 사냥", enemy.name + " 공격"));
+    if (state.zone === "dock") actions.push(button("윤대장과 대화", "윤대장 대화"), button("의무실에서 휴식", "휴식"), button("보급소 보기", "상점"));
+    if (state.zone === "wreck") actions.push(button("보급상자 조사", "보급상자 조사"));
+    if (state.zone === "office") actions.push(button("정비기록 조사", "정비기록 조사"));
+    if (state.zone === "generator") actions.push(button("발전기 수리", "발전기 수리"));
     byId("context-actions").replaceChildren(...actions);
     const rows = state.inventory.map((item) => {
       const row = document.createElement("li"), name = document.createElement("span");
@@ -71,7 +71,7 @@
       row.append(name);
       if (item.equipped) {
         const mark = document.createElement("small"); mark.textContent = "착용 중"; row.append(mark);
-      } else if (["weapon", "armor"].includes(item.slot)) row.append(button("착용", "착용 " + item.name));
+      } else if (["weapon", "armor"].includes(item.slot)) row.append(button("착용", item.name + " 착용"));
       else if (item.id === "bandage") row.append(button("사용", "회복"));
       return row;
     });
@@ -135,7 +135,8 @@
     const text = input.value.trim();
     if (!text || !playing) return;
     // Credentials belong in the password form, never in the visible log/history.
-    if (/^(connect|create|접속|가입)\s/i.test(text)) { append("계정 접속은 전용 접속창을 사용하세요.", "event"); input.value = ""; return; }
+    const chat = text.startsWith("'") || /(?:^|\s)(말|say)$/i.test(text);
+    if (!chat && /^(connect|create|접속|가입)\s/i.test(text)) { append("계정 접속은 전용 접속창을 사용하세요.", "event"); input.value = ""; return; }
     command(text); history.push(text); history = history.slice(-100);
     historyIndex = history.length; input.value = ""; input.focus();
   });
