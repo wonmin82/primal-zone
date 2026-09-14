@@ -17,6 +17,8 @@
 
 ## 실행
 
+처음 설치한다면 [설치 안내](docs/installation.md)에서 필요한 환경, Git·uv 설치, 저장소 다운로드와 초기 설정부터 확인한다.
+
 Python 3.13과 [uv](https://docs.astral.sh/uv/getting-started/installation/)를 사용한다.
 저장소 루트에서 실행:
 
