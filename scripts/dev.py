@@ -18,6 +18,7 @@ def run(*args, cwd=GAME):
 
 
 def ensure_secret():
+    (GAME / "server" / "logs").mkdir(parents=True, exist_ok=True)
     target = GAME / "server" / "conf" / "secret_settings.py"
     if not target.exists():
         target.write_text(
