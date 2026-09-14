@@ -1,0 +1,73 @@
+{% load static %}
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101b17">
+  <title>원시구역 — 탐사 기록</title>
+  <link rel="stylesheet" href="{% static 'webclient/css/primal.css' %}">
+  <script defer src="{% static 'webclient/js/primal.js' %}"></script>
+</head>
+<body data-ws-url="{{ websocket_url|default:'' }}" data-ws-port="{{ websocket_port }}">
+  <header class="masthead">
+    <a class="brand" href="/"><span class="emblem" aria-hidden="true">⌖</span><span>원시구역<small>PRIMAL ZONE</small></span></a>
+    <div class="edition">탐사 기록 <span>/</span> 제01구역</div>
+    <div class="connection"><span id="connection-dot"></span><span id="connection-label">연결 중</span><button id="reconnect" hidden>재연결</button></div>
+  </header>
+  <main class="workspace">
+    <aside class="left-column">
+      <section class="panel explorer">
+        <p class="eyebrow">EXPLORER</p>
+        <h2 id="player-name">탐사자 미접속</h2>
+        <div class="level-line"><span id="level">Lv. —</span><span id="credits">— 크레딧</span></div>
+        <div class="meter-label"><span>체력</span><span id="hp-label">— / —</span></div>
+        <progress id="hp" max="100" value="0" aria-label="체력"></progress>
+        <div class="meter-label"><span>경험치</span><span id="xp-label">— / —</span></div>
+        <progress id="xp" max="100" value="0" aria-label="경험치"></progress>
+        <div class="stats"><span>공격 <b id="attack">—</b></span><span>방어 <b id="defense">—</b></span></div>
+      </section>
+      <section class="panel">
+        <p class="eyebrow">FIELD GUIDE</p>
+        <h2>탐사 수첩</h2>
+        <div class="navigation">
+          <button data-command="보기">주변 살펴보기 <span>↗</span></button>
+          <button data-command="지도">방문한 지역 <span>↗</span></button>
+          <button data-command="가방">소지품 확인 <span>↗</span></button>
+          <button data-command="도움말">명령어 안내 <span>↗</span></button>
+          <button data-command="접속자">접속 중인 탐사자 <span>↗</span></button>
+        </div>
+      </section>
+      <p class="field-note">작은 사냥에서 시작해<br>섬의 가장 깊은 곳까지.<br><span>혼자서도 모든 임무를 진행할 수 있습니다.</span></p>
+    </aside>
+    <section class="terminal panel">
+      <div class="terminal-heading"><div><p class="eyebrow">LIVE EXPEDITION</p><h1 id="room-name">탐사 준비</h1></div><span class="tag" id="zone-tag">대기</span></div>
+      <div id="log" role="log" aria-label="게임 기록" aria-live="polite" aria-relevant="additions" tabindex="0">
+        <article class="log-entry welcome"><span class="log-marker">FIELD LOG / 001</span><h2>안개 너머, 새로운 사냥터.</h2><p>장비를 챙기고 탐사를 시작하세요.<br>명령어와 버튼으로 같은 행동을 할 수 있습니다.</p></article>
+      </div>
+      <button id="latest" hidden>새 기록으로 이동 ↓</button>
+      <div class="encounter-strip" id="encounter" hidden></div>
+      <div class="command-area">
+        <div class="quick-actions"><button data-command="강타">강타</button><button data-command="방어">방어</button><button data-command="회복">붕대 사용</button><button data-command="도주" class="subtle">도주</button><button data-command="귀환" class="subtle">귀환</button></div>
+        <form id="command-form"><label for="command" class="prompt-mark">›</label><input id="command" autocomplete="off" maxlength="500" placeholder="명령어를 입력하세요. 예: 어린청소룡 공격" aria-label="게임 명령어" disabled><button type="submit" id="send-command" disabled>실행 ↵</button></form>
+        <p class="input-note">대상 + 행동 · 채팅: 내용 말 / '내용 · Enter 실행 · ↑ 이전 명령</p>
+      </div>
+    </section>
+    <aside class="right-column">
+      <section class="panel"><p class="eyebrow">OBJECTIVE</p><h2>통신탑 복구</h2><p id="quest">탐사자로 접속하면 현재 목표가 표시됩니다.</p></section>
+      <section class="panel"><p class="eyebrow">SURROUNDINGS</p><h2>주변 행동</h2><p id="room-hint" class="muted">주변을 확인하고 이동할 방향을 선택하세요.</p><div id="context-actions" class="context-actions"></div><div id="exits" class="exits"></div></section>
+      <section class="panel inventory-panel"><p class="eyebrow">EQUIPMENT & SUPPLIES</p><h2>장비와 보급품</h2><ul id="inventory"><li class="muted">아직 탐사자가 없습니다.</li></ul></section>
+    </aside>
+  </main>
+  <footer>PRIMAL ZONE <span>첫 탐사 · 개발 중인 플레이 버전</span><button id="logout" data-command="종료" hidden>접속 종료</button></footer>
+  <dialog id="auth-dialog" aria-labelledby="auth-title">
+    <div class="auth-decoration">⌖</div><p class="eyebrow">WELCOME, EXPLORER</p><h2 id="auth-title">탐사를 시작하세요.</h2><p class="muted">원시구역에서 사용할 탐사자 계정으로 접속합니다.</p>
+    <form id="auth-form">
+      <label for="username">탐사자 이름</label><input id="username" autocomplete="username" minlength="2" maxlength="24" pattern="[가-힣A-Za-z0-9_]{2,24}" placeholder="한글·영문·숫자·밑줄" required>
+      <label for="password">비밀번호</label><input id="password" type="password" autocomplete="current-password" minlength="8" maxlength="128" placeholder="8자 이상" required>
+      <p id="auth-error" role="alert"></p>
+      <div class="auth-buttons"><button type="submit" value="login" class="primary">접속하기</button><button type="submit" value="register">새 탐사자 만들기</button></div>
+    </form><p class="auth-note">처음이라면 이름과 비밀번호를 정한 뒤<br>‘새 탐사자 만들기’를 선택하세요.</p>
+  </dialog>
+</body>
+</html>
