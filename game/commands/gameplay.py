@@ -329,7 +329,115 @@ class UnknownCommand(Command):
         )
 
 
+class PartyCommand(GameCommand):
+    key = "파티"
+
+    def run(self):
+        from typeclasses.parties import invitation_for, party_for
+        from world.multiplayer import object_by_id
+
+        party = party_for(self.caller)
+        if party:
+            state = party.state()
+            names = [object_by_id(key).key for key in state["members"] if object_by_id(key)]
+            leader = object_by_id(state["leader"])
+            self.caller.msg(
+                f"파티장: {leader.key} · 멤버: {', '.join(names)} · 전리품: {state['loot_mode']}"
+            )
+        else:
+            self.caller.msg("소속 파티가 없습니다. 플레이어이름 파티초대로 시작하세요.")
+        invited, _ = invitation_for(self.caller)
+        if invited:
+            self.caller.msg("대기 중인 초대가 있습니다: 파티수락 / 파티거절")
+
+
+class PartyInvite(GameCommand):
+    key = "파티초대"
+    input_style = "target"
+
+    def run(self):
+        from evennia.objects.models import ObjectDB
+        from typeclasses.parties import invite
+
+        target = ObjectDB.objects.filter(
+            db_key__iexact=self.args.strip(), db_typeclass_path="typeclasses.explorers.Explorer"
+        ).first()
+        invite(self.caller, target)
+        self.caller.msg("파티 초대를 보냈습니다.")
+
+
+class PartyAccept(GameCommand):
+    key = "파티수락"
+    accept = True
+
+    def run(self):
+        from typeclasses.parties import respond
+
+        respond(self.caller, self.accept)
+        self.caller.msg("파티에 가입했습니다." if self.accept else "파티 초대를 거절했습니다.")
+
+
+class PartyReject(PartyAccept):
+    key = "파티거절"
+    accept = False
+
+
+class PartyLeave(GameCommand):
+    key = "파티탈퇴"
+
+    def run(self):
+        from typeclasses.parties import party_for
+
+        party = party_for(self.caller)
+        if not party:
+            raise rules.RuleError("소속 파티가 없습니다.")
+        party.remove_member(self.caller)
+        self.caller.msg("파티를 탈퇴했습니다.")
+
+
+class PartyKick(GameCommand):
+    key = "파티제외"
+    input_style = "target"
+    transfer = False
+
+    def run(self):
+        from typeclasses.parties import party_for
+        from world.multiplayer import object_by_id
+
+        party = party_for(self.caller)
+        if not party:
+            raise rules.RuleError("소속 파티가 없습니다.")
+        target = next(
+            (
+                object_by_id(key)
+                for key in party.state()["members"]
+                if object_by_id(key)
+                and object_by_id(key).key.casefold() == self.args.strip().casefold()
+            ),
+            None,
+        )
+        if not target:
+            raise rules.RuleError("파티 멤버를 지정하세요.")
+        if self.transfer:
+            party.transfer(self.caller, target)
+        else:
+            party.remove_member(self.caller, target)
+        self.caller.msg("파티 구성을 변경했습니다.")
+
+
+class PartyTransfer(PartyKick):
+    key = "파티장위임"
+    transfer = True
+
+
 COMMANDS = [
+    PartyCommand,
+    PartyInvite,
+    PartyAccept,
+    PartyReject,
+    PartyLeave,
+    PartyKick,
+    PartyTransfer,
     Look,
     Help,
     Status,
