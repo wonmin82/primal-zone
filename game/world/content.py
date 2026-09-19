@@ -14,6 +14,7 @@ ITEMS = {
 ENEMIES = {
     "scavenger": {
         "name": "어린청소룡",
+        "combat_mode": "claimed",
         "hp": 24,
         "attack": 5,
         "defense": 0,
@@ -24,6 +25,7 @@ ENEMIES = {
     },
     "hunter": {
         "name": "갈퀴사냥룡",
+        "combat_mode": "claimed",
         "hp": 42,
         "attack": 9,
         "defense": 1,
@@ -34,6 +36,7 @@ ENEMIES = {
     },
     "sentinel": {
         "name": "고장난경비기",
+        "combat_mode": "claimed",
         "hp": 60,
         "attack": 11,
         "defense": 3,
@@ -44,6 +47,7 @@ ENEMIES = {
     },
     "alpha": {
         "name": "능선의우두머리",
+        "combat_mode": "public",
         "hp": 130,
         "attack": 17,
         "defense": 3,

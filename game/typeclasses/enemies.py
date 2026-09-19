@@ -8,7 +8,14 @@ from evennia.utils import delay
 from evennia.utils.dbserialize import deserialize
 from world import rules
 from world.content import ENEMIES
-from world.multiplayer import COMBAT_INTERVAL, ENEMY_RESET_SECONDS, object_by_id, world_change
+from world.multiplayer import (
+    CLAIM_TIMEOUT_SECONDS,
+    COMBAT_INTERVAL,
+    ENEMY_RESET_SECONDS,
+    PARTICIPATION_TIMEOUT_SECONDS,
+    object_by_id,
+    world_change,
+)
 
 
 class Enemy(DefaultObject):
@@ -35,6 +42,37 @@ class Enemy(DefaultObject):
             and player.profile().get("combat_target") == self.id
         ]
 
+    @staticmethod
+    def group_for(player):
+        from typeclasses.parties import party_for
+
+        party = party_for(player)
+        return f"party:{party.id}" if party else f"player:{player.id}"
+
+    def can_attack(self, player):
+        return ENEMIES[self.db.enemy_id]["combat_mode"] == "public" or self.db.claim in (
+            None,
+            self.group_for(player),
+        )
+
+    def reward_groups(self, now):
+        groups = {}
+        for player in self.active_players():
+            entry = self.db.contribution.get(player.id)
+            group = self.group_for(player)
+            if (
+                not entry
+                or entry["damage"] <= 0
+                or now - entry["last_action_at"] > PARTICIPATION_TIMEOUT_SECONDS
+            ):
+                continue
+            if entry["group"] != group:
+                continue
+            if ENEMIES[self.db.enemy_id]["combat_mode"] == "claimed" and group != self.db.claim:
+                continue
+            groups.setdefault(group, {})[player.id] = entry["damage"]
+        return groups
+
     def engage(self, player, now=None):
         now = time() if now is None else now
         with world_change():
@@ -44,6 +82,11 @@ class Enemy(DefaultObject):
             profile = player.profile()
             if profile.get("combat_target") not in (None, self.id):
                 raise rules.RuleError("현재 상대에게서 먼저 도주하세요.")
+            if not self.can_attack(player):
+                owner = "다른 파티" if str(self.db.claim).startswith("party:") else "다른 탐사자"
+                raise rules.RuleError(f"{self.key}은(는) {owner}와 교전 중입니다.")
+            if ENEMIES[self.db.enemy_id]["combat_mode"] == "claimed" and not self.db.claim:
+                self.db.claim = self.group_for(player)
             if player.id not in self.db.combatants:
                 self.db.combatants = [*self.db.combatants, player.id]
                 profile.update(
@@ -54,7 +97,9 @@ class Enemy(DefaultObject):
                 player.save_profile(profile)
                 if not self.db.next_attack_at:
                     self.db.next_attack_at = now + COMBAT_INTERVAL
-            self.db.last_activity = now
+            if len(self.db.combatants) == 1 and not self.db.claim_last_activity:
+                self.db.claim_last_activity = now
+                self.db.last_activity = now
         player.schedule_combat()
         self.schedule_combat()
 
@@ -63,13 +108,23 @@ class Enemy(DefaultObject):
         threat = deserialize(self.db.threat)
         threat.pop(player.id, None)
         self.db.threat = threat
+        contribution = deserialize(self.db.contribution)
+        contribution.pop(player.id, None)
+        self.db.contribution = contribution
         if not self.db.combatants:
+            self.db.claim = None
+            self.db.claim_last_activity = 0
             self.stop_combat_timer()
         self.schedule_lifecycle()
 
     def reconcile(self, now=None):
         now = time() if now is None else now
         with world_change():
+            if self.db.claim and now - self.db.claim_last_activity >= CLAIM_TIMEOUT_SECONDS:
+                for player in self.active_players():
+                    player.leave_combat()
+                self.db.claim = None
+                self.db.claim_last_activity = 0
             active = self.active_players()
             active_ids = [player.id for player in active]
             for identity in list(self.db.combatants):
@@ -118,12 +173,17 @@ class Enemy(DefaultObject):
             damage = min(self.db.hp, damage)
             self.db.hp -= damage
             self.db.last_activity = now
+            self.db.claim_last_activity = now
             threat = deserialize(self.db.threat)
             threat[player.id] = threat.get(player.id, 0) + damage
             self.db.threat = threat
             contribution = deserialize(self.db.contribution)
             previous = contribution.get(player.id, {"damage": 0})
-            contribution[player.id] = {"damage": previous["damage"] + damage, "last_action_at": now}
+            contribution[player.id] = {
+                "damage": previous["damage"] + damage,
+                "last_action_at": now,
+                "group": self.group_for(player),
+            }
             self.db.contribution = contribution
             player.save_profile(profile)
             player.msg(message)
@@ -132,21 +192,29 @@ class Enemy(DefaultObject):
         self.broadcast_state()
 
     def finish_death(self, killer, now, rng=None):
-        # 공유 전투 전환 중의 솔로 보상 호환 경로. 다음 단계에서 그룹 배분으로 교체한다.
         if self.db.state != "alive":
             return
+        groups = self.reward_groups(now)
         self.db.state = "respawning"
         self.db.respawn_at = now + 45
         definition = ENEMIES[self.db.enemy_id]
+        for identity, share in rules.reward_shares(
+            definition["xp"], definition["credits"], groups
+        ).items():
+            player = object_by_id(identity)
+            profile = player.profile()
+            rules.gain_xp(profile, share["xp"])
+            profile["credits"] += share["credits"]
+            profile["kills"] += 1
+            if definition.get("boss"):
+                profile["boss_defeated"] = True
+            player.save_profile(profile)
+            player.msg(f"처치 보상: 경험치 +{share['xp']} · 크레딧 +{share['credits']}")
+        # 아이템은 다음 단계에서 공유 시체로 이동한다. 지금은 기존 솔로 획득을 유지한다.
         profile = killer.profile()
-        rules.gain_xp(profile, definition["xp"])
-        profile["credits"] += definition["credits"]
-        profile["kills"] += 1
         rules.add_item(profile, "scrap")
         if (rng or Random()).random() < definition["chance"]:
             rules.add_item(profile, definition["drop"])
-        if definition.get("boss"):
-            profile["boss_defeated"] = True
         killer.save_profile(profile)
         for player in self.active_players():
             player.leave_combat()

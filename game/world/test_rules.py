@@ -155,3 +155,12 @@ class RuleTests(TestCase):
                     break
             self.assertFalse(defeated, f"Solo boss failed with seed {seed}")
             self.assertLessEqual(hp, 0)
+
+    def test_reward_distribution_preserves_pools_and_deterministic_remainders(self):
+        groups = {"party:2": {4: 30, 3: 10}, "party:1": {2: 10, 1: 10}}
+        result = rules.reward_shares(101, 29, groups)
+        self.assertEqual(sum(value["xp"] for value in result.values()), 101)
+        self.assertEqual(sum(value["credits"] for value in result.values()), 29)
+        self.assertEqual(result[3]["xp"], 34)
+        self.assertEqual(result[4]["xp"], 33)
+        self.assertEqual(result, rules.reward_shares(101, 29, dict(reversed(list(groups.items())))))

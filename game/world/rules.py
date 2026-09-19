@@ -202,3 +202,29 @@ def claim_quest(profile):
     profile["credits"] += 100
     gain_xp(profile, 100)
     add_item(profile, "bandage", 3)
+
+
+def weighted_split(pool, weights):
+    """최대 나머지법. 같은 나머지는 키 순서로 결정하여 총량을 보존한다."""
+    weights = {key: weight for key, weight in weights.items() if weight > 0}
+    total = sum(weights.values())
+    if not total:
+        return {}
+    result = {key: pool * weight // total for key, weight in weights.items()}
+    order = sorted(weights, key=lambda key: (-(pool * weights[key] % total), key))
+    for key in order[: pool - sum(result.values())]:
+        result[key] += 1
+    return result
+
+
+def reward_shares(xp, credits, groups):
+    """그룹 기여 비례 → 그룹 안에서는 참여자에게 균등 배분한다."""
+    weights = {key: sum(members.values()) for key, members in groups.items()}
+    pools = [weighted_split(amount, weights) for amount in (xp, credits)]
+    result = {}
+    for key, members in groups.items():
+        equal = {identity: 1 for identity in members}
+        shares = [weighted_split(pool[key], equal) for pool in pools]
+        for identity in members:
+            result[identity] = {"xp": shares[0][identity], "credits": shares[1][identity]}
+    return result

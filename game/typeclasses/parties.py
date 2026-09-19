@@ -50,6 +50,8 @@ def invite(caller, target, now=None):
             raise RuleError("이미 다른 파티의 초대를 받고 있습니다.")
         if party and len(party.state()["members"]) >= PARTY_MAX_SIZE:
             raise RuleError("파티 정원이 가득 찼습니다.")
+        if not party and caller.profile().get("combat_target"):
+            raise RuleError("교전 중에는 파티를 만들 수 없습니다. 먼저 도주하세요.")
         if not party:
             party = create_object(Party, key="탐사 파티")
             state = party.state()
@@ -73,6 +75,8 @@ def respond(character, accept, now=None):
             raise RuleError("유효한 파티 초대가 없습니다.")
         state = party.state()
         if accept:
+            if character.profile().get("combat_target"):
+                raise RuleError("교전 중에는 가입할 수 없습니다. 먼저 도주하세요.")
             if party_for(character):
                 raise RuleError("이미 파티에 속해 있습니다.")
             if not state["members"] or not object_by_id(state["leader"]):
@@ -138,6 +142,7 @@ class Party(DefaultObject):
             state = self.state()
             if target.id not in state["members"]:
                 raise RuleError("파티 멤버가 아닙니다.")
+            target.leave_combat()
             state["members"].remove(target.id)
             target.db.party_id = None
             if not state["members"]:
