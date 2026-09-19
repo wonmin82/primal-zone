@@ -14,6 +14,11 @@ class GameCommand(Command):
     def func(self):
         try:
             self.run()
+            from typeclasses.explorers import Explorer
+
+            for player in Explorer.objects.all():
+                if player.sessions.count():
+                    player.push_state()
         except rules.RuleError as error:
             self.caller.msg(f"|y{error}|n")
 

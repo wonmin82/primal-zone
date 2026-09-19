@@ -59,7 +59,43 @@
     byId("xp").max = state.xp_next - state.xp_floor;
     byId("xp").value = state.level >= 10 ? byId("xp").max : state.xp - state.xp_floor;
     byId("exits").replaceChildren(...state.exits.map((direction) => button(direction, direction)));
-    const actions = state.enemies.map((enemy) => button(enemy.name + " 사냥", enemy.name + " 공격"));
+    const actions = state.enemies.map((enemy) => {
+      const el = button(enemy.name + " " + enemy.hp + "/" + enemy.max_hp + (enemy.can_attack ? " 사냥" : " · 다른 그룹 교전 중"), enemy.name + " 사냥");
+      el.disabled = !enemy.can_attack;
+      return el;
+    });
+    for (const corpse of state.corpses) {
+      const title = document.createElement("p"); title.className = "loot-label";
+      title.textContent = corpse.name;
+      actions.push(title);
+      if (corpse.loot.length) {
+        const all = button("시체에서 모두 가져", "시체에서 모두 가져");
+        all.disabled = !corpse.loot.some((item) => item.can_take); actions.push(all);
+      } else { const empty = document.createElement("small"); empty.textContent = "남은 전리품 없음"; actions.push(empty); }
+      for (const item of corpse.loot) {
+        const el = button(item.name + " ×" + item.quantity + " → " + (item.protected ? item.assigned_name : "자유 획득"), "시체에서 " + item.name + " 가져");
+        el.disabled = !item.can_take; actions.push(el);
+      }
+    }
+    if (state.ground_loot.length) {
+      const all = button("바닥에서 모두 가져", "모두 가져");
+      all.disabled = !state.ground_loot.some((source) => source.loot.some((item) => item.can_take));
+      actions.push(all);
+    }
+    for (const source of state.ground_loot) for (const item of source.loot) {
+      const el = button("바닥 · " + item.name + " ×" + item.quantity + " → " + (item.protected ? item.assigned_name : "자유 획득"), item.name + " 가져");
+      el.disabled = !item.can_take; actions.push(el);
+    }
+    const party = state.party;
+    byId("party-state").textContent = party ? "파티장: " + party.leader_name + (party.is_leader ? " (나)" : "") + " · 전리품: 순번 분배" : "소속 파티 없음";
+    byId("party-members").replaceChildren(...(party?.members || []).map((member) => {
+      const row = document.createElement("li"); row.textContent = member.name + (member.id === party.leader ? " · 파티장" : ""); return row;
+    }));
+    byId("party-leave").hidden = !party;
+    byId("party-invite-form").hidden = !!party && !party.is_leader;
+    const invitation = state.invitation;
+    byId("party-invitation").hidden = !invitation;
+    byId("party-inviter").textContent = invitation ? invitation.inviter + "의 파티 초대 (60초 이내 수락)" : "";
     if (state.zone === "dock") actions.push(button("윤대장과 대화", "윤대장 대화"), button("의무실에서 휴식", "휴식"), button("보급소 보기", "상점"));
     if (state.zone === "wreck") actions.push(button("보급상자 조사", "보급상자 조사"));
     if (state.zone === "office") actions.push(button("정비기록 조사", "정비기록 조사"));
@@ -76,9 +112,9 @@
       return row;
     });
     byId("inventory").replaceChildren(...rows);
-    const encounter = state.encounter;
+    const encounter = state.combat_target;
     byId("encounter").hidden = !encounter;
-    if (encounter) byId("encounter").textContent = "교전 중 · 적 체력 " + encounter.hp + " · " + encounter.round + "차례 진행 · 강타 / 방어 / 회복을 선택하세요.";
+    if (encounter) byId("encounter").textContent = encounter.name + " · 공유 체력 " + encounter.hp + "/" + encounter.max_hp + " · 적 " + encounter.round + "차례" + (encounter.telegraph ? " · 다음 돌진! 방어를 준비하세요." : " · 강타 / 방어 / 회복");
   }
   function connect() {
     if (socket && [WebSocket.OPEN, WebSocket.CONNECTING].includes(socket.readyState)) return;
@@ -128,6 +164,11 @@
     const sent = send("pz_auth", [{mode: event.submitter?.value || "login", username: byId("username").value, password: byId("password").value}]);
     if (sent) authBusy(true);
     else { byId("auth-error").textContent = "연결이 끊겨 있습니다. 재연결 중입니다."; connect(); }
+  });
+  byId("party-invite-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const name = byId("party-target").value.trim();
+    if (name) command(name + " 파티초대");
   });
   dialog.addEventListener("cancel", (event) => event.preventDefault());
   byId("command-form").addEventListener("submit", (event) => {

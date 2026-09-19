@@ -65,6 +65,8 @@ class Explorer(DefaultCharacter):
     def push_state(self):
         if not self.sessions.count():
             return
+        from world.state import multiplayer_state
+
         profile = self.profile()
         values = rules.stats(profile)
         zone = self.zone
@@ -93,10 +95,10 @@ class Explorer(DefaultCharacter):
             "inventory": inventory,
             "exits": list(room.get("exits", {})),
             "hint": room.get("hint", ""),
-            "enemies": [
-                {"id": key, "name": ENEMIES[key]["name"]} for key in room.get("enemies", [])
-            ],
-            "encounter": self.combat_snapshot(),
+            **multiplayer_state(self),
+            "player_round": profile["player_round"],
+            "heavy_ready": time() >= profile["heavy_ready_at"],
+            "queued_action": profile["queued_action"],
             "quest": self.quest_text(profile),
             "visited": [ROOMS[key]["name"] for key in profile["visited"] if key in ROOMS],
         }
