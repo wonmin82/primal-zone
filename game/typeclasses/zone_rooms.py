@@ -18,9 +18,9 @@ class ZoneRoom(DefaultRoom):
         if enemies:
             lines.append("사냥 대상: " + " · ".join(enemy.key for enemy in enemies))
         for corpse in room_loot(self):
-            lines.append(corpse.key + " · 시체에서 모두 가져")
+            lines.append(corpse.key)
         for dropped in room_loot(self, corpse=False):
-            lines.append(dropped.key + " · " + dropped.key + " 가져")
+            lines.append(dropped.key)
         others = [obj.key for obj in self.contents if obj != looker and obj.has_account]
         if others:
             lines.append("함께 있는 탐사자: " + ", ".join(others))
