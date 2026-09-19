@@ -234,3 +234,5 @@ class Explorer(DefaultCharacter):
         enemy = self.combat_target()
         if enemy:
             enemy.receive_attack(self, now=now, rng=rng)
+        else:
+            self.leave_combat()

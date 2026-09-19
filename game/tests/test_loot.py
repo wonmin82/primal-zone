@@ -150,3 +150,38 @@ class LootTests(EvenniaCommandTest):
         self.assertEqual(len(corpse.db.entries), 1)
         take_loot(self.char2, corpse=True, now=103)
         self.assertEqual(len(corpse.db.entries), 0)
+
+    def test_party_delivery_failure_preserves_all_items_and_inventories(self):
+        corpse, _, _ = self.kill(party=True)
+        original = [dict(entry) for entry in corpse.db.entries]
+        inventories = [player.profile()["inventory"] for player in (self.char1, self.char2)]
+        with patch.object(self.char2, "save_profile", side_effect=RuntimeError("injected")):
+            with self.assertRaises(RuntimeError):
+                take_loot(self.char1, corpse=True, now=103)
+        self.assertEqual([dict(entry) for entry in corpse.db.entries], original)
+        self.assertEqual(
+            [player.profile()["inventory"] for player in (self.char1, self.char2)], inventories
+        )
+        take_loot(self.char1, corpse=True, now=104)
+        self.assertEqual(self.char1.profile()["inventory"]["scrap"], 1)
+        self.assertEqual(self.char2.profile()["inventory"]["blade"], 1)
+
+    def test_decay_failure_restores_corpse_and_retry_does_not_duplicate_ground(self):
+        corpse, _, _ = self.kill()
+        identity = corpse.id
+        original_delete = corpse.delete
+
+        def fail_after_delete():
+            original_delete()
+            raise RuntimeError("injected")
+
+        with patch.object(corpse, "delete", side_effect=fail_after_delete):
+            with self.assertRaises(RuntimeError):
+                corpse.reconcile(now=133)
+        self.assertEqual(corpse.id, identity)
+        self.assertIn(corpse, room_loot(self.rooms["grass"]))
+        self.assertEqual(DroppedLoot.objects.count(), 0)
+        corpse.reconcile(now=134)
+        corpse.reconcile(now=135)
+        self.assertEqual(Corpse.objects.count(), 0)
+        self.assertEqual(DroppedLoot.objects.count(), 2)

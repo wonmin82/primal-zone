@@ -82,3 +82,48 @@ class SharedCombatTests(EvenniaCommandTest):
             (converted["xp"], converted["credits"], converted["generator_fixed"]), (333, 111, True)
         )
         self.assertIsNone(converted["combat_target"])
+
+    def test_prepared_solo_shared_boss_and_quest_completion(self):
+        from typeclasses.loot import take_loot
+        from world import rules
+
+        profile = self.char1.profile()
+        profile.update(quest_started=True, record_read=True)
+        rules.gain_xp(profile, rules.xp_threshold(4))
+        rules.add_item(profile, "scrap", 3)
+        for item in ("carbine", "armor"):
+            rules.add_item(profile, item)
+            rules.equip(profile, item)
+        rules.fix_generator(profile)
+        self.char1.save_profile(profile)
+        self.enemy.engage(self.char1, now=100)
+        rng = Random(9)
+        for turn in range(1, 51):
+            if self.enemy.db.state != "alive":
+                break
+            now = 100 + turn * 2.5
+            profile = self.char1.profile()
+            if self.enemy.db.enemy_round % 3 == 2:
+                rules.queue_action(profile, "guard", now)
+            elif profile["hp"] < 45 and profile["inventory"].get("bandage"):
+                rules.queue_action(profile, "heal", now)
+            elif now >= profile["heavy_ready_at"]:
+                rules.queue_action(profile, "heavy", now)
+            self.char1.save_profile(profile)
+            self.enemy.receive_attack(self.char1, now=now, rng=rng)
+            self.enemy.enemy_tick(now=now, rng=rng)
+        self.assertTrue(self.char1.profile()["boss_defeated"])
+        self.assertEqual(self.enemy.db.state, "respawning")
+        take_loot(self.char1, corpse=True, now=now)
+        self.assertEqual(self.char1.profile()["inventory"]["fang"], 1)
+        self.char1.change(rules.claim_quest)
+        self.assertTrue(self.char1.profile()["quest_claimed"])
+        with self.assertRaises(rules.RuleError):
+            self.char1.change(rules.claim_quest)
+
+    def test_missing_target_stops_player_timer_on_next_tick(self):
+        self.char1.change(lambda profile: profile.update(combat_target=999999))
+        with patch("typeclasses.explorers.delay") as timer:
+            self.char1.combat_tick()
+        self.assertIsNone(self.char1.profile()["combat_target"])
+        timer.assert_not_called()
