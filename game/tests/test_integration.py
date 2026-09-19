@@ -10,6 +10,7 @@ from evennia.typeclasses.models import Attribute
 from evennia.utils.test_resources import EvenniaCommandTest
 from server.conf.cmdparser import cmdparser
 from server.conf.primal_inputfuncs import pz_auth
+from typeclasses.enemies import room_enemies
 from typeclasses.explorers import Explorer
 from world.bootstrap import build_world
 from world.content import ROOMS
@@ -59,21 +60,21 @@ class GameplayIntegrationTests(EvenniaCommandTest):
         self.assertEqual(self.char1.profile()["credits"], 20)
         self.assertEqual(self.char1.profile()["inventory"]["bandage"], 3)
 
-    def test_kill_snapshot_is_persisted_and_personal(self):
+    def test_shared_kill_persists_once(self):
         self.char1.location = self.rooms["grass"]
-        self.char2.location = self.rooms["grass"]
-        self.char1.start_combat("scavenger")
-        profile = self.char1.profile()
-        profile["encounter"]["hp"] = 1
-        self.char1.save_profile(profile)
-        self.char1.resolve_combat_round(Random(3))
-        attribute = self.char1.attributes.get("profile", return_obj=True)
-        saved = Attribute.objects.get(pk=attribute.pk).value
-        self.assertEqual(saved["xp"], 22)
-        self.assertIsNone(saved["encounter"])
-        self.assertEqual(self.char2.profile()["xp"], 0)
-        self.char1.resolve_combat_round(Random(3))
-        self.assertEqual(self.char1.profile()["xp"], 22)
+        with patch.object(self.char1.sessions, "count", return_value=1):
+            self.char1.start_combat("scavenger")
+            enemy = room_enemies(self.char1.location)[0]
+            enemy.db.hp = 1
+            now = self.char1.profile()["next_attack_at"]
+            self.char1.resolve_combat_round(Random(3), now=now)
+            attribute = self.char1.attributes.get("profile", return_obj=True)
+            saved = Attribute.objects.get(pk=attribute.pk).value
+            self.assertEqual(saved["xp"], 22)
+            self.assertIsNone(saved["combat_target"])
+            self.assertEqual(self.char2.profile()["xp"], 0)
+            self.char1.resolve_combat_round(Random(3), now=now)
+            self.assertEqual(self.char1.profile()["xp"], 22)
 
     def test_attack_spam_creates_only_one_timer(self):
         self.char1.location = self.rooms["grass"]
@@ -152,18 +153,28 @@ class GameplayIntegrationTests(EvenniaCommandTest):
         self.char1.execute_cmd("북")
         self.assertEqual(self.char1.location, self.rooms["grass"])
         self.char1.execute_cmd("어린 청소룡 사냥")
-        before = self.char1.profile()["encounter"]
-        self.assertEqual(before["enemy"], "scavenger")
-        self.char1.execute_cmd("공격")
-        self.assertEqual(self.char1.profile()["encounter"], before)
+        before = self.char1.profile()["combat_target"]
+        self.assertEqual(self.char1.combat_target().db.enemy_id, "scavenger")
+        with patch.object(self.char1.sessions, "count", return_value=1):
+            self.char1.execute_cmd("공격")
+        self.assertEqual(self.char1.profile()["combat_target"], before)
         self.char1.execute_cmd("강타")
-        self.assertEqual(self.char1.profile()["encounter"]["action"], "heavy")
+        self.assertEqual(self.char1.profile()["queued_action"], "heavy")
 
     def test_old_prefix_commands_never_execute(self):
         for raw in (
-            "공격 어린청소룡", "attack scavenger", "구매 붕대", "buy bandage",
-            "착용 낡은칼", "대화 윤대장", "말 안녕하세요", "say hello",
-            "어린청소룡공격", "어린청소룡 강타", "상태 추가인자", "@say hello",
+            "공격 어린청소룡",
+            "attack scavenger",
+            "구매 붕대",
+            "buy bandage",
+            "착용 낡은칼",
+            "대화 윤대장",
+            "말 안녕하세요",
+            "say hello",
+            "어린청소룡공격",
+            "어린청소룡 강타",
+            "상태 추가인자",
+            "@say hello",
         ):
             with self.subTest(raw=raw), patch.object(self.char2, "msg") as other:
                 before = deepcopy(self.char1.profile())

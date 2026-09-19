@@ -1,5 +1,7 @@
 from evennia.objects.objects import DefaultRoom
-from world.content import ENEMIES, ROOMS
+from world.content import ROOMS
+
+from typeclasses.enemies import room_enemies
 
 
 class ZoneRoom(DefaultRoom):
@@ -8,10 +10,9 @@ class ZoneRoom(DefaultRoom):
         if not room:
             return super().return_appearance(looker, **kwargs)
         lines = [f"|g[{room['name']}]|n", room["desc"], ""]
-        if room["enemies"]:
-            lines.append(
-                "사냥 대상: " + " · ".join(ENEMIES[key]["name"] for key in room["enemies"])
-            )
+        enemies = room_enemies(self)
+        if enemies:
+            lines.append("사냥 대상: " + " · ".join(enemy.key for enemy in enemies))
         others = [obj.key for obj in self.contents if obj != looker and obj.has_account]
         if others:
             lines.append("함께 있는 탐사자: " + ", ".join(others))

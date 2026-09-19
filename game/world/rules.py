@@ -1,6 +1,5 @@
 """Pure gameplay rules: no database, networking or Evennia imports."""
 
-from copy import deepcopy
 from random import Random
 
 from world.content import ENEMIES, EXCHANGE, ITEMS, SHOP
@@ -14,7 +13,7 @@ class RuleError(ValueError):
 
 def new_profile():
     return {
-        "version": 1,
+        "version": 2,
         "xp": 0,
         "hp": 60,
         "credits": 20,
@@ -28,7 +27,12 @@ def new_profile():
         "quest_claimed": False,
         "cache_claimed": False,
         "visited": ["dock"],
-        "encounter": None,
+        "combat_target": None,
+        "queued_action": "attack",
+        "next_attack_at": 0,
+        "heavy_ready_at": 0,
+        "guard_until": 0,
+        "player_round": 0,
     }
 
 
@@ -73,7 +77,7 @@ def gain_xp(profile, amount):
 
 
 def require_peace(profile):
-    if profile["encounter"]:
+    if profile.get("combat_target"):
         raise RuleError("전투 중입니다. 먼저 승리하거나 도주하세요.")
 
 
@@ -112,109 +116,67 @@ def heal(profile):
     return amount
 
 
-def start_encounter(profile, enemy_id):
-    if profile["encounter"]:
-        if profile["encounter"]["enemy"] != enemy_id:
-            raise RuleError("현재 상대부터 처리하세요.")
-        return
-    profile["encounter"] = {
-        "enemy": enemy_id,
-        "hp": ENEMIES[enemy_id]["hp"],
-        "round": 0,
-        "heavy_ready": 1,
-        "action": "attack",
-    }
+def queue_action(profile, action, now=None):
+    from time import time
 
-
-def queue_action(profile, action):
-    encounter = profile["encounter"]
-    if not encounter:
-        raise RuleError("먼저 공격할 대상을 선택하세요.")
+    now = time() if now is None else now
+    if not profile.get("combat_target"):
+        raise RuleError("진행 중인 교전이 없습니다.")
     if action not in ("heavy", "guard", "heal"):
         raise RuleError("알 수 없는 전투 행동입니다.")
-    if action == "heavy" and encounter["round"] + 1 < encounter["heavy_ready"]:
-        raise RuleError("강타는 아직 준비되지 않았습니다.")
+    if action == "heavy" and now < profile["heavy_ready_at"]:
+        raise RuleError("강타가 아직 준비되지 않았습니다.")
     if action == "heal":
         if not profile["inventory"].get("bandage", 0):
             raise RuleError("붕대가 없습니다.")
         if profile["hp"] >= stats(profile)["max_hp"]:
-            raise RuleError("이미 체력이 가득합니다.")
-    encounter["action"] = action
+            raise RuleError("체력이 가득합니다.")
+    profile["queued_action"] = action
 
 
-def combat_round(original, rng=None):
-    """Resolve exactly one round and return a new snapshot plus its messages.
-
-    Rewards and encounter clearing happen in the same snapshot. Calling again
-    on a completed encounter cannot grant a second reward.
-    """
-    profile = deepcopy(original)
-    encounter = profile["encounter"]
-    if not encounter:
-        return profile, []
+def player_attack(profile, enemy_id, now, interval, rng=None):
+    """플레이어 입력만 계산한다. 적 HP, 반격, 보상은 소유하지 않는다."""
     rng = rng or Random()
-    enemy = ENEMIES[encounter["enemy"]]
-    player = stats(profile)
-    encounter["round"] += 1
-    turn = encounter["round"]
-    action = encounter.pop("action", "attack")
-    encounter["action"] = "attack"
-    messages = []
+    action = profile["queued_action"]
+    profile["queued_action"] = "attack"
+    profile["player_round"] += 1
+    profile["next_attack_at"] = now + interval
     if action == "heal":
         try:
-            messages.append(f"붕대로 체력 {heal(profile)} 회복. 이번 공격은 쉽니다.")
+            amount = heal(profile)
+            return 0, f"붕대로 체력 {amount} 회복."
         except RuleError as error:
-            messages.append(str(error))
-    else:
-        attack = player["attack"]
-        if action == "heavy" and turn >= encounter["heavy_ready"]:
-            attack = int(attack * 1.8)
-            encounter["heavy_ready"] = turn + 3
-        damage = max(1, attack + rng.randint(-1, 2) - enemy["defense"])
-        encounter["hp"] = max(0, encounter["hp"] - damage)
-        label = "강타" if action == "heavy" else "공격"
-        messages.append(
-            f"{label}! {enemy['name']}에게 {damage} 피해. [적 {encounter['hp']}/{enemy['hp']}]"
-        )
-    if encounter["hp"] <= 0:
-        profile["encounter"] = None
-        profile["kills"] += 1
-        profile["credits"] += enemy["credits"]
-        levels = gain_xp(profile, enemy["xp"])
-        add_item(profile, "scrap")
-        messages.append(f"승리! 경험치 +{enemy['xp']} · 크레딧 +{enemy['credits']} · 회수부품 +1")
-        if rng.random() < enemy["chance"]:
-            add_item(profile, enemy["drop"])
-            messages.append(f"전리품 발견: {ITEMS[enemy['drop']]['name']}! 가방에서 확인하세요.")
-        if enemy.get("boss"):
-            profile["boss_defeated"] = True
-            messages.append("능선이 조용해졌다. 부두로 귀환하여 윤대장에게 보고하자.")
-        if levels:
-            messages.append(f"레벨 상승! Lv.{level_of(profile)}")
-        return profile, messages
-    damage = max(1, enemy["attack"] + rng.randint(-1, 1) - player["defense"])
-    if enemy.get("boss") and turn % 3 == 0:
-        damage *= 2
-        messages.append("우두머리가 돌진한다!")
+            return 0, str(error)
+    multiplier = 1.0
+    if action == "heavy" and now >= profile["heavy_ready_at"]:
+        multiplier = 1.8
+        profile["heavy_ready_at"] = now + interval * 3
     if action == "guard":
-        damage = max(1, damage // 3)
-        messages.append("방어 자세로 피해를 줄였다.")
-    profile["hp"] = max(0, profile["hp"] - damage)
-    messages.append(
-        f"{enemy['name']}의 공격: {damage} 피해. [체력 {profile['hp']}/{player['max_hp']}]"
+        profile["guard_until"] = now + interval * 1.1
+    damage = max(
+        1,
+        int((stats(profile)["attack"] + rng.randint(-1, 2)) * multiplier)
+        - ENEMIES[enemy_id]["defense"],
     )
-    if profile["hp"] <= 0:
-        loss = min(profile["credits"], 10)
-        profile["credits"] -= loss
-        profile["hp"] = player["max_hp"]
-        profile["encounter"] = None
-        messages.append(
-            f"탐사대가 구조했습니다. 복구 비용 {loss} 크레딧. 장비와 경험치는 유지됩니다."
-        )
-        return profile, messages + ["__return_home__"]
-    if enemy.get("boss") and turn % 3 == 2:
-        messages.append("우두머리가 몸을 낮춘다. 다음 공격은 돌진! 지금 '방어'하세요.")
-    return profile, messages
+    return damage, f"{ENEMIES[enemy_id]['name']}에게 {damage} 피해."
+
+
+def enemy_attack(profile, enemy_id, enemy_round, now, rng=None):
+    """독립된 적 차례의 피해와 구조 여부를 구조화된 값으로 반환한다."""
+    rng = rng or Random()
+    enemy = ENEMIES[enemy_id]
+    damage = max(1, enemy["attack"] + rng.randint(-1, 1) - stats(profile)["defense"])
+    charged = bool(enemy.get("boss") and enemy_round % 3 == 0)
+    if charged:
+        damage *= 2
+    if profile["guard_until"] > now:
+        damage = max(1, damage // 3)
+    profile["hp"] -= damage
+    defeated = profile["hp"] <= 0
+    if defeated:
+        profile["credits"] -= min(profile["credits"], 10)
+        profile["hp"] = stats(profile)["max_hp"]
+    return {"damage": damage, "charged": charged, "defeated": defeated}
 
 
 def fix_generator(profile):

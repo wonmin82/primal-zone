@@ -111,8 +111,8 @@ class Attack(GameCommand):
 
     def run(self):
         name = self.args.strip()
-        current = self.caller.profile()["encounter"]
-        enemy = find_id(ENEMIES, name) if name else current["enemy"] if current else None
+        current = self.caller.combat_target()
+        enemy = find_id(ENEMIES, name) if name else current.db.enemy_id if current else None
         if not enemy:
             raise rules.RuleError("사용법: 어린청소룡 공격 · '보기'로 사냥 대상을 확인하세요.")
         self.caller.start_combat(enemy)
@@ -139,7 +139,7 @@ class Heal(GameCommand):
     aliases = ["붕대", "heal"]
 
     def run(self):
-        if self.caller.profile()["encounter"]:
+        if self.caller.profile().get("combat_target"):
             self.caller.change(lambda profile: rules.queue_action(profile, "heal"))
             self.caller.msg("다음 차례에 붕대를 사용합니다. 이번 기본 공격을 대신합니다.")
         else:
@@ -152,11 +152,10 @@ class Flee(GameCommand):
     aliases = ["flee"]
 
     def run(self):
-        if not self.caller.profile()["encounter"]:
+        if not self.caller.profile().get("combat_target"):
             raise rules.RuleError("진행 중인 교전이 없습니다.")
-        self.caller.stop_combat_timer()
-        self.caller.change(lambda profile: profile.update(encounter=None))
-        self.caller.msg("교전을 끝냈습니다. 보상은 없으며, 다음 교전은 처음부터 시작합니다.")
+        self.caller.leave_combat()
+        self.caller.msg("교전을 끝냈습니다. 적은 일정 시간 아무도 싸우지 않으면 회복합니다.")
 
 
 class Return(GameCommand):

@@ -2,6 +2,7 @@
 
 import re
 import unicodedata
+from time import time
 
 from django.db import transaction
 from evennia.objects.objects import DefaultCharacter
@@ -29,7 +30,21 @@ class Explorer(DefaultCharacter):
     def profile(self):
         if self.db.profile is None:
             self.db.profile = rules.new_profile()
-        return deserialize(self.db.profile)
+        profile = deserialize(self.db.profile)
+        if profile.get("version", 1) < 2:
+            profile.pop("encounter", None)
+            for key in (
+                "combat_target",
+                "queued_action",
+                "next_attack_at",
+                "heavy_ready_at",
+                "guard_until",
+                "player_round",
+            ):
+                profile[key] = rules.new_profile()[key]
+            profile["version"] = 2
+            self.db.profile = profile
+        return profile
 
     def save_profile(self, profile):
         with transaction.atomic():
@@ -80,7 +95,7 @@ class Explorer(DefaultCharacter):
             "enemies": [
                 {"id": key, "name": ENEMIES[key]["name"]} for key in room.get("enemies", [])
             ],
-            "encounter": profile["encounter"],
+            "encounter": self.combat_snapshot(),
             "quest": self.quest_text(profile),
             "visited": [ROOMS[key]["name"] for key in profile["visited"] if key in ROOMS],
         }
@@ -110,17 +125,16 @@ class Explorer(DefaultCharacter):
                 self.location = dock
         super().at_post_puppet(**kwargs)
         self.msg("|g원시구역에 오신 것을 환영합니다.|n '도움말'로 명령을 확인하세요.")
-        if self.profile()["encounter"]:
-            self.msg("이전 교전이 저장되어 있습니다. '공격'으로 재개하거나 '도주'하세요.")
+        self.leave_combat()
         self.push_state()
 
     def at_post_unpuppet(self, account=None, session=None, **kwargs):
         if not self.sessions.count():
-            self.stop_combat_timer()
+            self.leave_combat()
         super().at_post_unpuppet(account=account, session=session, **kwargs)
 
     def at_pre_move(self, destination, move_type="move", **kwargs):
-        if self.profile()["encounter"]:
+        if self.profile().get("combat_target"):
             self.msg("전투 중에는 이동할 수 없습니다. '도주'로 교전을 끝내세요.")
             return False
         if destination.db.zone_id == "ridge" and not self.profile()["generator_fixed"]:
@@ -129,6 +143,7 @@ class Explorer(DefaultCharacter):
         return super().at_pre_move(destination, move_type=move_type, **kwargs)
 
     def at_post_move(self, source_location, move_type="move", **kwargs):
+        self.leave_combat()
         if self.zone in ROOMS:
             profile = self.profile()
             if self.zone not in profile["visited"]:
@@ -136,18 +151,64 @@ class Explorer(DefaultCharacter):
             self.save_profile(profile)
         super().at_post_move(source_location, move_type=move_type, **kwargs)
 
+    def combat_target(self):
+        from world.multiplayer import object_by_id
+
+        from typeclasses.enemies import Enemy
+
+        enemy = object_by_id(self.profile().get("combat_target"))
+        return enemy if enemy and enemy.is_typeclass(Enemy, exact=True) else None
+
+    def combat_snapshot(self):
+        enemy = self.combat_target()
+        if not enemy or enemy.db.state != "alive":
+            return None
+        return {
+            "id": enemy.id,
+            "enemy": enemy.db.enemy_id,
+            "name": enemy.key,
+            "hp": enemy.db.hp,
+            "max_hp": enemy.db.max_hp,
+            "round": enemy.db.enemy_round,
+            "state": enemy.db.state,
+            "telegraph": bool(
+                ENEMIES[enemy.db.enemy_id].get("boss") and enemy.db.enemy_round % 3 == 2
+            ),
+        }
+
     def start_combat(self, enemy_id):
-        if enemy_id not in ROOMS.get(self.zone, {}).get("enemies", []):
-            raise rules.RuleError("이곳에는 그 상대가 없습니다.")
-        self.change(lambda profile: rules.start_encounter(profile, enemy_id))
-        self.msg(
-            f"{ENEMIES[enemy_id]['name']}과(와) 교전합니다. 기본 공격은 2.5초마다 자동 진행됩니다."
+        from typeclasses.enemies import room_enemies
+
+        enemy = next(
+            (obj for obj in room_enemies(self.location) if obj.db.enemy_id == enemy_id), None
         )
-        self.schedule_combat()
+        if not enemy:
+            raise rules.RuleError("이곳에는 공격할 수 있는 상대가 없습니다.")
+        enemy.engage(self)
+        self.msg(f"{enemy.key}과(와) 교전합니다. 기본 공격은 2.5초마다 자동 진행됩니다.")
+        self.push_state()
+
+    def leave_combat(self):
+        from world.multiplayer import world_change
+
+        with world_change():
+            enemy = self.combat_target()
+            if enemy:
+                enemy.remove_combatant(self)
+            self.stop_combat_timer()
+            profile = self.profile()
+            if profile.get("combat_target"):
+                profile.update(combat_target=None, queued_action="attack", guard_until=0)
+                self.save_profile(profile)
 
     def schedule_combat(self):
-        if not self.ndb.combat_task and self.sessions.count() and self.profile()["encounter"]:
-            self.ndb.combat_task = delay(2.5, self.combat_tick)
+        if (
+            not self.ndb.combat_task
+            and self.sessions.count()
+            and self.profile().get("combat_target")
+        ):
+            remaining = max(0.05, self.profile()["next_attack_at"] - time())
+            self.ndb.combat_task = delay(remaining, self.combat_tick)
 
     def stop_combat_timer(self):
         task = self.ndb.combat_task
@@ -158,15 +219,12 @@ class Explorer(DefaultCharacter):
     def combat_tick(self):
         self.ndb.combat_task = None
         if not self.sessions.count():
+            self.leave_combat()
             return
         self.resolve_combat_round()
         self.schedule_combat()
 
-    def resolve_combat_round(self, rng=None):
-        profile, messages = rules.combat_round(self.profile(), rng)
-        self.save_profile(profile)
-        for message in messages:
-            if message == "__return_home__":
-                self.move_to(self.home, quiet=True)
-            else:
-                self.msg(message)
+    def resolve_combat_round(self, rng=None, now=None):
+        enemy = self.combat_target()
+        if enemy:
+            enemy.receive_attack(self, now=now, rng=rng)
