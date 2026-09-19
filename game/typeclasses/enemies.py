@@ -1,6 +1,5 @@
 """장소별로 하나씩 존재하는 영속 적 spawn."""
 
-from random import Random
 from time import time
 
 from evennia.objects.objects import DefaultObject
@@ -11,8 +10,11 @@ from world.content import ENEMIES
 from world.multiplayer import (
     CLAIM_TIMEOUT_SECONDS,
     COMBAT_INTERVAL,
+    CORPSE_TTL_SECONDS,
     ENEMY_RESET_SECONDS,
     PARTICIPATION_TIMEOUT_SECONDS,
+    RESPAWN_DELAY_SECONDS,
+    after_change,
     object_by_id,
     world_change,
 )
@@ -114,8 +116,8 @@ class Enemy(DefaultObject):
         if not self.db.combatants:
             self.db.claim = None
             self.db.claim_last_activity = 0
-            self.stop_combat_timer()
-        self.schedule_lifecycle()
+            after_change(self.stop_combat_timer)
+        after_change(self.schedule_lifecycle)
 
     def reconcile(self, now=None):
         now = time() if now is None else now
@@ -130,10 +132,16 @@ class Enemy(DefaultObject):
             for identity in list(self.db.combatants):
                 if identity not in active_ids:
                     player = object_by_id(identity)
-                    if player:
+                    if player and player.profile().get("combat_target") == self.id:
                         player.leave_combat()
+                    elif player:
+                        self.remove_combatant(player)
                     else:
                         self.db.combatants = [key for key in self.db.combatants if key != identity]
+            if not self.db.combatants:
+                self.db.claim = None
+                self.db.claim_last_activity = 0
+                self.db.threat = {}
             if (
                 not self.db.combatants
                 and self.db.last_activity
@@ -155,7 +163,7 @@ class Enemy(DefaultObject):
                 self.db.last_activity = 0
                 self.db.contribution = {}
                 self.db.threat = {}
-        self.schedule_lifecycle()
+        after_change(self.schedule_lifecycle)
 
     def receive_attack(self, player, now=None, rng=None):
         now = time() if now is None else now
@@ -186,17 +194,23 @@ class Enemy(DefaultObject):
             }
             self.db.contribution = contribution
             player.save_profile(profile)
-            player.msg(message)
+            after_change(lambda: player.msg(message))
             if self.db.hp <= 0:
                 self.finish_death(player, now, rng)
         self.broadcast_state()
 
     def finish_death(self, killer, now, rng=None):
-        if self.db.state != "alive":
+        with world_change():
+            return self._finish_death(now, rng)
+
+    def _finish_death(self, now, rng=None):
+        from typeclasses.loot import Corpse
+
+        if self.db.state != "alive" or self.db.hp > 0:
             return
         groups = self.reward_groups(now)
         self.db.state = "respawning"
-        self.db.respawn_at = now + 45
+        self.db.respawn_at = now + CORPSE_TTL_SECONDS + RESPAWN_DELAY_SECONDS
         definition = ENEMIES[self.db.enemy_id]
         for identity, share in rules.reward_shares(
             definition["xp"], definition["credits"], groups
@@ -209,17 +223,13 @@ class Enemy(DefaultObject):
             if definition.get("boss"):
                 profile["boss_defeated"] = True
             player.save_profile(profile)
-            player.msg(f"처치 보상: 경험치 +{share['xp']} · 크레딧 +{share['credits']}")
-        # 아이템은 다음 단계에서 공유 시체로 이동한다. 지금은 기존 솔로 획득을 유지한다.
-        profile = killer.profile()
-        rules.add_item(profile, "scrap")
-        if (rng or Random()).random() < definition["chance"]:
-            rules.add_item(profile, definition["drop"])
-        killer.save_profile(profile)
+            message = f"처치 보상: 경험치 +{share['xp']} · 크레딧 +{share['credits']}"
+            after_change(lambda player=player, message=message: player.msg(message))
+        Corpse.from_enemy(self, groups, now, rng)
         for player in self.active_players():
             player.leave_combat()
-        self.stop_combat_timer()
-        self.schedule_lifecycle()
+        after_change(self.stop_combat_timer)
+        after_change(self.schedule_lifecycle)
 
     def enemy_tick(self, now=None, rng=None):
         now = time() if now is None else now

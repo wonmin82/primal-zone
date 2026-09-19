@@ -33,6 +33,13 @@ def at_server_start():
     from world.bootstrap import build_world
 
     build_world()
+    from evennia import create_script
+    from typeclasses.scripts import WorldLifecycle
+    from world.lifecycle import reconcile_world
+
+    reconcile_world(restart=True)
+    if not WorldLifecycle.objects.filter(db_key="primal_world_lifecycle").exists():
+        create_script(WorldLifecycle)
 
 
 def at_server_stop():

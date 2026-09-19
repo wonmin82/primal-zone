@@ -429,7 +429,52 @@ class PartyTransfer(PartyKick):
     transfer = True
 
 
+class Take(GameCommand):
+    key = "가져"
+    input_style = "target"
+
+    def run(self):
+        from typeclasses.loot import take_loot
+        from world.lifecycle import reconcile_room
+
+        reconcile_room(self.caller.location)
+
+        text = self.args.strip()
+        corpse = text.startswith("시체에서 ")
+        if corpse:
+            text = text[len("시체에서 ") :].strip()
+        item = None if text == "모두" else find_id(ITEMS, text)
+        if text != "모두" and not item:
+            raise rules.RuleError(
+                "시체에서 모두 가져 · 시체에서 강화 조끼 가져 · 모두 가져 · 회수 부품 가져"
+            )
+        take_loot(self.caller, item, corpse=corpse)
+
+
+class PartyLootMode(GameCommand):
+    key = "파티분배"
+    input_style = "target"
+
+    def run(self):
+        from typeclasses.parties import party_for
+        from world.multiplayer import world_change
+
+        with world_change():
+            party = party_for(self.caller)
+            if not party:
+                raise rules.RuleError("소속 파티가 없습니다.")
+            party.require_leader(self.caller)
+            if self.args.strip() not in ("순번", "round_robin"):
+                raise rules.RuleError("현재 지원하는 전리품 방식: 순번 파티분배")
+            state = party.state()
+            state["loot_mode"] = "round_robin"
+            party.db.state = state
+        self.caller.msg("전리품을 참여자 순번으로 배분합니다.")
+
+
 COMMANDS = [
+    Take,
+    PartyLootMode,
     PartyCommand,
     PartyInvite,
     PartyAccept,

@@ -10,6 +10,7 @@ from evennia.utils import delay
 from evennia.utils.dbserialize import deserialize
 from world import rules
 from world.content import ENEMIES, ITEMS, ROOMS
+from world.multiplayer import after_change
 
 
 class Explorer(DefaultCharacter):
@@ -49,7 +50,7 @@ class Explorer(DefaultCharacter):
     def save_profile(self, profile):
         with transaction.atomic():
             self.db.profile = profile
-        self.push_state()
+        after_change(self.push_state)
 
     def change(self, operation):
         profile = self.profile()
@@ -177,6 +178,9 @@ class Explorer(DefaultCharacter):
         }
 
     def start_combat(self, enemy_id):
+        from world.lifecycle import reconcile_room
+
+        reconcile_room(self.location)
         from typeclasses.enemies import room_enemies
 
         enemy = next(
@@ -195,7 +199,7 @@ class Explorer(DefaultCharacter):
             enemy = self.combat_target()
             if enemy:
                 enemy.remove_combatant(self)
-            self.stop_combat_timer()
+            after_change(self.stop_combat_timer)
             profile = self.profile()
             if profile.get("combat_target"):
                 profile.update(combat_target=None, queued_action="attack", guard_until=0)

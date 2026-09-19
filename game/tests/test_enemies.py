@@ -1,3 +1,5 @@
+from time import time
+
 from evennia.utils.test_resources import EvenniaCommandTest
 from typeclasses.enemies import Enemy, room_enemies
 from typeclasses.explorers import Explorer
@@ -27,5 +29,6 @@ class EnemySpawnTests(EvenniaCommandTest):
         self.assertIn(first, rooms["grass"].contents)
         self.assertIn(first.key, rooms["grass"].return_appearance(self.char1))
         first.db.state = "respawning"
+        first.db.respawn_at = time() + 100
         # 장소 안내 문구와 구분해 실제 사냥 대상 행을 검사한다.
         self.assertNotIn("사냥 대상:", rooms["grass"].return_appearance(self.char1))
