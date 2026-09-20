@@ -60,6 +60,8 @@ class Explorer(DefaultCharacter):
             return
         from world.state import multiplayer_state
 
+        from typeclasses.interactables import instructor_for
+
         profile = self.profile()
         values = rules.stats(profile)
         zone = self.zone
@@ -74,7 +76,10 @@ class Explorer(DefaultCharacter):
             }
             for key, count in profile["inventory"].items()
         ]
+        instructor = instructor_for(self)
         payload = {
+            "growth": rules.growth_state(profile),
+            "training_available": bool(instructor and instructor.available(self)),
             "name": self.key,
             "hp": profile["hp"],
             **values,

@@ -56,3 +56,23 @@ class WebStateTests(EvenniaCommandTest):
         self.assertTrue(snapshot["ground_loot"][0]["loot"][0]["can_take"])
         self.assertFalse(snapshot["ground_loot"][0]["loot"][0]["protected"])
         json.dumps(snapshot)
+
+    def test_growth_web_state_matches_rules_and_training_location(self):
+        from world import rules
+
+        self.char1.location = self.rooms["dock"]
+        self.char1.change(
+            lambda profile: rules.allocate_attribute(profile, "constitution", 2, safe=True)
+        )
+        with patch.object(self.char1, "msg") as message:
+            Explorer.push_state(self.char1)
+        state = message.call_args.kwargs["pz_state"][0][0]
+        self.assertTrue(state["training_available"])
+        self.assertEqual(state["growth"]["attribute_points"], 2)
+        self.assertEqual((state["hp"], state["max_hp"]), (60, 68))
+        self.assertTrue(state["growth"]["skills"][0]["can_learn"])
+        json.dumps(state)
+        self.char1.location = self.rooms["grass"]
+        with patch.object(self.char1, "msg") as message:
+            Explorer.push_state(self.char1)
+        self.assertFalse(message.call_args.kwargs["pz_state"][0][0]["training_available"])

@@ -42,6 +42,38 @@
       byId("auth-error").textContent = "응답이 지연되고 있습니다. 연결 상태를 확인한 뒤 다시 시도하세요.";
     }, 15000);
   }
+  function renderGrowth(state) {
+    const growth = state.growth, available = state.training_available;
+    byId("training-location").textContent = available ? "탐사대 훈련관 · 훈련 가능" : "학습·배분·재훈련은 비전투 상태로 부두 교관에게서 이용하세요.";
+    byId("attribute-points").textContent = "· 남은 포인트 " + growth.attribute_points;
+    byId("skill-points").textContent = "· 남은 점수 " + growth.skill_points;
+    byId("attributes").replaceChildren(...growth.attributes.map((attribute) => {
+      const row = document.createElement("div"), text = document.createElement("span");
+      row.className = "growth-row";
+      text.textContent = attribute.name + " " + attribute.value + " (기본 " + attribute.base + " + " + attribute.allocated + ")";
+      text.title = attribute.description;
+      const add = button("+1", attribute.name + " 1 배분");
+      add.setAttribute("aria-label", attribute.name + " 1 포인트 배분");
+      add.disabled = !available || growth.attribute_points < 1;
+      row.append(text, add); return row;
+    }));
+    byId("proficiencies").replaceChildren(...growth.proficiencies.map((proficiency) => {
+      const row = document.createElement("p");
+      row.textContent = proficiency.name + " Rank " + proficiency.rank + "/" + proficiency.max_rank + " · XP " + proficiency.xp;
+      return row;
+    }));
+    byId("skills").replaceChildren(...growth.skills.map((skill) => {
+      const row = document.createElement("div"), title = document.createElement("p"), detail = document.createElement("p");
+      row.className = "skill-row";
+      title.textContent = skill.name + " Rank " + skill.rank + "/" + skill.max_rank;
+      detail.className = "muted";
+      detail.textContent = skill.description + (skill.rank === skill.max_rank ? " · 최고 Rank" : " · 다음: Lv." + skill.required_level + " / " + skill.next_points + "점 / " + skill.next_credits + " 크레딧");
+      const learn = button(skill.name + " 배워", skill.name + " 배워");
+      learn.disabled = !available || !skill.can_learn;
+      row.append(title, detail, learn); return row;
+    }));
+    ["reset-attributes", "reset-skills", "reset-all"].forEach((id) => { byId(id).disabled = !available; });
+  }
   function render(state) {
     playing = true;
     authBusy(false);
@@ -86,6 +118,7 @@
       const el = button("바닥 · " + item.name + " ×" + item.quantity + " → " + (item.protected ? item.assigned_name : "자유 획득"), item.name + " 가져");
       el.disabled = !item.can_take; actions.push(el);
     }
+    renderGrowth(state);
     const party = state.party;
     byId("party-state").textContent = party ? "파티장: " + party.leader_name + (party.is_leader ? " (나)" : "") + " · 전리품: 순번 분배" : "소속 파티 없음";
     byId("party-members").replaceChildren(...(party?.members || []).map((member) => {
@@ -96,7 +129,7 @@
     const invitation = state.invitation;
     byId("party-invitation").hidden = !invitation;
     byId("party-inviter").textContent = invitation ? invitation.inviter + "의 파티 초대 (60초 이내 수락)" : "";
-    if (state.zone === "dock") actions.push(button("윤대장과 대화", "윤대장 대화"), button("의무실에서 휴식", "휴식"), button("보급소 보기", "상점"));
+    if (state.zone === "dock") actions.push(button("윤대장과 대화", "윤대장 대화"), button("훈련관과 대화", "탐사대 훈련관 대화"), button("의무실에서 휴식", "휴식"), button("보급소 보기", "상점"));
     if (state.zone === "wreck") actions.push(button("보급상자 조사", "보급상자 조사"));
     if (state.zone === "office") actions.push(button("정비기록 조사", "정비기록 조사"));
     if (state.zone === "generator") actions.push(button("발전기 수리", "발전기 수리"));
