@@ -1,0 +1,34 @@
+from time import time
+
+from evennia.utils.test_resources import EvenniaCommandTest
+from typeclasses.enemies import Enemy, room_enemies
+from typeclasses.explorers import Explorer
+from world.bootstrap import build_world
+
+
+class EnemySpawnTests(EvenniaCommandTest):
+    character_typeclass = Explorer
+
+    def test_idempotent_bootstrap_preserves_hp_and_state(self):
+        rooms = build_world()
+        enemy = room_enemies(rooms["grass"])[0]
+        enemy.db.hp = 7
+        enemy.db.state = "respawning"
+        identity = enemy.id
+        build_world()
+        self.assertEqual(Enemy.objects.count(), 7)
+        again = room_enemies(rooms["grass"], alive_only=False)[0]
+        self.assertEqual((again.id, again.db.hp, again.db.state), (identity, 7, "respawning"))
+
+    def test_same_species_independent_and_appearance_alive_only(self):
+        rooms = build_world()
+        first, second = (room_enemies(rooms[key])[0] for key in ("grass", "wreck"))
+        self.assertNotEqual(first.id, second.id)
+        first.db.hp = 2
+        self.assertEqual(second.db.hp, 24)
+        self.assertIn(first, rooms["grass"].contents)
+        self.assertIn(first.key, rooms["grass"].return_appearance(self.char1))
+        first.db.state = "respawning"
+        first.db.respawn_at = time() + 100
+        # 장소 안내 문구와 구분해 실제 사냥 대상 행을 검사한다.
+        self.assertNotIn("사냥 대상:", rooms["grass"].return_appearance(self.char1))

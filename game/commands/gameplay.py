@@ -1,0 +1,35 @@
+"""기존 import 경로를 위한 명시적 호환 모듈."""
+
+from commands.base import GameCommand as GameCommand
+from commands.base import UnknownCommand as UnknownCommand
+from commands.character import Help as Help
+from commands.character import Look as Look
+from commands.character import Map as Map
+from commands.character import Quest as Quest
+from commands.character import Status as Status
+from commands.combat import Attack as Attack
+from commands.combat import Flee as Flee
+from commands.combat import Guard as Guard
+from commands.combat import Heal as Heal
+from commands.combat import Heavy as Heavy
+from commands.inventory import Buy as Buy
+from commands.inventory import Equip as Equip
+from commands.inventory import Exchange as Exchange
+from commands.inventory import Inventory as Inventory
+from commands.inventory import Shop as Shop
+from commands.inventory import Take as Take
+from commands.party import PartyAccept as PartyAccept
+from commands.party import PartyCommand as PartyCommand
+from commands.party import PartyInvite as PartyInvite
+from commands.party import PartyKick as PartyKick
+from commands.party import PartyLeave as PartyLeave
+from commands.party import PartyLootMode as PartyLootMode
+from commands.party import PartyReject as PartyReject
+from commands.party import PartyTransfer as PartyTransfer
+from commands.registry import COMMANDS as COMMANDS
+from commands.social import Say as Say
+from commands.world_actions import Investigate as Investigate
+from commands.world_actions import Repair as Repair
+from commands.world_actions import Rest as Rest
+from commands.world_actions import Return as Return
+from commands.world_actions import Talk as Talk
