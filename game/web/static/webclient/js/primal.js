@@ -2,7 +2,7 @@
 (() => {
   const byId = (id) => document.getElementById(id);
   const log = byId("log"), dialog = byId("auth-dialog"), input = byId("command");
-  let socket, playing = false, history = [], historyIndex = 0, authTimer;
+  let socket, playing = false, history = [], historyIndex = 0, authTimer, growthKey = "";
   function append(text, kind = "") {
     const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 70;
     const entry = document.createElement("article");
@@ -43,6 +43,10 @@
     }, 15000);
   }
   function renderGrowth(state) {
+    // Keep focused training controls stable during unchanged world lifecycle updates.
+    const nextKey = JSON.stringify([state.growth, state.training_available]);
+    if (nextKey === growthKey) return;
+    growthKey = nextKey;
     const growth = state.growth, available = state.training_available;
     byId("training-location").textContent = available ? "탐사대 훈련관 · 훈련 가능" : "학습·배분·재훈련은 비전투 상태로 부두 교관에게서 이용하세요.";
     byId("attribute-points").textContent = "· 남은 포인트 " + growth.attribute_points;
