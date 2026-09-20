@@ -164,3 +164,191 @@ class RuleTests(TestCase):
         self.assertEqual(result[3]["xp"], 34)
         self.assertEqual(result[4]["xp"], 33)
         self.assertEqual(result, rules.reward_shares(101, 29, dict(reversed(list(groups.items())))))
+
+
+class GrowthRuleTests(TestCase):
+    def test_migrations_preserve_history_combat_and_baseline(self):
+        for version in (1, 2, 3):
+            old = rules.new_profile()
+            old.update(
+                version=version,
+                xp=140,
+                hp=37,
+                credits=81,
+                record_read=True,
+                combat_target=123,
+                next_attack_at=44,
+                heavy_ready_at=99,
+                guard_until=55,
+                player_round=7,
+                queued_action="guard",
+            )
+            if version < 3:
+                for key in rules.growth_defaults():
+                    old.pop(key)
+            before = deepcopy(old)
+            migrated = rules.migrate_profile(old)
+            for key, value in before.items():
+                if key != "version":
+                    self.assertEqual(migrated[key], value)
+            self.assertEqual(migrated["version"], 3)
+            self.assertEqual(rules.migrate_profile(migrated), migrated)
+            self.assertEqual(old, before)
+            self.assertEqual(rules.stats(old), rules.stats(migrated))
+
+    def test_attribute_budget_and_hp_never_heals(self):
+        profile = rules.new_profile()
+        profile["hp"] = 40
+        for _ in range(10):
+            rules.allocate_attribute(profile, "constitution", 4, safe=True)
+            self.assertEqual(rules.stats(profile)["max_hp"], 76)
+            self.assertEqual(profile["hp"], 40)
+            self.assertEqual(rules.point_pools(profile)["attribute_points"], 0)
+            before = deepcopy(profile)
+            with self.assertRaises(rules.RuleError):
+                rules.allocate_attribute(profile, "strength", safe=True)
+            self.assertEqual(profile, before)
+            rules.retrain(profile, "attributes", safe=True)
+            self.assertEqual(rules.point_pools(profile)["attribute_points"], 4)
+            self.assertEqual(profile["hp"], 40)
+        rules.allocate_attribute(profile, "constitution", 4, safe=True)
+        profile["hp"] = 75
+        rules.retrain(profile, "attributes", safe=True)
+        self.assertEqual(profile["hp"], 60)
+
+    def test_skill_costs_limits_and_failure_atomicity(self):
+        profile = rules.new_profile()
+        profile.update(xp=140, credits=100)
+        rules.learn_skill(profile, "heavy", safe=True)
+        self.assertEqual((profile["skills"]["heavy"], profile["credits"]), (2, 96))
+        rules.learn_skill(profile, "heavy", safe=True)
+        self.assertEqual((profile["skills"]["heavy"], profile["credits"]), (3, 88))
+        for skill, credits in (("heavy", 88), ("guard", 0)):
+            profile["credits"] = credits
+            before = deepcopy(profile)
+            with self.assertRaises(rules.RuleError):
+                rules.learn_skill(profile, skill, safe=True)
+            self.assertEqual(profile, before)
+        profile["credits"] = 100
+        rules.learn_skill(profile, "guard", safe=True)
+        before = deepcopy(profile)
+        with self.assertRaises(rules.RuleError):
+            rules.learn_skill(profile, "heal", safe=True)
+        self.assertEqual(profile, before)
+
+    def test_retraining_preserves_history_and_separate_pools(self):
+        profile = rules.new_profile()
+        profile.update(
+            xp=140,
+            credits=1000,
+            hp=47,
+            heavy_ready_at=100,
+            next_attack_at=90,
+            guard_until=80,
+            queued_action="guard",
+            quest_started=True,
+            visited=["dock", "grass"],
+        )
+        profile["proficiencies"]["weapon"]["xp"] = 45
+        baseline = deepcopy(profile)
+        for scope in ("attributes", "skills", "all"):
+            for _ in range(4):
+                profile = deepcopy(baseline)
+                rules.allocate_attribute(profile, "strength", 2, safe=True)
+                rules.learn_skill(profile, "heavy", safe=True)
+                before = deepcopy(profile)
+                rules.retrain(profile, scope, safe=True)
+                for key in baseline:
+                    if key not in ("attributes", "skills"):
+                        self.assertEqual(profile[key], before[key])
+                self.assertEqual(
+                    profile["attributes"]["strength"]["allocated"], 2 if scope == "skills" else 0
+                )
+                self.assertEqual(profile["skills"]["heavy"], 2 if scope == "attributes" else 1)
+                first = deepcopy(profile)
+                rules.retrain(profile, scope, safe=True)
+                self.assertEqual(profile, first)
+                pools = rules.point_pools(profile)
+                for kind in ("attribute", "skill"):
+                    self.assertEqual(
+                        pools[kind + "_total"], pools[kind + "_spent"] + pools[kind + "_points"]
+                    )
+
+    def test_training_restrictions_do_not_mutate(self):
+        for combat, safe in ((None, False), (123, True)):
+            profile = rules.new_profile()
+            profile["combat_target"] = combat
+            before = deepcopy(profile)
+            for operation in (
+                lambda: rules.allocate_attribute(profile, "strength", safe=safe),
+                lambda: rules.learn_skill(profile, "heavy", safe=safe),
+                lambda: rules.retrain(profile, "all", safe=safe),
+            ):
+                with self.assertRaises(rules.RuleError):
+                    operation()
+                self.assertEqual(profile, before)
+
+    def test_proficiency_effects_caps_and_failed_healing(self):
+        profile = rules.new_profile()
+        for _ in range(250):
+            rules.train_proficiency(profile, "weapon", 0, 10)
+        self.assertEqual(profile["proficiencies"]["weapon"]["xp"], 0)
+        for _ in range(250):
+            rules.train_proficiency(profile, "weapon", 1, 2)
+        self.assertEqual(rules.proficiency_rank(profile, "weapon"), 2)
+        before = deepcopy(profile)
+        with self.assertRaises(rules.RuleError):
+            rules.heal(profile)
+        self.assertEqual(profile, before)
+        profile["hp"] = 30
+        rules.heal(profile)
+        self.assertEqual(profile["proficiencies"]["medicine"]["xp"], 1)
+        profile["combat_target"] = 1
+        rules.queue_action(profile, "guard", now=100)
+        self.assertEqual(profile["proficiencies"]["defense"]["xp"], 0)
+        profile["guard_until"] = 110
+        rules.enemy_attack(profile, "alpha", 1, 105, Random(1))
+        self.assertEqual(profile["proficiencies"]["defense"]["xp"], 1)
+
+    def test_each_attribute_and_skill_rank_changes_effect(self):
+        profile = rules.new_profile()
+        profile.update(xp=rules.xp_threshold(10), credits=100)
+        base = rules.stats(profile)
+        rules.allocate_attribute(profile, "strength", 2, safe=True)
+        rules.allocate_attribute(profile, "agility", 3, safe=True)
+        rules.allocate_attribute(profile, "wisdom", 2, safe=True)
+        self.assertEqual(rules.stats(profile)["attack"], base["attack"] + 1)
+        self.assertEqual(rules.stats(profile)["defense"], base["defense"] + 1)
+        profile["hp"] = 1
+        self.assertEqual(rules.heal(profile), 39)
+        rules.learn_skill(profile, "heal", safe=True)
+        profile["hp"] = 1
+        self.assertEqual(rules.heal(profile), 44)
+        normal = deepcopy(profile)
+        improved = deepcopy(profile)
+        rules.learn_skill(improved, "heavy", safe=True)
+        for data in (normal, improved):
+            data.update(combat_target=1, queued_action="heavy")
+        a, _ = rules.player_attack(normal, "alpha", 100, 2.5, Random(1))
+        b, _ = rules.player_attack(improved, "alpha", 100, 2.5, Random(1))
+        self.assertGreater(b, a)
+        improved["combat_target"] = None
+        rules.learn_skill(improved, "guard", safe=True)
+        for data in (normal, improved):
+            data.update(hp=100, guard_until=110)
+        a = rules.enemy_attack(normal, "alpha", 3, 105, Random(1))
+        b = rules.enemy_attack(improved, "alpha", 3, 105, Random(1))
+        self.assertLess(b["damage"], a["damage"])
+
+    def test_invalid_allocations_and_rank_requirement_are_lossless(self):
+        profile = rules.new_profile()
+        for amount in (0, -1, True, 1.5, 999):
+            before = deepcopy(profile)
+            with self.assertRaises(rules.RuleError):
+                rules.allocate_attribute(profile, "strength", amount, safe=True)
+            self.assertEqual(profile, before)
+        rules.learn_skill(profile, "heavy", safe=True)
+        before = deepcopy(profile)
+        with self.assertRaises(rules.RuleError):
+            rules.learn_skill(profile, "heavy", safe=True)
+        self.assertEqual(profile, before)

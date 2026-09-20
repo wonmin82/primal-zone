@@ -1,10 +1,20 @@
 """Pure gameplay rules: no database, networking or Evennia imports."""
 
+from copy import deepcopy
 from random import Random
 
 from world.content import ENEMIES, EXCHANGE, ITEMS, SHOP
+from world.progression import (
+    ATTRIBUTES,
+    PROFICIENCIES,
+    PROFICIENCY_MAX_RANK,
+    PROFICIENCY_XP_PER_RANK,
+    SAFE_HEAL_TRAINING_CAP,
+    SKILLS,
+)
 
 MAX_LEVEL = 10
+PROFILE_VERSION = 3
 
 
 class RuleError(ValueError):
@@ -13,7 +23,8 @@ class RuleError(ValueError):
 
 def new_profile():
     return {
-        "version": 2,
+        "version": PROFILE_VERSION,
+        **growth_defaults(),
         "xp": 0,
         "hp": 60,
         "credits": 20,
@@ -49,9 +60,19 @@ def stats(profile):
     equipped = [ITEMS[item] for item in profile["equipment"].values()]
     return {
         "level": level,
-        "max_hp": 60 + (level - 1) * 10,
-        "attack": 7 + (level - 1) * 2 + sum(item.get("attack", 0) for item in equipped),
-        "defense": (level - 1) // 2 + sum(item.get("defense", 0) for item in equipped),
+        "max_hp": 60 + (level - 1) * 10 + allocated(profile, "constitution") * 4,
+        "attack": (
+            7
+            + (level - 1) * 2
+            + sum(item.get("attack", 0) for item in equipped)
+            + allocated(profile, "strength") // 2
+            + proficiency_rank(profile, "weapon") // 3
+        ),
+        "defense": (
+            (level - 1) // 2
+            + sum(item.get("defense", 0) for item in equipped)
+            + allocated(profile, "agility") // 3
+        ),
     }
 
 
@@ -106,13 +127,20 @@ def buy(profile, item_id, exchange=False):
     add_item(profile, item_id)
 
 
-def heal(profile):
+def heal(profile, training_cap=SAFE_HEAL_TRAINING_CAP):
     maximum = stats(profile)["max_hp"]
     if profile["hp"] >= maximum:
         raise RuleError("이미 체력이 가득합니다.")
     consume(profile, "bandage")
-    amount = min(ITEMS["bandage"]["heal"], maximum - profile["hp"])
+    amount = min(
+        ITEMS["bandage"]["heal"]
+        + allocated(profile, "wisdom") * 2
+        + (skill_rank(profile, "heal") - 1) * 5
+        + proficiency_rank(profile, "medicine") // 2,
+        maximum - profile["hp"],
+    )
     profile["hp"] += amount
+    train_proficiency(profile, "medicine", amount, training_cap)
     return amount
 
 
@@ -143,14 +171,14 @@ def player_attack(profile, enemy_id, now, interval, rng=None):
     profile["next_attack_at"] = now + interval
     if action == "heal":
         try:
-            amount = heal(profile)
+            amount = heal(profile, ENEMIES[enemy_id]["training_cap"])
             return 0, f"붕대로 체력 {amount} 회복."
         except RuleError as error:
             return 0, str(error)
     multiplier = 1.0
     if action == "heavy" and now >= profile["heavy_ready_at"]:
-        multiplier = 1.8
-        profile["heavy_ready_at"] = now + interval * 3
+        multiplier = 1.8 + (skill_rank(profile, "heavy") - 1) * 0.2
+        profile["heavy_ready_at"] = now + SKILLS["heavy"]["cooldown"]
     if action == "guard":
         profile["guard_until"] = now + interval * 1.1
     damage = max(
@@ -169,14 +197,21 @@ def enemy_attack(profile, enemy_id, enemy_round, now, rng=None):
     charged = bool(enemy.get("boss") and enemy_round % 3 == 0)
     if charged:
         damage *= 2
+    unguarded = damage
     if profile["guard_until"] > now:
-        damage = max(1, damage // 3)
+        damage = max(
+            1,
+            damage // (2 + skill_rank(profile, "guard"))
+            - proficiency_rank(profile, "defense") // 3,
+        )
+    prevented = unguarded - damage
+    train_proficiency(profile, "defense", prevented, enemy["training_cap"])
     profile["hp"] -= damage
     defeated = profile["hp"] <= 0
     if defeated:
         profile["credits"] -= min(profile["credits"], 10)
         profile["hp"] = stats(profile)["max_hp"]
-    return {"damage": damage, "charged": charged, "defeated": defeated}
+    return {"damage": damage, "charged": charged, "defeated": defeated, "prevented": prevented}
 
 
 def fix_generator(profile):
@@ -228,3 +263,201 @@ def reward_shares(xp, credits, groups):
         for identity in members:
             result[identity] = {"xp": shares[0][identity], "credits": shares[1][identity]}
     return result
+
+
+def growth_defaults():
+    return {
+        "attributes": {key: {"base": 10, "allocated": 0} for key in ATTRIBUTES},
+        "proficiencies": {key: {"xp": 0} for key in PROFICIENCIES},
+        "skills": {key: value["base_rank"] for key, value in SKILLS.items()},
+    }
+
+
+def migrate_profile(profile):
+    result = deepcopy(profile)
+    version = result.get("version", 1)
+    if version < 2:
+        result.pop("encounter", None)
+        defaults = new_profile()
+        for key in (
+            "combat_target",
+            "queued_action",
+            "next_attack_at",
+            "heavy_ready_at",
+            "guard_until",
+            "player_round",
+        ):
+            result.setdefault(key, defaults[key])
+    if version < PROFILE_VERSION:
+        for key, value in growth_defaults().items():
+            result.setdefault(key, value)
+        result["version"] = PROFILE_VERSION
+    return result
+
+
+def allocated(profile, attribute):
+    return profile.get("attributes", {}).get(attribute, {}).get("allocated", 0)
+
+
+def skill_rank(profile, skill):
+    return profile.get("skills", {}).get(skill, SKILLS[skill]["base_rank"])
+
+
+def proficiency_rank(profile, proficiency):
+    xp = profile.get("proficiencies", {}).get(proficiency, {}).get("xp", 0)
+    return min(PROFICIENCY_MAX_RANK, xp // PROFICIENCY_XP_PER_RANK)
+
+
+def train_proficiency(profile, proficiency, effect, cap):
+    if effect <= 0:
+        return
+    entry = profile["proficiencies"][proficiency]
+    ceiling = min(PROFICIENCY_MAX_RANK, cap) * PROFICIENCY_XP_PER_RANK
+    if entry["xp"] < ceiling:
+        entry["xp"] += 1
+
+
+def point_pools(profile):
+    attribute_total = level_of(profile) * 2 + 2
+    skill_total = level_of(profile) + 1
+    attribute_spent = sum(allocated(profile, key) for key in ATTRIBUTES)
+    skill_spent = sum(
+        sum(
+            data["point_cost"][rank]
+            for rank in range(data["base_rank"] + 1, skill_rank(profile, key) + 1)
+        )
+        for key, data in SKILLS.items()
+    )
+    return {
+        "attribute_total": attribute_total,
+        "attribute_spent": attribute_spent,
+        "attribute_points": attribute_total - attribute_spent,
+        "skill_total": skill_total,
+        "skill_spent": skill_spent,
+        "skill_points": skill_total - skill_spent,
+    }
+
+
+def require_training(profile, safe):
+    require_peace(profile)
+    if not safe:
+        raise RuleError("안전한 부두의 탐사대 훈련관에게서만 훈련할 수 있습니다.")
+
+
+def allocate_attribute(profile, attribute, amount=1, *, safe=False):
+    require_training(profile, safe)
+    if attribute not in ATTRIBUTES or type(amount) is not int or amount <= 0:
+        raise RuleError("특성과 양의 정수 포인트를 지정하세요. 예: 힘 1 배분")
+    if point_pools(profile)["attribute_points"] < amount:
+        raise RuleError("특성 포인트가 부족합니다.")
+    profile["attributes"][attribute]["allocated"] += amount
+    profile["hp"] = min(profile["hp"], stats(profile)["max_hp"])
+
+
+def learn_skill(profile, skill, *, safe=False):
+    require_training(profile, safe)
+    if skill not in SKILLS:
+        raise RuleError("배울 기술을 지정하세요.")
+    data = SKILLS[skill]
+    rank = skill_rank(profile, skill) + 1
+    if rank > data["max_rank"]:
+        raise RuleError("이미 최고 Rank입니다.")
+    if level_of(profile) < data["requirements"][rank]:
+        raise RuleError(f"레벨 {data['requirements'][rank]}부터 배울 수 있습니다.")
+    if point_pools(profile)["skill_points"] < data["point_cost"][rank]:
+        raise RuleError("기술점수가 부족합니다.")
+    if profile["credits"] < data["credit_cost"][rank]:
+        raise RuleError("크레딧이 부족합니다.")
+    profile["credits"] -= data["credit_cost"][rank]
+    profile["skills"][skill] = rank
+
+
+def retrain(profile, scope, *, safe=False):
+    require_training(profile, safe)
+    if scope not in ("attributes", "skills", "all"):
+        raise RuleError("특성 재분배 · 기술 재분배 · 전체 재훈련")
+    draft = deepcopy(profile)
+    if scope in ("attributes", "all"):
+        for entry in draft["attributes"].values():
+            entry["allocated"] = 0
+    if scope in ("skills", "all"):
+        draft["skills"] = growth_defaults()["skills"]
+    draft["hp"] = min(profile["hp"], stats(draft)["max_hp"])
+    profile.clear()
+    profile.update(draft)
+
+
+def commander_talk(profile):
+    require_peace(profile)
+    if not profile["quest_started"]:
+        profile["quest_started"] = True
+        return "start"
+    if profile["boss_defeated"] and not profile["quest_claimed"]:
+        claim_quest(profile)
+        return "complete"
+    return "progress"
+
+
+def read_record(profile):
+    require_peace(profile)
+    profile["record_read"] = True
+
+
+def claim_cache(profile):
+    require_peace(profile)
+    if profile["cache_claimed"]:
+        raise RuleError("이미 보급품을 챙겼습니다.")
+    add_item(profile, "bandage", 2)
+    profile["cache_claimed"] = True
+
+
+def growth_state(profile):
+    """화면과 정보 명령에서 재사용할 직렬화 가능한 성장 정보."""
+    pools = point_pools(profile)
+    return {
+        **pools,
+        "attributes": [
+            {
+                "id": key,
+                **data,
+                **profile["attributes"][key],
+                "value": profile["attributes"][key]["base"] + allocated(profile, key),
+            }
+            for key, data in ATTRIBUTES.items()
+        ],
+        "proficiencies": [
+            {
+                "id": key,
+                "name": name,
+                "xp": profile["proficiencies"][key]["xp"],
+                "rank": proficiency_rank(profile, key),
+                "max_rank": PROFICIENCY_MAX_RANK,
+            }
+            for key, name in PROFICIENCIES.items()
+        ],
+        "skills": [skill_state(profile, key) for key in SKILLS],
+    }
+
+
+def skill_state(profile, key):
+    data = SKILLS[key]
+    rank = skill_rank(profile, key)
+    next_rank = rank + 1
+    maximum = rank == data["max_rank"]
+    points = 0 if maximum else data["point_cost"][next_rank]
+    credits = 0 if maximum else data["credit_cost"][next_rank]
+    level = 0 if maximum else data["requirements"][next_rank]
+    return {
+        "id": key,
+        "name": data["name"],
+        "description": data["description"],
+        "rank": rank,
+        "max_rank": data["max_rank"],
+        "next_points": points,
+        "next_credits": credits,
+        "required_level": level,
+        "can_learn": not maximum
+        and level_of(profile) >= level
+        and point_pools(profile)["skill_points"] >= points
+        and profile["credits"] >= credits,
+    }

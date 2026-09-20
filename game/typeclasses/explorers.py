@@ -32,18 +32,8 @@ class Explorer(DefaultCharacter):
         if self.db.profile is None:
             self.db.profile = rules.new_profile()
         profile = deserialize(self.db.profile)
-        if profile.get("version", 1) < 2:
-            profile.pop("encounter", None)
-            for key in (
-                "combat_target",
-                "queued_action",
-                "next_attack_at",
-                "heavy_ready_at",
-                "guard_until",
-                "player_round",
-            ):
-                profile[key] = rules.new_profile()[key]
-            profile["version"] = 2
+        if profile.get("version", 1) < rules.PROFILE_VERSION:
+            profile = rules.migrate_profile(profile)
             self.db.profile = profile
         return profile
 
@@ -53,10 +43,13 @@ class Explorer(DefaultCharacter):
         after_change(self.push_state)
 
     def change(self, operation):
-        profile = self.profile()
-        result = operation(profile)
-        self.save_profile(profile)
-        return result
+        from world.multiplayer import world_change
+
+        with world_change():
+            profile = self.profile()
+            result = operation(profile)
+            self.save_profile(profile)
+            return result
 
     @property
     def zone(self):

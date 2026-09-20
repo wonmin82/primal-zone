@@ -180,6 +180,9 @@ class Enemy(DefaultObject):
             )
             damage = min(self.db.hp, damage)
             self.db.hp -= damage
+            rules.train_proficiency(
+                profile, "weapon", damage, ENEMIES[self.db.enemy_id]["training_cap"]
+            )
             self.db.last_activity = now
             self.db.claim_last_activity = now
             threat = deserialize(self.db.threat)

@@ -13,6 +13,7 @@ ITEMS = {
 
 ENEMIES = {
     "scavenger": {
+        "training_cap": 2,
         "name": "어린청소룡",
         "combat_mode": "claimed",
         "hp": 24,
@@ -24,6 +25,7 @@ ENEMIES = {
         "chance": 0.25,
     },
     "hunter": {
+        "training_cap": 4,
         "name": "갈퀴사냥룡",
         "combat_mode": "claimed",
         "hp": 42,
@@ -35,6 +37,7 @@ ENEMIES = {
         "chance": 0.25,
     },
     "sentinel": {
+        "training_cap": 7,
         "name": "고장난경비기",
         "combat_mode": "claimed",
         "hp": 60,
@@ -46,6 +49,7 @@ ENEMIES = {
         "chance": 0.15,
     },
     "alpha": {
+        "training_cap": 10,
         "name": "능선의우두머리",
         "combat_mode": "public",
         "hp": 130,
