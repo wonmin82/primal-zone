@@ -31,7 +31,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         Populates the cmdset
         """
         super().at_cmdset_creation()
-        from commands.gameplay import COMMANDS
+        from commands.registry import COMMANDS
 
         for command in COMMANDS:
             self.add(command())

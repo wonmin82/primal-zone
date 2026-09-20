@@ -11,6 +11,15 @@ def cmdparser(raw_string, cmdset, caller, match_index=None, session=None, **kwar
     if not game_commands:
         return default_parser(raw_string, cmdset, caller, match_index, session, **kwargs)
 
+    from commands.aliases import SHORTCUTS
+
+    if text in SHORTCUTS:
+        original = default_parser(text, cmdset, caller, match_index, session, **kwargs)
+        engine = [match for match in original if not getattr(match[2], "input_style", None)]
+        if engine:
+            return engine
+        text = SHORTCUTS[text]
+
     # 작은따옴표 이후에는 행동 이름도 모두 대화 내용이다.
     quoted = text.startswith("'")
     parts = text.rsplit(None, 1)

@@ -52,4 +52,15 @@ def _build_world():
                     location=room,
                     destination=rooms[target],
                 )
+    from typeclasses.interactables import DEFINITIONS
+
+    for identity, zone, typeclass, name, aliases in DEFINITIONS:
+        if not search_tag(identity, category="primal_interactable"):
+            obj = create_object(
+                f"typeclasses.interactables.{typeclass}",
+                key=name,
+                aliases=aliases,
+                location=rooms[zone],
+            )
+            obj.tags.add(identity, category="primal_interactable")
     return rooms

@@ -14,6 +14,11 @@ class ZoneRoom(DefaultRoom):
         if not room:
             return super().return_appearance(looker, **kwargs)
         lines = [f"|g[{room['name']}]|n", room["desc"], ""]
+        from typeclasses.interactables import action_objects
+
+        targets = action_objects(self)
+        if targets:
+            lines.append("주변 대상: " + " · ".join(obj.key for obj in targets))
         enemies = room_enemies(self)
         if enemies:
             lines.append("사냥 대상: " + " · ".join(enemy.key for enemy in enemies))
