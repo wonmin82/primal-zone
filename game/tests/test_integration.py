@@ -53,6 +53,55 @@ class GameplayIntegrationTests(EvenniaCommandTest):
         self.assertEqual(wire["pz_state"][0][0]["hp"], 60)
         self.assertEqual(wire["pz_state"][0][0]["name"], self.char1.key)
 
+    def test_exit_state_and_text_follow_room_data(self):
+        from typeclasses.zone_rooms import exit_diagram
+
+        for zone, definition in ROOMS.items():
+            with self.subTest(zone=zone):
+                self.char1.location = self.rooms[zone]
+                with patch.object(self.char1, "msg") as message:
+                    with patch.object(self.char1.sessions, "count", return_value=1):
+                        Explorer.push_state(self.char1)
+                state = message.call_args.kwargs["pz_state"][0][0]
+                self.assertEqual(state["exits"], list(definition["exits"]))
+                self.assertIn(
+                    exit_diagram(definition["exits"]),
+                    self.rooms[zone].return_appearance(self.char1),
+                )
+
+    def test_direction_text_omits_missing_branches_and_supports_other_exits(self):
+        from typeclasses.zone_rooms import exit_diagram
+
+        self.assertEqual(exit_diagram(["북"]), "  북\n   │\n[현재]")
+        self.assertEqual(exit_diagram(["남"]), "[현재]\n   │\n  남")
+        self.assertEqual(exit_diagram(["동"]), "[현재] ─ 동")
+        self.assertEqual(exit_diagram(["서"]), "서 ─ [현재]")
+        self.assertEqual(exit_diagram(["서", "동"]), "서 ─ [현재] ─ 동")
+        self.assertEqual(exit_diagram([]), "[현재]")
+        for count in range(1, 5):
+            exits = ["북", "남", "동", "서"][:count]
+            diagram = exit_diagram(exits)
+            for direction in ("북", "남", "동", "서"):
+                self.assertEqual(direction in diagram, direction in exits)
+            self.assertEqual(diagram.count("│"), len(set(exits) & {"북", "남"}))
+            self.assertEqual(diagram.count("─"), len(set(exits) & {"동", "서"}))
+        self.assertEqual(exit_diagram(["위", "북동"]), "[현재]\n기타 출구: 위 · 북동")
+
+    def test_movement_immediately_emits_new_exits_and_appearance(self):
+        with patch.object(self.char1, "push_state", wraps=lambda: Explorer.push_state(self.char1)):
+            with patch.object(self.char1.sessions, "count", return_value=1):
+                with patch.object(self.char1, "msg") as message:
+                    self.assertTrue(self.char1.move_to(self.rooms["grass"]))
+                    self.assertTrue(self.char1.move_to(self.rooms["wreck"]))
+        states = [
+            call.kwargs["pz_state"][0][0]
+            for call in message.call_args_list
+            if "pz_state" in call.kwargs
+        ]
+        self.assertEqual(states[-1]["exits"], ["서"])
+        self.assertTrue(any(state["exits"] == list(ROOMS["grass"]["exits"]) for state in states))
+        self.assertTrue(any("서 ─ [현재]" in str(call) for call in message.call_args_list))
+
     def test_draft_profile_does_not_autosave(self):
         draft = self.char1.profile()
         draft["credits"] = 999
