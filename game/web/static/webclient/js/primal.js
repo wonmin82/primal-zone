@@ -2,7 +2,7 @@
 (() => {
   const byId = (id) => document.getElementById(id);
   const log = byId("log"), dialog = byId("auth-dialog"), input = byId("command");
-  let socket, playing = false, history = [], historyIndex = 0, authTimer, growthKey = "";
+  let socket, playing = false, history = [], historyIndex = 0, authTimer, growthKey = "", exitsKey = "";
   function append(text, kind = "") {
     const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 70;
     const entry = document.createElement("article");
@@ -33,6 +33,37 @@
     el.textContent = label;
     el.dataset.command = cmd;
     return el;
+  }
+  function renderExits(exits) {
+    const key = JSON.stringify(exits);
+    if (key === exitsKey) return;
+    exitsKey = key;
+    const grid = document.createElement("div"), center = document.createElement("span");
+    grid.className = "direction-grid";
+    center.className = "direction-center";
+    center.textContent = "[현재]";
+    grid.append(center);
+    const positions = new Map([["북", "north"], ["남", "south"], ["동", "east"], ["서", "west"]]);
+    const other = document.createElement("div");
+    other.className = "other-exits";
+    for (const direction of exits) {
+      const el = button(direction, direction), position = positions.get(direction);
+      if (position) {
+        grid.classList.add("has-" + position);
+        el.className = "direction-" + position;
+        const line = document.createElement("span");
+        line.className = "direction-line line-" + position;
+        line.setAttribute("aria-hidden", "true");
+        grid.append(el, line);
+      } else other.append(el);
+    }
+    const children = [grid];
+    if (other.childElementCount) {
+      const label = document.createElement("p");
+      label.textContent = "기타 출구";
+      children.push(label, other);
+    }
+    byId("exits").replaceChildren(...children);
   }
   function authBusy(busy) {
     byId("auth-form").querySelectorAll("button").forEach((el) => { el.disabled = busy; });
@@ -94,7 +125,7 @@
     byId("hp").max = state.max_hp; byId("hp").value = state.hp;
     byId("xp").max = state.xp_next - state.xp_floor;
     byId("xp").value = state.level >= 10 ? byId("xp").max : state.xp - state.xp_floor;
-    byId("exits").replaceChildren(...state.exits.map((direction) => button(direction, direction)));
+    renderExits(state.exits);
     const actions = state.enemies.map((enemy) => {
       const el = button(enemy.name + " " + enemy.hp + "/" + enemy.max_hp + (enemy.can_attack ? " 사냥" : " · 다른 그룹 교전 중"), enemy.name + " 사냥");
       el.disabled = !enemy.can_attack;
