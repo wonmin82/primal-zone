@@ -9,11 +9,43 @@ from evennia.objects.objects import DefaultCharacter
 from evennia.utils import delay
 from evennia.utils.dbserialize import deserialize
 from world import rules
+from world import text as ft
 from world.content import ENEMIES, ITEMS, ROOMS
 from world.multiplayer import after_change
 
 
 class Explorer(DefaultCharacter):
+    def return_appearance(self, looker, **kwargs):
+        return ft.sheet(ft.token("player", self.key), "섬을 탐험하는 탐사자다.")
+
+    def msg(self, text=None, from_obj=None, session=None, options=None, **kwargs):
+        from evennia.utils.utils import make_iter
+        from world.text import Text
+
+        message = text[0] if isinstance(text, tuple) else text
+        if not isinstance(message, Text):
+            return super().msg(text, from_obj=from_obj, session=session, options=options, **kwargs)
+        sessions = make_iter(session) if session else self.sessions.all()
+        for target in sessions:
+            if target.protocol_key in ("websocket", "webclient/websocket"):
+                super().msg(
+                    from_obj=from_obj,
+                    session=target,
+                    options={**(options or {}), "raw": True},
+                    pz_log=([{"kind": message.kind, "segments": message.segments}], {}),
+                    **kwargs,
+                )
+            else:
+                from evennia.utils.ansi import parse_ansi
+
+                super().msg(
+                    parse_ansi(message.ansi()),
+                    from_obj=from_obj,
+                    session=target,
+                    options={**(options or {}), "raw": True},
+                    **kwargs,
+                )
+
     @classmethod
     def normalize_name(cls, name):
         return unicodedata.normalize("NFKC", name).strip()
@@ -134,6 +166,23 @@ class Explorer(DefaultCharacter):
             self.leave_combat()
         super().at_post_unpuppet(account=account, session=session, **kwargs)
 
+    def announce_move_from(self, destination, msg=None, mapping=None, move_type="move", **kwargs):
+        if msg is not None:
+            return super().announce_move_from(destination, msg, mapping, move_type, **kwargs)
+        self._announce_presence(self.location, " 이곳을 떠났다.")
+
+    def announce_move_to(self, source_location, msg=None, mapping=None, move_type="move", **kwargs):
+        if msg is not None:
+            return super().announce_move_to(source_location, msg, mapping, move_type, **kwargs)
+        self._announce_presence(self.location, " 이곳에 도착했다.")
+
+    def _announce_presence(self, room, sentence):
+        if room:
+            message = ft.text(ft.named("player", self.key, "이/가"), sentence)
+            for observer in room.contents:
+                if observer != self and observer.has_account:
+                    observer.msg(message, from_obj=self)
+
     def at_pre_move(self, destination, move_type="move", **kwargs):
         if self.profile().get("combat_target"):
             self.msg("전투 중에는 이동할 수 없습니다. '도주'로 교전을 끝내세요.")
@@ -189,7 +238,12 @@ class Explorer(DefaultCharacter):
         if not enemy:
             raise rules.RuleError("이곳에는 공격할 수 있는 상대가 없습니다.")
         enemy.engage(self)
-        self.msg(f"{enemy.key}과(와) 교전합니다. 기본 공격은 2.5초마다 자동 진행됩니다.")
+        self.msg(
+            ft.text(
+                ft.named("hostile", enemy.key, "과/와"),
+                " 교전을 시작했다. 기본 공격은 2.5초마다 이어진다.",
+            )
+        )
         self.push_state()
 
     def leave_combat(self):

@@ -192,8 +192,16 @@ class GrowthIntegrationTests(EvenniaCommandTest):
         self.assertEqual(cmdparser("상", admin, self.char1)[0][2].key, "상")
 
     def test_information_commands_and_help_registry(self):
-        self.call(Abilities(), "", "[특성]")
-        self.call(Skills(), "", "[기술]")
-        self.call(Experience(), "", "캐릭터 XP")
-        self.call(Equipment(), "", "착용 장비")
-        self.call(Help(), "", "탐사 안내")
+        for command, heading in (
+            (Abilities(), "능력"),
+            (Skills(), "기술"),
+            (Experience(), "경험치"),
+            (Equipment(), "착용 장비"),
+            (Help(), "탐사 안내"),
+        ):
+            with patch.object(self.char1, "msg") as message:
+                command.caller = self.char1
+                command.run()
+            output = message.call_args.args[0]
+            self.assertEqual(output.kind, "sheet")
+            self.assertIn(heading, output)

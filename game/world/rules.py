@@ -172,9 +172,9 @@ def player_attack(profile, enemy_id, now, interval, rng=None):
     if action == "heal":
         try:
             amount = heal(profile, ENEMIES[enemy_id]["training_cap"])
-            return 0, f"붕대로 체력 {amount} 회복."
+            return 0, {"action": "heal", "amount": amount}
         except RuleError as error:
-            return 0, str(error)
+            return 0, {"action": "error", "message": str(error)}
     multiplier = 1.0
     if action == "heavy" and now >= profile["heavy_ready_at"]:
         multiplier = 1.8 + (skill_rank(profile, "heavy") - 1) * 0.2
@@ -186,7 +186,7 @@ def player_attack(profile, enemy_id, now, interval, rng=None):
         int((stats(profile)["attack"] + rng.randint(-1, 2)) * multiplier)
         - ENEMIES[enemy_id]["defense"],
     )
-    return damage, f"{ENEMIES[enemy_id]['name']}에게 {damage} 피해."
+    return damage, {"action": "heavy" if multiplier > 1 else "guard" if action == "guard" else "attack"}
 
 
 def enemy_attack(profile, enemy_id, enemy_round, now, rng=None):

@@ -1,7 +1,9 @@
 """inventory 영역의 명시적 게임 명령."""
 
+from world import presentation as view
 from world import rules
-from world.content import EXCHANGE, ITEMS, SHOP, find_id
+from world import text as ft
+from world.content import ITEMS, find_id
 
 from commands.base import GameCommand
 
@@ -14,18 +16,7 @@ class Inventory(GameCommand):
     aliases = ["i", "인벤토리"]
 
     def run(self):
-        profile = self.caller.profile()
-        lines = ["|g소지품|n"]
-        for key, count in profile["inventory"].items():
-            item = ITEMS[key]
-            equipped = " [착용]" if key in profile["equipment"].values() else ""
-            bonus = (
-                f" 공격 +{item.get('attack', 0)} / 방어 +{item.get('defense', 0)}"
-                if item["slot"] in ("weapon", "armor")
-                else ""
-            )
-            lines.append(f"{item['name']} ×{count}{equipped}{bonus}")
-        self.caller.msg("\n".join(lines))
+        self.caller.msg(view.inventory(self.caller.profile()))
 
 
 class Equip(GameCommand):
@@ -41,7 +32,9 @@ class Equip(GameCommand):
         if not item:
             raise rules.RuleError("사용법: 강철마체테 착용")
         self.caller.change(lambda profile: rules.equip(profile, item))
-        self.caller.msg(f"{ITEMS[item]['name']} 착용 완료.")
+        self.caller.msg(
+            ft.text(ft.item(item), ft.particle(ITEMS[item]["name"], "을/를"), " 착용했다.")
+        )
 
 
 class Shop(GameCommand):
@@ -53,12 +46,7 @@ class Shop(GameCommand):
 
     def run(self):
         self.at_dock()
-        lines = ["|g부두 보급소|n"]
-        for key, price in SHOP.items():
-            exchange = f" / 회수부품 {EXCHANGE[key]}개" if key in EXCHANGE else ""
-            lines.append(f"{ITEMS[key]['name']}: {price} 크레딧{exchange}")
-        lines.append("붕대 구매 · 강철마체테 구매 · 강화조끼 교환 (한 번에 1개)")
-        self.caller.msg("\n".join(lines))
+        self.caller.msg(view.shop())
 
 
 class Buy(GameCommand):
@@ -76,7 +64,7 @@ class Buy(GameCommand):
         if not item:
             raise rules.RuleError("물건 이름을 확인하세요. 예: 붕대 구매")
         self.caller.change(lambda profile: rules.buy(profile, item, exchange=self.exchange))
-        self.caller.msg(f"{ITEMS[item]['name']} 1개를 받았습니다.")
+        self.caller.msg(ft.text(ft.item(item), " 1개를 받아 가방에 넣었다."))
 
 
 class Exchange(Buy):
@@ -119,11 +107,4 @@ class Equipment(GameCommand):
     summary = "현재 착용한 무기와 방어구만 확인합니다."
 
     def run(self):
-        profile = self.caller.profile()
-        self.caller.msg(
-            "착용 장비\n"
-            + "\n".join(
-                f"{ITEMS[item]['name']} · 공격 +{ITEMS[item].get('attack', 0)} · 방어 +{ITEMS[item].get('defense', 0)}"
-                for item in profile["equipment"].values()
-            )
-        )
+        self.caller.msg(view.equipment(self.caller.profile()))

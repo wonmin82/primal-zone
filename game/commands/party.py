@@ -1,6 +1,7 @@
 """party 영역의 명시적 게임 명령."""
 
 from world import rules
+from world import text as ft
 
 from commands.base import GameCommand
 
@@ -16,18 +17,46 @@ class PartyCommand(GameCommand):
         from world.multiplayer import object_by_id
 
         party = party_for(self.caller)
+        lines = []
         if party:
             state = party.state()
-            names = [object_by_id(key).key for key in state["members"] if object_by_id(key)]
             leader = object_by_id(state["leader"])
-            self.caller.msg(
-                f"파티장: {leader.key} · 멤버: {', '.join(names)} · 전리품: {state['loot_mode']}"
+            lines.extend(
+                [
+                    ft.row("파티장", ft.token("player", leader.key)),
+                    "전리품 : 참여자 순번 분배",
+                    "",
+                    "[ 멤버 ]",
+                ]
             )
+            for identity in state["members"]:
+                member = object_by_id(identity)
+                if member:
+                    lines.append(
+                        ft.text(
+                            ft.token("player", member.key),
+                            " [파티장]" if identity == state["leader"] else "",
+                        )
+                    )
         else:
-            self.caller.msg("소속 파티가 없습니다. 플레이어이름 파티초대로 시작하세요.")
+            lines.append(
+                ft.text(
+                    "소속 파티가 없습니다. 플레이어이름 ",
+                    ft.token("command", "파티초대"),
+                    "로 시작하세요.",
+                )
+            )
         invited, _ = invitation_for(self.caller)
         if invited:
-            self.caller.msg("대기 중인 초대가 있습니다: 파티수락 / 파티거절")
+            lines.append(
+                ft.text(
+                    "대기 중인 초대 : ",
+                    ft.token("command", "파티수락"),
+                    " / ",
+                    ft.token("command", "파티거절"),
+                )
+            )
+        self.caller.msg(ft.sheet("탐사 파티", *lines))
 
 
 class PartyInvite(GameCommand):
@@ -45,7 +74,7 @@ class PartyInvite(GameCommand):
             db_key__iexact=self.args.strip(), db_typeclass_path="typeclasses.explorers.Explorer"
         ).first()
         invite(self.caller, target)
-        self.caller.msg("파티 초대를 보냈습니다.")
+        self.caller.msg(ft.text(ft.token("player", target.key), "에게 파티 초대를 보냈다."))
 
 
 class PartyAccept(GameCommand):
@@ -58,8 +87,13 @@ class PartyAccept(GameCommand):
     def run(self):
         from typeclasses.parties import respond
 
-        respond(self.caller, self.accept)
-        self.caller.msg("파티에 가입했습니다." if self.accept else "파티 초대를 거절했습니다.")
+        party = respond(self.caller, self.accept)
+        if self.accept:
+            announce(
+                party, ft.text(ft.named("player", self.caller.key, "이/가"), " 파티에 합류했다.")
+            )
+        else:
+            self.caller.msg(ft.text("파티 초대를 거절했다."))
 
 
 class PartyReject(PartyAccept):
@@ -83,7 +117,10 @@ class PartyLeave(GameCommand):
         if not party:
             raise rules.RuleError("소속 파티가 없습니다.")
         party.remove_member(self.caller)
-        self.caller.msg("파티를 탈퇴했습니다.")
+        message = ft.text(ft.named("player", self.caller.key, "이/가"), " 파티를 떠났다.")
+        self.caller.msg(message)
+        if party.pk:
+            announce(party, message)
 
 
 class PartyKick(GameCommand):
@@ -116,7 +153,13 @@ class PartyKick(GameCommand):
             party.transfer(self.caller, target)
         else:
             party.remove_member(self.caller, target)
-        self.caller.msg("파티 구성을 변경했습니다.")
+        message = ft.text(
+            ft.named("player", target.key, "이/가"),
+            " 파티장을 맡았다." if self.transfer else " 파티에서 제외되었다.",
+        )
+        announce(party, message)
+        if not self.transfer:
+            target.msg(message)
 
 
 class PartyTransfer(PartyKick):
@@ -149,3 +192,12 @@ class PartyLootMode(GameCommand):
             state["loot_mode"] = "round_robin"
             party.db.state = state
         self.caller.msg("전리품을 참여자 순번으로 배분합니다.")
+
+
+def announce(party, message):
+    from world.multiplayer import object_by_id
+
+    for identity in party.state()["members"]:
+        member = object_by_id(identity)
+        if member:
+            member.msg(message)

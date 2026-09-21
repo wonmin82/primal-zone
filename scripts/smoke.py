@@ -38,6 +38,10 @@ class Client:
                     elif kind == "pz_state":
                         self.state = args[0]
                         self.revision += 1
+                    elif kind == "pz_log":
+                        self.messages.put_nowait(
+                            "".join(part["text"] for part in args[0]["segments"])
+                        )
                     elif kind == "text":
                         self.messages.put_nowait(args[0])
                     self.changed.notify_all()

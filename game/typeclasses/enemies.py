@@ -5,7 +5,9 @@ from time import time
 from evennia.objects.objects import DefaultObject
 from evennia.utils import delay
 from evennia.utils.dbserialize import deserialize
+from world import presentation as view
 from world import rules
+from world import text as ft
 from world.content import ENEMIES
 from world.multiplayer import (
     CLAIM_TIMEOUT_SECONDS,
@@ -21,6 +23,19 @@ from world.multiplayer import (
 
 
 class Enemy(DefaultObject):
+    def return_appearance(self, looker, **kwargs):
+        definition = ENEMIES[self.db.enemy_id]
+        alive = self.db.state == "alive"
+        return ft.sheet(
+            ft.token("hostile", self.key),
+            definition["description"],
+            f"체력 {self.db.hp} / {self.db.max_hp}"
+            if alive
+            else "아직 다시 모습을 드러내지 않았다.",
+            "",
+            ft.actions(["공격"] if alive else []),
+        )
+
     def at_object_creation(self):
         self.locks.add("get:false();puppet:false();delete:false()")
         self.db.state = "alive"
@@ -86,7 +101,9 @@ class Enemy(DefaultObject):
                 raise rules.RuleError("현재 상대에게서 먼저 도주하세요.")
             if not self.can_attack(player):
                 owner = "다른 파티" if str(self.db.claim).startswith("party:") else "다른 탐사자"
-                raise rules.RuleError(f"{self.key}은(는) {owner}와 교전 중입니다.")
+                raise rules.RuleError(
+                    f"{self.key}{ft.particle(self.key, '은/는')} {owner}와 교전 중입니다."
+                )
             if ENEMIES[self.db.enemy_id]["combat_mode"] == "claimed" and not self.db.claim:
                 self.db.claim = self.group_for(player)
             if player.id not in self.db.combatants:
@@ -175,7 +192,7 @@ class Enemy(DefaultObject):
             profile = player.profile()
             if now < profile["next_attack_at"]:
                 return
-            damage, message = rules.player_attack(
+            damage, outcome = rules.player_attack(
                 profile, self.db.enemy_id, now, COMBAT_INTERVAL, rng
             )
             damage = min(self.db.hp, damage)
@@ -197,6 +214,7 @@ class Enemy(DefaultObject):
             }
             self.db.contribution = contribution
             player.save_profile(profile)
+            message = view.outgoing_attack(profile, self.key, outcome, damage)
             after_change(lambda: player.msg(message))
             if self.db.hp <= 0:
                 self.finish_death(player, now, rng)
@@ -212,6 +230,11 @@ class Enemy(DefaultObject):
         if self.db.state != "alive" or self.db.hp > 0:
             return
         groups = self.reward_groups(now)
+        fallen = ft.text(
+            ft.named("hostile", self.key, "이/가"), " 더는 버티지 못하고 바닥에 쓰러졌다."
+        )
+        for participant in self.active_players():
+            after_change(lambda participant=participant: participant.msg(fallen))
         self.db.state = "respawning"
         self.db.respawn_at = now + CORPSE_TTL_SECONDS + RESPAWN_DELAY_SECONDS
         definition = ENEMIES[self.db.enemy_id]
@@ -226,7 +249,7 @@ class Enemy(DefaultObject):
             if definition.get("boss"):
                 profile["boss_defeated"] = True
             player.save_profile(profile)
-            message = f"처치 보상: 경험치 +{share['xp']} · 크레딧 +{share['credits']}"
+            message = view.reward(share["xp"], share["credits"])
             after_change(lambda player=player, message=message: player.msg(message))
         Corpse.from_enemy(self, groups, now, rng)
         for player in self.active_players():
@@ -250,7 +273,14 @@ class Enemy(DefaultObject):
             )
             target.save_profile(result_profile)
             target.msg(
-                f"{self.key}{'의 돌진' if result['charged'] else ''}: {result['damage']} 피해."
+                ft.text(
+                    ft.named("hostile", self.key, "이/가"),
+                    " 거세게 돌진해 " if result["charged"] else " 달려들어 ",
+                    f"{result['damage']}의 피해를 입혔다.",
+                    f" 방어로 {result['prevented']}의 피해를 막았다."
+                    if result["prevented"]
+                    else "",
+                )
             )
             if result["defeated"]:
                 target.leave_combat()
@@ -258,7 +288,13 @@ class Enemy(DefaultObject):
                 target.msg("탐사대가 부두로 구조했습니다. 최대 10크레딧을 잃었습니다.")
             if ENEMIES[self.db.enemy_id].get("boss") and self.db.enemy_round % 3 == 2:
                 for player in self.active_players():
-                    player.msg("우두머리가 몸을 낮춘다. 다음 돌진에 대비하세요!")
+                    player.msg(
+                        ft.text(
+                            ft.token("warning", "! "),
+                            ft.named("hostile", self.key, "이/가"),
+                            " 몸을 낮추고 돌진할 자세를 취한다.",
+                        )
+                    )
         self.broadcast_state()
 
     def schedule_combat(self):

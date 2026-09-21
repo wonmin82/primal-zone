@@ -1,6 +1,8 @@
 """combat 영역의 명시적 게임 명령."""
 
+from world import presentation as view
 from world import rules
+from world import text as ft
 from world.content import ENEMIES, find_id
 
 from commands.base import GameCommand
@@ -33,7 +35,7 @@ class Heavy(GameCommand):
 
     def run(self):
         self.caller.change(lambda profile: rules.queue_action(profile, self.action))
-        self.caller.msg(f"다음 차례에 {self.key}합니다.")
+        self.caller.msg(ft.text("다음 차례에 ", ft.token("command", self.key), " 행동을 준비한다."))
 
 
 class Guard(Heavy):
@@ -55,10 +57,12 @@ class Heal(GameCommand):
     def run(self):
         if self.caller.profile().get("combat_target"):
             self.caller.change(lambda profile: rules.queue_action(profile, "heal"))
-            self.caller.msg("다음 차례에 붕대를 사용합니다. 이번 기본 공격을 대신합니다.")
+            self.caller.msg(
+                ft.text("다음 차례에는 공격 대신 ", ft.item("bandage"), "를 사용할 준비를 한다.")
+            )
         else:
             amount = self.caller.change(rules.heal)
-            self.caller.msg(f"체력 {amount} 회복.")
+            self.caller.msg(view.healing(amount))
 
 
 class Flee(GameCommand):

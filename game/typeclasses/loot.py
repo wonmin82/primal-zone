@@ -8,6 +8,7 @@ from evennia.objects.objects import DefaultObject
 from evennia.utils import delay
 from evennia.utils.dbserialize import deserialize
 from world import rules
+from world import text as ft
 from world.content import ENEMIES, ITEMS
 from world.multiplayer import (
     CORPSE_TTL_SECONDS,
@@ -118,8 +119,23 @@ def take_loot(caller, item=None, corpse=True, now=None):
     if not received:
         raise rules.RuleError("가져갈 물건이 없거나 다른 탐사자의 보호된 전리품입니다.")
     for target, item_id, quantity in received:
-        target.msg(f"{ITEMS[item_id]['name']} {quantity}개를 받았습니다.")
-    caller.msg("전리품을 배정된 탐사자에게 전달했습니다.")
+        if target == caller:
+            caller.msg(
+                ft.text(
+                    "시체를 뒤져 " if corpse else "바닥에서 ",
+                    ft.item(item_id),
+                    f" {quantity}개를 챙겼다.",
+                )
+            )
+        else:
+            message = ft.text(
+                ft.item(item_id),
+                f" {quantity}개는 이번 순번인 ",
+                ft.token("player", target.key),
+                "에게 돌아갔다.",
+            )
+            caller.msg(message)
+            target.msg(message)
     for obj in caller.location.contents:
         if hasattr(obj, "push_state"):
             obj.push_state()
@@ -127,6 +143,30 @@ def take_loot(caller, item=None, corpse=True, now=None):
 
 
 class Corpse(DefaultObject):
+    def return_appearance(self, looker, **kwargs):
+        from world.state import loot_entries
+
+        entries = loot_entries(self, looker, time())
+        lines = ["남아 있는 물건을 살펴본다.", ""]
+        for entry in entries:
+            rights = (
+                ft.text(" · 배정: ", ft.token("player", entry["assigned_name"]))
+                if entry["protected"]
+                else " · 자유 획득"
+            )
+            lines.append(
+                ft.text(
+                    ft.item(entry["item"]),
+                    f" ×{entry['quantity']}",
+                    rights,
+                    " (회수 가능)" if entry["can_take"] else " (보호 중)",
+                )
+            )
+        if not entries:
+            lines.append("남은 전리품이 없다.")
+        lines.extend(["", ft.actions(["가져"] if entries else [])])
+        return ft.sheet(ft.token("remains", self.key), *lines)
+
     def at_object_creation(self):
         self.locks.add("get:false();puppet:false();delete:false()")
         self.db.entries = []
@@ -180,6 +220,30 @@ class Corpse(DefaultObject):
 
 
 class DroppedLoot(DefaultObject):
+    def return_appearance(self, looker, **kwargs):
+        from world.state import loot_entries
+
+        entries = loot_entries(self, looker, time())
+        lines = ["남아 있는 물건을 살펴본다.", ""]
+        for entry in entries:
+            rights = (
+                ft.text(" · 배정: ", ft.token("player", entry["assigned_name"]))
+                if entry["protected"]
+                else " · 자유 획득"
+            )
+            lines.append(
+                ft.text(
+                    ft.item(entry["item"]),
+                    f" ×{entry['quantity']}",
+                    rights,
+                    " (회수 가능)" if entry["can_take"] else " (보호 중)",
+                )
+            )
+        if not entries:
+            lines.append("남은 전리품이 없다.")
+        lines.extend(["", ft.actions(["가져"] if entries else [])])
+        return ft.sheet(ft.token("item", self.key), *lines)
+
     def at_object_creation(self):
         self.locks.add("get:false();puppet:false();delete:false()")
         self.db.entries = []
