@@ -2,6 +2,7 @@
 
 from evennia import Command
 from world import rules
+from world import text as ft
 
 
 class GameCommand(Command):
@@ -17,7 +18,7 @@ class GameCommand(Command):
                 if player.sessions.count():
                     player.push_state()
         except rules.RuleError as error:
-            self.caller.msg(f"|y{error}|n")
+            self.caller.msg(ft.text(ft.token("error", str(error)), kind="error"))
 
     def peaceful(self):
         rules.require_peace(self.caller.profile())

@@ -147,3 +147,36 @@ profile의 최신 버전은 3이다. v1 → v3는 개인 encounter를 제거하�
 ### 현재 위치 방향 표시
 
 `ROOMS[zone]["exits"]`를 서버 이동·`pz_state.exits`·Room 텍스트 방향도의 공통 출처로 사용한다. `ZoneRoom`의 formatter는 실제 사방 출구와 연결선만 순수 문자로 출력한다. 웹 SURROUNDINGS는 CSS Grid에 같은 방향을 배치하고 기존 `data-command` 버튼으로 방향 텍스트를 전송한다. 중앙 `[현재]`는 비대화형 표시이며 기타 출구는 별도 목록으로 표시한다. 이동 후 기존 appearance/state 전송으로 즉시 갱신하고 출구 배열이 같은 주기 전송에서는 버튼을 유지한다. 일반 로그의 `textContent` 출력과 서버 이동 제한은 변경하지 않는다.
+
+## 텍스트와 의미별 색상
+
+세계 사건과 조회 화면은 같은 데이터를 서로 다른 형식으로 표현한다. Room·공격·처치·전리품·NPC 대화는 한국어 서술이고, 상태·능력·경험치·기술·장비·가방·상점·임무·파티·도움말은 `[제목]`과 짧은 행으로 구성한 compact 정보창이다. Room과 대상 보기는 기존 구분선과 설명·행동 안내를 유지한다. Room은 실제로 보이는 대상만 묘사하며 명령 목록을 넣지 않는다. 가능한 행동은 대상 보기와 command registry 기반 도움말에서 확인한다.
+
+`world/text.py`의 `Text`는 색 없는 문자열과 `{text, role}` 조각을 함께 가진다. `token`, `text`, `join`, `sheet`, `compact`, `row`가 조합과 한글 표시 폭을 담당한다. 조사는 색 코드를 붙이기 전 원래 이름의 받침으로 선택한다. `world/presentation.py`는 기존 rules·성장 정의·ITEMS·SHOP·EXCHANGE에서 조회값을 읽는다. Enemy/Corpse/DroppedLoot/ActionObject/Explorer의 실제 타입과 콘텐츠 정의가 대상 역할과 행동을 결정한다. 이름별 색상 목록이나 완성된 문자열 검색은 사용하지 않는다.
+
+`rules.player_attack()`은 피해량과 구조화된 행동 결과를 반환한다. Enemy가 실제 HP 감소량을 확정한 뒤 문장을 만든다. 사망·보상·전리품 권한 판정에 출력 문장을 사용하지 않는다. 전투 공식, 타이머, 포인트 경제, 가격, 보상·배정, profile 버전과 저장 구조는 변경하지 않는다.
+
+웹 경로는 `Explorer.msg(Text)` → `pz_log` → 허용된 role의 `<span>` → `textContent`다. 이름·대사·아이템·입력의 내용은 항상 텍스트이며 링크나 HTML로 해석하지 않는다. raw 전송으로 Evennia inline function 치환도 차단한다. 일반 인증·관리 출력은 기존 `text`/`plainText()` 경로를 유지한다. 기존 inert template는 웹으로 받은 레거시 출력에서 문자만 추출하며 live DOM에 넣지 않는다. command echo는 입력 전체를 기존 스타일로 보여주고 클라이언트 명령 parser를 추가하지 않는다.
+
+웹 팔레트는 `primal.css`의 `--semantic-*` 변수 한 곳에서 관리한다. semantic role과 실제 색상은 1:1이 아니며 플레이어/행동/성공, 객체/보상/경고는 같은 색을 공유한다. 장비도 일반 아이템과 같은 색을 쓰고 `[착용]`으로 상태를 구분한다. 비웹 세션은 같은 조각을 이스케이프한 후 ANSI 근사색으로 변환한다. 사용자 ESC 제어문자는 제거하고 `|`는 literal로 처리한다. 기본 서버 설정은 Telnet을 비활성화한 상태다.
+
+| 역할 | 실제 웹 색 | 의미 |
+| --- | --- | --- |
+| text, title | `#e1e9de` | 일반 문장·정보창 제목 |
+| muted | `#9aac9e` | 보조 설명·구분선 |
+| hostile, error | `#e6a08c` | 적·오류 |
+| npc | `#8ecfce` | NPC |
+| player, command, direction, success | `#bbdb98` | 탐사자·실제 행동/출구·완료 표시 |
+| object, reward, warning | `#d6bc80` | 상호작용 객체·확정 보상·경고 |
+| item | `#c7b4e6` | 소모품·재료·장비 |
+| remains | `#b9a5ac` | 시체·전리품 원천 |
+
+텍스트의 색은 클릭 기능이 아니다. SURROUNDINGS 버튼만 기존 명령을 전송하고 서버가 최종 허용 여부를 판단한다. 색이 없어도 대상 이름, 서술, `[착용]`, 임무의 `+ / > / -`, 위험 경고 문장으로 의미를 이해할 수 있다.
+
+### Compact 정보 조회
+
+`compact(title, *lines, summary=...)`는 기존 Text 조각을 보존하면서 제목과 요약을 한 줄에 놓고 첫 내용까지 빈 줄을 추가하지 않는다. 기존 `sheet`는 Room·대상 보기 등에 남긴다. 상태는 전투 수치·특성·장비 요약, 능력은 기본값과 투자값, 장비는 슬롯별 보정으로 역할을 나눈다. 가방은 비어 있지 않은 분류마다 한 행을 만들고, 기술은 SKILLS의 설명과 다음 조건을 그대로 한 항목에 표시한다. R은 Rank, C는 크레딧이며 비용 화면에 단위 안내를 둔다. 임무는 완료 수/전체 단계와 ASCII `+`(완료), `>`(현재), `-`(대기)로 구분한다.
+
+기본 도움말은 registry 순서와 category를 사용한 명령 지도다. `명령이름 도움말`은 같은 metadata의 summary/usage/aliases를 표시하며 등록 별칭과 공용 단축어로도 조회할 수 있다. 상세 조회에서 단축어를 해석하는 것은 도움말 대상 검색이며 이동이나 게임 입력 parser는 바꾸지 않는다. `능력 도움말`은 ATTRIBUTES의 설명을 추가로 표시하고 기존 웹 성장 패널 tooltip도 유지한다.
+
+웹은 기존 semantic span과 textContent 경로를 사용한다. 정보창은 `word-break: keep-all`로 공백을 우선해 줄바꿈하되 기존 `overflow-wrap: anywhere`로 공백 없는 긴 이름의 가로 넘침을 막는다. 글자 크기와 색상은 변경하지 않는다. CSS URL의 버전 표시는 이전 스타일 캐시가 새 줄바꿈을 가리지 않도록 한다. terminal ANSI 변환도 같은 Text를 사용하며 저장·경제·전투 규칙을 변경하지 않는다.

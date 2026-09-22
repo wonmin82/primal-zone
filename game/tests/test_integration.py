@@ -155,7 +155,7 @@ class GameplayIntegrationTests(EvenniaCommandTest):
             self.call(
                 gameplay.Investigate(),
                 "보급상자",
-                "보급상자에서 붕대 2개를 찾았습니다.",
+                "보급상자에서 붕대 2개를 찾아 챙겼다.",
                 caller=character,
             )
         self.call(
@@ -165,17 +165,19 @@ class GameplayIntegrationTests(EvenniaCommandTest):
         self.assertEqual(self.char2.profile()["inventory"]["bandage"], 5)
 
     def test_korean_quest_sequence_and_reward(self):
-        self.call(gameplay.Talk(), "윤대장", "윤대장:", caller=self.char1)
+        self.call(gameplay.Talk(), "윤대장", "윤대장", caller=self.char1)
         self.char1.location = self.rooms["office"]
-        self.call(gameplay.Investigate(), "정비기록", "정비기록:", caller=self.char1)
+        self.call(gameplay.Investigate(), "정비기록", "정비기록을 펼쳐", caller=self.char1)
         self.char1.change(lambda profile: profile["inventory"].update(scrap=3))
         self.char1.location = self.rooms["generator"]
-        self.call(gameplay.Repair(), "발전기", "발전기가 돌아갑니다!", caller=self.char1)
+        self.call(
+            gameplay.Repair(), "발전기", "발전기가 다시 돌아가기 시작했다.", caller=self.char1
+        )
         self.char1.change(lambda profile: profile.update(boss_defeated=True))
         self.char1.location = self.rooms["dock"]
-        self.call(gameplay.Talk(), "윤대장", "첫 탐사 완료!", caller=self.char1)
+        self.call(gameplay.Talk(), "윤대장", "윤대장", caller=self.char1)
         before = self.char1.profile()
-        self.call(gameplay.Talk(), "윤대장", "통신탑 복구 완료", caller=self.char1)
+        self.call(gameplay.Talk(), "윤대장", "윤대장", caller=self.char1)
         self.assertEqual(self.char1.profile(), before)
 
     def test_raw_commands_purchase_equip_and_quest(self):

@@ -2,6 +2,7 @@
 
 from evennia.utils.ansi import strip_ansi
 from world import rules
+from world import text as ft
 
 from commands.base import GameCommand
 
@@ -21,6 +22,6 @@ class Say(GameCommand):
         if len(text) > 300:
             raise rules.RuleError("대화는 300자 이하로 입력하세요.")
         # msg_contents의 템플릿 해석 없이 중괄호와 $You()도 입력 그대로 전달한다.
-        message = f"{self.caller.key}: {text.replace('|', '||')}"
+        message = ft.text(ft.token("player", self.caller.key), ": ", text, kind="chat")
         for recipient in self.caller.location.contents:
             recipient.msg(message)

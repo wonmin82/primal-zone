@@ -30,5 +30,6 @@ class EnemySpawnTests(EvenniaCommandTest):
         self.assertIn(first.key, rooms["grass"].return_appearance(self.char1))
         first.db.state = "respawning"
         first.db.respawn_at = time() + 100
-        # 장소 안내 문구와 구분해 실제 사냥 대상 행을 검사한다.
-        self.assertNotIn("사냥 대상:", rooms["grass"].return_appearance(self.char1))
+        # 살아 있는 적의 의미 조각이 사라지는지 확인한다.
+        output = rooms["grass"].return_appearance(self.char1)
+        self.assertNotIn("hostile", [part["role"] for part in output.segments])

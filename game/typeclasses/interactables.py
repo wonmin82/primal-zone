@@ -2,12 +2,21 @@
 
 from evennia.objects.objects import DefaultObject
 from world import rules
-from world.content import ROOMS
+from world import text as ft
+from world.content import ENEMIES, ROOMS
 from world.progression import ATTRIBUTES, SKILLS
 
 
 class ActionObject(DefaultObject):
     actions = ()
+    semantic_role = "object"
+    presence = "가까이에서 살펴볼 수 있다."
+    description = "탐사 중에 발견한 물건이다."
+
+    def return_appearance(self, looker, **kwargs):
+        return ft.sheet(
+            ft.token(self.semantic_role, self.key), self.description, "", ft.actions(self.actions)
+        )
 
     def at_object_creation(self):
         self.locks.add("get:false();puppet:false()")
@@ -23,44 +32,102 @@ class ActionObject(DefaultObject):
 
 
 class Commander(ActionObject):
+    semantic_role = "npc"
+    presence = "낡은 지도를 펼쳐 놓고 탐사대를 기다리고 있다."
+    description = "탐사대를 지휘하는 책임자다. 낡은 지도와 무전기를 늘 곁에 두고 있다."
     actions = ("대화",)
 
     def act(self, caller, action, args):
+        from world import presentation as view
+
+        before = caller.profile()
         result = caller.change(rules.commander_talk)
-        messages = {
-            "start": "윤대장: 장비를 마련하고 관리동의 정비기록을 찾아보게. 발전기를 복구하고 능선의 우두머리를 처치하면 통신탑을 되찾을 수 있네.",
-            "complete": "|g첫 탐사 완료!|n 경험치 +100 · 크레딧 +100 · 붕대 +3\n통신탑에서 구조 신호가 퍼져 나간다. 자유롭게 사냥과 장비 수집을 계속할 수 있습니다.",
-        }
-        caller.msg(messages.get(result, caller.quest_text(caller.profile())))
+        after = caller.profile()
+        if result == "start":
+            body = ft.text(
+                "  장비를 마련하고 관리동의 ",
+                content_name("maintenance_log"),
+                "을 찾아보게. ",
+                content_name("generator"),
+                "를 복구하고 ",
+                ft.token("hostile", ENEMIES["alpha"]["name"]),
+                "를 처치하면 통신탑을 되찾을 수 있네.",
+            )
+        elif result == "complete":
+            body = ft.text(
+                ft.token("success", "첫 탐사를 완수했다."),
+                "\n통신탑에서 구조 신호가 퍼져 나간다.\n보고를 마치고 ",
+                ft.token("reward", f"경험치 {after['xp'] - before['xp']}"),
+                ", ",
+                ft.token("reward", f"{after['credits'] - before['credits']}크레딧"),
+                ", ",
+                ft.item("bandage"),
+                f" {after['inventory'].get('bandage', 0) - before['inventory'].get('bandage', 0)}개를 받았다.",
+            )
+        else:
+            body = view.quest(after)
+        caller.msg(ft.text(ft.token("npc", self.key), "\n\n", body))
 
 
 class MaintenanceLog(ActionObject):
+    presence = "젖은 책상 위에 펼쳐져 있다."
+    description = "발전기 복구 절차와 현장 전투 기록이 남아 있는 문서다."
     actions = ("조사",)
 
     def act(self, caller, action, args):
         caller.change(rules.read_record)
         caller.msg(
-            "정비기록: 회수부품 3개로 발전기를 수리하면 능선의 문을 열 수 있다.\n현장 메모: 우두머리가 몸을 낮추면 다음 차례에는 방어할 것."
+            ft.text(
+                content_name("maintenance_log"),
+                "을 펼쳐 복구 절차를 읽었다.\n  ",
+                ft.item("scrap"),
+                " 3개로 ",
+                content_name("generator"),
+                "를 수리하면 능선의 문을 열 수 있다.\n  ",
+                ft.named("hostile", ENEMIES["alpha"]["name"], "이/가"),
+                " 몸을 낮추면 다음 차례에는 ",
+                ft.token("command", "방어"),
+                "할 것.",
+            )
         )
 
 
 class SupplyCache(ActionObject):
+    presence = "뒤집힌 수송차 틈에 걸려 있다."
+    description = "누군가 남긴 보급품이 들어 있는 튼튼한 상자다."
     actions = ("조사",)
 
     def act(self, caller, action, args):
         caller.change(rules.claim_cache)
-        caller.msg("보급상자에서 붕대 2개를 찾았습니다.")
+        caller.msg(
+            ft.text(
+                ft.token("object", self.key), "에서 ", ft.item("bandage"), " 2개를 찾아 챙겼다."
+            )
+        )
 
 
 class Generator(ActionObject):
+    presence = "낡은 외벽 너머로 희미한 경고등을 깜빡이고 있다."
+    description = "능선 진입문에 전력을 공급하는 설비다. 정비기록과 부품이 필요하다."
     actions = ("수리",)
 
     def act(self, caller, action, args):
+        before = caller.profile()["xp"]
         caller.change(rules.fix_generator)
-        caller.msg("발전기가 돌아갑니다! 경험치 +50. 능선 진입문이 열렸습니다.")
+        caller.msg(
+            ft.text(
+                ft.named("object", self.key, "이/가"),
+                " 다시 돌아가기 시작했다. 능선 진입문이 열렸다.\n복구 작업으로 ",
+                ft.token("reward", f"경험치 {caller.profile()['xp'] - before}"),
+                "를 얻었다.",
+            )
+        )
 
 
 class Instructor(ActionObject):
+    semantic_role = "npc"
+    presence = "탐사자의 전투 기록을 살피며 훈련 계획을 세우고 있다."
+    description = "전투 기록을 분석하고 신체 훈련과 전술을 다시 설계하는 교관이다."
     actions = ("대화", "배워", "배분", "재분배")
 
     def available(self, caller):
@@ -75,7 +142,11 @@ class Instructor(ActionObject):
         safe = self.available(caller)
         if action == "대화":
             caller.msg(
-                "탐사대 훈련관: 전투 기록을 분석하고 훈련 계획을 다시 짜 드리지요.\n힘 1 배분 · 강타 배워 · 특성 재분배 · 기술 재분배 · 전체 재훈련\n재훈련은 무료입니다. 기본 Rank 1은 유지하며 학습 크레딧은 반환하지 않습니다."
+                ft.text(
+                    ft.token("npc", self.key),
+                    "\n\n  전투 기록을 분석하고 훈련 계획을 다시 짜 드리지요.\n  재훈련은 무료입니다. 기본 Rank 1은 유지하며 학습 크레딧은 반환하지 않습니다.\n\n",
+                    ft.actions(self.actions),
+                )
             )
         elif action == "배워":
             caller.change(lambda profile: rules.learn_skill(profile, args, safe=safe))
@@ -108,3 +179,10 @@ DEFINITIONS = (
     ("supply_cache", "wreck", "SupplyCache", "보급상자", ["상자"]),
     ("generator", "generator", "Generator", "발전기", []),
 )
+
+
+def content_name(identity):
+    """콘텐츠 정의의 실제 이름과 타입으로 대화/임무에서 대상을 표현한다."""
+    definition = next(row for row in DEFINITIONS if row[0] == identity)
+    cls = globals()[definition[2]]
+    return ft.token(cls.semantic_role, definition[3])

@@ -5,6 +5,7 @@ from time import time
 from evennia import create_object
 from evennia.objects.objects import DefaultObject
 from evennia.utils.dbserialize import deserialize
+from world import text as ft
 from world.multiplayer import (
     PARTY_INVITE_TTL_SECONDS,
     PARTY_MAX_SIZE,
@@ -64,7 +65,16 @@ def invite(caller, target, now=None):
             "expires_at": now + PARTY_INVITE_TTL_SECONDS,
         }
         party.db.state = state
-        target.msg(f"{caller.key}의 파티 초대: 파티수락 / 파티거절 (60초 이내)")
+        target.msg(
+            ft.text(
+                ft.named("player", caller.key, "이/가"),
+                " 파티에 초대했다.\n",
+                ft.token("command", "파티수락"),
+                " / ",
+                ft.token("command", "파티거절"),
+                f" ({PARTY_INVITE_TTL_SECONDS}초 이내)",
+            )
+        )
         return party
 
 

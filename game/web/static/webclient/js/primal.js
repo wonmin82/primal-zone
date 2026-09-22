@@ -3,11 +3,20 @@
   const byId = (id) => document.getElementById(id);
   const log = byId("log"), dialog = byId("auth-dialog"), input = byId("command");
   let socket, playing = false, history = [], historyIndex = 0, authTimer, growthKey = "", exitsKey = "";
-  function append(text, kind = "") {
+  function append(text, kind = "", segments = null) {
     const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 70;
     const entry = document.createElement("article");
     entry.className = "log-entry " + kind;
-    entry.textContent = text;
+    if (segments) {
+      const roles = new Set(["text", "muted", "title", "hostile", "npc", "player", "object", "remains", "item", "command", "direction", "reward", "warning", "success", "error"]);
+      for (const part of segments) {
+        if (!part || typeof part.text !== "string") continue;
+        const span = document.createElement("span");
+        span.textContent = part.text;
+        if (roles.has(part.role)) span.className = "semantic-" + part.role;
+        entry.append(span);
+      }
+    } else entry.textContent = text;
     log.append(entry);
     while (log.children.length > 400) log.firstElementChild.remove();
     if (nearBottom || kind === "command") log.scrollTop = log.scrollHeight;
@@ -27,6 +36,12 @@
   function command(text) {
     if (!playing) { if (!dialog.open) dialog.showModal(); return; }
     if (send("text", [text])) append("› " + text, "command");
+  }
+  function semantic(role, text) {
+    const span = document.createElement("span");
+    span.className = "semantic-" + role;
+    span.textContent = text;
+    return span;
   }
   function button(label, cmd) {
     const el = document.createElement("button");
@@ -48,6 +63,7 @@
     other.className = "other-exits";
     for (const direction of exits) {
       const el = button(direction, direction), position = positions.get(direction);
+      el.replaceChildren(semantic("direction", direction));
       if (position) {
         grid.classList.add("has-" + position);
         el.className = "direction-" + position;
@@ -128,12 +144,13 @@
     renderExits(state.exits);
     const actions = state.enemies.map((enemy) => {
       const el = button(enemy.name + " " + enemy.hp + "/" + enemy.max_hp + (enemy.can_attack ? " 사냥" : " · 다른 그룹 교전 중"), enemy.name + " 사냥");
+      el.replaceChildren(semantic("hostile", enemy.name), " " + enemy.hp + "/" + enemy.max_hp + (enemy.can_attack ? " 사냥" : " · 다른 그룹 교전 중"));
       el.disabled = !enemy.can_attack;
       return el;
     });
     for (const corpse of state.corpses) {
       const title = document.createElement("p"); title.className = "loot-label";
-      title.textContent = corpse.name;
+      title.replaceChildren(semantic("remains", corpse.name));
       actions.push(title);
       if (corpse.loot.length) {
         const all = button("시체에서 모두 가져", "시체에서 모두 가져");
@@ -141,6 +158,7 @@
       } else { const empty = document.createElement("small"); empty.textContent = "남은 전리품 없음"; actions.push(empty); }
       for (const item of corpse.loot) {
         const el = button(item.name + " ×" + item.quantity + " → " + (item.protected ? item.assigned_name : "자유 획득"), "시체에서 " + item.name + " 가져");
+        el.replaceChildren(semantic("item", item.name), " ×" + item.quantity + " → ", semantic(item.protected ? "player" : "muted", item.protected ? item.assigned_name : "자유 획득"));
         el.disabled = !item.can_take; actions.push(el);
       }
     }
@@ -151,13 +169,14 @@
     }
     for (const source of state.ground_loot) for (const item of source.loot) {
       const el = button("바닥 · " + item.name + " ×" + item.quantity + " → " + (item.protected ? item.assigned_name : "자유 획득"), item.name + " 가져");
+      el.replaceChildren("바닥 · ", semantic("item", item.name), " ×" + item.quantity + " → ", semantic(item.protected ? "player" : "muted", item.protected ? item.assigned_name : "자유 획득"));
       el.disabled = !item.can_take; actions.push(el);
     }
     renderGrowth(state);
     const party = state.party;
     byId("party-state").textContent = party ? "파티장: " + party.leader_name + (party.is_leader ? " (나)" : "") + " · 전리품: 순번 분배" : "소속 파티 없음";
     byId("party-members").replaceChildren(...(party?.members || []).map((member) => {
-      const row = document.createElement("li"); row.textContent = member.name + (member.id === party.leader ? " · 파티장" : ""); return row;
+      const row = document.createElement("li"); row.append(semantic("player", member.name), member.id === party.leader ? " · 파티장" : ""); return row;
     }));
     byId("party-leave").hidden = !party;
     byId("party-invite-form").hidden = !!party && !party.is_leader;
@@ -171,7 +190,7 @@
     byId("context-actions").replaceChildren(...actions);
     const rows = state.inventory.map((item) => {
       const row = document.createElement("li"), name = document.createElement("span");
-      name.textContent = item.name + " ×" + item.count;
+      name.append(semantic("item", item.name), " ×" + item.count);
       row.append(name);
       if (item.equipped) {
         const mark = document.createElement("small"); mark.textContent = "착용 중"; row.append(mark);
@@ -182,7 +201,7 @@
     byId("inventory").replaceChildren(...rows);
     const encounter = state.combat_target;
     byId("encounter").hidden = !encounter;
-    if (encounter) byId("encounter").textContent = encounter.name + " · 공유 체력 " + encounter.hp + "/" + encounter.max_hp + " · 적 " + encounter.round + "차례" + (encounter.telegraph ? " · 다음 돌진! 방어를 준비하세요." : " · 강타 / 방어 / 회복");
+    if (encounter) byId("encounter").replaceChildren(semantic("hostile", encounter.name), " · 공유 체력 " + encounter.hp + "/" + encounter.max_hp + " · 적 " + encounter.round + "차례" + (encounter.telegraph ? " · 다음 돌진! 방어를 준비하세요." : " · 강타 / 방어 / 회복"));
   }
   function connect() {
     if (socket && [WebSocket.OPEN, WebSocket.CONNECTING].includes(socket.readyState)) return;
@@ -205,6 +224,9 @@
       if (kind === "text" || kind === "prompt") {
         const text = plainText(args?.[0] ?? "");
         if (text.trim()) append(text);
+      } else if (kind === "pz_log" && Array.isArray(args?.[0]?.segments)) {
+        const message = args[0];
+        append("", ["sheet", "event", "error", "chat"].includes(message.kind) ? message.kind : "", message.segments);
       } else if (kind === "pz_state" && args?.[0]) render(args[0]);
       else if (kind === "pz_auth") {
         authBusy(false);

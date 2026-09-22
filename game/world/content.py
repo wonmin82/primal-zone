@@ -15,6 +15,7 @@ ENEMIES = {
     "scavenger": {
         "training_cap": 2,
         "name": "어린청소룡",
+        "description": "작은 몸집의 육식 공룡이다. 날카로운 이빨을 드러내며 주변을 경계한다.",
         "combat_mode": "claimed",
         "hp": 24,
         "attack": 5,
@@ -27,6 +28,7 @@ ENEMIES = {
     "hunter": {
         "training_cap": 4,
         "name": "갈퀴사냥룡",
+        "description": "굽은 발톱을 가진 사냥룡이다. 낮게 엎드린 자세로 먹잇감의 움직임을 살핀다.",
         "combat_mode": "claimed",
         "hp": 42,
         "attack": 9,
@@ -39,6 +41,7 @@ ENEMIES = {
     "sentinel": {
         "training_cap": 7,
         "name": "고장난경비기",
+        "description": "외장이 부서진 경비 기계다. 감지기가 움직일 때마다 금속 마찰음이 들린다.",
         "combat_mode": "claimed",
         "hp": 60,
         "attack": 11,
@@ -51,6 +54,7 @@ ENEMIES = {
     "alpha": {
         "training_cap": 10,
         "name": "능선의우두머리",
+        "description": "능선을 차지한 거대한 포식자다. 돌진하기 전 몸을 낮추는 습성이 있다.",
         "combat_mode": "public",
         "hp": 130,
         "attack": 17,
@@ -68,8 +72,8 @@ ROOMS = {
         "name": "탐사대 부두",
         "safe": True,
         "enemies": [],
-        "desc": "안개 너머로 버려진 섬이 드러난다. 윤대장이 낡은 지도를 펼쳐 보인다.\n"
-        "북쪽 초지에서 장비를 마련하고 통신탑을 복구하자. 여기서는 휴식과 보급이 가능하다.",
+        "desc": "안개 너머로 버려진 섬이 드러난다. 낡은 선착장에 밧줄과 장비가 가지런히 놓여 있다.\n"
+        "정박한 배 사이로 잔물결이 일고, 먼 숲에서 새소리가 들려온다.",
         "hint": "윤대장 대화 · 상점 · 휴식",
         "exits": {"북": "grass"},
     },
@@ -83,7 +87,7 @@ ROOMS = {
     "wreck": {
         "name": "부서진 수송차",
         "enemies": ["scavenger"],
-        "desc": "뒤집힌 수송차에 낡은 보급상자가 걸려 있다. 누군가 남긴 물자를 찾을 수 있을 것 같다.",
+        "desc": "수송차가 옆으로 뒤집힌 채 풀숲에 박혀 있다. 누군가 남긴 물자를 찾을 수 있을 것 같다.",
         "hint": "보급상자 조사",
         "exits": {"서": "grass"},
     },
@@ -97,14 +101,14 @@ ROOMS = {
     "office": {
         "name": "폐쇄된 관리동",
         "enemies": [],
-        "desc": "책상 위에 젖은 정비기록이 펼쳐져 있다. 발전기 복구에 필요한 절차가 적혀 있다.",
+        "desc": "비가 새는 천장 아래로 젖은 책상이 보인다. 바람이 들어올 때마다 종잇장이 들썩인다.",
         "hint": "정비기록 조사",
         "exits": {"서": "trail", "동": "generator"},
     },
     "generator": {
         "name": "멈춰 선 발전실",
         "enemies": ["sentinel"],
-        "desc": "경고등만 켜진 발전기 곁을 경비기가 맴돈다. 기록을 읽고 회수부품 3개를 모으면 수리할 수 있다.",
+        "desc": "기름 냄새가 밴 발전실에 녹슨 배관이 얽혀 있다. 바닥에는 오래된 기름 자국이 남아 있다.",
         "hint": "발전기 수리",
         "exits": {"서": "office"},
     },

@@ -1,8 +1,10 @@
 """character 영역의 명시적 게임 명령."""
 
 from evennia.commands.default.general import CmdLook
+from world import presentation as view
 from world import rules
-from world.content import ITEMS, ROOMS
+from world import text as ft
+from world.content import ROOMS
 
 from commands.base import GameCommand
 
@@ -16,41 +18,118 @@ class Look(CmdLook):
     aliases = ["look", "l", "둘러보기"]
 
     def func(self):
+        from world.content import ITEMS
+        from world.lifecycle import reconcile_room
+
+        name = self.args.strip()
+        if name and self.caller.location:
+            reconcile_room(self.caller.location)
+            normalized = "".join(name.split()).casefold()
+            matches = [
+                obj
+                for obj in self.caller.location.contents
+                if normalized
+                in ["".join(value.split()).casefold() for value in (obj.key, *obj.aliases.all())]
+            ]
+            if len(matches) == 1:
+                self.caller.msg(self.caller.at_look(matches[0]))
+                self.caller.push_state()
+                return
+            if not matches:
+                inventory = self.caller.profile()["inventory"]
+                identity = next(
+                    (
+                        key
+                        for key in inventory
+                        if inventory[key] > 0
+                        and normalized in (key, "".join(ITEMS[key]["name"].split()).casefold())
+                    ),
+                    None,
+                )
+                if identity:
+                    self.caller.msg(view.item_appearance(identity))
+                    self.caller.push_state()
+                    return
         super().func()
         self.caller.push_state()
 
 
 class Help(GameCommand):
     category = "탐사"
-    usage = "도움말"
-    summary = "등록된 명령과 단축어를 확인합니다."
+    usage = "도움말 · 명령이름 도움말"
+    summary = "분류별 명령과 개별 명령의 사용법·별칭을 확인합니다."
+    input_style = "target"
     key = "도움말"
     aliases = ["안내", "?"]
 
     def run(self):
+        from world.progression import ATTRIBUTES
+
         from commands.aliases import SHORTCUTS
         from commands.registry import COMMANDS
 
-        lines = ["|g탐사 안내|n", "대상 + 행동 · 이동: 북/남/동/서 · 채팅: 내용 말 또는 '내용"]
-        for command in COMMANDS:
-            if not getattr(command, "input_style", None):
-                continue
-            aliases = " / ".join(command.aliases) if command.aliases else ""
-            usage = getattr(command, "usage", "") or command.key
-            lines.append(
-                f"[{getattr(command, 'category', '탐사')}] {usage}: {command.summary}"
-                + (f" (별칭: {aliases})" if aliases else "")
+        commands = [cls for cls in COMMANDS if getattr(cls, "input_style", None)]
+        query = (getattr(self, "args", "") or "").strip().casefold()
+        if query:
+            query = SHORTCUTS.get(query, query)
+            selected = next(
+                (
+                    cls
+                    for cls in commands
+                    if query in {str(name).casefold() for name in (cls.key, *cls.aliases)}
+                ),
+                None,
             )
-        lines.append(
-            "단축어: " + " · ".join(f"{key} → {value}" for key, value in SHORTCUTS.items())
+            if not selected:
+                raise rules.RuleError("등록된 명령을 찾을 수 없습니다. '도움말'에서 확인하세요.")
+            lines = [selected.summary]
+            lines.append(
+                ft.text(
+                    "사용법: ",
+                    ft.usage(
+                        getattr(selected, "usage", "") or selected.key,
+                        {selected.key, *selected.aliases},
+                    ),
+                )
+            )
+            aliases = [*selected.aliases, *[k for k, v in SHORTCUTS.items() if v == selected.key]]
+            if aliases:
+                lines.append(
+                    ft.text("별칭: ", ft.join([ft.token("command", a) for a in aliases], " / "))
+                )
+            if selected is Abilities:
+                lines.extend(
+                    f"{data['name']} | {data['description']}" for data in ATTRIBUTES.values()
+                )
+            self.caller.msg(ft.compact(ft.token("command", selected.key), *lines))
+            return
+        groups = {}
+        for cls in commands:
+            groups.setdefault(getattr(cls, "category", "탐사"), []).append(
+                ft.token("command", cls.key)
+            )
+        lines = [
+            ft.text(category, " | ", ft.join(entries, " · "))
+            for category, entries in groups.items()
+        ]
+        lines.extend(
+            [
+                ft.text("상세: 명령이름 ", ft.token("command", "도움말")),
+                ft.text("대상: 대상이름 ", ft.token("command", "보기")),
+                "대상 + 행동 · 채팅: 내용 말 또는 '내용",
+                ft.text(
+                    "단축어: ",
+                    ft.join(
+                        [
+                            ft.text(ft.token("command", k), "→", ft.token("command", v))
+                            for k, v in SHORTCUTS.items()
+                        ],
+                        " · ",
+                    ),
+                ),
+            ]
         )
-        lines.append(
-            "일반 적은 그룹 점유, 우두머리는 공동 참여. 경험치·크레딧은 참여자에게, 아이템은 시체에 배정됩니다."
-        )
-        lines.append(
-            "시체 30초 · 전리품 보호 120초 · 적 재생성 45초. 접속 종료 시 교전에서 이탈합니다."
-        )
-        self.caller.msg("\n".join(lines))
+        self.caller.msg(ft.compact("도움말", *lines))
 
 
 class Status(GameCommand):
@@ -61,16 +140,7 @@ class Status(GameCommand):
     aliases = ["stat", "정보"]
 
     def run(self):
-        profile = self.caller.profile()
-        values = rules.stats(profile)
-        self.caller.msg(
-            f"|g{self.caller.key} · Lv.{values['level']}|n\n"
-            f"체력 {profile['hp']}/{values['max_hp']} · 공격 {values['attack']} · 방어 {values['defense']}\n"
-            f"특성 {attribute_summary(profile)}\n"
-            f"경험치 {profile['xp']} · 크레딧 {profile['credits']} · 처치 {profile['kills']}\n"
-            f"무기 {ITEMS[profile['equipment']['weapon']]['name']} · "
-            f"방어구 {ITEMS[profile['equipment']['armor']]['name']}"
-        )
+        self.caller.msg(view.status(self.caller.key, self.caller.profile()))
         self.caller.push_state()
 
 
@@ -82,7 +152,7 @@ class Quest(GameCommand):
     aliases = ["quest", "퀘스트"]
 
     def run(self):
-        self.caller.msg("|g통신탑 복구|n\n" + self.caller.quest_text(self.caller.profile()))
+        self.caller.msg(view.quest(self.caller.profile()))
 
 
 class Map(GameCommand):
@@ -94,16 +164,23 @@ class Map(GameCommand):
 
     def run(self):
         visited = set(self.caller.profile()["visited"])
-        lines = ["|g탐사 지도 · 방문한 장소만 표시됩니다.|n"]
+        lines = ["방문한 장소만 표시됩니다.", ""]
         for key, room in ROOMS.items():
             if key in visited:
                 mark = " ← 현재" if self.caller.zone == key else ""
-                exits = ", ".join(
-                    f"{direction}: {ROOMS[target]['name'] if target in visited else '미탐사'}"
-                    for direction, target in room["exits"].items()
+                exits = ft.join(
+                    [
+                        ft.text(
+                            ft.token("direction", direction),
+                            ": ",
+                            ROOMS[target]["name"] if target in visited else "미탐사",
+                        )
+                        for direction, target in room["exits"].items()
+                    ],
+                    ", ",
                 )
-                lines.append(f"{room['name']}{mark} / {exits}")
-        self.caller.msg("\n".join(lines))
+                lines.append(ft.text(room["name"], mark, " / ", exits))
+        self.caller.msg(ft.sheet("탐사 지도", *lines))
 
 
 def attribute_summary(profile):
@@ -121,22 +198,7 @@ class Abilities(GameCommand):
     summary = "기본 특성과 투자 포인트, 실제 행동으로 쌓은 숙련을 확인합니다."
 
     def run(self):
-        from world.progression import ATTRIBUTES, PROFICIENCIES
-
-        profile = self.caller.profile()
-        lines = ["[특성]"]
-        for key, data in ATTRIBUTES.items():
-            entry = profile["attributes"][key]
-            lines.append(
-                f"{data['name']}: 기본 {entry['base']} + 투자 {entry['allocated']} · {data['description']}"
-            )
-        lines.append(f"미사용 특성 포인트: {rules.point_pools(profile)['attribute_points']}")
-        lines.append("[숙련]")
-        lines.extend(
-            f"{name}: Rank {rules.proficiency_rank(profile, key)}"
-            for key, name in PROFICIENCIES.items()
-        )
-        self.caller.msg("\n".join(lines))
+        self.caller.msg(view.abilities(self.caller.profile()))
 
 
 class Skills(GameCommand):
@@ -145,22 +207,7 @@ class Skills(GameCommand):
     summary = "기술 Rank와 다음 학습 조건·비용을 확인합니다."
 
     def run(self):
-        from world.progression import SKILLS
-
-        profile = self.caller.profile()
-        lines = ["[기술]"]
-        for key, data in SKILLS.items():
-            rank = rules.skill_rank(profile, key)
-            next_rank = rank + 1
-            cost = (
-                f"다음: Lv.{data['requirements'][next_rank]} · 기술점수 {data['point_cost'][next_rank]} · {data['credit_cost'][next_rank]} 크레딧"
-                if next_rank <= data["max_rank"]
-                else "최고 Rank"
-            )
-            lines.append(f"{data['name']} Rank {rank} · {data['description']} · {cost}")
-        lines.append(f"미사용 기술점수: {rules.point_pools(profile)['skill_points']}")
-        lines.append("부두 훈련관: 기술이름 배워 · 기술 재분배 (무료, 기본 Rank 1 유지)")
-        self.caller.msg("\n".join(lines))
+        self.caller.msg(view.skills(self.caller.profile()))
 
 
 class Experience(GameCommand):
@@ -169,14 +216,4 @@ class Experience(GameCommand):
     summary = "캐릭터와 숙련 경험치를 확인합니다."
 
     def run(self):
-        from world.progression import PROFICIENCIES
-
-        profile = self.caller.profile()
-        level = rules.level_of(profile)
-        remaining = rules.xp_threshold(level + 1) - profile["xp"] if level < rules.MAX_LEVEL else 0
-        lines = [f"캐릭터 XP {profile['xp']} · 다음 레벨까지 {remaining}"]
-        lines.extend(
-            f"{name} 숙련 XP {profile['proficiencies'][key]['xp']} / 200 · Rank {rules.proficiency_rank(profile, key)}"
-            for key, name in PROFICIENCIES.items()
-        )
-        self.caller.msg("\n".join(lines))
+        self.caller.msg(view.experience(self.caller.profile()))
