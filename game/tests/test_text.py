@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 import evennia
 from commands.character import Help, Look
 from evennia.objects.objects import DefaultCharacter
-from evennia.utils.ansi import strip_raw_ansi
+from evennia.utils.ansi import parse_ansi, strip_raw_ansi
 from evennia.utils.test_resources import EvenniaCommandTest
 from typeclasses.enemies import room_enemies
 from typeclasses.explorers import Explorer
@@ -79,7 +79,7 @@ class SemanticTextTests(EvenniaCommandTest):
         stats = rules.stats(profile)
         status = view.status("탐사자", profile)
         self.assertEqual(tokens(status, "player"), ["탐사자"])
-        for expected in (f"43 / {stats['max_hp']}", "123", "7", "200"):
+        for expected in (f"43/{stats['max_hp']}", "123", "7", "200"):
             self.assertIn(expected, status)
         for output in (status, view.equipment(profile), view.inventory(profile)):
             self.assertTrue(
@@ -91,16 +91,16 @@ class SemanticTextTests(EvenniaCommandTest):
             self.assertIn(data["name"], view.abilities(profile))
         for key, data in SKILLS.items():
             self.assertIn(
-                f"Rank {rules.skill_rank(profile, key)} / {data['max_rank']}",
+                f"R{rules.skill_rank(profile, key)}/{data['max_rank']}",
                 view.skills(profile),
             )
         next_xp = rules.xp_threshold(rules.level_of(profile) + 1)
-        self.assertIn(f"200 / {next_xp}", view.experience(profile))
+        self.assertIn(f"200/{next_xp}", view.experience(profile))
         self.assertIn(str(next_xp - 200), view.experience(profile))
         shop = view.shop()
         for key, price in SHOP.items():
             self.assertIn(ITEMS[key]["name"], tokens(shop, "item"))
-            self.assertIn(f"{price} 크레딧", tokens(shop, "reward"))
+            self.assertIn(f"{price}C", tokens(shop, "reward"))
             if key in EXCHANGE:
                 self.assertIn(f"{EXCHANGE[key]}개", shop)
 
@@ -115,6 +115,149 @@ class SemanticTextTests(EvenniaCommandTest):
         for cls in COMMANDS:
             if getattr(cls, "input_style", None):
                 self.assertIn(cls.key, tokens(output, "command"))
+
+    def test_compact_progression_values_and_maximums(self):
+        from copy import deepcopy
+
+        from world.progression import PROFICIENCIES
+
+        profile = rules.new_profile()
+        profile.update(xp=200, hp=43, credits=123, kills=7)
+        profile["attributes"]["strength"]["allocated"] = 3
+        profile["proficiencies"]["weapon"]["xp"] = 47
+        before = deepcopy(profile)
+        values = rules.stats(profile)
+        status = view.status("탐사자", profile)
+        for value in (
+            f"Lv.{values['level']}",
+            f"공격 {values['attack']}",
+            f"방어 {values['defense']}",
+            "힘13",
+        ):
+            self.assertIn(value, status)
+        self.assertEqual(
+            tokens(status, "item"), [ITEMS[i]["name"] for i in profile["equipment"].values()]
+        )
+        abilities = view.abilities(profile)
+        self.assertIn("힘 13 (10+3)", abilities)
+        self.assertIn(
+            f"남은 특성 포인트 {rules.point_pools(profile)['attribute_points']}", abilities
+        )
+        for key, name in PROFICIENCIES.items():
+            self.assertIn(f"{name} R{rules.proficiency_rank(profile, key)}", abilities)
+            self.assertIn(
+                f"{name} R{rules.proficiency_rank(profile, key)} XP{profile['proficiencies'][key]['xp']}",
+                view.experience(profile),
+            )
+        for key, data in SKILLS.items():
+            next_rank = rules.skill_rank(profile, key) + 1
+            self.assertIn(
+                f"다음 Lv{data['requirements'][next_rank]}/{data['point_cost'][next_rank]}점/{data['credit_cost'][next_rank]}C",
+                view.skills(profile),
+            )
+            self.assertIn(data["description"], view.skills(profile))
+        self.assertEqual(tokens(view.skills(profile), "command"), ["배워"])
+        self.assertIn(
+            f"남은 점수 {rules.point_pools(profile)['skill_points']}", view.skills(profile)
+        )
+        for output, limit in (
+            (status, 5),
+            (abilities, 6),
+            (view.experience(profile), 2),
+            (view.skills(profile), len(SKILLS) + 2),
+        ):
+            self.assertLessEqual(len(output.splitlines()), limit)
+            self.assertNotIn("────", output)
+            self.assertEqual(output.kind, "sheet")
+            self.assertEqual(strip_raw_ansi(parse_ansi(output.ansi())), str(output))
+        self.assertEqual(profile, before)
+        profile["xp"] = rules.xp_threshold(rules.MAX_LEVEL)
+        for key, data in SKILLS.items():
+            profile["skills"][key] = data["max_rank"]
+        self.assertIn("최고 등급", view.status("탐사자", profile))
+        self.assertIn("최고 등급", view.experience(profile))
+        self.assertNotIn("다음", view.experience(profile))
+        self.assertEqual(view.skills(profile).count("최고 Rank"), len(SKILLS))
+
+    def test_compact_inventory_equipment_and_quest(self):
+        profile = rules.new_profile()
+        profile["inventory"].update(blade=2, scrap=8)
+        bag = view.inventory(profile)
+        self.assertEqual(
+            tokens(bag, "item"),
+            [ITEMS[i]["name"] for i in ("machete", "vest", "blade", "bandage", "scrap")],
+        )
+        self.assertIn("강철마체테×2", bag)
+        self.assertIn("[재료] 회수부품×8", bag)
+        self.assertEqual(len(tokens(bag, "success")), len(profile["equipment"]))
+        self.assertNotIn("[기타]", bag)
+        equip = view.equipment(profile)
+        for slot, identity in profile["equipment"].items():
+            self.assertIn("무기" if slot == "weapon" else "방어구", equip)
+            self.assertIn(ITEMS[identity]["name"], tokens(equip, "item"))
+            for key, label in (("attack", "공격"), ("defense", "방어")):
+                if ITEMS[identity].get(key):
+                    self.assertIn(f"{label} +{ITEMS[identity][key]}", equip)
+        attack = sum(ITEMS[i].get("attack", 0) for i in profile["equipment"].values())
+        defense = sum(ITEMS[i].get("defense", 0) for i in profile["equipment"].values())
+        self.assertIn(f"공격 +{attack} · 방어 +{defense}", equip.splitlines()[-1])
+        profile["inventory"] = {}
+        self.assertEqual(str(view.inventory(profile)), "[가방] 비어 있다.")
+        self.assertEqual(tokens(view.shop(), "command"), ["구매", "교환"])
+        profile.update(quest_started=True, record_read=True)
+        quest = view.quest(profile)
+        self.assertIn("2/5", quest.splitlines()[0])
+        self.assertEqual([line[0] for line in quest.splitlines()[1:]], ["+", "+", ">", "-", "-"])
+        self.assertIn("윤대장", tokens(quest, "npc"))
+        self.assertEqual(tokens(quest, "object"), ["정비기록", "발전기"])
+        self.assertTrue(tokens(quest, "hostile"))
+        for key in ("generator_fixed", "boss_defeated", "quest_claimed"):
+            profile[key] = True
+        self.assertIn("5/5", view.quest(profile))
+        self.assertNotIn(">", view.quest(profile))
+
+    def test_compact_party_invitation_and_detailed_help(self):
+        from commands.combat import Attack
+        from commands.party import PartyCommand
+        from commands.registry import COMMANDS
+        from evennia import CmdSet
+        from server.conf.cmdparser import cmdparser
+
+        def output(command, caller, args=""):
+            command.caller, command.args = caller, args
+            with patch.object(caller, "msg") as message:
+                command.run()
+            return message.call_args.args[0]
+
+        self.assertIn("소속 파티 없음", output(PartyCommand(), self.char2))
+        invite(self.char1, self.char2)
+        invitation = output(PartyCommand(), self.char2)
+        self.assertIn(self.char1.key, tokens(invitation, "player"))
+        self.assertTrue({"파티수락", "파티거절"}.issubset(tokens(invitation, "command")))
+        respond(self.char2, True)
+        party = output(PartyCommand(), self.char1)
+        self.assertIn(f"파티장 {self.char1.key} · 전리품 순번", party)
+        self.assertIn(f"{self.char1.key}(장) · {self.char2.key}", party)
+        self.assertEqual(len(party.splitlines()), 2)
+        help_text = output(Help(), self.char1)
+        for cls in COMMANDS:
+            if getattr(cls, "input_style", None):
+                self.assertIn(f"{getattr(cls, 'category', '탐사')} |", help_text)
+                self.assertIn(cls.key, tokens(help_text, "command"))
+        for query in (Attack.key, *Attack.aliases):
+            detail = output(Help(), self.char1, query)
+            self.assertIn(Attack.summary, detail)
+            self.assertIn(Attack.usage, detail)
+            self.assertTrue(set(Attack.aliases).issubset(tokens(detail, "command")))
+        detail = output(Help(), self.char1, "능")
+        for data in ATTRIBUTES.values():
+            self.assertIn(data["description"], detail)
+        with self.assertRaises(rules.RuleError):
+            output(Help(), self.char1, "<script>")
+        cmdset = CmdSet(self.char1)
+        cmdset.add(Help())
+        self.assertEqual(cmdparser("공격 도움말", cmdset, self.char1)[0][1], "공격")
+        self.assertFalse(cmdparser("도움말 공격", cmdset, self.char1))
 
     def test_usage_styles_only_declared_action_metadata(self):
         output = ft.usage("강철 마체테 착용 · 대상 기타", {"착용"})

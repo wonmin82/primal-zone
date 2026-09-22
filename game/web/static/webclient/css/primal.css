@@ -16,4 +16,4 @@ body{font-synthesis:none;font-variant-ligatures:none}h1,h2,b,strong,.brand,.eyeb
 :root{--semantic-text:#e1e9de;--semantic-muted:#9aac9e;--semantic-hostile:#e6a08c;--semantic-npc:#8ecfce;--semantic-action:#bbdb98;--semantic-gold:#d6bc80;--semantic-item:#c7b4e6;--semantic-remains:#b9a5ac}
 .log-entry.event{color:var(--semantic-text)}
 .semantic-text,.semantic-title{color:var(--semantic-text)}.semantic-muted{color:var(--semantic-muted)}.semantic-hostile,.semantic-error{color:var(--semantic-hostile)}.semantic-npc{color:var(--semantic-npc)}.semantic-player,.semantic-command,.semantic-direction,.semantic-success{color:var(--semantic-action)}.semantic-object,.semantic-reward,.semantic-warning{color:var(--semantic-gold)}.semantic-item{color:var(--semantic-item)}.semantic-remains{color:var(--semantic-remains)}
-.log-entry.sheet{padding:12px 0;border-bottom:1px solid var(--line);line-height:1.6}.log-entry .semantic-command{font-size:inherit}.log-entry span{cursor:inherit}
+.log-entry.sheet{word-break:keep-all;padding:12px 0;border-bottom:1px solid var(--line);line-height:1.6}.log-entry .semantic-command{font-size:inherit}.log-entry span{cursor:inherit}

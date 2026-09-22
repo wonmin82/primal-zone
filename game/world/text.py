@@ -91,6 +91,12 @@ def sheet(title, *lines):
     )
 
 
+def compact(title, *lines, summary=""):
+    """조회 제목과 첫 내용을 붙이고 의미 조각을 유지하는 작은 정보창."""
+    heading = text(token("title", "["), title, token("title", "]"), " " if summary else "", summary)
+    return text(join([heading, *lines]), kind="sheet")
+
+
 def row(label, value, width=12):
     columns = sum(2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in str(label))
     return text(label, " " * max(2, width - columns), value)

@@ -56,54 +56,80 @@ class Look(CmdLook):
 
 class Help(GameCommand):
     category = "탐사"
-    usage = "도움말"
-    summary = "등록된 명령과 단축어를 확인합니다."
+    usage = "도움말 · 명령이름 도움말"
+    summary = "분류별 명령과 개별 명령의 사용법·별칭을 확인합니다."
+    input_style = "target"
     key = "도움말"
     aliases = ["안내", "?"]
 
     def run(self):
+        from world.progression import ATTRIBUTES
+
         from commands.aliases import SHORTCUTS
         from commands.registry import COMMANDS
 
-        lines = ["대상 + 행동 · 채팅: 내용 말 또는 '내용", ""]
-        groups = {}
-        for command in COMMANDS:
-            if not getattr(command, "input_style", None):
-                continue
-            groups.setdefault(getattr(command, "category", "탐사"), []).append(command)
-        for category, commands in groups.items():
-            lines.append(f"[ {category} ]")
-            for command in commands:
-                lines.extend([ft.token("command", command.key), f"  {command.summary}"])
-                if getattr(command, "usage", ""):
-                    lines.append(
-                        ft.text(
-                            "  사용법 : ", ft.usage(command.usage, {command.key, *command.aliases})
-                        )
-                    )
-                if command.aliases:
-                    lines.append(
-                        ft.text(
-                            "  별칭 : ",
-                            ft.join(
-                                [ft.token("command", alias) for alias in command.aliases], " / "
-                            ),
-                        )
-                    )
-            lines.append("")
-        lines.append(
-            ft.text(
-                "단축어 : ",
-                ft.join(
-                    [
-                        ft.text(ft.token("command", key), " → ", ft.token("command", value))
-                        for key, value in SHORTCUTS.items()
-                    ],
-                    " · ",
+        commands = [cls for cls in COMMANDS if getattr(cls, "input_style", None)]
+        query = (getattr(self, "args", "") or "").strip().casefold()
+        if query:
+            query = SHORTCUTS.get(query, query)
+            selected = next(
+                (
+                    cls
+                    for cls in commands
+                    if query in {str(name).casefold() for name in (cls.key, *cls.aliases)}
                 ),
+                None,
             )
+            if not selected:
+                raise rules.RuleError("등록된 명령을 찾을 수 없습니다. '도움말'에서 확인하세요.")
+            lines = [selected.summary]
+            lines.append(
+                ft.text(
+                    "사용법: ",
+                    ft.usage(
+                        getattr(selected, "usage", "") or selected.key,
+                        {selected.key, *selected.aliases},
+                    ),
+                )
+            )
+            aliases = [*selected.aliases, *[k for k, v in SHORTCUTS.items() if v == selected.key]]
+            if aliases:
+                lines.append(
+                    ft.text("별칭: ", ft.join([ft.token("command", a) for a in aliases], " / "))
+                )
+            if selected is Abilities:
+                lines.extend(
+                    f"{data['name']} | {data['description']}" for data in ATTRIBUTES.values()
+                )
+            self.caller.msg(ft.compact(ft.token("command", selected.key), *lines))
+            return
+        groups = {}
+        for cls in commands:
+            groups.setdefault(getattr(cls, "category", "탐사"), []).append(
+                ft.token("command", cls.key)
+            )
+        lines = [
+            ft.text(category, " | ", ft.join(entries, " · "))
+            for category, entries in groups.items()
+        ]
+        lines.extend(
+            [
+                ft.text("상세: 명령이름 ", ft.token("command", "도움말")),
+                ft.text("대상: 대상이름 ", ft.token("command", "보기")),
+                "대상 + 행동 · 채팅: 내용 말 또는 '내용",
+                ft.text(
+                    "단축어: ",
+                    ft.join(
+                        [
+                            ft.text(ft.token("command", k), "→", ft.token("command", v))
+                            for k, v in SHORTCUTS.items()
+                        ],
+                        " · ",
+                    ),
+                ),
+            ]
         )
-        self.caller.msg(ft.sheet("탐사 안내", *lines))
+        self.caller.msg(ft.compact("도움말", *lines))
 
 
 class Status(GameCommand):

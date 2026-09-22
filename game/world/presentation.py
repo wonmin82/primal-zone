@@ -6,8 +6,6 @@ from world.content import EXCHANGE, ITEMS, SHOP
 from world.progression import (
     ATTRIBUTES,
     PROFICIENCIES,
-    PROFICIENCY_MAX_RANK,
-    PROFICIENCY_XP_PER_RANK,
     SKILLS,
 )
 
@@ -16,107 +14,93 @@ def equipment(profile):
     lines = []
     attack = defense = 0
     for slot, identity in profile["equipment"].items():
-        item = ITEMS[identity]
-        attack += item.get("attack", 0)
-        defense += item.get("defense", 0)
-        lines.extend(
-            [
+        data = ITEMS[identity]
+        attack += data.get("attack", 0)
+        defense += data.get("defense", 0)
+        bonuses = [
+            f"{label} +{data[key]}"
+            for key, label in (("attack", "공격"), ("defense", "방어"))
+            if data.get(key, 0)
+        ]
+        lines.append(
+            ft.row(
                 "무기" if slot == "weapon" else "방어구",
-                ft.text("  ", ft.item(identity)),
-                f"  공격 +{item.get('attack', 0)} · 방어 +{item.get('defense', 0)}",
-                "",
-            ]
+                ft.join([ft.item(identity), *bonuses], " · "),
+                8,
+            )
         )
-    lines.append(f"장비 보정 : 공격 +{attack} · 방어 +{defense}")
-    return ft.sheet("착용 장비", *lines)
+    lines.append(ft.row("보정", f"공격 +{attack} · 방어 +{defense}", 8))
+    return ft.compact("장비", *lines)
 
 
 def status(name, profile):
     values = rules.stats(profile)
     xp = (
-        f"{profile['xp']} / {rules.xp_threshold(values['level'] + 1)}"
+        f"{profile['xp']}/{rules.xp_threshold(values['level'] + 1)}"
         if values["level"] < rules.MAX_LEVEL
         else f"{profile['xp']} (최고 등급)"
     )
-    lines = [
-        ft.row("등급", f"Lv.{values['level']}"),
-        ft.row("체력", f"{profile['hp']} / {values['max_hp']}"),
-        ft.row("경험치", xp),
-        ft.row("크레딧", profile["credits"]),
-        ft.row("처치", profile["kills"]),
-        "",
-        ft.row("공격", values["attack"]),
-        ft.row("방어", values["defense"]),
-        "",
-        "[ 특성 ]",
-        " · ".join(
-            f"{v['name']} {profile['attributes'][k]['base'] + rules.allocated(profile, k)}"
+    return ft.compact(
+        "상태",
+        f"체력 {profile['hp']}/{values['max_hp']} · 공격 {values['attack']} · 방어 {values['defense']}",
+        f"경험치 {xp} · 크레딧 {profile['credits']} · 처치 {profile['kills']}",
+        "특성 | "
+        + " ".join(
+            f"{v['name']}{profile['attributes'][k]['base'] + rules.allocated(profile, k)}"
             for k, v in ATTRIBUTES.items()
         ),
-        "",
-        "[ 착용 장비 ]",
-    ]
-    lines.extend(
-        ft.row("무기" if slot == "weapon" else "방어구", ft.item(identity))
-        for slot, identity in profile["equipment"].items()
+        ft.text("장비 | ", ft.join([ft.item(i) for i in profile["equipment"].values()], " · ")),
+        summary=ft.text(ft.token("player", name), f" · Lv.{values['level']}"),
     )
-    return ft.sheet(ft.text(ft.token("player", name), "의 상태"), *lines)
 
 
 def abilities(profile):
-    lines = ["[ 특성 ]", ""]
-    for key, data in ATTRIBUTES.items():
-        entry = profile["attributes"][key]
-        lines.extend(
-            [
-                ft.row(
-                    data["name"],
-                    f"{entry['base'] + entry['allocated']} (기본 {entry['base']} + 투자 {entry['allocated']})",
-                ),
-                ft.text("  ", ft.token("muted", data["description"])),
-            ]
-        )
+    attributes = [
+        f"{data['name']} {profile['attributes'][key]['base'] + rules.allocated(profile, key)} "
+        f"({profile['attributes'][key]['base']}+{rules.allocated(profile, key)})"
+        for key, data in ATTRIBUTES.items()
+    ]
+    lines = [ft.join(attributes[i : i + 2], " · ") for i in range(0, len(attributes), 2)]
     lines.extend(
         [
+            f"남은 특성 포인트 {rules.point_pools(profile)['attribute_points']}",
             "",
-            f"남은 특성 포인트 : {rules.point_pools(profile)['attribute_points']}",
-            "",
-            "[ 숙련 ]",
-            "",
+            ft.text(
+                "[숙련] ",
+                ft.join(
+                    [
+                        f"{name} R{rules.proficiency_rank(profile, key)}"
+                        for key, name in PROFICIENCIES.items()
+                    ],
+                    " · ",
+                ),
+            ),
         ]
     )
-    lines.extend(
-        ft.row(name, f"Rank {rules.proficiency_rank(profile, key)}")
-        for key, name in PROFICIENCIES.items()
-    )
-    return ft.sheet("능력", *lines)
+    return ft.compact("능력", *lines)
 
 
 def experience(profile):
     level = rules.level_of(profile)
-    remaining = (
-        max(0, rules.xp_threshold(level + 1) - profile["xp"]) if level < rules.MAX_LEVEL else 0
+    progress = (
+        f"XP {profile['xp']}/{rules.xp_threshold(level + 1)} · 다음 {rules.xp_threshold(level + 1) - profile['xp']}"
+        if level < rules.MAX_LEVEL
+        else f"XP {profile['xp']} · 최고 등급"
     )
-    lines = [
-        f"캐릭터 Lv.{level}",
-        ft.row(
-            "경험치",
-            f"{profile['xp']} / {rules.xp_threshold(level + 1)}"
-            if level < rules.MAX_LEVEL
-            else f"{profile['xp']} (최고 등급)",
+    return ft.compact(
+        "경험치",
+        ft.text(
+            "숙련 | ",
+            ft.join(
+                [
+                    f"{name} R{rules.proficiency_rank(profile, key)} XP{profile['proficiencies'][key]['xp']}"
+                    for key, name in PROFICIENCIES.items()
+                ],
+                " · ",
+            ),
         ),
-        ft.row("다음 등급까지", remaining),
-        "",
-        "[ 숙련 ]",
-    ]
-    lines.extend(
-        ft.row(
-            name,
-            f"Rank {rules.proficiency_rank(profile, key)} · XP {profile['proficiencies'][key]['xp']} / {PROFICIENCY_MAX_RANK * PROFICIENCY_XP_PER_RANK}",
-        )
-        for key, name in PROFICIENCIES.items()
+        summary=f"Lv.{level} · {progress}",
     )
-    return ft.sheet("경험치", *lines)
 
 
 def skills(profile):
@@ -124,29 +108,26 @@ def skills(profile):
     for key, data in SKILLS.items():
         rank = rules.skill_rank(profile, key)
         next_rank = rank + 1
-        # 기술명은 학습 대상이다. 행동 명령과 동일하다고 추측하지 않는다.
-        lines.extend(
-            [ft.row(data["name"], f"Rank {rank} / {data['max_rank']}"), f"  {data['description']}"]
+        learning = (
+            f"다음 Lv{data['requirements'][next_rank]}/{data['point_cost'][next_rank]}점/{data['credit_cost'][next_rank]}C"
+            if next_rank <= data["max_rank"]
+            else "최고 Rank"
         )
-        if next_rank <= data["max_rank"]:
-            lines.append(
-                f"  다음 수련 : Lv.{data['requirements'][next_rank]} · {data['point_cost'][next_rank]}점 · {data['credit_cost'][next_rank]}크레딧"
-            )
-        else:
-            lines.append("  최고 Rank")
-        lines.append("")
-    lines.extend(
-        [
-            f"남은 기술점수 : {rules.point_pools(profile)['skill_points']}",
-            ft.text("교관에게 기술이름 ", ft.token("command", "배워")),
-        ]
+        # 기존 설명을 그대로 사용한다. 모바일에서는 한 항목 안에서 자연스럽게 줄바꿈한다.
+        lines.append(
+            f"{data['name']} R{rank}/{data['max_rank']} · {data['description']} · {learning}"
+        )
+    lines.append(ft.text("학습: 교관에게 기술이름 ", ft.token("command", "배워"), " · C=크레딧"))
+    return ft.compact(
+        "기술", *lines, summary=f"남은 점수 {rules.point_pools(profile)['skill_points']}"
     )
-    return ft.sheet("기술", *lines)
 
 
 def inventory(profile):
     groups = {"장비": [], "소모품": [], "재료": [], "기타": []}
     for identity, count in profile["inventory"].items():
+        if count <= 0:
+            continue
         slot = ITEMS[identity]["slot"]
         group = (
             "장비"
@@ -158,38 +139,32 @@ def inventory(profile):
             else "기타"
         )
         mark = ft.token("success", " [착용]") if identity in profile["equipment"].values() else ""
-        groups[group].append(ft.text(ft.row(ft.item(identity), f"×{count}", 18), mark))
-    lines = []
-    for title, entries in groups.items():
-        if entries:
-            lines.extend([f"[ {title} ]", *entries, ""])
-    return ft.sheet("소지품", *(lines or ["가방이 비어 있다."]))
+        groups[group].append(ft.text(ft.item(identity), f"×{count}", mark))
+    lines = [
+        ft.text(f"[{title}] ", ft.join(entries, " · "))
+        for title, entries in groups.items()
+        if entries
+    ]
+    return ft.compact("가방", *lines, summary="" if lines else "비어 있다.")
 
 
 def shop():
     lines = []
     for key, price in SHOP.items():
-        exchange = (
-            ft.text("\n  교환 : ", ft.item("scrap"), f" {EXCHANGE[key]}개")
-            if key in EXCHANGE
-            else ""
+        parts = [ft.item(key), ft.token("reward", f"{price}C")]
+        if key in EXCHANGE:
+            parts.append(ft.text("교환 ", ft.item("scrap"), f" {EXCHANGE[key]}개"))
+        lines.append(ft.join(parts, " · "))
+    lines.append(
+        ft.text(
+            "물건이름 ",
+            ft.token("command", "구매"),
+            " · 물건이름 ",
+            ft.token("command", "교환"),
+            " · C=크레딧 (1개씩)",
         )
-        lines.append(
-            ft.text(ft.row(ft.item(key), ft.token("reward", f"{price} 크레딧"), 18), exchange)
-        )
-    lines.extend(
-        [
-            "",
-            ft.text(
-                "물건이름 ",
-                ft.token("command", "구매"),
-                " · 물건이름 ",
-                ft.token("command", "교환"),
-                " (한 번에 1개)",
-            ),
-        ]
     )
-    return ft.sheet("부두 보급소", *lines)
+    return ft.compact("부두 보급소", *lines)
 
 
 def quest(profile):
@@ -198,27 +173,28 @@ def quest(profile):
     from world.content import ENEMIES
 
     steps = [
-        ("quest_started", ft.text(content_name("commander"), "에게 임무를 받음")),
-        ("record_read", ft.text(content_name("maintenance_log"), "을 확인함")),
-        ("generator_fixed", ft.text(content_name("generator"), "를 복구")),
+        ("quest_started", ft.text(content_name("commander"), "에게 임무 수령")),
+        ("record_read", ft.text(content_name("maintenance_log"), " 확인")),
+        ("generator_fixed", ft.text(content_name("generator"), " 복구")),
         ("boss_defeated", ft.text(ft.token("hostile", ENEMIES["alpha"]["name"]), " 처치")),
         ("quest_claimed", ft.text(content_name("commander"), "에게 보고")),
     ]
-    current = next((index for index, (key, _) in enumerate(steps) if not profile[key]), len(steps))
-    lines = [
-        "현재 목표",
-        ft.text("  ", steps[current][1])
-        if current < len(steps)
-        else ft.token("success", "  첫 탐사를 완수했다."),
-        "",
-        "진행",
-    ]
+    current = next((i for i, (key, _) in enumerate(steps) if not profile[key]), len(steps))
+    lines = []
     for index, (key, description) in enumerate(steps):
-        label = "[완료]" if profile[key] else "[진행]" if index == current else "[대기]"
-        lines.append(
-            ft.text(ft.token("success" if profile[key] else "muted", label), " ", description)
+        mark, role = (
+            ("+", "success")
+            if profile[key]
+            else (">", "command")
+            if index == current
+            else ("-", "muted")
         )
-    return ft.sheet("통신탑 복구", *lines)
+        lines.append(ft.text(ft.token(role, mark), " ", description))
+    return ft.compact(
+        "임무",
+        *lines,
+        summary=f"통신탑 복구 · {sum(bool(profile[k]) for k, _ in steps)}/{len(steps)}",
+    )
 
 
 def outgoing_attack(profile, enemy_name, outcome, damage):

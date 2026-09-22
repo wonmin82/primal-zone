@@ -21,42 +21,39 @@ class PartyCommand(GameCommand):
         if party:
             state = party.state()
             leader = object_by_id(state["leader"])
-            lines.extend(
-                [
-                    ft.row("파티장", ft.token("player", leader.key)),
-                    "전리품 : 참여자 순번 분배",
-                    "",
-                    "[ 멤버 ]",
-                ]
+            summary = ft.text(
+                "파티장 ",
+                ft.token("player", leader.key),
+                " · 전리품 ",
+                "순번" if state["loot_mode"] == "round_robin" else state["loot_mode"],
             )
+            members = []
             for identity in state["members"]:
                 member = object_by_id(identity)
                 if member:
-                    lines.append(
+                    members.append(
                         ft.text(
                             ft.token("player", member.key),
-                            " [파티장]" if identity == state["leader"] else "",
+                            "(장)" if identity == state["leader"] else "",
                         )
                     )
+            lines.append(ft.text("멤버: ", ft.join(members, " · ")))
         else:
-            lines.append(
-                ft.text(
-                    "소속 파티가 없습니다. 플레이어이름 ",
-                    ft.token("command", "파티초대"),
-                    "로 시작하세요.",
-                )
-            )
-        invited, _ = invitation_for(self.caller)
+            summary = ft.text("소속 파티 없음 · 플레이어이름 ", ft.token("command", "파티초대"))
+        invited, invitation = invitation_for(self.caller)
         if invited:
+            inviter = object_by_id(invitation["inviter"])
             lines.append(
                 ft.text(
-                    "대기 중인 초대 : ",
+                    "초대: ",
+                    ft.token("player", inviter.key if inviter else "탐사자"),
+                    " → ",
                     ft.token("command", "파티수락"),
                     " / ",
                     ft.token("command", "파티거절"),
                 )
             )
-        self.caller.msg(ft.sheet("탐사 파티", *lines))
+        self.caller.msg(ft.compact("파티", *lines, summary=summary))
 
 
 class PartyInvite(GameCommand):

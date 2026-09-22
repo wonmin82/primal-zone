@@ -196,8 +196,8 @@ class GrowthIntegrationTests(EvenniaCommandTest):
             (Abilities(), "능력"),
             (Skills(), "기술"),
             (Experience(), "경험치"),
-            (Equipment(), "착용 장비"),
-            (Help(), "탐사 안내"),
+            (Equipment(), "장비"),
+            (Help(), "도움말"),
         ):
             with patch.object(self.char1, "msg") as message:
                 command.caller = self.char1
