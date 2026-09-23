@@ -141,7 +141,7 @@ class GameplayIntegrationTests(EvenniaCommandTest):
         self.assertFalse(self.char1.move_to(self.rooms["trail"]))
         self.call(gameplay.Flee(), "", "교전을 끝냈습니다.", caller=self.char1)
         self.assertFalse(self.char1.move_to(self.rooms["ridge"]))
-        self.char1.change(lambda profile: profile.update(generator_fixed=True))
+        self.char1.change(lambda profile: profile["quests"]["radio_tower"].update(generator_fixed=True))
         self.assertTrue(self.char1.move_to(self.rooms["ridge"]))
 
     def test_failed_purchase_does_not_change_saved_data(self):
@@ -173,7 +173,7 @@ class GameplayIntegrationTests(EvenniaCommandTest):
         self.call(
             gameplay.Repair(), "발전기", "발전기가 다시 돌아가기 시작했다.", caller=self.char1
         )
-        self.char1.change(lambda profile: profile.update(boss_defeated=True))
+        self.char1.change(lambda profile: profile["quests"]["radio_tower"].update(boss_defeated=True))
         self.char1.location = self.rooms["dock"]
         self.call(gameplay.Talk(), "윤대장", "윤대장", caller=self.char1)
         before = self.char1.profile()
@@ -187,14 +187,14 @@ class GameplayIntegrationTests(EvenniaCommandTest):
         self.char1.execute_cmd("강철 마체테 WIELD")
         self.assertEqual(self.char1.profile()["equipment"]["weapon"], "blade")
         self.char1.execute_cmd("윤대장 대화")
-        self.assertTrue(self.char1.profile()["quest_started"])
+        self.assertTrue(self.char1.profile()["quests"]["radio_tower"]["started"])
         self.char1.location = self.rooms["office"]
         self.char1.execute_cmd("정비 기록 조사")
-        self.assertTrue(self.char1.profile()["record_read"])
+        self.assertTrue(self.char1.profile()["quests"]["radio_tower"]["record_read"])
         self.char1.location = self.rooms["generator"]
         self.char1.change(lambda data: data["inventory"].update(scrap=9))
         self.char1.execute_cmd("발전 기 수리")
-        self.assertTrue(self.char1.profile()["generator_fixed"])
+        self.assertTrue(self.char1.profile()["quests"]["radio_tower"]["generator_fixed"])
         self.char1.execute_cmd("귀환")
         self.assertEqual(self.char1.location, self.rooms["dock"])
         self.char1.execute_cmd("강화조끼 교환")

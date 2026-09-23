@@ -10,8 +10,9 @@ from evennia.utils import delay
 from evennia.utils.dbserialize import deserialize
 from world import rules
 from world import text as ft
-from world.content import ENEMIES, EQUIPMENT_ACTIONS, ITEMS, ROOMS
+from world.content import EQUIPMENT_ACTIONS, ITEMS, REGIONS, ROOM_REGION, ROOMS
 from world.multiplayer import after_change
+from world.quests import QUESTS, next_step
 
 
 class Explorer(DefaultCharacter):
@@ -122,6 +123,8 @@ class Explorer(DefaultCharacter):
             "credits": profile["credits"],
             "room": room.get("name", "탐사 준비"),
             "zone": zone,
+            "region": ROOM_REGION.get(zone),
+            "region_name": REGIONS[ROOM_REGION[zone]]["name"] if zone in ROOM_REGION else None,
             "safe": room.get("safe", False),
             "inventory": inventory,
             "exits": list(room.get("exits", {})),
@@ -137,17 +140,10 @@ class Explorer(DefaultCharacter):
 
     @staticmethod
     def quest_text(profile):
-        if profile["quest_claimed"]:
-            return "통신탑 복구 완료 · 첫 탐사를 완수했습니다."
-        if not profile["quest_started"]:
-            return "부두에서 '윤대장 대화'으로 임무를 받으세요."
-        if not profile["record_read"]:
-            return "관리동에서 '정비기록 조사'. 사냥으로 장비와 회수부품 3개를 준비하세요."
-        if not profile["generator_fixed"]:
-            return "회수부품 3개를 모아 발전실에서 '발전기 수리'."
-        if not profile["boss_defeated"]:
-            return "능선의 우두머리를 처치하세요. 강화 장비와 붕대를 권장합니다."
-        return "부두로 귀환하여 '윤대장 대화'으로 보상을 받으세요."
+        identity = (
+            "deep_jungle" if profile["quests"]["radio_tower"]["claimed"] else "radio_tower"
+        )
+        return QUESTS[identity]["hints"][next_step(profile, identity)]
 
     def at_post_puppet(self, **kwargs):
         from world.bootstrap import get_room
@@ -188,8 +184,9 @@ class Explorer(DefaultCharacter):
         if self.profile().get("combat_target"):
             self.msg("전투 중에는 이동할 수 없습니다. '도주'로 교전을 끝내세요.")
             return False
-        if destination.db.zone_id == "ridge" and not self.profile()["generator_fixed"]:
-            self.msg("통신탑 진입문이 잠겨 있습니다. 정비기록을 읽고 발전기를 수리하세요.")
+        requirement = ROOMS.get(destination.db.zone_id, {}).get("requires")
+        if requirement and not self.profile()["quests"][requirement["quest"]][requirement["flag"]]:
+            self.msg(requirement["message"])
             return False
         return super().at_pre_move(destination, move_type=move_type, **kwargs)
 
@@ -222,9 +219,7 @@ class Explorer(DefaultCharacter):
             "max_hp": enemy.db.max_hp,
             "round": enemy.db.enemy_round,
             "state": enemy.db.state,
-            "telegraph": bool(
-                ENEMIES[enemy.db.enemy_id].get("boss") and enemy.db.enemy_round % 3 == 2
-            ),
+            "telegraph": rules.boss_telegraph(enemy.db.enemy_id, enemy.db.enemy_round),
         }
 
     def start_combat(self, enemy_id):

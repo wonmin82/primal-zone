@@ -13,7 +13,7 @@ from evennia.utils.test_resources import EvenniaCommandTest
 from server.conf.cmdparser import cmdparser
 from typeclasses.enemies import room_enemies
 from typeclasses.explorers import Explorer
-from typeclasses.interactables import action_objects, instructor_for
+from typeclasses.interactables import INTERACTABLES, action_objects, instructor_for
 from world import rules
 from world.bootstrap import build_world
 
@@ -84,7 +84,7 @@ class GrowthIntegrationTests(EvenniaCommandTest):
 
     def test_world_objects_are_persistent_and_bootstrap_does_not_reset(self):
         first = {obj.id for room in self.rooms.values() for obj in action_objects(room)}
-        self.assertEqual(len(first), 5)
+        self.assertEqual(len(first), len(INTERACTABLES))
         self.char1.change(lambda p: rules.allocate_attribute(p, "wisdom", 2, safe=True))
         before = self.char1.profile()
         build_world()

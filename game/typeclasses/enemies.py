@@ -246,8 +246,8 @@ class Enemy(DefaultObject):
             rules.gain_xp(profile, share["xp"])
             profile["credits"] += share["credits"]
             profile["kills"] += 1
-            if definition.get("boss"):
-                profile["boss_defeated"] = True
+            if definition.get("boss_quest"):
+                profile["quests"][definition["boss_quest"]]["boss_defeated"] = True
             player.save_profile(profile)
             message = view.reward(share["xp"], share["credits"])
             after_change(lambda player=player, message=message: player.msg(message))
@@ -275,7 +275,8 @@ class Enemy(DefaultObject):
             target.msg(
                 ft.text(
                     ft.named("hostile", self.key, "이/가"),
-                    " 거세게 돌진해 " if result["charged"] else " 달려들어 ",
+                    f" {ENEMIES[self.db.enemy_id].get('special_verb', '거세게 돌진해')} "
+                    if result["charged"] else " 달려들어 ",
                     f"{result['damage']}의 피해를 입혔다.",
                     f" 방어로 {result['prevented']}의 피해를 막았다."
                     if result["prevented"]
@@ -286,13 +287,16 @@ class Enemy(DefaultObject):
                 target.leave_combat()
                 target.move_to(target.home, quiet=True)
                 target.msg("탐사대가 부두로 구조했습니다. 최대 10크레딧을 잃었습니다.")
-            if ENEMIES[self.db.enemy_id].get("boss") and self.db.enemy_round % 3 == 2:
+            if rules.boss_telegraph(self.db.enemy_id, self.db.enemy_round):
                 for player in self.active_players():
                     player.msg(
                         ft.text(
                             ft.token("warning", "! "),
                             ft.named("hostile", self.key, "이/가"),
-                            " 몸을 낮추고 돌진할 자세를 취한다.",
+                            " ",
+                            ENEMIES[self.db.enemy_id].get(
+                                "telegraph", "몸을 낮추고 돌진할 자세를 취한다."
+                            ),
                         )
                     )
         self.broadcast_state()
