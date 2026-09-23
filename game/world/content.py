@@ -6,6 +6,12 @@ ITEMS = {
     "blade": {"name": "강철마체테", "slot": "weapon", "attack": 6, "defense": 0},
     "armor": {"name": "강화조끼", "slot": "armor", "attack": 0, "defense": 4},
     "carbine": {"name": "탐사카빈", "slot": "weapon", "attack": 10, "defense": 0},
+    "spear": {"name": "사냥창", "slot": "weapon", "attack": 4, "defense": 1},
+    "jungle_blade": {"name": "정글도", "slot": "weapon", "attack": 8, "defense": 0},
+    "heavy_carbine": {"name": "중량카빈", "slot": "weapon", "attack": 12, "defense": 0},
+    "leather_suit": {"name": "가죽보호복", "slot": "armor", "attack": 0, "defense": 2},
+    "tactical_vest": {"name": "경량전술조끼", "slot": "armor", "attack": 1, "defense": 3},
+    "heavy_suit": {"name": "중장방호복", "slot": "armor", "attack": 0, "defense": 6},
     "fang": {"name": "우두머리송곳니", "slot": "trophy", "attack": 0, "defense": 0},
     "bandage": {"name": "붕대", "slot": "consumable", "heal": 35},
     "scrap": {"name": "회수부품", "slot": "material"},
@@ -129,8 +135,31 @@ ROOMS = {
 }
 
 OPPOSITES = {"북": "n", "남": "s", "동": "e", "서": "w"}
-SHOP = {"bandage": 8, "blade": 60, "armor": 65, "carbine": 130}
-EXCHANGE = {"blade": 6, "armor": 6, "carbine": 12}
+# 행동 선택은 아이템 이름이 아니라 slot만 사용한다.
+EQUIPMENT_ACTIONS = {"weapon": "무장", "armor": "착용"}
+SHOP = {
+    "bandage": 8,
+    "spear": 35,
+    "blade": 60,
+    "jungle_blade": 95,
+    "carbine": 130,
+    "heavy_carbine": 240,
+    "leather_suit": 35,
+    "tactical_vest": 85,
+    "armor": 65,
+    "heavy_suit": 190,
+}
+EXCHANGE = {
+    "spear": 3,
+    "blade": 6,
+    "jungle_blade": 9,
+    "carbine": 12,
+    "heavy_carbine": 24,
+    "leather_suit": 3,
+    "tactical_vest": 8,
+    "armor": 6,
+    "heavy_suit": 18,
+}
 
 
 def find_id(catalog, name):

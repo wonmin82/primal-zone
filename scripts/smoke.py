@@ -187,7 +187,7 @@ async def main():
         if not count_item(first.state, "blade"):
             await first.act("강철마체테 구매", lambda state: count_item(state, "blade") > 0)
         before_attack = first.state["attack"]
-        await first.act("강철마체테 착용", lambda state: state["attack"] > before_attack)
+        await first.act("강철마체테 무장", lambda state: state["attack"] > before_attack)
         for direction, zone in (("북", "grass"), ("북", "trail"), ("동", "office")):
             await first.act(direction, lambda state, zone=zone: state["zone"] == zone)
         await first.act("정비기록 조사", lambda state: "발전기 수리" in state["quest"])

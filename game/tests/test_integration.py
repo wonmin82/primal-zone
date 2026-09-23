@@ -184,7 +184,7 @@ class GameplayIntegrationTests(EvenniaCommandTest):
         self.char1.change(lambda data: data.update(credits=200))
         self.char1.execute_cmd("  강철 마체테   구매  ")
         self.assertEqual(self.char1.profile()["inventory"]["blade"], 1)
-        self.char1.execute_cmd("강철 마체테 EQUIP")
+        self.char1.execute_cmd("강철 마체테 WIELD")
         self.assertEqual(self.char1.profile()["equipment"]["weapon"], "blade")
         self.char1.execute_cmd("윤대장 대화")
         self.assertTrue(self.char1.profile()["quest_started"])

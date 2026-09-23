@@ -18,6 +18,7 @@ from commands.inventory import Exchange as Exchange
 from commands.inventory import Inventory as Inventory
 from commands.inventory import Shop as Shop
 from commands.inventory import Take as Take
+from commands.inventory import Wield as Wield
 from commands.party import PartyAccept as PartyAccept
 from commands.party import PartyCommand as PartyCommand
 from commands.party import PartyInvite as PartyInvite

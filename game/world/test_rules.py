@@ -3,7 +3,7 @@ from random import Random
 from unittest import TestCase
 
 from world import rules
-from world.content import ENEMIES, ROOMS
+from world.content import ENEMIES, EQUIPMENT_ACTIONS, EXCHANGE, ITEMS, ROOMS, SHOP, find_id
 
 
 class RuleTests(TestCase):
@@ -40,6 +40,99 @@ class RuleTests(TestCase):
         rules.buy(profile, "blade", exchange=True)
         self.assertEqual(profile["inventory"]["blade"], 1)
         self.assertNotIn("scrap", profile["inventory"])
+
+    def test_equipment_catalog_integrity_and_acquisition(self):
+        self.assertEqual(len({item["name"] for item in ITEMS.values()}), len(ITEMS))
+        for identity, data in ITEMS.items():
+            self.assertEqual(find_id(ITEMS, identity), identity)
+            self.assertEqual(find_id(ITEMS, data["name"]), identity)
+            self.assertIn(data["slot"], {"weapon", "armor", "consumable", "material", "trophy"})
+            if data["slot"] in EQUIPMENT_ACTIONS:
+                self.assertTrue(
+                    all(isinstance(data[k], int) and data[k] >= 0 for k in ("attack", "defense"))
+                )
+                sources = set(SHOP) | set(EXCHANGE) | {e["drop"] for e in ENEMIES.values()}
+                sources |= set(rules.new_profile()["inventory"])
+                self.assertIn(identity, sources)
+        for catalog in (SHOP, EXCHANGE):
+            for identity, price in catalog.items():
+                self.assertIn(identity, ITEMS)
+                self.assertGreater(price, 0)
+        for enemy in ENEMIES.values():
+            self.assertIn(enemy["drop"], ITEMS)
+            self.assertTrue(0 <= enemy["chance"] <= 1)
+
+    def test_all_equipment_preserves_inventory_other_slot_and_stats(self):
+        for identity, data in ITEMS.items():
+            if data["slot"] not in EQUIPMENT_ACTIONS:
+                continue
+            with self.subTest(item=identity):
+                profile = rules.new_profile()
+                rules.add_item(profile, identity)
+                before = deepcopy(profile)
+                rules.equip(profile, identity, expected_slot=data["slot"])
+                expected = deepcopy(before)
+                expected["equipment"][data["slot"]] = identity
+                self.assertEqual(profile, expected)
+                equipped = [ITEMS[i] for i in profile["equipment"].values()]
+                self.assertEqual(
+                    rules.stats(profile)["attack"], 7 + sum(i["attack"] for i in equipped)
+                )
+                self.assertEqual(
+                    rules.stats(profile)["defense"], sum(i["defense"] for i in equipped)
+                )
+        profile = rules.new_profile()
+        for identity in ("spear", "tactical_vest"):
+            rules.add_item(profile, identity)
+            rules.equip(profile, identity, ITEMS[identity]["slot"])
+        self.assertEqual((rules.stats(profile)["attack"], rules.stats(profile)["defense"]), (12, 4))
+
+    def test_wrong_slot_unowned_and_combat_rejections_are_lossless(self):
+        for identity, data in ITEMS.items():
+            for slot in EQUIPMENT_ACTIONS:
+                with self.subTest(item=identity, action_slot=slot):
+                    profile = rules.new_profile()
+                    rules.add_item(profile, identity)
+                    if data["slot"] != slot:
+                        before = deepcopy(profile)
+                        with self.assertRaises(rules.RuleError):
+                            rules.equip(profile, identity, slot)
+                        self.assertEqual(profile, before)
+                    profile["combat_target"] = 123
+                    before = deepcopy(profile)
+                    with self.assertRaises(rules.RuleError):
+                        rules.equip(profile, identity, slot)
+                    self.assertEqual(profile, before)
+        for identity in ("heavy_carbine", "heavy_suit"):
+            profile = rules.new_profile()
+            before = deepcopy(profile)
+            with self.assertRaises(rules.RuleError):
+                rules.equip(profile, identity, ITEMS[identity]["slot"])
+            self.assertEqual(profile, before)
+
+    def test_every_purchase_and_exchange_exact_cost_and_lossless_failure(self):
+        for exchange, prices in ((False, SHOP), (True, EXCHANGE)):
+            for identity, price in prices.items():
+                with self.subTest(item=identity, exchange=exchange):
+                    profile = rules.new_profile()
+                    profile["credits"] = price - 1
+                    profile["inventory"]["scrap"] = price - 1
+                    before = deepcopy(profile)
+                    with self.assertRaises(rules.RuleError):
+                        rules.buy(profile, identity, exchange=exchange)
+                    self.assertEqual(profile, before)
+                    if exchange:
+                        profile["inventory"]["scrap"] = price
+                    else:
+                        profile["credits"] = price
+                    expected = deepcopy(profile)
+                    if exchange:
+                        del expected["inventory"]["scrap"]
+                    else:
+                        expected["credits"] = 0
+                    expected["inventory"][identity] = expected["inventory"].get(identity, 0) + 1
+                    rules.buy(profile, identity, exchange=exchange)
+                    self.assertEqual(profile, expected)
 
     def test_heal_is_capped_and_consumes_one_bandage(self):
         profile = rules.new_profile()

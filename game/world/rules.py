@@ -3,7 +3,7 @@
 from copy import deepcopy
 from random import Random
 
-from world.content import ENEMIES, EXCHANGE, ITEMS, SHOP
+from world.content import ENEMIES, EQUIPMENT_ACTIONS, EXCHANGE, ITEMS, SHOP
 from world.progression import (
     ATTRIBUTES,
     PROFICIENCIES,
@@ -102,13 +102,17 @@ def require_peace(profile):
         raise RuleError("전투 중입니다. 먼저 승리하거나 도주하세요.")
 
 
-def equip(profile, item_id):
+def equip(profile, item_id, expected_slot=None):
     require_peace(profile)
     if profile["inventory"].get(item_id, 0) < 1:
         raise RuleError("가방에 없는 장비입니다.")
     slot = ITEMS[item_id]["slot"]
-    if slot not in ("weapon", "armor"):
-        raise RuleError("무기와 방어구만 착용할 수 있습니다.")
+    if slot not in EQUIPMENT_ACTIONS:
+        raise RuleError("무기와 방어구만 장착할 수 있습니다.")
+    if expected_slot is not None and slot != expected_slot:
+        name = ITEMS[item_id]["name"]
+        kind = "무기" if slot == "weapon" else "방어구"
+        raise RuleError(f"{name}: {kind}입니다. '{name} {EQUIPMENT_ACTIONS[slot]}'을 사용하세요.")
     profile["equipment"][slot] = item_id
 
 
