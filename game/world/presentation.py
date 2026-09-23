@@ -171,30 +171,29 @@ def quest(profile):
     from typeclasses.interactables import content_name
 
     from world.content import ENEMIES
+    from world.quests import QUESTS, next_step
 
-    steps = [
-        ("quest_started", ft.text(content_name("commander"), "에게 임무 수령")),
-        ("record_read", ft.text(content_name("maintenance_log"), " 확인")),
-        ("generator_fixed", ft.text(content_name("generator"), " 복구")),
-        ("boss_defeated", ft.text(ft.token("hostile", ENEMIES["alpha"]["name"]), " 처치")),
-        ("quest_claimed", ft.text(content_name("commander"), "에게 보고")),
-    ]
-    current = next((i for i, (key, _) in enumerate(steps) if not profile[key]), len(steps))
     lines = []
-    for index, (key, description) in enumerate(steps):
-        mark, role = (
-            ("+", "success")
-            if profile[key]
-            else (">", "command")
-            if index == current
-            else ("-", "muted")
-        )
-        lines.append(ft.text(ft.token(role, mark), " ", description))
-    return ft.compact(
-        "임무",
-        *lines,
-        summary=f"통신탑 복구 · {sum(bool(profile[k]) for k, _ in steps)}/{len(steps)}",
-    )
+    for identity, data in QUESTS.items():
+        if not data.get("visible_from_start") and not profile["quests"][identity]["started"]:
+            continue
+        steps = data["steps"]
+        current = next_step(profile, identity)
+        done = sum(bool(profile["quests"][identity][flag]) for flag, *_ in steps)
+        lines.append(f"{data['name']} · {done}/{len(steps)}")
+        if done == len(steps):
+            continue
+        for index, (flag, target, role, suffix) in enumerate(steps):
+            mark, mark_role = (
+                ("+", "success") if profile["quests"][identity][flag]
+                else (">", "command") if index == current else ("-", "muted")
+            )
+            name = (
+                ft.token("hostile", ENEMIES[target]["name"])
+                if role == "hostile" else content_name(target)
+            )
+            lines.append(ft.text(ft.token(mark_role, mark), " ", name, suffix))
+    return ft.compact("임무", *lines)
 
 
 def outgoing_attack(profile, enemy_name, outcome, damage):

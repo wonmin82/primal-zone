@@ -4,7 +4,7 @@ from evennia.commands.default.general import CmdLook
 from world import presentation as view
 from world import rules
 from world import text as ft
-from world.content import ROOMS
+from world.content import REGIONS, ROOMS
 
 from commands.base import GameCommand
 
@@ -165,8 +165,13 @@ class Map(GameCommand):
     def run(self):
         visited = set(self.caller.profile()["visited"])
         lines = ["방문한 장소만 표시됩니다.", ""]
-        for key, room in ROOMS.items():
-            if key in visited:
+        for region in REGIONS.values():
+            region_rooms = [key for key in region["rooms"] if key in visited]
+            if not region_rooms:
+                continue
+            lines.append(f"[{region['name']}]")
+            for key in region_rooms:
+                room = ROOMS[key]
                 mark = " ← 현재" if self.caller.zone == key else ""
                 exits = ft.join(
                     [

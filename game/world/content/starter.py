@@ -1,21 +1,4 @@
-"""Small, authored starter zone. Stable IDs are also used in saved player data."""
-
-ITEMS = {
-    "machete": {"name": "낡은마체테", "slot": "weapon", "attack": 2, "defense": 0},
-    "vest": {"name": "탐사조끼", "slot": "armor", "attack": 0, "defense": 1},
-    "blade": {"name": "강철마체테", "slot": "weapon", "attack": 6, "defense": 0},
-    "armor": {"name": "강화조끼", "slot": "armor", "attack": 0, "defense": 4},
-    "carbine": {"name": "탐사카빈", "slot": "weapon", "attack": 10, "defense": 0},
-    "spear": {"name": "사냥창", "slot": "weapon", "attack": 4, "defense": 1},
-    "jungle_blade": {"name": "정글도", "slot": "weapon", "attack": 8, "defense": 0},
-    "heavy_carbine": {"name": "중량카빈", "slot": "weapon", "attack": 12, "defense": 0},
-    "leather_suit": {"name": "가죽보호복", "slot": "armor", "attack": 0, "defense": 2},
-    "tactical_vest": {"name": "경량전술조끼", "slot": "armor", "attack": 1, "defense": 3},
-    "heavy_suit": {"name": "중장방호복", "slot": "armor", "attack": 0, "defense": 6},
-    "fang": {"name": "우두머리송곳니", "slot": "trophy", "attack": 0, "defense": 0},
-    "bandage": {"name": "붕대", "slot": "consumable", "heal": 35},
-    "scrap": {"name": "회수부품", "slot": "material"},
-}
+"""탐사대 전초구역의 기존 stable Room/Enemy 정의."""
 
 ENEMIES = {
     "scavenger": {
@@ -70,6 +53,8 @@ ENEMIES = {
         "drop": "fang",
         "chance": 1.0,
         "boss": True,
+        "boss_quest": "radio_tower",
+        "special_period": 3,
     },
 }
 
@@ -130,46 +115,7 @@ ROOMS = {
         "enemies": ["alpha"],
         "desc": "통신탑을 둘러싼 덩굴 사이로 거대한 그림자가 움직인다. 전력이 복구되어야 접근할 수 있다.",
         "hint": "우두머리가 몸을 낮추면 다음 공격을 방어하자.",
-        "exits": {"남": "marsh"},
+        "exits": {"남": "marsh", "북": "jungle_edge"},
+        "requires": {"quest": "radio_tower", "flag": "generator_fixed", "message": "통신탑 진입문이 잠겨 있습니다. 정비기록을 읽고 발전기를 수리하세요."},
     },
 }
-
-OPPOSITES = {"북": "n", "남": "s", "동": "e", "서": "w"}
-# 행동 선택은 아이템 이름이 아니라 slot만 사용한다.
-EQUIPMENT_ACTIONS = {"weapon": "무장", "armor": "착용"}
-SHOP = {
-    "bandage": 8,
-    "spear": 35,
-    "blade": 60,
-    "jungle_blade": 95,
-    "carbine": 130,
-    "heavy_carbine": 240,
-    "leather_suit": 35,
-    "tactical_vest": 85,
-    "armor": 65,
-    "heavy_suit": 190,
-}
-EXCHANGE = {
-    "spear": 3,
-    "blade": 6,
-    "jungle_blade": 9,
-    "carbine": 12,
-    "heavy_carbine": 24,
-    "leather_suit": 3,
-    "tactical_vest": 8,
-    "armor": 6,
-    "heavy_suit": 18,
-}
-
-
-def find_id(catalog, name):
-    """Accept a stable ID or an exact Korean display name, ignoring spaces."""
-    normalized = name.replace(" ", "").lower()
-    return next(
-        (
-            key
-            for key, value in catalog.items()
-            if normalized in (key, value["name"].replace(" ", "").lower())
-        ),
-        None,
-    )

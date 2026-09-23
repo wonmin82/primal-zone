@@ -95,8 +95,8 @@ class RewardTests(EvenniaCommandTest):
         boss.finish_death(self.char1, now=105, rng=Random(1))
         self.assertEqual([p.profile()["xp"] for p in self.players], [44, 43, 22, 21, 0])
         self.assertEqual(sum(p.profile()["credits"] - 20 for p in self.players), 50)
-        self.assertTrue(all(p.profile()["boss_defeated"] for p in self.players[:4]))
-        self.assertFalse(self.players[4].profile()["boss_defeated"])
+        self.assertTrue(all(p.profile()["quests"]["radio_tower"]["boss_defeated"] for p in self.players[:4]))
+        self.assertFalse(self.players[4].profile()["quests"]["radio_tower"]["boss_defeated"])
 
     def test_party_departure_removes_combat_and_contribution(self):
         party = self.party(self.char1, self.char2)

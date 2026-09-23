@@ -162,6 +162,75 @@ class Instructor(ActionObject):
             caller.msg("재훈련 완료. 투자 포인트를 반환했습니다. 숙련과 탐사 기록은 유지됩니다.")
 
 
+class Pathfinder(ActionObject):
+    semantic_role = "npc"
+    presence = "젖은 지도 위에 선발대의 이동 경로를 표시하고 있다."
+    description = "밀림에서 돌아온 선발대 길잡이다. 두 갈래 탐사로의 표식을 찾고 있다."
+    actions = ("대화",)
+
+    def act(self, caller, action, args):
+        before = caller.profile()
+        result = caller.change(rules.jungle_talk)
+        after = caller.profile()
+        if result == "start":
+            body = "관측소와 수몰 도로의 표식을 확인해 주세요. 두 기록을 맞추면 거목의 신호 장치가 연구구역 길을 열 겁니다."
+        elif result == "complete":
+            body = ft.text(
+                ft.token("success", "밀림의 탐사를 마쳤다."), " 보고를 마치고 ",
+                ft.token("reward", f"경험치 {after['xp'] - before['xp']}"), ", ",
+                ft.token("reward", f"{after['credits'] - before['credits']}크레딧"),
+                ", ", ft.item("bandage"), " 3개를 받았다.",
+            )
+        else:
+            from world import presentation as view
+            body = view.quest(after)
+        caller.msg(ft.text(ft.token("npc", self.key), "\n\n", body))
+
+
+class JungleMarker(ActionObject):
+    presence = "나무와 돌에 선발대의 흔적이 남아 있다."
+    description = "선발대가 길을 잃지 않도록 남긴 현장 표식이다."
+    actions = ("조사",)
+    quest_flag = None
+
+    def act(self, caller, action, args):
+        newly_marked = caller.change(lambda profile: rules.jungle_mark(profile, self.quest_flag))
+        caller.msg(ft.text(ft.token("object", self.key), "을 살펴 선발대의 경로를 확인했다."))
+        return newly_marked
+
+
+class WatchMarker(JungleMarker):
+    quest_flag = "watch_marked"
+
+
+class WaterMarker(JungleMarker):
+    quest_flag = "road_marked"
+
+    def act(self, caller, action, args):
+        if super().act(caller, action, args):
+            caller.msg(ft.text("표식 아래에서 ", ft.item("jungle_cell"), "를 확보했다."))
+
+
+class SignalDevice(ActionObject):
+    presence = "닫힌 출입문 옆에서 신호등을 깜빡이고 있다."
+    description = "두 탐사 표식의 좌표를 맞추면 연구구역의 문을 열 수 있다."
+    actions = ("조사",)
+
+    def act(self, caller, action, args):
+        caller.change(rules.open_jungle_gate)
+        caller.msg(ft.text(ft.item("jungle_cell"), "로 ", ft.token("object", self.key), "의 좌표를 맞추자 연구구역의 문이 열렸다."))
+
+
+class JungleCache(ActionObject):
+    presence = "검은 물가에 반쯤 잠겨 있다."
+    description = "선발대가 늪을 지날 때 남긴 작은 보급 주머니다."
+    actions = ("조사",)
+
+    def act(self, caller, action, args):
+        caller.change(rules.claim_jungle_cache)
+        caller.msg(ft.text(ft.token("object", self.key), "에서 ", ft.item("bandage"), " 2개를 찾아 챙겼다."))
+
+
 def action_objects(room):
     return [obj for obj in room.contents if isinstance(obj, ActionObject)] if room else []
 
@@ -172,17 +241,22 @@ def instructor_for(caller):
     )
 
 
-DEFINITIONS = (
-    ("commander", "dock", "Commander", "윤대장", ["대장"]),
-    ("instructor", "dock", "Instructor", "탐사대 훈련관", ["훈련관", "교관"]),
-    ("maintenance_log", "office", "MaintenanceLog", "정비기록", ["기록"]),
-    ("supply_cache", "wreck", "SupplyCache", "보급상자", ["상자"]),
-    ("generator", "generator", "Generator", "발전기", []),
-)
+INTERACTABLES = {
+    "commander": {"room": "dock", "typeclass": "Commander", "name": "윤대장", "aliases": ["대장"]},
+    "instructor": {"room": "dock", "typeclass": "Instructor", "name": "탐사대 훈련관", "aliases": ["훈련관", "교관"]},
+    "maintenance_log": {"room": "office", "typeclass": "MaintenanceLog", "name": "정비기록", "aliases": ["기록"]},
+    "supply_cache": {"room": "wreck", "typeclass": "SupplyCache", "name": "보급상자", "aliases": ["상자"]},
+    "generator": {"room": "generator", "typeclass": "Generator", "name": "발전기", "aliases": []},
+    "pathfinder": {"room": "jungle_edge", "typeclass": "Pathfinder", "name": "선발대 길잡이", "aliases": ["길잡이"]},
+    "watch_marker": {"room": "jungle_watch", "typeclass": "WatchMarker", "name": "관측 표식", "aliases": ["표식"]},
+    "water_marker": {"room": "jungle_road", "typeclass": "WaterMarker", "name": "수위 표식", "aliases": ["표식"]},
+    "signal_device": {"room": "jungle_grove", "typeclass": "SignalDevice", "name": "신호 장치", "aliases": ["장치"]},
+    "jungle_cache": {"room": "jungle_fen", "typeclass": "JungleCache", "name": "늪지 보급품", "aliases": ["보급품"]},
+}
 
 
 def content_name(identity):
     """콘텐츠 정의의 실제 이름과 타입으로 대화/임무에서 대상을 표현한다."""
-    definition = next(row for row in DEFINITIONS if row[0] == identity)
-    cls = globals()[definition[2]]
-    return ft.token(cls.semantic_role, definition[3])
+    definition = INTERACTABLES[identity]
+    cls = globals()[definition["typeclass"]]
+    return ft.token(cls.semantic_role, definition["name"])

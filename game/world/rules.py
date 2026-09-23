@@ -12,9 +12,10 @@ from world.progression import (
     SAFE_HEAL_TRAINING_CAP,
     SKILLS,
 )
+from world.quests import progress_defaults
 
 MAX_LEVEL = 10
-PROFILE_VERSION = 3
+PROFILE_VERSION = 4
 
 
 class RuleError(ValueError):
@@ -31,12 +32,8 @@ def new_profile():
         "inventory": {"machete": 1, "vest": 1, "bandage": 3},
         "equipment": {"weapon": "machete", "armor": "vest"},
         "kills": 0,
-        "quest_started": False,
-        "record_read": False,
-        "generator_fixed": False,
-        "boss_defeated": False,
-        "quest_claimed": False,
-        "cache_claimed": False,
+        "quests": progress_defaults(),
+        "discoveries": {},
         "visited": ["dock"],
         "combat_target": None,
         "queued_action": "attack",
@@ -198,7 +195,7 @@ def enemy_attack(profile, enemy_id, enemy_round, now, rng=None):
     rng = rng or Random()
     enemy = ENEMIES[enemy_id]
     damage = max(1, enemy["attack"] + rng.randint(-1, 1) - stats(profile)["defense"])
-    charged = bool(enemy.get("boss") and enemy_round % 3 == 0)
+    charged = bool(enemy.get("special_period") and enemy_round % enemy["special_period"] == 0)
     if charged:
         damage *= 2
     unguarded = damage
@@ -218,26 +215,33 @@ def enemy_attack(profile, enemy_id, enemy_round, now, rng=None):
     return {"damage": damage, "charged": charged, "defeated": defeated, "prevented": prevented}
 
 
+def boss_telegraph(enemy_id, enemy_round):
+    period = ENEMIES[enemy_id].get("special_period")
+    return bool(period and enemy_round % period == period - 1)
+
+
 def fix_generator(profile):
     require_peace(profile)
-    if not profile["quest_started"]:
+    progress = profile["quests"]["radio_tower"]
+    if not progress["started"]:
         raise RuleError("먼저 부두에서 윤대장에게 임무를 받으세요.")
-    if profile["generator_fixed"]:
+    if progress["generator_fixed"]:
         raise RuleError("이미 발전기를 복구했습니다.")
-    if not profile["record_read"]:
+    if not progress["record_read"]:
         raise RuleError("관리동의 정비기록을 먼저 조사하세요.")
     consume(profile, "scrap", 3)
-    profile["generator_fixed"] = True
+    progress["generator_fixed"] = True
     gain_xp(profile, 50)
 
 
 def claim_quest(profile):
     require_peace(profile)
-    if profile["quest_claimed"]:
+    progress = profile["quests"]["radio_tower"]
+    if progress["claimed"]:
         raise RuleError("이미 임무 보상을 받았습니다.")
-    if not (profile["quest_started"] and profile["generator_fixed"] and profile["boss_defeated"]):
+    if not (progress["started"] and progress["generator_fixed"] and progress["boss_defeated"]):
         raise RuleError("발전기 복구와 능선의 우두머리 처치가 필요합니다.")
-    profile["quest_claimed"] = True
+    progress["claimed"] = True
     profile["credits"] += 100
     gain_xp(profile, 100)
     add_item(profile, "bandage", 3)
@@ -292,9 +296,21 @@ def migrate_profile(profile):
             "player_round",
         ):
             result.setdefault(key, defaults[key])
-    if version < PROFILE_VERSION:
+    if version < 3:
         for key, value in growth_defaults().items():
             result.setdefault(key, value)
+    if version < 4:
+        progress = progress_defaults()
+        legacy = {
+            "quest_started": "started", "record_read": "record_read",
+            "generator_fixed": "generator_fixed", "boss_defeated": "boss_defeated",
+            "quest_claimed": "claimed",
+        }
+        for old, flag in legacy.items():
+            progress["radio_tower"][flag] = bool(result.pop(old, False))
+        result["quests"] = progress
+        result["discoveries"] = {"supply_cache": bool(result.pop("cache_claimed", False))}
+    if version < PROFILE_VERSION:
         result["version"] = PROFILE_VERSION
     return result
 
@@ -393,10 +409,11 @@ def retrain(profile, scope, *, safe=False):
 
 def commander_talk(profile):
     require_peace(profile)
-    if not profile["quest_started"]:
-        profile["quest_started"] = True
+    progress = profile["quests"]["radio_tower"]
+    if not progress["started"]:
+        progress["started"] = True
         return "start"
-    if profile["boss_defeated"] and not profile["quest_claimed"]:
+    if progress["boss_defeated"] and not progress["claimed"]:
         claim_quest(profile)
         return "complete"
     return "progress"
@@ -404,15 +421,72 @@ def commander_talk(profile):
 
 def read_record(profile):
     require_peace(profile)
-    profile["record_read"] = True
+    profile["quests"]["radio_tower"]["record_read"] = True
 
 
 def claim_cache(profile):
     require_peace(profile)
-    if profile["cache_claimed"]:
+    if profile["discoveries"].get("supply_cache"):
         raise RuleError("이미 보급품을 챙겼습니다.")
     add_item(profile, "bandage", 2)
-    profile["cache_claimed"] = True
+    profile["discoveries"]["supply_cache"] = True
+
+
+def jungle_talk(profile):
+    require_peace(profile)
+    if not profile["quests"]["radio_tower"]["claimed"]:
+        raise RuleError("먼저 통신탑 복구 임무를 마치세요.")
+    progress = profile["quests"]["deep_jungle"]
+    if not progress["started"]:
+        progress["started"] = True
+        return "start"
+    if progress["boss_defeated"] and not progress["claimed"]:
+        progress["claimed"] = True
+        profile["credits"] += 120
+        gain_xp(profile, 120)
+        add_item(profile, "bandage", 3)
+        return "complete"
+    return "progress"
+
+
+def jungle_mark(profile, flag):
+    require_peace(profile)
+    progress = profile["quests"]["deep_jungle"]
+    if not progress["started"]:
+        raise RuleError("먼저 밀림 입구에서 선발대 길잡이에게 의뢰를 받으세요.")
+    if flag not in ("watch_marked", "road_marked"):
+        raise RuleError("조사할 수 없는 표식입니다.")
+    newly_marked = not progress[flag]
+    cell_acquired = (
+        flag == "road_marked"
+        and not progress["gate_open"]
+        and profile["inventory"].get("jungle_cell", 0) < 1
+    )
+    if cell_acquired:
+        add_item(profile, "jungle_cell")
+    progress[flag] = True
+    return cell_acquired if flag == "road_marked" else newly_marked
+
+
+def open_jungle_gate(profile):
+    require_peace(profile)
+    progress = profile["quests"]["deep_jungle"]
+    if progress["gate_open"]:
+        raise RuleError("이미 연구구역 문이 열렸습니다.")
+    if not (progress["watch_marked"] and progress["road_marked"]):
+        raise RuleError("관측소와 수몰 도로의 표식을 모두 확인하세요.")
+    if profile["inventory"].get("jungle_cell", 0) < 1:
+        raise RuleError("수몰 도로에서 밀림 신호전지를 확보하세요.")
+    consume(profile, "jungle_cell")
+    progress["gate_open"] = True
+
+
+def claim_jungle_cache(profile):
+    require_peace(profile)
+    if profile["discoveries"].get("jungle_cache"):
+        raise RuleError("이미 늪지의 보급품을 챙겼습니다.")
+    add_item(profile, "bandage", 2)
+    profile["discoveries"]["jungle_cache"] = True
 
 
 def growth_state(profile):

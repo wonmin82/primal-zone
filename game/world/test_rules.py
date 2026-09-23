@@ -1,9 +1,32 @@
 from copy import deepcopy
 from random import Random
 from unittest import TestCase
+from unittest.mock import patch
 
 from world import rules
 from world.content import ENEMIES, EQUIPMENT_ACTIONS, EXCHANGE, ITEMS, ROOMS, SHOP, find_id
+from world.quests import QUESTS, current_hint
+
+
+class QuestHintTests(TestCase):
+    def test_hint_follows_quest_definitions_and_prerequisites(self):
+        profile = rules.new_profile()
+        self.assertEqual(current_hint(profile), QUESTS["radio_tower"]["hints"][0])
+        profile["quests"]["radio_tower"]["claimed"] = True
+        self.assertEqual(current_hint(profile), QUESTS["deep_jungle"]["hints"][0])
+        profile["quests"]["deep_jungle"]["claimed"] = True
+
+        third = {
+            "name": "다음 지역",
+            "requires": ("deep_jungle", "claimed"),
+            "steps": (("started", "guide", "npc", "에게 임무 수령"), ("claimed", "guide", "npc", "에게 보고")),
+            "hints": ("새 지역에서 임무를 받으세요.", "결과를 보고하세요.", "새 지역 완료."),
+        }
+        with patch.dict(QUESTS, {"third": third}):
+            profile["quests"]["third"] = {"started": False, "claimed": False}
+            self.assertEqual(current_hint(profile), third["hints"][0])
+            profile["quests"]["third"]["claimed"] = True
+            self.assertEqual(current_hint(profile), third["hints"][-1])
 
 
 class RuleTests(TestCase):
@@ -187,11 +210,11 @@ class RuleTests(TestCase):
 
     def test_generator_requires_clue_and_consumes_materials_once(self):
         profile = rules.new_profile()
-        profile["quest_started"] = True
+        profile["quests"]["radio_tower"]["started"] = True
         rules.add_item(profile, "scrap", 3)
         with self.assertRaises(rules.RuleError):
             rules.fix_generator(profile)
-        profile["record_read"] = True
+        profile["quests"]["radio_tower"]["record_read"] = True
         rules.fix_generator(profile)
         before = deepcopy(profile)
         with self.assertRaises(rules.RuleError):
@@ -202,7 +225,7 @@ class RuleTests(TestCase):
         profile = rules.new_profile()
         with self.assertRaises(rules.RuleError):
             rules.claim_quest(profile)
-        profile.update(quest_started=True, generator_fixed=True, boss_defeated=True)
+        profile["quests"]["radio_tower"].update(started=True, generator_fixed=True, boss_defeated=True)
         rules.claim_quest(profile)
         before = deepcopy(profile)
         with self.assertRaises(rules.RuleError):
@@ -249,6 +272,32 @@ class RuleTests(TestCase):
             self.assertFalse(defeated, f"Solo boss failed with seed {seed}")
             self.assertLessEqual(hp, 0)
 
+    def test_prepared_solo_player_can_beat_jungle_boss(self):
+        for seed in range(10):
+            profile = rules.new_profile()
+            rules.gain_xp(profile, rules.xp_threshold(5))
+            profile["inventory"]["bandage"] = 8
+            for item in ("carbine", "heavy_suit"):
+                rules.add_item(profile, item)
+                rules.equip(profile, item)
+            profile["combat_target"] = 1
+            rng, hp = Random(seed), ENEMIES["jungle_apex"]["hp"]
+            for turn in range(1, 51):
+                now = turn * 2.5
+                if rules.boss_telegraph("jungle_apex", turn - 1):
+                    rules.queue_action(profile, "guard", now)
+                elif profile["hp"] < 55 and profile["inventory"].get("bandage"):
+                    rules.queue_action(profile, "heal", now)
+                elif now >= profile["heavy_ready_at"]:
+                    rules.queue_action(profile, "heavy", now)
+                damage, _ = rules.player_attack(profile, "jungle_apex", now, 2.5, rng)
+                hp -= damage
+                if hp <= 0:
+                    break
+                if rules.enemy_attack(profile, "jungle_apex", turn, now, rng)["defeated"]:
+                    break
+            self.assertLessEqual(hp, 0, f"Solo jungle boss failed with seed {seed}")
+
     def test_reward_distribution_preserves_pools_and_deterministic_remainders(self):
         groups = {"party:2": {4: 30, 3: 10}, "party:1": {2: 10, 1: 10}}
         result = rules.reward_shares(101, 29, groups)
@@ -260,6 +309,65 @@ class RuleTests(TestCase):
 
 
 class GrowthRuleTests(TestCase):
+    def test_quest_migration_preserves_completion_and_one_time_cache(self):
+        old = rules.new_profile()
+        old.update(version=3, xp=333, credits=111, visited=["dock", "ridge"])
+        old.pop("quests")
+        old.pop("discoveries")
+        old.update(
+            quest_started=True, record_read=True, generator_fixed=True,
+            boss_defeated=True, quest_claimed=True, cache_claimed=True,
+        )
+        migrated = rules.migrate_profile(old)
+        self.assertEqual(migrated["version"], 4)
+        self.assertEqual(migrated["quests"]["radio_tower"], {
+            "started": True, "record_read": True, "generator_fixed": True,
+            "boss_defeated": True, "claimed": True,
+        })
+        self.assertTrue(migrated["discoveries"]["supply_cache"])
+        self.assertEqual((migrated["xp"], migrated["credits"], migrated["visited"]), (333, 111, ["dock", "ridge"]))
+        self.assertEqual(rules.migrate_profile(migrated), migrated)
+        for operation in (rules.claim_quest, rules.claim_cache):
+            with self.assertRaises(rules.RuleError):
+                operation(migrated)
+
+    def test_jungle_objective_requires_both_clues_and_rewards_once(self):
+        profile = rules.new_profile()
+        profile["quests"]["radio_tower"]["claimed"] = True
+        with self.assertRaises(rules.RuleError):
+            rules.jungle_mark(profile, "watch_marked")
+        self.assertEqual(rules.jungle_talk(profile), "start")
+        rules.jungle_mark(profile, "watch_marked")
+        before = deepcopy(profile)
+        with self.assertRaises(rules.RuleError):
+            rules.open_jungle_gate(profile)
+        self.assertEqual(profile, before)
+        self.assertNotIn("jungle_cell", profile["inventory"])
+        self.assertTrue(rules.jungle_mark(profile, "road_marked"))
+        self.assertEqual(profile["inventory"]["jungle_cell"], 1)
+        self.assertFalse(rules.jungle_mark(profile, "road_marked"))
+        self.assertEqual(profile["inventory"]["jungle_cell"], 1)
+        profile["inventory"].pop("jungle_cell")
+        before = deepcopy(profile)
+        with self.assertRaises(rules.RuleError):
+            rules.open_jungle_gate(profile)
+        self.assertEqual(profile, before)
+        self.assertTrue(rules.jungle_mark(profile, "road_marked"))
+        self.assertEqual(profile["inventory"]["jungle_cell"], 1)
+        self.assertFalse(rules.jungle_mark(profile, "road_marked"))
+        rules.open_jungle_gate(profile)
+        self.assertNotIn("jungle_cell", profile["inventory"])
+        self.assertTrue(profile["quests"]["deep_jungle"]["gate_open"])
+        self.assertFalse(rules.jungle_mark(profile, "road_marked"))
+        self.assertNotIn("jungle_cell", profile["inventory"])
+        with self.assertRaises(rules.RuleError):
+            rules.open_jungle_gate(profile)
+        profile["quests"]["deep_jungle"]["boss_defeated"] = True
+        before = (profile["xp"], profile["credits"])
+        self.assertEqual(rules.jungle_talk(profile), "complete")
+        self.assertEqual((profile["xp"] - before[0], profile["credits"] - before[1]), (120, 120))
+        self.assertEqual(rules.jungle_talk(profile), "progress")
+
     def test_migrations_preserve_history_combat_and_baseline(self):
         for version in (1, 2, 3):
             old = rules.new_profile()
@@ -268,7 +376,6 @@ class GrowthRuleTests(TestCase):
                 xp=140,
                 hp=37,
                 credits=81,
-                record_read=True,
                 combat_target=123,
                 next_attack_at=44,
                 heavy_ready_at=99,
@@ -276,15 +383,23 @@ class GrowthRuleTests(TestCase):
                 player_round=7,
                 queued_action="guard",
             )
+            old["quests"]["radio_tower"]["record_read"] = True
+            if version < 4:
+                old.pop("quests")
+                old.pop("discoveries")
+                old["record_read"] = True
+                old["cache_claimed"] = True
             if version < 3:
                 for key in rules.growth_defaults():
                     old.pop(key)
             before = deepcopy(old)
             migrated = rules.migrate_profile(old)
             for key, value in before.items():
-                if key != "version":
+                if key not in ("version", "record_read", "cache_claimed"):
                     self.assertEqual(migrated[key], value)
-            self.assertEqual(migrated["version"], 3)
+            self.assertTrue(migrated["quests"]["radio_tower"]["record_read"])
+            self.assertTrue(migrated["discoveries"]["supply_cache"])
+            self.assertEqual(migrated["version"], 4)
             self.assertEqual(rules.migrate_profile(migrated), migrated)
             self.assertEqual(old, before)
             self.assertEqual(rules.stats(old), rules.stats(migrated))
@@ -339,9 +454,9 @@ class GrowthRuleTests(TestCase):
             next_attack_at=90,
             guard_until=80,
             queued_action="guard",
-            quest_started=True,
             visited=["dock", "grass"],
         )
+        profile["quests"]["radio_tower"]["started"] = True
         profile["proficiencies"]["weapon"]["xp"] = 45
         baseline = deepcopy(profile)
         for scope in ("attributes", "skills", "all"):

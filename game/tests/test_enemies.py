@@ -4,6 +4,7 @@ from evennia.utils.test_resources import EvenniaCommandTest
 from typeclasses.enemies import Enemy, room_enemies
 from typeclasses.explorers import Explorer
 from world.bootstrap import build_world
+from world.content import ROOMS
 
 
 class EnemySpawnTests(EvenniaCommandTest):
@@ -16,7 +17,7 @@ class EnemySpawnTests(EvenniaCommandTest):
         enemy.db.state = "respawning"
         identity = enemy.id
         build_world()
-        self.assertEqual(Enemy.objects.count(), 7)
+        self.assertEqual(Enemy.objects.count(), sum(len(room["enemies"]) for room in ROOMS.values()))
         again = room_enemies(rooms["grass"], alive_only=False)[0]
         self.assertEqual((again.id, again.db.hp, again.db.state), (identity, 7, "respawning"))
 

@@ -75,11 +75,13 @@ class SharedCombatTests(EvenniaCommandTest):
             credits=111,
             generator_fixed=True,
         )
+        profile.pop("quests")
+        profile.pop("discoveries")
         self.char1.db.profile = profile
         converted = self.char1.profile()
         self.assertNotIn("encounter", converted)
         self.assertEqual(
-            (converted["xp"], converted["credits"], converted["generator_fixed"]), (333, 111, True)
+            (converted["xp"], converted["credits"], converted["quests"]["radio_tower"]["generator_fixed"]), (333, 111, True)
         )
         self.assertIsNone(converted["combat_target"])
 
@@ -88,7 +90,7 @@ class SharedCombatTests(EvenniaCommandTest):
         from world import rules
 
         profile = self.char1.profile()
-        profile.update(quest_started=True, record_read=True)
+        profile["quests"]["radio_tower"].update(started=True, record_read=True)
         rules.gain_xp(profile, rules.xp_threshold(4))
         rules.add_item(profile, "scrap", 3)
         for item in ("carbine", "armor"):
@@ -112,12 +114,12 @@ class SharedCombatTests(EvenniaCommandTest):
             self.char1.save_profile(profile)
             self.enemy.receive_attack(self.char1, now=now, rng=rng)
             self.enemy.enemy_tick(now=now, rng=rng)
-        self.assertTrue(self.char1.profile()["boss_defeated"])
+        self.assertTrue(self.char1.profile()["quests"]["radio_tower"]["boss_defeated"])
         self.assertEqual(self.enemy.db.state, "respawning")
         take_loot(self.char1, corpse=True, now=now)
         self.assertEqual(self.char1.profile()["inventory"]["fang"], 1)
         self.char1.change(rules.claim_quest)
-        self.assertTrue(self.char1.profile()["quest_claimed"])
+        self.assertTrue(self.char1.profile()["quests"]["radio_tower"]["claimed"])
         with self.assertRaises(rules.RuleError):
             self.char1.change(rules.claim_quest)
 

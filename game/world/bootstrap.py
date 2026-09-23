@@ -2,10 +2,11 @@
 
 from evennia import create_object, search_tag
 
-from world.content import ENEMIES, OPPOSITES, ROOMS
+from world.content import ENEMIES, OPPOSITES, ROOMS, spawn_id_for
 from world.multiplayer import world_change
 
 CATEGORY = "primal_zone_room"
+EXIT_CATEGORY = "primal_zone_exit"
 
 
 def get_room(zone_id):
@@ -24,14 +25,15 @@ def _build_world():
         if not room:
             room = create_object("typeclasses.zone_rooms.ZoneRoom", key=data["name"])
             room.tags.add(zone_id, category=CATEGORY)
+        room.key = data["name"]
         room.db.zone_id = zone_id
         room.db.desc = data["desc"]
         rooms[zone_id] = room
         for enemy_id in data["enemies"]:
-            spawn_id = f"{zone_id}:{enemy_id}"
+            spawn_id = spawn_id_for(zone_id, enemy_id)
+            definition = ENEMIES[enemy_id]
             enemy = next(iter(search_tag(spawn_id, category="primal_spawn")), None)
             if not enemy:
-                definition = ENEMIES[enemy_id]
                 enemy = create_object(
                     "typeclasses.enemies.Enemy", key=definition["name"], location=room
                 )
@@ -40,27 +42,71 @@ def _build_world():
                 enemy.db.enemy_id = enemy_id
                 enemy.db.max_hp = definition["hp"]
                 enemy.db.hp = definition["hp"]
+            else:
+                # 정의가 소유하는 값만 갱신하고 현재 피해·교전·재생성 상태는 보존한다.
+                enemy.key = definition["name"]
+                enemy.db.enemy_id = enemy_id
+                enemy.db.max_hp = definition["hp"]
+                enemy.db.hp = min(enemy.db.hp, definition["hp"])
+                if not enemy.db.combatants and enemy.location != room:
+                    enemy.location = room
     for zone_id, data in ROOMS.items():
         room = rooms[zone_id]
         for direction, target in data["exits"].items():
-            existing = next((obj for obj in room.exits if obj.key == direction), None)
+            identity = f"{zone_id}:{direction}"
+            existing = next(iter(search_tag(identity, category=EXIT_CATEGORY)), None)
             if not existing:
-                create_object(
+                existing = next((obj for obj in room.exits if obj.key == direction), None)
+            if not existing:
+                existing = create_object(
                     "typeclasses.exits.Exit",
                     key=direction,
-                    aliases=[OPPOSITES[direction]],
+                    aliases=[OPPOSITES[direction]] if direction in OPPOSITES else [],
                     location=room,
                     destination=rooms[target],
                 )
-    from typeclasses.interactables import DEFINITIONS
+            existing.tags.add(identity, category=EXIT_CATEGORY)
+            existing.key = direction
+            existing.location = room
+            existing.destination = rooms[target]
+            existing.aliases.clear()
+            if direction in OPPOSITES:
+                existing.aliases.add(OPPOSITES[direction])
+    from typeclasses.interactables import INTERACTABLES
 
-    for identity, zone, typeclass, name, aliases in DEFINITIONS:
-        if not search_tag(identity, category="primal_interactable"):
+    for identity, data in INTERACTABLES.items():
+        obj = next(iter(search_tag(identity, category="primal_interactable")), None)
+        if not obj:
             obj = create_object(
-                f"typeclasses.interactables.{typeclass}",
-                key=name,
-                aliases=aliases,
-                location=rooms[zone],
+                f"typeclasses.interactables.{data['typeclass']}",
+                key=data["name"],
+                aliases=data["aliases"],
+                location=rooms[data["room"]],
             )
             obj.tags.add(identity, category="primal_interactable")
+        else:
+            obj.key = data["name"]
+            obj.location = rooms[data["room"]]
+            obj.aliases.clear()
+            obj.aliases.add(*data["aliases"])
     return rooms
+
+
+def stale_definitions():
+    """정의에서 사라진 관리 객체를 보고만 한다. 플레이 중인 객체는 지우지 않는다."""
+    from typeclasses.interactables import INTERACTABLES
+
+    expected = {
+        CATEGORY: set(ROOMS),
+        EXIT_CATEGORY: {f"{zone}:{direction}" for zone, data in ROOMS.items() for direction in data["exits"]},
+        "primal_spawn": {spawn_id_for(zone, enemy) for zone, data in ROOMS.items() for enemy in data["enemies"]},
+        "primal_interactable": set(INTERACTABLES),
+    }
+    result = []
+    for category, identities in expected.items():
+        from evennia.typeclasses.tags import Tag
+
+        for tag in Tag.objects.filter(db_category=category):
+            if tag.db_key not in identities:
+                result.append((category, tag.db_key))
+    return sorted(result)

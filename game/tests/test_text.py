@@ -204,15 +204,15 @@ class SemanticTextTests(EvenniaCommandTest):
         profile["inventory"] = {}
         self.assertEqual(str(view.inventory(profile)), "[가방] 비어 있다.")
         self.assertEqual(tokens(view.shop(), "command"), ["구매", "교환"])
-        profile.update(quest_started=True, record_read=True)
+        profile["quests"]["radio_tower"].update(started=True, record_read=True)
         quest = view.quest(profile)
-        self.assertIn("2/5", quest.splitlines()[0])
-        self.assertEqual([line[0] for line in quest.splitlines()[1:]], ["+", "+", ">", "-", "-"])
+        self.assertIn("2/5", quest.splitlines()[1])
+        self.assertEqual([line[0] for line in quest.splitlines()[2:]], ["+", "+", ">", "-", "-"])
         self.assertIn("윤대장", tokens(quest, "npc"))
         self.assertEqual(tokens(quest, "object"), ["정비기록", "발전기"])
         self.assertTrue(tokens(quest, "hostile"))
-        for key in ("generator_fixed", "boss_defeated", "quest_claimed"):
-            profile[key] = True
+        for key in ("generator_fixed", "boss_defeated", "claimed"):
+            profile["quests"]["radio_tower"][key] = True
         self.assertIn("5/5", view.quest(profile))
         self.assertNotIn(">", view.quest(profile))
 
@@ -316,7 +316,7 @@ class SemanticTextTests(EvenniaCommandTest):
             commander.perform_action(self.char1, "대화")
         self.assertEqual(tokens(message.call_args.args[0], "npc"), [commander.key])
         self.assertIn("발전기", tokens(message.call_args.args[0], "object"))
-        self.char1.change(lambda p: p.update(record_read=True))
+        self.char1.change(lambda p: p["quests"]["radio_tower"].update(record_read=True))
         self.char1.change(lambda p: p["inventory"].update(scrap=3))
         self.char1.location = self.rooms["generator"]
         generator = next(

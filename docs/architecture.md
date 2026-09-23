@@ -6,7 +6,8 @@
 
 | 구성 | 책임 |
 | --- | --- |
-| world/content.py | 장소·아이템·적 종류·가격과 spawn 정의 |
+| world/content/ | 지역별 장소·적 정의와 공통 아이템·가격, Region 결합·무결성 검사 |
+| world/quests.py | 임무별 진행 필드·표시 단계·안내 정의 |
 | world/rules.py / progression.py | DB나 Evennia에 의존하지 않는 규칙 / 특성·숙련·기술 정의 |
 | commands/registry.py / 각 명령 모듈 | 명시적 등록, 인자 문법과 공통 검증, 도움말 metadata |
 | typeclasses/interactables.py | 윤대장·정비기록·보급상자·발전기·훈련관의 콘텐츠 행동 |
@@ -92,7 +93,7 @@ Party는 위치가 없는 영속 Evennia 객체다. DB identity 하나가 파티
 
 ## 공유 Enemy와 두 공격 타이머
 
-ROOMS.enemies는 spawn 정의다. 실제 적은 방의 영속 Enemy 객체다. grass:scavenger와 wreck:scavenger는 서로 다른 객체이며 총 7개 spawn이 있다. bootstrap을 반복해도 기존 적 HP·사망·재생성 상태를 덮어쓰거나 중복 생성하지 않는다.
+ROOMS.enemies는 spawn 정의다. 실제 적은 방의 영속 Enemy 객체다. grass:scavenger와 wreck:scavenger는 서로 다른 객체이며 현재 총 15개 spawn이 있다. bootstrap을 반복해도 기존 적의 현재 HP·사망·재생성 상태를 초기화하거나 spawn을 중복 생성하지 않는다. 최대 HP는 최신 Enemy 정의에 맞추고 현재 HP는 보존하되 새 최대치를 넘으면 그 값으로 제한한다.
 
 Enemy가 HP/max HP, alive/respawning 상태, respawn_at, claim, claim_last_activity, combatants, contribution, threat, enemy_round, next_attack_at을 소유한다. 모든 탐사자가 같은 HP를 본다. 개인 profile에는 combat_target 참조, queued_action, next_attack_at, heavy_ready_at, guard_until, player_round만 저장한다. 적 HP는 개인 profile에 없다.
 
@@ -100,7 +101,7 @@ Enemy가 HP/max HP, alive/respawning 상태, respawn_at, claim, claim_last_activ
 
 위협도는 실제 깎은 HP만큼 증가한다. 적은 같은 방·접속 중·해당 적을 공격 중인 탐사자 중 위협도가 가장 높은 사람을 선택하고 동률은 캐릭터 ID 순서로 해결한다. 강타는 7.5초 재사용 대기시간, 회복은 다음 개인 공격을 대체하며, 방어는 개인 공격을 유지하고 다음 공격 간격 동안 받는 피해를 줄인다.
 
-보스의 예고/돌진은 공유 enemy_round를 따른다. 2·5차례에 예고하고 3·6차례에 돌진한다. 도주·패배·접속 종료·장소 이탈 시 전투 소속과 위협도·기여도를 정리한다. 일반 이동은 전투 중 거부하며, 강제 이동도 이동 후 정리한다. 패배 시 장비·경험치는 보존하고 최대 10크레딧을 잃으며 부두에서 회복한다.
+보스의 예고/돌진은 공유 enemy_round를 따른다. 능선 보스는 2·5차례에 예고하고 3·6차례에 돌진하며 밀림 보스는 3·7차례에 예고하고 4·8차례에 돌진한다. 주기는 Enemy 정의의 `special_period`를 사용한다. 도주·패배·접속 종료·장소 이탈 시 전투 소속과 위협도·기여도를 정리한다. 일반 이동은 전투 중 거부하며, 강제 이동도 이동 후 정리한다. 패배 시 장비·경험치는 보존하고 최대 10크레딧을 잃으며 부두에서 회복한다.
 
 ## 점유와 보상 자격
 
@@ -136,9 +137,9 @@ Corpse는 실제 방 객체이며 source spawn/enemy, created_at, decay_at과 lo
 
 ## 기존 데이터와 운영 범위
 
-profile의 최신 버전은 3이다. v1 → v3는 개인 encounter를 제거하고 누락된 전투 입력 필드와 성장 기본값을 추가한다. v2 → v3는 특성·숙련·기술 기본값만 추가한다. XP, HP, credits, inventory, equipment, kills, 모든 임무 플래그와 visited를 유지하며, v2의 combat_target, queued_action, next_attack_at, heavy_ready_at, guard_until, player_round도 그대로 보존한다. v3의 반복 로드·저장은 초기화하지 않는다.
+profile의 최신 버전은 4다. v1/v2의 개인 encounter 제거·전투 입력 필드·성장 기본값 변환을 거친 뒤, v1~v3의 첫 임무 boolean을 `quests.radio_tower`의 진행 필드로 옮긴다. `cache_claimed`는 `discoveries.supply_cache`로 옮긴다. XP, HP, credits, inventory, equipment, kills, 완료 여부와 visited 및 개인 전투 상태를 유지한다. 이미 받은 보상은 재지급하지 않으며 v4 반복 로드·저장은 초기화하지 않는다.
 
-변환은 기존 프로필의 복사본에 새 필드만 추가한다. 기존 플레이어는 현재 레벨에 해당하는 포인트를 즉시 사용할 수 있고, 무료 기본 기술 Rank 1과 미투자 특성은 기존 전투 성능을 유지한다. Party·Enemy·Corpse·DroppedLoot는 profile 밖에 있으므로 migration이 수정하지 않는다. 기존 DB의 로드 시 점진적으로 변환하며 DB 삭제·교체는 필요 없다. 위의 서버 재시작/재접속 전투 정리 정책과 migration 자체의 보존 정책은 별개다.
+변환은 기존 프로필의 복사본에서 첫 임무·보급 boolean을 새 구조로 옮기고 오래된 key를 제거한다. 기존 플레이어는 현재 레벨에 해당하는 포인트를 즉시 사용할 수 있고, 무료 기본 기술 Rank 1과 미투자 특성은 기존 전투 성능을 유지한다. Party·Enemy·Corpse·DroppedLoot는 profile 밖에 있으므로 migration이 수정하지 않는다. 기존 DB의 로드 시 점진적으로 변환하며 DB 삭제·교체는 필요 없다. 위의 서버 재시작/재접속 전투 정리 정책과 migration 자체의 보존 정책은 별개다.
 
 원자성 보장은 단일 Evennia 게임 서버 프로세스와 그 DB를 전제로 한다. 현재 잠금은 프로세스 내부 RLock이며 다중 게임 서버가 같은 월드를 동시에 쓰는 구조는 지원하지 않는다. PostgreSQL 설정 연결점은 있으나 이번 검증은 SQLite 기준이다. 수평 확장 전 DB 수준 락과 트랜잭션 경계·캐시 정책을 다시 설계해야 한다.
 
@@ -187,4 +188,16 @@ profile의 최신 버전은 3이다. v1 → v3는 개인 encounter를 제거하�
 
 대상 보기와 `pz_state.inventory[].equip_action`도 이 슬롯 대응을 사용한다. 웹은 전달된 행동을 기존 텍스트 명령 버튼으로 전송하며 장비 이름 목록을 따로 관리하지 않는다. `stats()`와 장비 화면은 양쪽 슬롯의 공격·방어를 모두 합산하므로 사냥창의 방어와 경량전술조끼의 공격도 적용된다.
 
-새 장비 6종의 수치·구매·교환 경로는 [README 장비 표](../README.md#장비와-획득-경로)를 따른다. 기존 확률 드롭은 변경하지 않았으며 새 장비의 별도 드롭 테이블이나 보상 조건을 추가하지 않았다. 기존 아이템 ID와 profile v3를 유지하므로 데이터 변환은 필요 없다.
+장비 수치·구매·교환 경로는 [README 장비 표](../README.md#장비와-획득-경로)를 따른다. 두 번째 지역도 기존 장비를 활용하며 새 무기·방어구를 추가하지 않는다. 기존 장비 ID와 획득 경로를 유지한다.
+
+## Region·임무·Gate 확장
+
+`world/content/starter.py`에는 기존 8개 Room/4종 Enemy의 stable ID를 보존한다. `deep_jungle.py`에는 7개 Room/4종 Enemy를 정의한다. `items.py`는 공통 아이템과 상점 가격을 담고 `content/__init__.py`가 기존 `from world.content import ROOMS, ENEMIES, ITEMS` 경로를 유지한다. `REGIONS[region].rooms`는 각 지역 파일의 Room key에서 파생되므로 Room↔Region 소속을 두 곳에 입력하지 않는다. `ROOM_REGION`은 이 정의에서 파생된다. ID 충돌·참조 누락·출구 역방향·spawn 충돌은 `content.integrity.errors()`로 검사한다.
+
+첫 지역 `dock`~`ridge`의 Room ID, `zone:enemy` spawn ID, 기존 아이템 ID를 바꾸지 않았다. `ridge` 북쪽에 밀림 입구를 연결했다. Spawn을 다른 Room으로 옮길 때는 새 Room의 `spawn_ids[enemy_id]`에 이전 stable tag를 명시하면 동일한 Enemy 객체와 HP를 유지한다. Room의 `requires`는 도착 시 필요한 임무 ID·진행 필드·거절 문구를 선언한다. `Explorer.at_pre_move()`는 이 데이터만 해석하며 지역 이름을 하드코딩하지 않는다. 통신탑은 발전기 복구, 밀림 입구는 첫 임무 보고, 연구구역 외곽은 밀림의 두 표식·신호전지를 확인한 신호 장치 가동을 요구한다. `exits`는 기존 `방향 → Room ID` 형태를 유지해 방향도·웹 버튼·서버 이동이 같은 정의를 읽는다.
+
+`world/quests.py`의 임무별 단계는 `flag/대상/의미 역할/설명`과 안내문으로 구성된다. 선행 임무 조건 `requires`와 시작 전 표시 여부 `visible_from_start`도 임무 정의가 소유하며, 안내 선택과 임무 화면은 이 정의를 순서대로 읽는다. profile은 `quests[quest_id][flag]`와 개인 일회 발견용 `discoveries[id]`를 저장한다. 조회 화면은 완료 임무를 한 줄로 압축하고 진행 임무의 완료·현재·대기 단계를 보여준다. 웹 `pz_state`는 현재 안내 외에 Region ID/이름을 전달한다. 실제 임무 행동은 `ActionObject` subclass와 순수 `rules` 함수가 처리하므로 임무 DSL이나 새 parser는 없다.
+
+`build_world()`는 Room 이름·설명, Exit 방향·별칭·목적지, 상호작용 객체 이름·별칭·위치, Enemy 이름·ID·최대 HP와 유휴 spawn 위치처럼 정적 정의가 소유하는 값을 동기화한다. 현재 HP는 유지하되 최대 HP가 낮아졌다면 새 최대치로 제한한다. Enemy의 교전 중 위치, state, respawn_at, claim, combatants, contribution, threat, round·timer·last_activity와 시체·바닥 전리품, 파티, 플레이어 profile·가방·임무는 런타임이 소유하므로 초기화하지 않는다. 삭제된 관리 Exit/Interactable/spawn은 `stale_definitions()`로 보고하지만 자동 삭제하지 않는다. 실제 운영 DB에서 제거가 필요하면 상태와 참조를 확인한 뒤 별도 작업으로 정리한다. Region 3 추가 시 지역 정의, 필요하다면 작은 행동 subclass, 임무 정의 및 순수 규칙 함수를 더하고 무결성 검사를 통과시킨다.
+
+밀림 신호전지는 두 번째 지역 임무 전용 열쇠다. 수위 표식은 문이 닫혀 있고 전지가 없을 때만 한 개를 지급하며, 신호 장치 가동은 조건을 모두 확인한 뒤 전지 한 개를 소비하고 gate_open을 기록한다. 철갑등짐승은 신호전지 대신 일반 회수부품을 확률적으로 남긴다. 이미 문을 연 개발 데이터의 잔여 전지는 bootstrap이나 profile 변환에서 임의로 삭제하지 않는다.
