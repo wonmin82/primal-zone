@@ -3,6 +3,7 @@
 QUESTS = {
     "radio_tower": {
         "name": "통신탑 복구",
+        "visible_from_start": True,
         "steps": (
             ("started", "commander", "npc", "에게 임무 수령"),
             ("record_read", "maintenance_log", "object", " 확인"),
@@ -21,6 +22,7 @@ QUESTS = {
     },
     "deep_jungle": {
         "name": "깊은 밀림 조사",
+        "requires": ("radio_tower", "claimed"),
         "steps": (
             ("started", "pathfinder", "npc", "에게 탐사 의뢰"),
             ("watch_marked", "watch_marker", "object", " 확인"),
@@ -58,3 +60,16 @@ def next_step(profile, identity):
         ),
         len(QUESTS[identity]["steps"]),
     )
+
+
+def available(profile, identity):
+    requirement = QUESTS[identity].get("requires")
+    return not requirement or profile["quests"][requirement[0]][requirement[1]]
+
+
+def current_hint(profile):
+    for identity, data in QUESTS.items():
+        if available(profile, identity) and not profile["quests"][identity]["claimed"]:
+            return data["hints"][next_step(profile, identity)]
+    last = next(reversed(QUESTS))
+    return QUESTS[last]["hints"][-1]

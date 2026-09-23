@@ -61,6 +61,12 @@ def errors(interactables):
         if data["room"] not in ROOMS:
             issues.append(f"{identity}: 대상 Room이 없습니다.")
     for quest_id, data in QUESTS.items():
+        requirement = data.get("requires")
+        if requirement and (
+            requirement[0] not in QUESTS
+            or requirement[1] not in {flag for flag, *_ in QUESTS[requirement[0]]["steps"]}
+        ):
+            issues.append(f"{quest_id}: 선행 임무 필드가 없습니다.")
         flags = [step[0] for step in data["steps"]]
         if len(flags) != len(set(flags)) or not flags or flags[-1] != "claimed":
             issues.append(f"{quest_id}: 임무 단계가 잘못되었습니다.")

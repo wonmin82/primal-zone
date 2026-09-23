@@ -1,9 +1,32 @@
 from copy import deepcopy
 from random import Random
 from unittest import TestCase
+from unittest.mock import patch
 
 from world import rules
 from world.content import ENEMIES, EQUIPMENT_ACTIONS, EXCHANGE, ITEMS, ROOMS, SHOP, find_id
+from world.quests import QUESTS, current_hint
+
+
+class QuestHintTests(TestCase):
+    def test_hint_follows_quest_definitions_and_prerequisites(self):
+        profile = rules.new_profile()
+        self.assertEqual(current_hint(profile), QUESTS["radio_tower"]["hints"][0])
+        profile["quests"]["radio_tower"]["claimed"] = True
+        self.assertEqual(current_hint(profile), QUESTS["deep_jungle"]["hints"][0])
+        profile["quests"]["deep_jungle"]["claimed"] = True
+
+        third = {
+            "name": "다음 지역",
+            "requires": ("deep_jungle", "claimed"),
+            "steps": (("started", "guide", "npc", "에게 임무 수령"), ("claimed", "guide", "npc", "에게 보고")),
+            "hints": ("새 지역에서 임무를 받으세요.", "결과를 보고하세요.", "새 지역 완료."),
+        }
+        with patch.dict(QUESTS, {"third": third}):
+            profile["quests"]["third"] = {"started": False, "claimed": False}
+            self.assertEqual(current_hint(profile), third["hints"][0])
+            profile["quests"]["third"]["claimed"] = True
+            self.assertEqual(current_hint(profile), third["hints"][-1])
 
 
 class RuleTests(TestCase):

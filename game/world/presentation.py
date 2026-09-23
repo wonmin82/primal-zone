@@ -175,7 +175,7 @@ def quest(profile):
 
     lines = []
     for identity, data in QUESTS.items():
-        if identity != "radio_tower" and not profile["quests"][identity]["started"]:
+        if not data.get("visible_from_start") and not profile["quests"][identity]["started"]:
             continue
         steps = data["steps"]
         current = next_step(profile, identity)

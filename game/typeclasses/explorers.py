@@ -12,7 +12,7 @@ from world import rules
 from world import text as ft
 from world.content import EQUIPMENT_ACTIONS, ITEMS, REGIONS, ROOM_REGION, ROOMS
 from world.multiplayer import after_change
-from world.quests import QUESTS, next_step
+from world.quests import current_hint
 
 
 class Explorer(DefaultCharacter):
@@ -140,10 +140,7 @@ class Explorer(DefaultCharacter):
 
     @staticmethod
     def quest_text(profile):
-        identity = (
-            "deep_jungle" if profile["quests"]["radio_tower"]["claimed"] else "radio_tower"
-        )
-        return QUESTS[identity]["hints"][next_step(profile, identity)]
+        return current_hint(profile)
 
     def at_post_puppet(self, **kwargs):
         from world.bootstrap import get_room
