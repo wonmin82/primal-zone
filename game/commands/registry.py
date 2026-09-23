@@ -3,7 +3,7 @@
 from commands.base import UnknownCommand
 from commands.character import Abilities, Experience, Help, Look, Map, Quest, Skills, Status
 from commands.combat import Attack, Flee, Guard, Heal, Heavy
-from commands.inventory import Buy, Equip, Equipment, Exchange, Inventory, Shop, Take
+from commands.inventory import Buy, Equip, Equipment, Exchange, Inventory, Shop, Take, Wield
 from commands.party import (
     PartyAccept,
     PartyCommand,
@@ -39,6 +39,7 @@ COMMANDS = [
     Help,
     Status,
     Inventory,
+    Wield,
     Equip,
     Attack,
     Heavy,

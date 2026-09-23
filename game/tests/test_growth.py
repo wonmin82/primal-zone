@@ -181,7 +181,7 @@ class GrowthIntegrationTests(EvenniaCommandTest):
         match = cmdparser("ㅂ 정비 기록 조사", cmdset, self.char1)[0]
         self.assertEqual(match[1], "ㅂ 정비 기록")
         self.assertFalse(cmdparser("배워 강타", cmdset, self.char1))
-        self.assertEqual(cmdparser("강철 마체테 착용", cmdset, self.char1)[0][1], "강철 마체테")
+        self.assertEqual(cmdparser("강철 마체테 무장", cmdset, self.char1)[0][1], "강철 마체테")
         unlogged = UnloggedinCmdSet(self.char1)
         self.assertEqual(
             cmdparser("상", unlogged, self.char1), default_parser("상", unlogged, self.char1)

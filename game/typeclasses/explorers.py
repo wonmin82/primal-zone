@@ -10,7 +10,7 @@ from evennia.utils import delay
 from evennia.utils.dbserialize import deserialize
 from world import rules
 from world import text as ft
-from world.content import ENEMIES, ITEMS, ROOMS
+from world.content import ENEMIES, EQUIPMENT_ACTIONS, ITEMS, ROOMS
 from world.multiplayer import after_change
 
 
@@ -104,6 +104,7 @@ class Explorer(DefaultCharacter):
                 "name": ITEMS[key]["name"],
                 "count": count,
                 "slot": ITEMS[key]["slot"],
+                "equip_action": EQUIPMENT_ACTIONS.get(ITEMS[key]["slot"]),
                 "equipped": key in profile["equipment"].values(),
             }
             for key, count in profile["inventory"].items()

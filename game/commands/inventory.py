@@ -3,7 +3,7 @@
 from world import presentation as view
 from world import rules
 from world import text as ft
-from world.content import ITEMS, find_id
+from world.content import EQUIPMENT_ACTIONS, ITEMS, find_id
 
 from commands.base import GameCommand
 
@@ -21,20 +21,30 @@ class Inventory(GameCommand):
 
 class Equip(GameCommand):
     category = "보급"
-    usage = "강철 마체테 착용"
-    summary = "소유한 장비를 착용합니다."
+    usage = "강화 조끼 착용"
+    summary = "소유한 방어구를 착용합니다."
     input_style = "target"
-    key = "착용"
-    aliases = ["equip"]
+    expected_slot = "armor"
+    key = EQUIPMENT_ACTIONS[expected_slot]
+    aliases = ["wear"]
 
     def run(self):
         item = find_id(ITEMS, self.args.strip())
         if not item:
-            raise rules.RuleError("사용법: 강철마체테 착용")
-        self.caller.change(lambda profile: rules.equip(profile, item))
+            raise rules.RuleError(f"사용법: {self.usage}")
+        self.caller.change(lambda profile: rules.equip(profile, item, self.expected_slot))
+        particle = "으로/로" if ITEMS[item]["slot"] == "weapon" else "을/를"
         self.caller.msg(
-            ft.text(ft.item(item), ft.particle(ITEMS[item]["name"], "을/를"), " 착용했다.")
+            ft.text(ft.item(item), ft.particle(ITEMS[item]["name"], particle), f" {self.key}했다.")
         )
+
+
+class Wield(Equip):
+    usage = "강철 마체테 무장"
+    summary = "소유한 무기를 사용 중인 무기로 바꿉니다."
+    expected_slot = "weapon"
+    key = EQUIPMENT_ACTIONS[expected_slot]
+    aliases = ["wield"]
 
 
 class Shop(GameCommand):

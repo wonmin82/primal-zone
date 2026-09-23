@@ -194,7 +194,7 @@
       row.append(name);
       if (item.equipped) {
         const mark = document.createElement("small"); mark.textContent = "착용 중"; row.append(mark);
-      } else if (["weapon", "armor"].includes(item.slot)) row.append(button("착용", item.name + " 착용"));
+      } else if (item.equip_action) row.append(button(item.equip_action, item.name + " " + item.equip_action));
       else if (item.id === "bandage") row.append(button("사용", "회복"));
       return row;
     });

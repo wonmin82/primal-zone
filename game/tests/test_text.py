@@ -70,7 +70,7 @@ class SemanticTextTests(EvenniaCommandTest):
         with patch.object(self.char1, "msg") as message:
             command.func()
         self.assertEqual(tokens(message.call_args.args[0], "item"), [ITEMS["machete"]["name"]])
-        self.assertEqual(tokens(message.call_args.args[0], "command"), ["착용"])
+        self.assertEqual(tokens(message.call_args.args[0], "command"), ["무장"])
 
     def test_query_values_and_item_roles_are_consistent(self):
         profile = rules.new_profile()
@@ -260,9 +260,9 @@ class SemanticTextTests(EvenniaCommandTest):
         self.assertFalse(cmdparser("도움말 공격", cmdset, self.char1))
 
     def test_usage_styles_only_declared_action_metadata(self):
-        output = ft.usage("강철 마체테 착용 · 대상 기타", {"착용"})
+        output = ft.usage("강화 조끼 착용 · 대상 기타", {"착용"})
         self.assertEqual(tokens(output, "command"), ["착용"])
-        self.assertIn("강철 마체테", tokens(output, "text"))
+        self.assertIn("강화 조끼", tokens(output, "text"))
         self.assertIn("대상 기타", tokens(output, "text"))
         self.assertEqual(tokens(ft.usage("회복", {"회복"}), "command"), ["회복"])
 

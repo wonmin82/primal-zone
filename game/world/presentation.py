@@ -2,7 +2,7 @@
 
 from world import rules
 from world import text as ft
-from world.content import EXCHANGE, ITEMS, SHOP
+from world.content import EQUIPMENT_ACTIONS, EXCHANGE, ITEMS, SHOP
 from world.progression import (
     ATTRIBUTES,
     PROFICIENCIES,
@@ -231,11 +231,11 @@ def item_appearance(identity):
     data = ITEMS[identity]
     lines = [data.get("description", "탐사 중 사용하는 물품이다.")]
     for key, label in (("attack", "공격"), ("defense", "방어"), ("heal", "회복")):
-        if key in data:
+        if data.get(key):
             lines.append(f"{label} +{data[key]}")
     actions = (
-        ["착용"]
-        if data["slot"] in ("weapon", "armor")
+        [EQUIPMENT_ACTIONS[data["slot"]]]
+        if data["slot"] in EQUIPMENT_ACTIONS
         else ["회복"]
         if identity == "bandage"
         else []

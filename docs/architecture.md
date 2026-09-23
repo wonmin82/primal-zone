@@ -180,3 +180,11 @@ profile의 최신 버전은 3이다. v1 → v3는 개인 encounter를 제거하�
 기본 도움말은 registry 순서와 category를 사용한 명령 지도다. `명령이름 도움말`은 같은 metadata의 summary/usage/aliases를 표시하며 등록 별칭과 공용 단축어로도 조회할 수 있다. 상세 조회에서 단축어를 해석하는 것은 도움말 대상 검색이며 이동이나 게임 입력 parser는 바꾸지 않는다. `능력 도움말`은 ATTRIBUTES의 설명을 추가로 표시하고 기존 웹 성장 패널 tooltip도 유지한다.
 
 웹은 기존 semantic span과 textContent 경로를 사용한다. 정보창은 `word-break: keep-all`로 공백을 우선해 줄바꿈하되 기존 `overflow-wrap: anywhere`로 공백 없는 긴 이름의 가로 넘침을 막는다. 글자 크기와 색상은 변경하지 않는다. CSS URL의 버전 표시는 이전 스타일 캐시가 새 줄바꿈을 가리지 않도록 한다. terminal ANSI 변환도 같은 Text를 사용하며 저장·경제·전투 규칙을 변경하지 않는다.
+
+### 슬롯별 무장과 착용
+
+`ITEMS[id].slot`이 장비 종류의 단일 출처다. `EQUIPMENT_ACTIONS`는 슬롯을 행동에 대응하며 `weapon → 무장`, `armor → 착용`이다. `Wield`와 `Equip`은 같은 구현을 사용하고 `rules.equip(profile, item_id, expected_slot)`에 기대 슬롯만 전달한다. 모든 검증은 저장 전에 끝나며 다른 슬롯·소지 수량·진행 상태는 바꾸지 않는다. 내부 규칙 호출은 expected_slot 생략 시 기존 공통 장착을 지원하지만 사용자 `equip` 별칭은 제거했다. parser는 변경하지 않았다.
+
+대상 보기와 `pz_state.inventory[].equip_action`도 이 슬롯 대응을 사용한다. 웹은 전달된 행동을 기존 텍스트 명령 버튼으로 전송하며 장비 이름 목록을 따로 관리하지 않는다. `stats()`와 장비 화면은 양쪽 슬롯의 공격·방어를 모두 합산하므로 사냥창의 방어와 경량전술조끼의 공격도 적용된다.
+
+새 장비 6종의 수치·구매·교환 경로는 [README 장비 표](../README.md#장비와-획득-경로)를 따른다. 기존 확률 드롭은 변경하지 않았으며 새 장비의 별도 드롭 테이블이나 보상 조건을 추가하지 않았다. 기존 아이템 ID와 profile v3를 유지하므로 데이터 변환은 필요 없다.
