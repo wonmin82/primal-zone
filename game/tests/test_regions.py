@@ -111,6 +111,56 @@ class RegionTests(EvenniaCommandTest):
         self.assertEqual(room_loot(self.rooms["jungle_watch"], corpse=False)[0].id, ground.id)
         self.assertEqual(self.char1.profile()["credits"], 87)
 
+    def test_bootstrap_syncs_enemy_max_hp_without_healing(self):
+        enemy = room_enemies(self.rooms["jungle_road"])[0]
+        self.assertEqual(enemy.db.max_hp, 92)
+        enemy.db.hp = 37
+        with patch.dict(ENEMIES["shellback"], {"hp": 100}):
+            build_world()
+            self.assertEqual((enemy.db.max_hp, enemy.db.hp), (100, 37))
+        enemy.db.hp = 95
+        with patch.dict(ENEMIES["shellback"], {"hp": 80}):
+            build_world()
+            self.assertEqual((enemy.db.max_hp, enemy.db.hp), (80, 80))
+
+    def test_bootstrap_syncs_respawning_and_engaged_enemy_without_reset(self):
+        enemy = room_enemies(self.rooms["jungle_road"])[0]
+        enemy.db.state = "respawning"
+        enemy.db.hp = 0
+        enemy.db.respawn_at = 999999
+        enemy.db.claim = "player:123"
+        enemy.db.claim_last_activity = 100
+        enemy.db.combatants = [self.char1.id]
+        enemy.db.contribution = {self.char1.id: {"damage": 12, "last_action_at": 100}}
+        enemy.db.threat = {self.char1.id: 12}
+        enemy.db.enemy_round = 3
+        enemy.db.next_attack_at = 102.5
+        enemy.db.last_activity = 100
+        before = (
+            enemy.db.state, enemy.db.hp, enemy.db.respawn_at, enemy.db.claim,
+            enemy.db.claim_last_activity, enemy.db.combatants, enemy.db.contribution,
+            enemy.db.threat, enemy.db.enemy_round, enemy.db.next_attack_at,
+            enemy.db.last_activity,
+        )
+        with patch.dict(ENEMIES["shellback"], {"hp": 100}):
+            build_world()
+            self.assertEqual(enemy.db.max_hp, 100)
+            self.assertEqual(
+                (
+                    enemy.db.state, enemy.db.hp, enemy.db.respawn_at, enemy.db.claim,
+                    enemy.db.claim_last_activity, enemy.db.combatants, enemy.db.contribution,
+                    enemy.db.threat, enemy.db.enemy_round, enemy.db.next_attack_at,
+                    enemy.db.last_activity,
+                ),
+                before,
+            )
+        enemy.db.state = "alive"
+        enemy.db.hp = 37
+        with patch.dict(ENEMIES["shellback"], {"hp": 110}):
+            build_world()
+            self.assertEqual((enemy.db.max_hp, enemy.db.hp), (110, 37))
+            self.assertEqual((enemy.db.combatants, enemy.db.claim), ([self.char1.id], "player:123"))
+
     def test_bootstrap_syncs_exit_and_interactable_and_audits_removed_exit(self):
         road = self.rooms["jungle_road"]
         exit_north = next(obj for obj in road.exits if obj.key == "북")
@@ -169,9 +219,16 @@ class RegionTests(EvenniaCommandTest):
         self.char1.execute_cmd("남")
         self.assertEqual(self.char1.zone, "jungle_road")
         self.char1.execute_cmd("수위 표식 조사")
+        self.assertEqual(self.char1.profile()["inventory"]["jungle_cell"], 1)
+        self.char1.execute_cmd("수위 표식 조사")
+        self.assertEqual(self.char1.profile()["inventory"]["jungle_cell"], 1)
         self.char1.execute_cmd("북")
         self.char1.execute_cmd("신호 장치 조사")
-        self.assertEqual(self.char1.profile()["inventory"]["jungle_cell"], 1)
+        self.assertNotIn("jungle_cell", self.char1.profile()["inventory"])
+        self.char1.execute_cmd("남")
+        self.char1.execute_cmd("수위 표식 조사")
+        self.assertNotIn("jungle_cell", self.char1.profile()["inventory"])
+        self.char1.execute_cmd("북")
         self.assertTrue(self.char1.move_to(self.rooms["jungle_gate"]))
         self.char1.execute_cmd("북")
         self.assertEqual(self.char1.zone, "jungle_nest")

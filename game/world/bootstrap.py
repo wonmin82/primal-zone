@@ -31,9 +31,9 @@ def _build_world():
         rooms[zone_id] = room
         for enemy_id in data["enemies"]:
             spawn_id = spawn_id_for(zone_id, enemy_id)
+            definition = ENEMIES[enemy_id]
             enemy = next(iter(search_tag(spawn_id, category="primal_spawn")), None)
             if not enemy:
-                definition = ENEMIES[enemy_id]
                 enemy = create_object(
                     "typeclasses.enemies.Enemy", key=definition["name"], location=room
                 )
@@ -42,10 +42,13 @@ def _build_world():
                 enemy.db.enemy_id = enemy_id
                 enemy.db.max_hp = definition["hp"]
                 enemy.db.hp = definition["hp"]
-            elif not enemy.db.combatants:
-                # Spawn의 정적 위치만 동기화한다. 현재 HP/respawn/claim은 그대로 둔다.
-                enemy.key = ENEMIES[enemy_id]["name"]
-                if enemy.location != room:
+            else:
+                # 정의가 소유하는 값만 갱신하고 현재 피해·교전·재생성 상태는 보존한다.
+                enemy.key = definition["name"]
+                enemy.db.enemy_id = enemy_id
+                enemy.db.max_hp = definition["hp"]
+                enemy.db.hp = min(enemy.db.hp, definition["hp"])
+                if not enemy.db.combatants and enemy.location != room:
                     enemy.location = room
     for zone_id, data in ROOMS.items():
         room = rooms[zone_id]

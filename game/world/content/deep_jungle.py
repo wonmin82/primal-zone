@@ -24,7 +24,7 @@ ENEMIES = {
         "defense": 6,
         "xp": 70,
         "credits": 24,
-        "drop": "jungle_cell",
+        "drop": "scrap",
         "chance": 0.2,
     },
     "stalker": {

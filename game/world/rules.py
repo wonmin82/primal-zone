@@ -457,10 +457,15 @@ def jungle_mark(profile, flag):
     if flag not in ("watch_marked", "road_marked"):
         raise RuleError("조사할 수 없는 표식입니다.")
     newly_marked = not progress[flag]
-    if flag == "road_marked" and newly_marked:
+    cell_acquired = (
+        flag == "road_marked"
+        and not progress["gate_open"]
+        and profile["inventory"].get("jungle_cell", 0) < 1
+    )
+    if cell_acquired:
         add_item(profile, "jungle_cell")
     progress[flag] = True
-    return newly_marked
+    return cell_acquired if flag == "road_marked" else newly_marked
 
 
 def open_jungle_gate(profile):
@@ -472,6 +477,7 @@ def open_jungle_gate(profile):
         raise RuleError("관측소와 수몰 도로의 표식을 모두 확인하세요.")
     if profile["inventory"].get("jungle_cell", 0) < 1:
         raise RuleError("수몰 도로에서 밀림 신호전지를 확보하세요.")
+    consume(profile, "jungle_cell")
     progress["gate_open"] = True
 
 
