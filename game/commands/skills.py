@@ -3,6 +3,7 @@
 from world import rules
 from world.content import find_id
 from world.progression import ATTRIBUTES, SKILLS
+from world.targets import item_selector
 
 from commands.base import GameCommand
 from commands.world_actions import resolve_action
@@ -16,7 +17,7 @@ class Learn(GameCommand):
     summary = "부두 교관에게 기술점수와 크레딧으로 다음 Rank를 배웁니다."
 
     def run(self):
-        skill = find_id(SKILLS, self.args.strip())
+        skill = item_selector(self.args, SKILLS, self.key)
         if not skill:
             raise rules.RuleError(self.usage)
         resolve_action(self.caller, "배워").perform_action(self.caller, "배워", skill)

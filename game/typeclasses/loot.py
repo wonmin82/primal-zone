@@ -9,7 +9,7 @@ from evennia.utils import delay
 from evennia.utils.dbserialize import deserialize
 from world import rules
 from world import text as ft
-from world.content import ENEMIES, ITEMS
+from world.content import ENEMIES, ITEMS, find_id
 from world.multiplayer import (
     CORPSE_TTL_SECONDS,
     LOOT_PROTECTION_SECONDS,
@@ -17,6 +17,7 @@ from world.multiplayer import (
     object_by_id,
     world_change,
 )
+from world.targets import LootRequest, Mode, TargetSelector, ordered, select, visible
 
 
 def build_entries(enemy, groups, now, rng=None):
@@ -79,34 +80,55 @@ def recipient_for(entry, caller, now):
 def room_loot(room, corpse=True):
     cls = Corpse if corpse else DroppedLoot
     return (
-        sorted(
+        ordered(
             (obj for obj in room.contents if obj.is_typeclass(cls, exact=True)),
-            key=lambda obj: obj.id,
         )
         if room
         else []
     )
 
 
-def take_loot(caller, item=None, corpse=True, now=None):
+def take_loot(caller, item=None, corpse=True, now=None, *, request=None):
+    """선택 범위/수량만 확장한다. 지급 권한은 recipient_for 한 곳에서 판단한다."""
+    from world.lifecycle import reconcile_room
+    from world.target_presentation import count_word
+
     now = time() if now is None else now
+    if request is None:
+        request = LootRequest(
+            TargetSelector(item or "전리품", Mode.DEFAULT if item else Mode.ALL),
+            TargetSelector("시체") if corpse else None,
+        )
+    corpse = request.source is not None
+    if request.source and request.source.mode == Mode.ALL and request.target.mode != Mode.ALL:
+        raise rules.RuleError("여러 시체에서 가져올 대상에도 '모두'를 붙이세요.")
+    item = None if request.target.name == "전리품" else find_id(ITEMS, request.target.name)
+    if item is None and request.target.name != "전리품":
+        raise rules.RuleError("가져올 아이템 이름을 확인하세요.")
+    # 만료 처리는 회수 실패와 별개로 확정한다. 회수 중에는 yield하지 않는다.
+    reconcile_room(caller.location, now)
     with world_change():
-        sources = room_loot(caller.location, corpse)
+        sources = [obj for obj in room_loot(caller.location, corpse) if visible(obj, caller)]
+        if corpse:
+            sources = select(sources, request.source)
+        candidates = [
+            (source, index)
+            for source in sources
+            for index, entry in enumerate(source.db.entries)
+            if item is None or entry["item"] == item
+        ]
+        chosen = select(candidates, request.target)
+        chosen = {(source.id, index) for source, index in chosen}
         received = []
         for source in sources:
-            if corpse:
-                source.reconcile(now)
-                if not source.pk:
-                    continue
             entries = deserialize(source.db.entries)
             remaining = []
-            for entry in entries:
+            for index, entry in enumerate(entries):
                 target = recipient_for(entry, caller, now)
-                matches = item is None or (entry["item"] == item and not received)
-                if not target or not matches:
+                if not target or (source.id, index) not in chosen:
                     remaining.append(entry)
                     continue
-                quantity = entry["quantity"] if item is None else 1
+                quantity = entry["quantity"] if request.target.mode == Mode.ALL else 1
                 profile = target.profile()
                 rules.add_item(profile, entry["item"], quantity)
                 target.save_profile(profile)
@@ -118,19 +140,24 @@ def take_loot(caller, item=None, corpse=True, now=None):
                 source.delete()
     if not received:
         raise rules.RuleError("가져갈 물건이 없거나 다른 탐사자의 보호된 전리품입니다.")
-    for target, item_id, quantity in received:
-        if target == caller:
-            caller.msg(
-                ft.text(
-                    "시체를 뒤져 " if corpse else "바닥에서 ",
-                    ft.item(item_id),
-                    f" {quantity}개를 챙겼다.",
-                )
-            )
-        else:
+    totals = {}
+    for target, identity, quantity in received:
+        totals[(target, identity)] = totals.get((target, identity), 0) + quantity
+    own = [
+        ft.text(ft.item(identity), " ", count_word(quantity), " 개")
+        for (target, identity), quantity in totals.items()
+        if target == caller
+    ]
+    if own:
+        items = ft.join(own, "와 ")
+        caller.msg(ft.text("시체를 뒤져 " if corpse else "바닥에서 ", items, "를 챙겼다."))
+    for (target, item_id), quantity in totals.items():
+        if target != caller:
             message = ft.text(
                 ft.item(item_id),
-                f" {quantity}개는 이번 순번인 ",
+                " ",
+                count_word(quantity),
+                " 개는 이번 순번인 ",
                 ft.token("player", target.key),
                 "에게 돌아갔다.",
             )

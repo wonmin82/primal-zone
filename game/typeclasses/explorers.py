@@ -225,7 +225,7 @@ class Explorer(DefaultCharacter):
         reconcile_room(self.location)
         from typeclasses.enemies import room_enemies
 
-        enemy = next(
+        enemy = enemy_id if enemy_id in room_enemies(self.location) else next(
             (obj for obj in room_enemies(self.location) if obj.db.enemy_id == enemy_id), None
         )
         if not enemy:

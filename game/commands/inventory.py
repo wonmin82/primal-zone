@@ -3,7 +3,8 @@
 from world import presentation as view
 from world import rules
 from world import text as ft
-from world.content import EQUIPMENT_ACTIONS, ITEMS, find_id
+from world.content import EQUIPMENT_ACTIONS, ITEMS
+from world.targets import item_selector, parse_loot
 
 from commands.base import GameCommand
 
@@ -29,7 +30,7 @@ class Equip(GameCommand):
     aliases = ["wear"]
 
     def run(self):
-        item = find_id(ITEMS, self.args.strip())
+        item = item_selector(self.args, ITEMS, self.key)
         if not item:
             raise rules.RuleError(f"사용법: {self.usage}")
         self.caller.change(lambda profile: rules.equip(profile, item, self.expected_slot))
@@ -70,7 +71,7 @@ class Buy(GameCommand):
 
     def run(self):
         self.at_dock()
-        item = find_id(ITEMS, self.args.strip())
+        item = item_selector(self.args, ITEMS, self.key)
         if not item:
             raise rules.RuleError("물건 이름을 확인하세요. 예: 붕대 구매")
         self.caller.change(lambda profile: rules.buy(profile, item, exchange=self.exchange))
@@ -88,27 +89,18 @@ class Exchange(Buy):
 
 class Take(GameCommand):
     category = "전리품"
-    usage = "시체에서 모두 가져 · 시체에서 아이템 가져 · 모두 가져 · 아이템 가져"
+    usage = "시체에서 모두 가져 · 시체 2에서 모두 가져 · 모든 시체에서 회수부품 모두 가져 · 회수부품 2 가져 · 회수부품 모두 가져 · 모두 가져"
     summary = "권한에 따라 배정된 전리품을 분배합니다."
     key = "가져"
     input_style = "target"
 
     def run(self):
         from typeclasses.loot import take_loot
-        from world.lifecycle import reconcile_room
 
-        reconcile_room(self.caller.location)
-
-        text = self.args.strip()
-        corpse = text.startswith("시체에서 ")
-        if corpse:
-            text = text[len("시체에서 ") :].strip()
-        item = None if text == "모두" else find_id(ITEMS, text)
-        if text != "모두" and not item:
-            raise rules.RuleError(
-                "시체에서 모두 가져 · 시체에서 강화 조끼 가져 · 모두 가져 · 회수 부품 가져"
-            )
-        take_loot(self.caller, item, corpse=corpse)
+        request = parse_loot(
+            self.args, [n for key, data in ITEMS.items() for n in (key, data["name"])]
+        )
+        take_loot(self.caller, request=request)
 
 
 class Equipment(GameCommand):

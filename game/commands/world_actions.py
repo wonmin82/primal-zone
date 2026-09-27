@@ -1,6 +1,7 @@
 """world_actions 영역의 명시적 게임 명령."""
 
 from world import rules
+from world.targets import TargetSelector, names, parse_selector, resolve, room_objects
 
 from commands.base import GameCommand
 
@@ -33,22 +34,18 @@ class Rest(GameCommand):
 
 
 def resolve_action(caller, action, name=None):
-    from typeclasses.interactables import action_objects
+    objects = room_objects(caller)
 
-    normalized = "".join(name.split()).casefold() if name else None
-    matches = [
-        obj
-        for obj in action_objects(caller.location)
-        if obj.supports_action(action)
-        and (
-            normalized is None
-            or normalized
-            in ["".join(value.split()).casefold() for value in (obj.key, *obj.aliases.all())]
-        )
-    ]
-    if len(matches) != 1:
+    def supports(obj):
+        return hasattr(obj, "supports_action") and obj.supports_action(action)
+
+    if name:
+        selector = parse_selector(name, [n for obj in objects for n in names(obj)])
+        return resolve(objects, selector, caller, action, supports)[0]
+    objects = [obj for obj in objects if supports(obj)]
+    if not objects:
         raise rules.RuleError("이곳에서 행동할 대상을 확인하세요. '보기'로 주변을 살펴보세요.")
-    return matches[0]
+    return resolve(objects, TargetSelector(objects[0].key), caller, action)[0]
 
 
 class TargetAction(GameCommand):

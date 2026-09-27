@@ -8,6 +8,7 @@ from typeclasses.parties import invitation_for, party_for
 
 from world.content import ENEMIES, ITEMS
 from world.multiplayer import object_by_id
+from world.targets import labels, room_objects
 
 
 def player_name(identity):
@@ -30,6 +31,34 @@ def loot_entries(source, player, now):
 
 def multiplayer_state(player, now=None):
     now = time() if now is None else now
+    from typeclasses.interactables import ActionObject
+
+    from world.lifecycle import reconcile_room
+
+    reconcile_room(player.location, now)
+    objects = room_objects(player)
+    enemies = [obj for obj in room_enemies(player.location) if obj in objects]
+    corpses = [obj for obj in room_loot(player.location) if obj in objects]
+    ground = [obj for obj in room_loot(player.location, corpse=False) if obj in objects]
+    controls = labels(objects)
+    corpse_controls = labels(corpses, lambda obj: "시체")
+    ground_entries = [(obj, i, entry) for obj in ground for i, entry in enumerate(obj.db.entries)]
+
+    def with_loot_controls(source):
+        entries = loot_entries(source, player, now)
+        pool = (
+            [(source, i, e) for i, e in enumerate(source.db.entries)]
+            if source in corpses
+            else ground_entries
+        )
+        for index, entry in enumerate(entries):
+            peers = [(obj, i) for obj, i, e in pool if e["item"] == entry["item"]]
+            suffix = f" {peers.index((source, index)) + 1}" if len(peers) > 1 else ""
+            target = entry["name"] + suffix
+            prefix = corpse_controls[source.id] + "에서 " if source in corpses else ""
+            entry.update(label=target, take_command=prefix + target + " 가져")
+        return entries
+
     party = party_for(player)
     party_data = None
     if party:
@@ -49,6 +78,9 @@ def multiplayer_state(player, now=None):
                 "id": enemy.id,
                 "enemy_id": enemy.db.enemy_id,
                 "name": enemy.key,
+                "label": controls[enemy.id],
+                "attack_command": controls[enemy.id] + " 공격",
+                "look_command": controls[enemy.id] + " 보기",
                 "hp": enemy.db.hp,
                 "max_hp": enemy.db.max_hp,
                 "state": enemy.db.state,
@@ -57,20 +89,37 @@ def multiplayer_state(player, now=None):
                 "mode": ENEMIES[enemy.db.enemy_id]["combat_mode"],
                 "can_attack": enemy.can_attack(player),
             }
-            for enemy in room_enemies(player.location)
+            for enemy in enemies
         ],
         "corpses": [
             {
                 "id": corpse.id,
                 "name": corpse.key,
+                "label": corpse_controls[corpse.id],
+                "look_command": corpse_controls[corpse.id] + " 보기",
+                "take_command": corpse_controls[corpse.id] + "에서 모두 가져",
                 "decay_at": corpse.db.decay_at,
-                "loot": loot_entries(corpse, player, now),
+                "loot": with_loot_controls(corpse),
             }
-            for corpse in room_loot(player.location)
+            for corpse in corpses
         ],
         "ground_loot": [
-            {"id": dropped.id, "loot": loot_entries(dropped, player, now)}
-            for dropped in room_loot(player.location, corpse=False)
+            {"id": dropped.id, "loot": with_loot_controls(dropped)} for dropped in ground
+        ],
+        "interactables": [
+            {
+                "name": obj.key,
+                "label": controls[obj.id],
+                "role": obj.semantic_role,
+                "actions": [
+                    {"label": action, "command": controls[obj.id] + " " + action}
+                    for action in obj.actions
+                    if action in ("대화", "조사", "수리")
+                ],
+                "look_command": controls[obj.id] + " 보기",
+            }
+            for obj in objects
+            if isinstance(obj, ActionObject)
         ],
         "party": party_data,
         "invitation": {
