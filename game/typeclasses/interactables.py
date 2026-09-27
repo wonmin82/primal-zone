@@ -232,7 +232,9 @@ class JungleCache(ActionObject):
 
 
 def action_objects(room):
-    return [obj for obj in room.contents if isinstance(obj, ActionObject)] if room else []
+    from world.targets import ordered
+
+    return ordered(obj for obj in room.contents if isinstance(obj, ActionObject)) if room else []
 
 
 def instructor_for(caller):

@@ -39,18 +39,44 @@ class ZoneRoom(DefaultRoom):
         room = ROOMS.get(self.db.zone_id)
         if not room:
             return super().return_appearance(looker, **kwargs)
+        from world.target_presentation import presence
+        from world.targets import room_objects
+
         from typeclasses.interactables import action_objects
 
         lines = [room["desc"], "", exit_diagram(room["exits"]), ""]
-        for obj in action_objects(self):
-            lines.append(ft.text(ft.named(obj.semantic_role, obj.key, "은/는"), " ", obj.presence))
-        for enemy in room_enemies(self):
-            lines.append(
-                ft.text(ft.named("hostile", enemy.key, "이/가"), " 주변을 경계하며 서성이고 있다.")
+        pool = room_objects(looker, self)
+        objects = [obj for obj in action_objects(self) if obj in pool]
+        for name in dict.fromkeys(obj.key for obj in objects):
+            group = [obj for obj in objects if obj.key == name]
+            lines.extend(
+                presence(
+                    group,
+                    group[0].semantic_role,
+                    "명" if group[0].semantic_role == "npc" else "개",
+                    group[0].presence,
+                    pool=pool,
+                )
             )
-        for corpse in room_loot(self):
-            lines.append(ft.text(ft.named("remains", corpse.key, "이/가"), " 바닥에 남아 있다."))
-        for dropped in room_loot(self, corpse=False):
+        lines.extend(
+            presence(
+                [obj for obj in room_enemies(self) if obj in pool],
+                "hostile",
+                "마리",
+                "주변을 경계하며 서성이고 있다.",
+                pool=pool,
+            )
+        )
+        lines.extend(
+            presence(
+                [obj for obj in room_loot(self) if obj in pool],
+                "remains",
+                "구",
+                "바닥에 남아 있다.",
+                source=True,
+            )
+        )
+        for dropped in (obj for obj in room_loot(self, corpse=False) if obj in pool):
             for entry in dropped.db.entries:
                 lines.append(
                     ft.text(ft.item(entry["item"]), f" {entry['quantity']}개가 바닥에 떨어져 있다.")

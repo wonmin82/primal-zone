@@ -143,22 +143,28 @@
     byId("xp").value = state.level >= 10 ? byId("xp").max : state.xp - state.xp_floor;
     renderExits(state.exits);
     const actions = state.enemies.map((enemy) => {
-      const el = button(enemy.name + " " + enemy.hp + "/" + enemy.max_hp + (enemy.can_attack ? " 사냥" : " · 다른 그룹 교전 중"), enemy.name + " 사냥");
-      el.replaceChildren(semantic("hostile", enemy.name), " " + enemy.hp + "/" + enemy.max_hp + (enemy.can_attack ? " 사냥" : " · 다른 그룹 교전 중"));
+      const el = button(enemy.label + " " + enemy.hp + "/" + enemy.max_hp + (enemy.can_attack ? " 사냥" : " · 다른 그룹 교전 중"), enemy.attack_command);
+      el.replaceChildren(semantic("hostile", enemy.label), " " + enemy.hp + "/" + enemy.max_hp + (enemy.can_attack ? " 사냥" : " · 다른 그룹 교전 중"));
       el.disabled = !enemy.can_attack;
       return el;
     });
+    if (state.corpses.length > 1) {
+      const all = button("모든 시체의 전리품 회수", "모든 시체에서 모두 가져");
+      all.disabled = !state.corpses.some((source) => source.loot.some((item) => item.can_take));
+      actions.push(all);
+    }
     for (const corpse of state.corpses) {
       const title = document.createElement("p"); title.className = "loot-label";
-      title.replaceChildren(semantic("remains", corpse.name));
+      title.replaceChildren(semantic("remains", corpse.label), " · ", semantic("remains", corpse.name));
       actions.push(title);
+      actions.push(button(corpse.label + " 보기", corpse.look_command));
       if (corpse.loot.length) {
-        const all = button("시체에서 모두 가져", "시체에서 모두 가져");
+        const all = button(corpse.label + " 전리품 회수", corpse.take_command);
         all.disabled = !corpse.loot.some((item) => item.can_take); actions.push(all);
       } else { const empty = document.createElement("small"); empty.textContent = "남은 전리품 없음"; actions.push(empty); }
       for (const item of corpse.loot) {
-        const el = button(item.name + " ×" + item.quantity + " → " + (item.protected ? item.assigned_name : "자유 획득"), "시체에서 " + item.name + " 가져");
-        el.replaceChildren(semantic("item", item.name), " ×" + item.quantity + " → ", semantic(item.protected ? "player" : "muted", item.protected ? item.assigned_name : "자유 획득"));
+        const el = button(item.label + " ×" + item.quantity + " → " + (item.protected ? item.assigned_name : "자유 획득"), item.take_command);
+        el.replaceChildren(semantic("item", item.label), " ×" + item.quantity + " → ", semantic(item.protected ? "player" : "muted", item.protected ? item.assigned_name : "자유 획득"));
         el.disabled = !item.can_take; actions.push(el);
       }
     }
@@ -168,8 +174,8 @@
       actions.push(all);
     }
     for (const source of state.ground_loot) for (const item of source.loot) {
-      const el = button("바닥 · " + item.name + " ×" + item.quantity + " → " + (item.protected ? item.assigned_name : "자유 획득"), item.name + " 가져");
-      el.replaceChildren("바닥 · ", semantic("item", item.name), " ×" + item.quantity + " → ", semantic(item.protected ? "player" : "muted", item.protected ? item.assigned_name : "자유 획득"));
+      const el = button("바닥 · " + item.label + " ×" + item.quantity + " → " + (item.protected ? item.assigned_name : "자유 획득"), item.take_command);
+      el.replaceChildren("바닥 · ", semantic("item", item.label), " ×" + item.quantity + " → ", semantic(item.protected ? "player" : "muted", item.protected ? item.assigned_name : "자유 획득"));
       el.disabled = !item.can_take; actions.push(el);
     }
     renderGrowth(state);
@@ -183,10 +189,12 @@
     const invitation = state.invitation;
     byId("party-invitation").hidden = !invitation;
     byId("party-inviter").textContent = invitation ? invitation.inviter + "의 파티 초대 (60초 이내 수락)" : "";
-    if (state.zone === "dock") actions.push(button("윤대장과 대화", "윤대장 대화"), button("훈련관과 대화", "탐사대 훈련관 대화"), button("의무실에서 휴식", "휴식"), button("보급소 보기", "상점"));
-    if (state.zone === "wreck") actions.push(button("보급상자 조사", "보급상자 조사"));
-    if (state.zone === "office") actions.push(button("정비기록 조사", "정비기록 조사"));
-    if (state.zone === "generator") actions.push(button("발전기 수리", "발전기 수리"));
+    for (const object of state.interactables) for (const action of object.actions) {
+      const el = button(object.label + " " + action.label, action.command);
+      el.replaceChildren(semantic(object.role, object.label), " ", semantic("command", action.label));
+      actions.push(el);
+    }
+    if (state.zone === "dock") actions.push(button("의무실에서 휴식", "휴식"), button("보급소 보기", "상점"));
     byId("context-actions").replaceChildren(...actions);
     const rows = state.inventory.map((item) => {
       const row = document.createElement("li"), name = document.createElement("span");

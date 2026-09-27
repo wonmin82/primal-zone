@@ -11,45 +11,61 @@ from commands.base import GameCommand
 
 class Look(CmdLook):
     category = "탐사"
-    usage = "보기 · 대상 보기"
+    usage = "보기 · 대상 보기 · 대상 2 보기 · 대상 모두 보기 · 시체 모두 보기"
     summary = "주변과 대상을 살펴봅니다."
     input_style = "target"
     key = "보기"
     aliases = ["look", "l", "둘러보기"]
 
     def func(self):
+        from time import time
+
+        from typeclasses.loot import Corpse
         from world.content import ITEMS
         from world.lifecycle import reconcile_room
+        from world.target_presentation import corpse_overview
+        from world.targets import Mode, item_selector, names, parse_selector, resolve, room_objects
 
         name = self.args.strip()
         if name and self.caller.location:
             reconcile_room(self.caller.location)
-            normalized = "".join(name.split()).casefold()
-            matches = [
-                obj
-                for obj in self.caller.location.contents
-                if normalized
-                in ["".join(value.split()).casefold() for value in (obj.key, *obj.aliases.all())]
-            ]
-            if len(matches) == 1:
-                self.caller.msg(self.caller.at_look(matches[0]))
+            objects = room_objects(self.caller)
+            inventory = {
+                key: ITEMS[key]
+                for key, count in self.caller.profile()["inventory"].items()
+                if count > 0
+            }
+            try:
+                selector = parse_selector(
+                    name,
+                    [n for obj in objects for n in names(obj)]
+                    + [n for key, data in inventory.items() for n in (key, data["name"])],
+                )
+                from world.targets import matching
+
+                if matching(objects, selector):
+                    selected = resolve(objects, selector, self.caller)
+                    if selector.mode == Mode.ALL and all(
+                        isinstance(obj, Corpse) for obj in selected
+                    ):
+                        output = corpse_overview(
+                            selected,
+                            self.caller,
+                            time(),
+                            pool=[obj for obj in objects if isinstance(obj, Corpse)],
+                        )
+                    else:
+                        output = ft.join([self.caller.at_look(obj) for obj in selected], "\n\n")
+                    self.caller.msg(output)
+                else:
+                    identity = item_selector(name, inventory, "보기")
+                    self.caller.msg(view.item_appearance(identity))
+            except rules.RuleError as error:
+                self.caller.msg(ft.token("error", str(error)))
                 self.caller.push_state()
                 return
-            if not matches:
-                inventory = self.caller.profile()["inventory"]
-                identity = next(
-                    (
-                        key
-                        for key in inventory
-                        if inventory[key] > 0
-                        and normalized in (key, "".join(ITEMS[key]["name"].split()).casefold())
-                    ),
-                    None,
-                )
-                if identity:
-                    self.caller.msg(view.item_appearance(identity))
-                    self.caller.push_state()
-                    return
+            self.caller.push_state()
+            return
         super().func()
         self.caller.push_state()
 
@@ -117,6 +133,13 @@ class Help(GameCommand):
                 ft.text("상세: 명령이름 ", ft.token("command", "도움말")),
                 ft.text("대상: 대상이름 ", ft.token("command", "보기")),
                 "대상 + 행동 · 채팅: 내용 말 또는 '내용",
+                "번호 없이 기본 하나, 대상 2로 두 번째, 대상 모두로 같은 종류 전부를 지정한다.",
+                "보기·가져는 모두 선택 가능. 공격·대화·조사·수리·무장·착용은 하나만 지정한다.",
+                ft.usage(
+                    "갈퀴사냥룡 2 공격 · 갈퀴사냥룡 모두 보기 · 시체 모두 보기 · 시체에서 회수부품 모두 가져 · 시체 2에서 모두 가져 · 모든 시체에서 회수부품 모두 가져",
+                    {"공격", "보기", "가져"},
+                ),
+                "모두 가져는 전리품 모두 가져의 축약이다. 여러 출처는 '모든 시체에서'로 지정한다.",
                 ft.text(
                     "단축어: ",
                     ft.join(

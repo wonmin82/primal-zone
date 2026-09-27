@@ -2,6 +2,7 @@
 
 from world import rules
 from world import text as ft
+from world.targets import matching, names, ordered, parse_selector, require_single, select
 
 from commands.base import GameCommand
 
@@ -67,9 +68,12 @@ class PartyInvite(GameCommand):
         from evennia.objects.models import ObjectDB
         from typeclasses.parties import invite
 
-        target = ObjectDB.objects.filter(
-            db_key__iexact=self.args.strip(), db_typeclass_path="typeclasses.explorers.Explorer"
-        ).first()
+        players = ordered(
+            ObjectDB.objects.filter(db_typeclass_path="typeclasses.explorers.Explorer")
+        )
+        selector = parse_selector(self.args, [n for obj in players for n in names(obj)])
+        require_single(selector, self.key)
+        target = select(matching(players, selector), selector)[0]
         invite(self.caller, target)
         self.caller.msg(ft.text(ft.token("player", target.key), "에게 파티 초대를 보냈다."))
 
@@ -135,15 +139,10 @@ class PartyKick(GameCommand):
         party = party_for(self.caller)
         if not party:
             raise rules.RuleError("소속 파티가 없습니다.")
-        target = next(
-            (
-                object_by_id(key)
-                for key in party.state()["members"]
-                if object_by_id(key)
-                and object_by_id(key).key.casefold() == self.args.strip().casefold()
-            ),
-            None,
-        )
+        members = ordered([obj for key in party.state()["members"] if (obj := object_by_id(key))])
+        selector = parse_selector(self.args, [n for obj in members for n in names(obj)])
+        require_single(selector, self.key)
+        target = select(matching(members, selector), selector)[0]
         if not target:
             raise rules.RuleError("파티 멤버를 지정하세요.")
         if self.transfer:

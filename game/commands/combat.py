@@ -3,23 +3,38 @@
 from world import presentation as view
 from world import rules
 from world import text as ft
-from world.content import ENEMIES, find_id
+from world.targets import names, parse_selector, resolve, room_objects
 
 from commands.base import GameCommand
 
 
 class Attack(GameCommand):
     category = "전투"
-    usage = "어린청소룡 공격"
+    usage = "어린청소룡 공격 · 갈퀴사냥룡 2 공격"
     summary = "공유 적에게 2.5초 간격으로 기본 공격합니다."
     input_style = "target"
     key = "공격"
     aliases = ["사냥", "attack"]
 
     def run(self):
+        from typeclasses.enemies import Enemy
+        from world.lifecycle import reconcile_room
+
         name = self.args.strip()
         current = self.caller.combat_target()
-        enemy = find_id(ENEMIES, name) if name else current.db.enemy_id if current else None
+        reconcile_room(self.caller.location)
+        objects = room_objects(self.caller)
+        enemy = (
+            resolve(
+                objects,
+                parse_selector(name, [n for obj in objects for n in names(obj)]),
+                self.caller,
+                self.key,
+                lambda obj: isinstance(obj, Enemy) and obj.db.state == "alive",
+            )[0]
+            if name
+            else current
+        )
         if not enemy:
             raise rules.RuleError("사용법: 어린청소룡 공격 · '보기'로 사냥 대상을 확인하세요.")
         self.caller.start_combat(enemy)

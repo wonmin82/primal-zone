@@ -21,6 +21,18 @@
 
 게임 명령은 `대상 + 행동`이다. 마지막 단어를 행동으로 해석하며, `'내용`은 나머지 전부를 채팅으로 처리한다. `내용 말`도 지원한다. 버튼은 같은 텍스트 명령을 보내며 서버가 권한과 결과를 결정한다. 메시지 문자열로 사망·보상 등 상태를 판정하지 않는다.
 
+## 공통 대상 선택
+
+`world/targets.py`의 `TargetSelector`는 DEFAULT / INDEX / ALL을 표현한다. 일반 대상은 `<대상>`, `<대상> <번호>`, `<대상> 모두`로, 전리품 출처는 `시체에서`, `시체 2에서`, `모든 시체에서`로 해석한다. 출처 ALL도 내부에서는 같은 ALL이며, 한국어 조사에 맞춰 표시 문법만 다르다. 번호와 모두는 함께 사용할 수 없다. 실제 이름/alias 전체가 일치하면 숫자로 끝나는 이름을 우선하고, 이후 접미 선택자를 해석한다. 이전 prefix `전체` 문법은 지원하지 않는다.
+
+`ordered()`의 객체 ID 오름차순을 Room 서술, SURROUNDINGS, 보기, 공격, 콘텐츠 행동, 시체 회수에서 공유한다. 번호는 방 안의 보이는 후보에 붙이는 1부터 시작하는 transient presentation index이며 DB에 저장하거나 객체 ID 자체를 노출하지 않는다. 같은 이름끼리 번호를 붙이되 `시체`는 방 전체 Corpse pool을 사용한다. 시체가 만료되면 남은 시체 번호도 다시 계산된다.
+
+DEFAULT는 구조적으로 행동을 지원하는 첫 대상을 선택한다. INDEX는 표시 순서의 정확한 개체를 선택한다. 실제 점유·임무·한 번 보상·전리품 권한은 행동/규칙 계층이 판단하며 resolver가 가능한 다음 대상으로 자동 이동하지 않는다. 보기와 가져만 ALL을 지원한다. 공격·대화·조사·수리·무장·착용·구매·교환·학습·파티 인물 조작은 단일 대상이다. 전투가 시작된 뒤 공격·강타·방어·회복·도주는 기존 combat_target을 사용한다. 특성의 `힘 2 배분`처럼 수량을 받는 명령은 해당 명령의 인자 문법을 유지한다. 파티 초대/관리의 기존 원격 캐릭터 범위도 유지한다.
+
+`world/target_presentation.py`는 개체 수를 자연어로 묘사하고 필요한 경우에만 `'갈퀴사냥룡 1'`, `'시체 2'` 같은 지정 방법을 문장으로 안내한다. Room 본문은 객체 표가 아니다. Compact 번호 label과 실제 명령 문자열은 웹 control에서 사용한다. `world/state.py`가 label/command를 생성하고 웹은 그대로 텍스트 명령을 전송하므로 클라이언트에 선택 parser를 복제하지 않는다.
+
+전리품 요청은 `LootRequest(source, target)`로 정규화한다. `모두 가져`는 가상 target `전리품`의 ALL이다. source가 없으면 DroppedLoot를, DEFAULT source면 시체 하나만 처리한다. source ALL에는 target ALL이 필수다. target DEFAULT/INDEX는 선택 entry에서 한 개를, ALL은 일치하는 entry의 전체 quantity를 처리한다. entry 순서는 객체 ID와 객체 내부의 저장 entry 순서이며, 번호를 별도 저장하지 않는다. 회수 전 같은 timestamp로 lifecycle을 정리한 뒤 world_change에서 선택·수량 차감·배정자 저장을 원자적으로 처리한다. 보호된 entry는 ALL에서 건너뛰며 하나라도 지급되면 성공이다. 수령 권한은 기존 recipient_for를 사용한다.
+
 ## 성장의 다섯 계층
 
 | 계층 | 역할 | 변경 방법 |
@@ -125,7 +137,7 @@ Corpse는 실제 방 객체이며 source spawn/enemy, created_at, decay_at과 lo
 
 선정된 파티의 실제 참여자를 가입 순서로 정렬하고 Party.round_robin_cursor를 적용한다. 아이템 한 개마다 순번을 증가시킨다. 현재 지원 모드는 round_robin뿐이며 `순번 파티분배`로 설정한다. free_for_all·need_greed·leader 방식과 관련 UI는 구현하지 않았다.
 
-각 entry는 item, quantity, reserved_party, reserved_player, assigned_player, protection_until을 저장한다. 보호 중에는 배정된 탐사자 또는 원래 파티원이 회수를 요청할 수 있으나 실제 가방은 assigned_player에게 지급된다. 배정자는 탈퇴·접속 종료해도 바뀌지 않는다. 보호 종료 뒤에는 회수 명령자가 받는다. 특정 아이템은 한 개, `모두`는 회수 가능한 전부를 처리한다. 같은 방의 여러 시체는 생성 순서로 탐색한다.
+각 entry는 item, quantity, reserved_party, reserved_player, assigned_player, protection_until을 저장한다. 보호 중에는 배정된 탐사자 또는 원래 파티원이 회수를 요청할 수 있으나 실제 가방은 assigned_player에게 지급된다. 배정자는 탈퇴·접속 종료해도 바뀌지 않는다. 보호 종료 뒤에는 회수 명령자가 받는다. 특정 아이템은 한 개, `<아이템> 모두`는 선택한 출처의 같은 종류 전체 수량을 처리한다. 여러 시체 전체의 회수는 `모든 시체에서 모두 가져`로 명시한다.
 
 시체는 처치 후 30초에 남은 entries를 DroppedLoot 방 객체로 옮기고 삭제된다. 원래 권한과 처치 후 120초인 protection_until은 그대로 유지된다. 적은 처치 후 45초(시체 30초 + 대기 15초)에 같은 spawn으로 재생성한다. 바닥 아이템은 재생성 시 삭제하지 않으며 현재 별도 영구 소멸 기한은 없다. 장기간 운영 시 누적량 관리 정책이 필요하다.
 

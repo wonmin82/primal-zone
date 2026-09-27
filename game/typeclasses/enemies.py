@@ -342,10 +342,14 @@ class Enemy(DefaultObject):
 
 
 def room_enemies(room, alive_only=True):
+    from world.targets import ordered
+
     if not room:
         return []
-    return [
-        obj
-        for obj in room.contents
-        if obj.is_typeclass(Enemy, exact=True) and (not alive_only or obj.db.state == "alive")
-    ]
+    return ordered(
+        [
+            obj
+            for obj in room.contents
+            if obj.is_typeclass(Enemy, exact=True) and (not alive_only or obj.db.state == "alive")
+        ]
+    )
