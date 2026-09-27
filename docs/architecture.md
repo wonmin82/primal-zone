@@ -251,6 +251,12 @@ equipment 슬롯은 `None`을 정상 값으로 허용한다. 해제/벗어는 �
 
 ## 동적 환경: Room / Environment / Object
 
+장소 고유의 기후 성향과 흔적은 static description에 둘 수 있지만 현재 기상 상태를 직접 표현하지 않는다. 부두의 해안·숲, 관리동의 오래된 누수 흔적, 습지의 지속적인 습기는 static이며 실제 안개·강우는 Environment가 소유한다. 새 표현의 회귀 검사는 특정 금지 단어 전체가 아니라 알려진 충돌 문구와 clear/fog/rain 전후의 static·객체 불변을 검증한다.
+
+Environment 저장 형식은 `ENVIRONMENT_VERSION = 1`로 식별한다. version 없는 초기 PR 값은 legacy v0로 읽고 순수 `normalize_state()`가 사본에 version만 추가한다. clock epoch, weather와 seed/step·기한은 보존하며 DB 기록은 기존 reconcile transaction에서 한 번 수행한다. 조회의 정규화는 저장하지 않고 두 번째 reconcile은 변경이 없으면 다시 쓰지 않는다. 지원 범위를 넘는 version은 명확한 오류를 발생시키며 초기화하지 않는다. 캐릭터 profile version과는 독립적이다.
+
+내부 weather/period 변화와 사용자 ambient 알림은 다르다. `publish_changes(before, after, zones, observed_at)`는 동일 시각의 `state_snapshot()`으로 저장된 전·후 period/weather를 유지해 문장을 비교한다. 일반 조회용 `snapshot()`은 현재 시각까지 순수 reconcile을 투영하므로 과거 상태 비교에 쓰지 않는다. 표현이 같은 고정 조명 실내의 period 변화는 메시지를 생략하고, rain→storm처럼 실제 실내 빗소리가 달라지면 발행한다. 웹은 두 경우 모두 기존 sweep로 최신 시간대/시각을 받는다. FIELD GUIDE의 환경 확인은 기존 data-command 경로로 날씨를 실행하고 CSS/JS query version은 환경 배포용 `environment`로 갱신한다.
+
 Room description은 지형·건축·분위기·지속되는 흔적, Environment는 현재 시간·날씨·달·밝기, Object presence는 현재 존재와 행동을 담당한다. 정적 Room 설명이나 Enemy presence에 현재 비/밤 정보를 복제하지 않는다. 현재 방은 `Room.desc → Environment 문장 → 방향도 → local presence`, 원거리는 `방향/이름 → Room.desc → Environment 문장 → distant presence` 순서다. 환경 문장은 기존 `muted` semantic role을 사용한다.
 
 `world/content/environment.py`는 시간대·달·날씨·전이·빛·노출별 문장의 선언형 SSOT다. `REGIONS[*].weather_zone`은 두 Region 모두 `island`를 가리킨다. 각 Room은 반드시 `exposure`(outdoor/sheltered/indoor)와 독립적인 `light_profile`(natural/filtered/dim/artificial)을 정의한다. office는 indoor/filtered, generator는 indoor/dim, jungle_watch는 sheltered/natural, jungle_nest는 sheltered/filtered이며 나머지는 콘텐츠의 하늘/수관 노출을 따른다. 무결성 검사는 누락·잘못된 값, Weather Zone 참조, 초기 날씨, 전이 대상·양수 가중치·지속 시간·노출별 문장을 검증한다.
@@ -261,6 +267,6 @@ Room description은 지형·건축·분위기·지속되는 흔적, Environment�
 
 `world/environment_state.py`만 영속 Script 상태와 접속자 발행을 담당한다. 기존 단일 `WorldLifecycle`의 `db.environment`에 clock epoch, 마지막 period, zone별 weather/started_at/next_change_at/RNG seed·step을 저장한다. 5초 sweep에서 순수 reconcile 결과가 달라질 때만 저장한다. seed+step으로 전이를 재현하므로 정상 중단 구간은 한 번에 복구하든 자주 sweep하든 같은 결과다. 조회도 같은 pure reconcile의 사본을 사용하여 deadline과 sweep 사이 상태를 투영하지만 저장·이벤트는 수행하지 않는다. 신규 zone 초기화는 기존 clock을 보존한다. 서버 bootstrap은 Script를 확보한 뒤 restart reconcile하며 기존 상태가 있으면 epoch나 날씨를 초기화하지 않는다.
 
-재시작 시 지난 deadline을 따라 최종 유효 구간까지 복구하고 과거 이벤트는 재생하지 않는다. 매우 긴 중단은 한 reconcile당 256회로 제한하고 이후 현재 시각에서 새 지속 구간을 시작한다. 이 제한을 넘는 중단은 세부 기상 이력을 재현하지 않는다. 변경은 기존 world_change transaction 안에서 저장하며 성공 후 callback으로 발행한다. 저장/외부 transaction 실패 시 상태와 알림을 되돌린다. 최종 weather 또는 period가 실제 달라진 zone의 **현재 session이 있는** 탐사자에게만 노출에 맞는 1–2문장을 보낸다. 같은 날씨의 기간 갱신이나 매 sweep는 로그를 추가하지 않는다. 웹은 기존 sweep의 push_state(observed_at=now) 한 경로로 갱신한다.
+재시작 시 지난 deadline을 따라 최종 유효 구간까지 복구하고 과거 이벤트는 재생하지 않는다. 매우 긴 중단은 한 reconcile당 256회로 제한하고 이후 현재 시각에서 새 지속 구간을 시작한다. 이 제한을 넘는 중단은 세부 기상 이력을 재현하지 않는다. 변경은 기존 world_change transaction 안에서 저장하며 성공 후 callback으로 발행한다. 저장/외부 transaction 실패 시 상태와 알림을 되돌린다. 최종 weather 또는 period가 실제 달라진 zone의 **현재 session이 있는** 탐사자 중 해당 Room의 환경 표현이 달라진 사람에게만 1–2문장을 보낸다. 같은 날씨의 기간 갱신이나 매 sweep는 로그를 추가하지 않는다. 웹은 기존 sweep의 push_state(observed_at=now) 한 경로로 갱신한다.
 
 profile는 v5를 그대로 유지하며 환경 데이터는 캐릭터에 저장하지 않는다. 타이머·점유·참여 보상·Corpse/DroppedLoot·파티 정책도 유지한다. 다음 단계는 별도 visibility 정책과 플레이어 광원을 snapshot에 결합하는 것이며, 현재 계산과 targeting 사이의 경계를 먼저 유지한다. LOS·날씨 API·조도 전파 엔진·환경 피해는 이 범위에 없다.

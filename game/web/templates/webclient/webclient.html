@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#101b17">
   <title>원시구역 — 탐사 기록</title>
-  <link rel="stylesheet" href="{% static 'webclient/css/primal.css' %}?v=compact">
-  <script defer src="{% static 'webclient/js/primal.js' %}?v=item-interactions"></script>
+  <link rel="stylesheet" href="{% static 'webclient/css/primal.css' %}?v=environment">
+  <script defer src="{% static 'webclient/js/primal.js' %}?v=environment"></script>
 </head>
 <body data-ws-url="{{ websocket_url|default:'' }}" data-ws-port="{{ websocket_port }}">
   <header class="masthead">
@@ -32,6 +32,7 @@
         <h2>탐사 수첩</h2>
         <div class="navigation">
           <button data-command="보기">주변 살펴보기 <span>↗</span></button>
+          <button data-command="날씨">환경 확인 <span>↗</span></button>
           <button data-command="지도">방문한 지역 <span>↗</span></button>
           <button data-command="상태">현재 상태 <span>↗</span></button>
           <button data-command="경험치">경험치 확인 <span>↗</span></button>

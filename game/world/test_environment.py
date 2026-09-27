@@ -12,6 +12,53 @@ from world.content.environment import WEATHERS
 
 
 class EnvironmentRulesTests(TestCase):
+    def test_legacy_schema_normalization_preserves_clock_weather_and_is_pure(self):
+        state = self.state(weather="rain")
+        self.assertEqual(state["version"], env.ENVIRONMENT_VERSION)
+        state.pop("version")
+        before = deepcopy(state)
+        normalized = env.normalize_state(state)
+        self.assertEqual(normalized["version"], env.ENVIRONMENT_VERSION)
+        self.assertEqual({k: v for k, v in normalized.items() if k != "version"}, before)
+        self.assertEqual(env.normalize_state(normalized), normalized)
+        self.assertEqual(state, before)
+        env.snapshot(state, "dock", 100)
+        self.assertEqual(state, before)
+
+    def test_unsupported_schema_never_silently_resets(self):
+        for version in (env.ENVIRONMENT_VERSION + 1, -1, "1", True):
+            state = self.state()
+            state["version"] = version
+            before = deepcopy(state)
+            with self.subTest(version=version), self.assertRaisesRegex(ValueError, "저장 버전"):
+                env.reconcile(state, 100)
+            self.assertEqual(state, before)
+
+    def test_transition_comparison_uses_stored_state_at_the_same_timestamp(self):
+        before = self.state()
+        before["clock"]["game_epoch"] = 18 * 3600 - 4
+        before["zones"]["island"]["next_change_at"] = 101
+        with patch.dict(WEATHERS["clear"], transitions={"cloudy": 1}):
+            after = env.reconcile(before, 101)
+            old = env.state_snapshot(before, "dock", 101)
+            new = env.state_snapshot(after, "dock", 101)
+            self.assertEqual(env.snapshot(before, "dock", 101), new)
+        self.assertEqual((old.observed_at, new.observed_at), (101, 101))
+        self.assertEqual((old.period, new.period), ("day", "dusk"))
+        self.assertEqual((old.weather, new.weather), ("clear", "cloudy"))
+        self.assertNotEqual(env.description(old), env.description(new))
+
+    def test_known_static_weather_regressions_remain_environment_owned(self):
+        for room, phrase in (
+            ("dock", "안개 너머로"),
+            ("office", "비가 새는"),
+            ("marsh", "낮게 깔린 물안개가"),
+        ):
+            with self.subTest(room=room):
+                self.assertNotIn(phrase, ROOMS[room]["desc"])
+        self.assertIn("물이 샌 흔적", ROOMS["office"]["desc"])
+        self.assertIn("습기", ROOMS["marsh"]["desc"])
+
     def state(self, hour=8, day=1, weather="clear"):
         state = env.new_environment(100, Random(7))
         state["clock"]["game_epoch"] = (day - 1) * 86400 + hour * 3600

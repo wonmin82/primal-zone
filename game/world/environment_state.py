@@ -1,6 +1,5 @@
 """WorldLifecycle가 소유하는 환경 저장/발행 경계. 조회는 상태를 저장하지 않는다."""
 
-from copy import deepcopy
 from random import Random
 from time import time
 
@@ -37,7 +36,7 @@ def reconcile_environment(now, restart=False):
     try:
         with world_change():
             before = deserialize(script.db.environment)
-            state = deepcopy(before) if before else model.new_environment(now)
+            state = model.normalize_state(before) if before else model.new_environment(now)
             missing = set(model.WEATHER_ZONES) - set(state["zones"])
             if missing:
                 initial = model.new_environment(now)
@@ -56,18 +55,20 @@ def reconcile_environment(now, restart=False):
                     )
                 }
                 if changed:
-                    after_change(lambda: publish_changes(after, changed, now))
+                    after_change(lambda: publish_changes(before, after, changed, now))
     except Exception:
         script.attributes.reset_cache()
         raise
 
 
-def publish_changes(state, zones, observed_at):
+def publish_changes(before, after, zones, observed_at):
     from typeclasses.explorers import Explorer
 
     for player in Explorer.objects.all():
         region = ROOM_REGION.get(player.zone)
         if player.sessions.count() and region and REGIONS[region]["weather_zone"] in zones:
-            environment = model.snapshot(state, player.zone, observed_at)
-            player.msg(ft.token("muted", model.description(environment)))
+            previous = model.description(model.state_snapshot(before, player.zone, observed_at))
+            current = model.description(model.state_snapshot(after, player.zone, observed_at))
+            if previous != current:
+                player.msg(ft.token("muted", current))
     # 웹 상태는 같은 reconcile_world() sweep의 기존 push_state 경로로 갱신한다.

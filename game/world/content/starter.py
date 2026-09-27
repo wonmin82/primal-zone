@@ -73,7 +73,7 @@ ROOMS = {
         "light_profile": "natural",
         "safe": True,
         "enemies": [],
-        "desc": "안개 너머로 버려진 섬이 드러난다. 낡은 선착장에 밧줄과 장비가 가지런히 놓여 있다.\n"
+        "desc": "낡은 선착장 너머로 섬의 해안과 숲이 이어진다. 밧줄과 장비가 가지런히 놓여 있다.\n"
         "정박한 배 사이로 잔물결이 일고, 먼 숲에서 새소리가 들려온다.",
         "hint": "윤대장 대화 · 상점 · 휴식",
         "exits": {"북": "grass"},
@@ -110,7 +110,7 @@ ROOMS = {
         "exposure": "indoor",
         "light_profile": "filtered",
         "enemies": [],
-        "desc": "비가 새는 천장 아래로 젖은 책상이 보인다. 바람이 들어올 때마다 종잇장이 들썩인다.",
+        "desc": "물이 샌 흔적이 남은 천장 아래로 습기에 젖은 책상이 보인다. 바람이 들어올 때마다 종잇장이 들썩인다.",
         "hint": "정비기록 조사",
         "exits": {"서": "trail", "동": "generator"},
     },
@@ -128,7 +128,7 @@ ROOMS = {
         "exposure": "outdoor",
         "light_profile": "natural",
         "enemies": ["hunter", "sentinel"],
-        "desc": "진흙 위로 생물의 흔적과 기계의 궤적이 교차한다. 낮게 깔린 물안개가 능선 아래를 감싸고 있다.",
+        "desc": "진흙 위로 생물의 흔적과 기계의 궤적이 교차한다. 물기 어린 공기와 짙은 습기가 능선 아래에 고여 있다.",
         "hint": "능선 진입 전 강화조끼와 붕대를 준비하자.",
         "exits": {"남": "trail", "북": "ridge"},
     },

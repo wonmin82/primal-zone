@@ -20,6 +20,17 @@ from world.content.environment import (
 )
 
 MAX_CATCHUP_TRANSITIONS = 256
+ENVIRONMENT_VERSION = 1
+
+
+def normalize_state(state):
+    """version 없는 초기 PR 저장값을 보존하며 정규화한다. 미래 형식은 덮어쓰지 않는다."""
+    version = state.get("version", 0)
+    if type(version) is not int or not 0 <= version <= ENVIRONMENT_VERSION:
+        raise ValueError(f"지원하지 않는 Environment 저장 버전입니다: {version!r}")
+    result = deepcopy(state)
+    result["version"] = ENVIRONMENT_VERSION
+    return result
 
 
 def game_seconds(clock, now):
@@ -39,6 +50,7 @@ def moon_at(day):
 def new_environment(now, rng=None):
     rng = rng if rng is not None else Random()
     return {
+        "version": ENVIRONMENT_VERSION,
         "clock": {
             "real_epoch": now,
             "game_epoch": INITIAL_GAME_SECONDS,
@@ -60,7 +72,7 @@ def new_environment(now, rng=None):
 
 def reconcile(state, now, rng=None):
     """사본만 갱신한다. RNG seed/순번은 저장되어 재시작·호출 간격에 독립적이다."""
-    result = deepcopy(state)
+    result = normalize_state(state)
     for zone, data in result["zones"].items():
         steps = 0
         while now >= data["next_change_at"]:
@@ -103,10 +115,15 @@ class EnvironmentSnapshot:
 
 
 def snapshot(state, zone, observed_at):
-    current = reconcile(state, observed_at)
+    return state_snapshot(reconcile(state, observed_at), zone, observed_at)
+
+
+def state_snapshot(state, zone, observed_at):
+    """알림 전/후 비교용: 같은 시각에서 저장된 period/weather를 진행시키지 않고 읽는다."""
+    current = normalize_state(state)
     seconds = game_seconds(current["clock"], observed_at)
     day = int(seconds // 86400) + 1
-    period = period_at(seconds)
+    period = current["period"]
     moon = moon_at(day)
     moon_light = MOONS[moon]["light"] if period == "night" else 0
     weather_zone = REGIONS[ROOM_REGION[zone]]["weather_zone"]

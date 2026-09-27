@@ -5,6 +5,8 @@ from copy import deepcopy
 from random import Random
 from unittest.mock import Mock, patch
 
+from django.template.loader import render_to_string
+from django.test import SimpleTestCase
 from evennia import create_object, create_script
 from evennia.utils.dbserialize import deserialize
 from evennia.utils.test_resources import EvenniaCommandTest
@@ -132,7 +134,9 @@ class EnvironmentTests(EvenniaCommandTest):
             self.char2.location = self.rooms["jungle_edge"]
             from world.environment_state import publish_changes
 
-            publish_changes(self.state, {"island"}, 100)
+            after = deepcopy(self.state)
+            after["zones"]["island"]["weather"] = "cloudy"
+            publish_changes(self.state, after, {"island"}, 100)
             first.assert_called_once()
             second.assert_not_called()
 
@@ -281,3 +285,115 @@ class EnvironmentTests(EvenniaCommandTest):
             self.assertTrue(any("가중치" in issue for issue in errors(INTERACTABLES)))
         with patch.dict(WEATHERS["clear"], duration=(50, 10)):
             self.assertTrue(any("지속 시간" in issue for issue in errors(INTERACTABLES)))
+
+    def test_fixed_light_period_change_skips_ambient_but_pushes_latest_state(self):
+        self.char1.location = self.rooms["generator"]
+        before_profile = deserialize(self.char1.db.profile)
+        for light_profile in ("dim", "artificial"):
+            self.state["clock"]["game_epoch"] = 18 * 3600 - 4
+            self.script.db.environment = self.state
+            with (
+                patch.dict(ROOMS["generator"], light_profile=light_profile),
+                patch.object(self.char1.sessions, "count", return_value=1),
+                patch.object(self.char2.sessions, "count", return_value=0),
+                patch.object(self.char1, "msg") as message,
+            ):
+                before = env.state_snapshot(self.state, "generator", 101)
+                reconcile_world(101)
+                after = snapshot_for(self.char1.location, 101)
+                self.assertEqual(env.description(before), env.description(after))
+                message.assert_not_called()
+                self.char1.push_state.assert_called_with(observed_at=101)
+                self.assertEqual(after.period, "dusk")
+                # 실제 웹 발행 경로도 최신 period/time을 전달하며 profile을 쓰지 않는다.
+                Explorer.push_state(self.char1, observed_at=101)
+                payload = message.call_args.kwargs["pz_state"][0][0]
+                self.assertEqual(payload["environment"]["period"]["id"], "dusk")
+                self.assertEqual(payload["environment"]["time"], "18:00")
+        self.assertEqual(deserialize(self.char1.db.profile), before_profile)
+
+    def test_indoor_weather_change_emits_once_even_with_fixed_light(self):
+        self.char1.location = self.rooms["generator"]
+        self.state["zones"]["island"].update(weather="rain", next_change_at=101)
+        self.script.db.environment = self.state
+        with (
+            patch.dict(WEATHERS["rain"], transitions={"storm": 1}),
+            patch.object(self.char1.sessions, "count", return_value=1),
+            patch.object(self.char2.sessions, "count", return_value=0),
+            patch.object(self.char1, "msg") as message,
+        ):
+            reconcile_world(101)
+            message.assert_called_once()
+            self.assertIn("거센 빗소리", message.call_args.args[0])
+            self.char1.push_state.assert_called_once_with(observed_at=101)
+            reconcile_world(106)
+            message.assert_called_once()
+
+    def test_legacy_state_migrates_once_without_reset_or_read_side_effects(self):
+        legacy = deepcopy(self.state)
+        legacy.pop("version")
+        self.script.db.environment = legacy
+        snapshot_for(self.rooms["dock"], 100)
+        self.assertEqual(deserialize(self.script.db.environment), legacy)
+        with (
+            patch.object(self.script.attributes, "add", wraps=self.script.attributes.add) as writes,
+            patch("world.environment_state.publish_changes") as publish,
+        ):
+            reconcile_environment(100)
+            writes.assert_called_once()
+            saved = deserialize(self.script.db.environment)
+            self.assertEqual(saved, env.normalize_state(legacy))
+            reconcile_environment(105)
+            writes.assert_called_once()
+            publish.assert_not_called()
+
+    def test_future_state_remains_intact_when_reconciliation_fails(self):
+        future = deepcopy(self.state)
+        future["version"] = env.ENVIRONMENT_VERSION + 1
+        self.script.db.environment = future
+        with (
+            patch("world.environment_state.publish_changes") as publish,
+            self.assertRaisesRegex(ValueError, "저장 버전"),
+        ):
+            reconcile_environment(100)
+        self.assertEqual(deserialize(self.script.db.environment), future)
+        publish.assert_not_called()
+
+    def test_local_static_and_object_presence_stay_equal_across_weather_changes(self):
+        for zone, weathers in (
+            ("dock", ("clear", "fog")),
+            ("office", ("clear", "rain", "storm")),
+            ("marsh", ("clear", "fog")),
+        ):
+            room = self.rooms[zone]
+            self.char1.location = room
+            static = ROOMS[zone]["desc"]
+            outputs, descriptions = [], []
+            for weather in weathers:
+                self.state["zones"]["island"]["weather"] = weather
+                self.script.db.environment = self.state
+                output = room.return_appearance(self.char1, observed_at=100)
+                description = env.description(snapshot_for(room, 100))
+                self.assertIn(static, output)
+                self.assertIn(description, output)
+                self.assertEqual(ROOMS[zone]["desc"], static)
+                outputs.append(output.replace(description, ""))
+                descriptions.append(description)
+                if weather == "clear":
+                    self.assertNotIn("안개가", output)
+                    self.assertNotIn("비가 새는", output)
+                elif weather == "fog":
+                    self.assertEqual(output.count("낮게 깔린 안개가"), 1)
+            self.assertEqual(len(set(outputs)), 1)  # 환경 외 방향도·객체 묘사는 동일하다.
+            self.assertEqual(len(set(descriptions)), len(weathers))
+
+
+class EnvironmentWebTemplateTests(SimpleTestCase):
+    def test_fresh_assets_and_field_guide_weather_entry_use_existing_command(self):
+        html = render_to_string("webclient/webclient.html")
+        self.assertIn("webclient/css/primal.css?v=environment", html)
+        self.assertIn("webclient/js/primal.js?v=environment", html)
+        self.assertNotIn("?v=compact", html)
+        self.assertNotIn("?v=item-interactions", html)
+        self.assertIn('data-command="날씨">환경 확인', html)
+        self.assertIn('id="environment-status"', html)
