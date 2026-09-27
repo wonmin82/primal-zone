@@ -29,7 +29,9 @@
 
 DEFAULT는 구조적으로 행동을 지원하는 첫 대상을 선택한다. INDEX는 표시 순서의 정확한 개체를 선택한다. 실제 점유·임무·한 번 보상·전리품 권한은 행동/규칙 계층이 판단하며 resolver가 가능한 다음 대상으로 자동 이동하지 않는다. 보기와 가져만 ALL을 지원한다. 공격·대화·조사·수리·무장·착용·구매·교환·학습·파티 인물 조작은 단일 대상이다. 전투가 시작된 뒤 공격·강타·방어·회복·도주는 기존 combat_target을 사용한다. 특성의 `힘 2 배분`처럼 수량을 받는 명령은 해당 명령의 인자 문법을 유지한다. 파티 초대/관리의 기존 원격 캐릭터 범위도 유지한다.
 
-`world/target_presentation.py`는 개체 수를 자연어로 묘사하고 필요한 경우에만 `'갈퀴사냥룡 1'`, `'시체 2'` 같은 지정 방법을 문장으로 안내한다. Room 본문은 객체 표가 아니다. Compact 번호 label과 실제 명령 문자열은 웹 control에서 사용한다. `world/state.py`가 label/command를 생성하고 웹은 그대로 텍스트 명령을 전송하므로 클라이언트에 선택 parser를 복제하지 않는다.
+`world/target_presentation.py`는 개체 수를 자연어로 묘사하고 필요한 경우에만 `'갈퀴사냥룡 1'`, `'시체 2'` 같은 지정 방법을 문장으로 안내한다. Room 본문과 세계 서술은 객체 표가 아니다. SURROUNDINGS·버튼·상태/조작 control에서는 빠른 인식과 조작을 위해 `시체 1 · 갈퀴사냥룡의 시체` 같은 compact label·번호·상태를 사용할 수 있다. `world/state.py`가 label/command를 생성하고 웹은 그대로 텍스트 명령을 전송하므로 클라이언트에 선택 parser를 복제하지 않는다.
+
+`world.state.loot_controls()`는 웹 상태와 Corpse/DroppedLoot 상세 보기의 지정명·회수 명령을 함께 생성한다. 시체는 현재 보이는 방 전체 Corpse pool, 바닥 물건은 같은 아이템의 객체/entry 순서를 기존 helper로 계산한다. 상세 보기에는 단독으로 실행할 수 없는 `가져` 대신 `시체 2에서 모두 가져`, `회수부품 2 가져` 같은 명령을 안내한다. 시체가 하나면 번호를 생략하고, 빈 시체에는 회수 안내를 표시하지 않는다. 이 helper는 표시만 담당하며 번호를 저장하거나 권한·수량 규칙을 다시 구현하지 않는다. 실제 실행은 현재 방 상태에서 기존 resolver와 전리품 규칙을 사용한다.
 
 전리품 요청은 `LootRequest(source, target)`로 정규화한다. `모두 가져`는 가상 target `전리품`의 ALL이다. source가 없으면 DroppedLoot를, DEFAULT source면 시체 하나만 처리한다. source ALL에는 target ALL이 필수다. target DEFAULT/INDEX는 선택 entry에서 한 개를, ALL은 일치하는 entry의 전체 quantity를 처리한다. entry 순서는 객체 ID와 객체 내부의 저장 entry 순서이며, 번호를 별도 저장하지 않는다. 회수 전 같은 timestamp로 lifecycle을 정리한 뒤 world_change에서 선택·수량 차감·배정자 저장을 원자적으로 처리한다. 보호된 entry는 ALL에서 건너뛰며 하나라도 지급되면 성공이다. 수령 권한은 기존 recipient_for를 사용한다.
 

@@ -29,18 +29,11 @@ def loot_entries(source, player, now):
     ]
 
 
-def multiplayer_state(player, now=None):
-    now = time() if now is None else now
-    from typeclasses.interactables import ActionObject
-
-    from world.lifecycle import reconcile_room
-
-    reconcile_room(player.location, now)
-    objects = room_objects(player)
-    enemies = [obj for obj in room_enemies(player.location) if obj in objects]
+def loot_controls(player, now, objects=None):
+    """상세 보기와 웹 control이 동일한 현재 출처/entry 번호를 사용한다."""
+    objects = room_objects(player) if objects is None else objects
     corpses = [obj for obj in room_loot(player.location) if obj in objects]
     ground = [obj for obj in room_loot(player.location, corpse=False) if obj in objects]
-    controls = labels(objects)
     corpse_controls = labels(corpses, lambda obj: "시체")
     ground_entries = [(obj, i, entry) for obj in ground for i, entry in enumerate(obj.db.entries)]
 
@@ -58,6 +51,33 @@ def multiplayer_state(player, now=None):
             prefix = corpse_controls[source.id] + "에서 " if source in corpses else ""
             entry.update(label=target, take_command=prefix + target + " 가져")
         return entries
+
+    return {
+        **{
+            source.id: {
+                "label": corpse_controls[source.id],
+                "take_command": corpse_controls[source.id] + "에서 모두 가져",
+                "loot": with_loot_controls(source),
+            }
+            for source in corpses
+        },
+        **{source.id: {"loot": with_loot_controls(source)} for source in ground},
+    }
+
+
+def multiplayer_state(player, now=None):
+    now = time() if now is None else now
+    from typeclasses.interactables import ActionObject
+
+    from world.lifecycle import reconcile_room
+
+    reconcile_room(player.location, now)
+    objects = room_objects(player)
+    enemies = [obj for obj in room_enemies(player.location) if obj in objects]
+    corpses = [obj for obj in room_loot(player.location) if obj in objects]
+    ground = [obj for obj in room_loot(player.location, corpse=False) if obj in objects]
+    controls = labels(objects)
+    loot = loot_controls(player, now, objects)
 
     party = party_for(player)
     party_data = None
@@ -95,16 +115,14 @@ def multiplayer_state(player, now=None):
             {
                 "id": corpse.id,
                 "name": corpse.key,
-                "label": corpse_controls[corpse.id],
-                "look_command": corpse_controls[corpse.id] + " 보기",
-                "take_command": corpse_controls[corpse.id] + "에서 모두 가져",
+                **loot[corpse.id],
+                "look_command": loot[corpse.id]["label"] + " 보기",
                 "decay_at": corpse.db.decay_at,
-                "loot": with_loot_controls(corpse),
             }
             for corpse in corpses
         ],
         "ground_loot": [
-            {"id": dropped.id, "loot": with_loot_controls(dropped)} for dropped in ground
+            {"id": dropped.id, **loot[dropped.id]} for dropped in ground
         ],
         "interactables": [
             {

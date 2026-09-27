@@ -293,7 +293,7 @@ class SemanticTextTests(EvenniaCommandTest):
             self.assertEqual(self.char1.profile()["xp"], 11)
             corpse = room_loot(self.char1.location)[0]
             output = corpse.return_appearance(self.char1)
-            self.assertEqual(tokens(output, "remains"), [corpse.key])
+            self.assertEqual(tokens(output, "remains"), [corpse.key, "시체"])
             first.reset_mock()
             second.reset_mock()
             take_loot(self.char2, now=103)
