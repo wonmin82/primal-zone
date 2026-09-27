@@ -1,5 +1,8 @@
 """정적 월드 정의의 참조와 stable ID를 검사한다. DB를 읽지 않는다."""
 
+from math import isfinite
+from numbers import Real
+
 from world.content import (
     ENEMIES,
     EXCHANGE,
@@ -10,9 +13,14 @@ from world.content import (
     SHOP,
     spawn_id_for,
 )
+from world.content.environment import EXPOSURES, LIGHT_PROFILES, WEATHER_ZONES, WEATHERS
 from world.quests import QUESTS
 
 OPPOSITE = {"북": "남", "남": "북", "동": "서", "서": "동"}
+
+
+def positive_number(value):
+    return isinstance(value, Real) and not isinstance(value, bool) and isfinite(value) and value > 0
 
 
 def errors(interactables):
@@ -25,10 +33,16 @@ def errors(interactables):
     if len(ROOMS) != sum(len(region["rooms"]) for region in REGIONS.values()):
         issues.append("Room ID가 중복되었습니다.")
     for region_id, region in REGIONS.items():
+        if region.get("weather_zone") not in WEATHER_ZONES:
+            issues.append(f"{region_id}: Weather Zone이 없습니다.")
         if region["entry"] not in region["rooms"]:
             issues.append(f"{region_id}: 진입 Room이 Region에 없습니다.")
     spawns = []
     for zone, room in ROOMS.items():
+        if room.get("exposure") not in EXPOSURES:
+            issues.append(f"{zone}: exposure가 유효하지 않습니다.")
+        if room.get("light_profile") not in LIGHT_PROFILES:
+            issues.append(f"{zone}: light_profile이 유효하지 않습니다.")
         if set(room.get("spawn_ids", {})) - set(room["enemies"]):
             issues.append(f"{zone}: 사용되지 않는 spawn ID 지정이 있습니다.")
         for direction, target in room["exits"].items():
@@ -81,4 +95,24 @@ def errors(interactables):
         for _, target, role, _ in data["steps"]:
             if target not in (ENEMIES if role == "hostile" else interactables):
                 issues.append(f"{quest_id}: 단계 대상 {target} 정의가 없습니다.")
+    for zone, data in WEATHER_ZONES.items():
+        if data.get("initial") not in WEATHERS:
+            issues.append(f"{zone}: 초기 날씨가 없습니다.")
+    for weather, data in WEATHERS.items():
+        duration = data.get("duration", ())
+        if (
+            not isinstance(duration, (tuple, list))
+            or len(duration) != 2
+            or not all(positive_number(value) for value in duration)
+            or duration[0] > duration[1]
+        ):
+            issues.append(f"{weather}: 날씨 지속 시간이 유효하지 않습니다.")
+        transitions = data.get("transitions", {})
+        if not transitions or any(
+            key not in WEATHERS or not positive_number(weight)
+            for key, weight in transitions.items()
+        ):
+            issues.append(f"{weather}: 날씨 전이 대상/가중치가 유효하지 않습니다.")
+        if set(data.get("presence", {})) != EXPOSURES:
+            issues.append(f"{weather}: exposure별 환경 문장이 없습니다.")
     return issues

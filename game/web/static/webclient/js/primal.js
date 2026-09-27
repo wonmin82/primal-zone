@@ -138,6 +138,10 @@
       attack: state.attack, defense: state.defense, "room-name": state.room,
       "zone-tag": state.safe ? "안전 지대" : "탐사 구역", quest: state.quest, "room-hint": state.hint};
     Object.entries(fields).forEach(([key, value]) => { byId(key).textContent = value; });
+    const environment = state.environment;
+    byId("environment-status").textContent = environment
+      ? environment.time + " · " + environment.weather.name + " · " + environment.period.name + " · " + environment.light.name
+      : "";
     byId("hp").max = state.max_hp; byId("hp").value = state.hp;
     byId("xp").max = state.xp_next - state.xp_floor;
     byId("xp").value = state.level >= 10 ? byId("xp").max : state.xp - state.xp_floor;

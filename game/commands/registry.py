@@ -1,7 +1,17 @@
 """명령 등록 목록. 자동 discovery 없이 여기에서 조합한다."""
 
 from commands.base import UnknownCommand
-from commands.character import Abilities, Experience, Help, Look, Map, Quest, Skills, Status
+from commands.character import (
+    Abilities,
+    Experience,
+    Help,
+    Look,
+    Map,
+    Quest,
+    Skills,
+    Status,
+    Weather,
+)
 from commands.combat import Attack, Flee, Guard, Heal, Heavy
 from commands.inventory import Buy, Equip, Equipment, Exchange, Inventory, Shop, Take, Wield
 from commands.items import Drink, Drop, Eat, Give, RemoveArmor, Retrieve, Store, Unwield
@@ -37,6 +47,7 @@ COMMANDS = [
     PartyKick,
     PartyTransfer,
     Look,
+    Weather,
     Help,
     Status,
     Inventory,

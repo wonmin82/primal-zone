@@ -68,6 +68,10 @@ def distant_appearance(context):
     room = context.target_room
     if not room.access(context.viewer, "view"):
         return ft.text("그 너머는 살펴볼 수 없다.")
+    from world.environment import description as environment_description
+    from world.environment_state import snapshot_for
+
+    environment = snapshot_for(room, context.observed_at)
     definition = ROOMS.get(room.db.zone_id)
     description = definition["desc"] if definition else (room.db.desc or "")
     heading = (
@@ -89,6 +93,8 @@ def distant_appearance(context):
             if summary is not None:
                 groups[summary] = groups.get(summary, 0) + 1
     lines = [heading, "", description, ""]
+    if environment:
+        lines.extend([ft.token("muted", environment_description(environment)), ""])
     for summary, count in groups.items():
         lines.append(
             ft.text(

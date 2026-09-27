@@ -52,6 +52,7 @@ class Exit(ObjectParent, DefaultExit):
             target_room=destination,
             via=self,
             direction=self.key,
+            **({"observed_at": kwargs["observed_at"]} if "observed_at" in kwargs else {}),
         )
         if not self.can_observe_through(context):
             requirement = ROOMS.get(destination.db.zone_id, {}).get("requires") or {}

@@ -247,3 +247,20 @@ equipment 슬롯은 `None`을 정상 값으로 허용한다. 해제/벗어는 �
 `build_world()`는 Room 이름·설명, Exit 방향·별칭·목적지, 상호작용 객체 이름·별칭·위치, Enemy 이름·ID·최대 HP와 유휴 spawn 위치처럼 정적 정의가 소유하는 값을 동기화한다. 현재 HP는 유지하되 최대 HP가 낮아졌다면 새 최대치로 제한한다. Enemy의 교전 중 위치, state, respawn_at, claim, combatants, contribution, threat, round·timer·last_activity와 시체·바닥 전리품, 파티, 플레이어 profile·가방·임무는 런타임이 소유하므로 초기화하지 않는다. 삭제된 관리 Exit/Interactable/spawn은 `stale_definitions()`로 보고하지만 자동 삭제하지 않는다. 실제 운영 DB에서 제거가 필요하면 상태와 참조를 확인한 뒤 별도 작업으로 정리한다. Region 3 추가 시 지역 정의, 필요하다면 작은 행동 subclass, 임무 정의 및 순수 규칙 함수를 더하고 무결성 검사를 통과시킨다.
 
 밀림 신호전지는 두 번째 지역 임무 전용 열쇠다. 수위 표식은 문이 닫혀 있고 전지가 없을 때만 한 개를 지급하며, 신호 장치 가동은 조건을 모두 확인한 뒤 전지 한 개를 소비하고 gate_open을 기록한다. 철갑등짐승은 신호전지 대신 일반 회수부품을 확률적으로 남긴다. 이미 문을 연 개발 데이터의 잔여 전지는 bootstrap이나 profile 변환에서 임의로 삭제하지 않는다.
+
+
+## 동적 환경: Room / Environment / Object
+
+Room description은 지형·건축·분위기·지속되는 흔적, Environment는 현재 시간·날씨·달·밝기, Object presence는 현재 존재와 행동을 담당한다. 정적 Room 설명이나 Enemy presence에 현재 비/밤 정보를 복제하지 않는다. 현재 방은 `Room.desc → Environment 문장 → 방향도 → local presence`, 원거리는 `방향/이름 → Room.desc → Environment 문장 → distant presence` 순서다. 환경 문장은 기존 `muted` semantic role을 사용한다.
+
+`world/content/environment.py`는 시간대·달·날씨·전이·빛·노출별 문장의 선언형 SSOT다. `REGIONS[*].weather_zone`은 두 Region 모두 `island`를 가리킨다. 각 Room은 반드시 `exposure`(outdoor/sheltered/indoor)와 독립적인 `light_profile`(natural/filtered/dim/artificial)을 정의한다. office는 indoor/filtered, generator는 indoor/dim, jungle_watch는 sheltered/natural, jungle_nest는 sheltered/filtered이며 나머지는 콘텐츠의 하늘/수관 노출을 따른다. 무결성 검사는 누락·잘못된 값, Weather Zone 참조, 초기 날씨, 전이 대상·양수 가중치·지속 시간·노출별 문장을 검증한다.
+
+`world/environment.py`는 DB/Evennia 없는 순수 계산이다. 4배속 시계는 `game_epoch + (observed_at - real_epoch) * time_scale`로 계산하며 매 tick 시각을 저장하지 않는다. 05/07/18/20시 경계로 시간대를 선택한다. 게임 28일 중 1–4/25–28일은 삭, 12–18일은 보름, 나머지는 반달이며 빛은 0/2/1이다. 달빛은 밤에만 더한다. 자연광은 시간대 빛(밤0/새벽2/낮4/해질녘2)+달+기상 보정+profile 보정으로 계산한다. filtered는 -1, dim은 고정1, artificial은 고정3이다. 점수 4 이상 bright, 3 normal, 1–2 dim, 0 이하 dark다. 시야는 기상 악화와 밝기 악화의 큰 값이며 실내는 직접 기상 악화를 적용하지 않는다. 이 등급은 현재 resolver나 전투 공식에 연결하지 않는다.
+
+불변 `EnvironmentSnapshot`은 observed_at·게임 날짜/시각·시간대·Weather Zone·날씨·달·exposure·light_profile·최종 밝기·시야를 담는다. 관찰 시작에 얻은 단일 observed_at을 Room, 기존 DistantViewContext, 날씨 명령과 웹 상태에 전달한다. `display()`는 안정적 ID와 한국어 표시명을 분리한다. 웹은 서버 payload를 textContent로 표시하며 자체 시계/기상 계산을 하지 않는다. 목적지 view lock/진행 관찰 차단은 환경 snapshot 계산보다 먼저 검사한다. 환경 조회는 profile migration을 저장하지 않는 profile_snapshot 경로를 사용하며 방문·임무·객체 lifecycle을 진행하지 않는다.
+
+`world/environment_state.py`만 영속 Script 상태와 접속자 발행을 담당한다. 기존 단일 `WorldLifecycle`의 `db.environment`에 clock epoch, 마지막 period, zone별 weather/started_at/next_change_at/RNG seed·step을 저장한다. 5초 sweep에서 순수 reconcile 결과가 달라질 때만 저장한다. seed+step으로 전이를 재현하므로 정상 중단 구간은 한 번에 복구하든 자주 sweep하든 같은 결과다. 조회도 같은 pure reconcile의 사본을 사용하여 deadline과 sweep 사이 상태를 투영하지만 저장·이벤트는 수행하지 않는다. 신규 zone 초기화는 기존 clock을 보존한다. 서버 bootstrap은 Script를 확보한 뒤 restart reconcile하며 기존 상태가 있으면 epoch나 날씨를 초기화하지 않는다.
+
+재시작 시 지난 deadline을 따라 최종 유효 구간까지 복구하고 과거 이벤트는 재생하지 않는다. 매우 긴 중단은 한 reconcile당 256회로 제한하고 이후 현재 시각에서 새 지속 구간을 시작한다. 이 제한을 넘는 중단은 세부 기상 이력을 재현하지 않는다. 변경은 기존 world_change transaction 안에서 저장하며 성공 후 callback으로 발행한다. 저장/외부 transaction 실패 시 상태와 알림을 되돌린다. 최종 weather 또는 period가 실제 달라진 zone의 **현재 session이 있는** 탐사자에게만 노출에 맞는 1–2문장을 보낸다. 같은 날씨의 기간 갱신이나 매 sweep는 로그를 추가하지 않는다. 웹은 기존 sweep의 push_state(observed_at=now) 한 경로로 갱신한다.
+
+profile는 v5를 그대로 유지하며 환경 데이터는 캐릭터에 저장하지 않는다. 타이머·점유·참여 보상·Corpse/DroppedLoot·파티 정책도 유지한다. 다음 단계는 별도 visibility 정책과 플레이어 광원을 snapshot에 결합하는 것이며, 현재 계산과 targeting 사이의 경계를 먼저 유지한다. LOS·날씨 API·조도 전파 엔진·환경 피해는 이 범위에 없다.

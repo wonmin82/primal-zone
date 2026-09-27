@@ -1,3 +1,5 @@
+from time import time
+
 from evennia.objects.objects import DefaultRoom
 from world import text as ft
 from world.content import ROOMS
@@ -40,9 +42,13 @@ class ZoneRoom(DefaultRoom):
         return distant_appearance(context)
 
     def return_appearance(self, looker, **kwargs):
+        from world.environment import description
+        from world.environment_state import snapshot_for
         from world.lifecycle import reconcile_room
 
-        reconcile_room(self)
+        observed_at = kwargs.get("observed_at")
+        observed_at = time() if observed_at is None else observed_at
+        reconcile_room(self, observed_at)
         room = ROOMS.get(self.db.zone_id)
         if not room:
             return super().return_appearance(looker, **kwargs)
@@ -51,7 +57,11 @@ class ZoneRoom(DefaultRoom):
 
         from typeclasses.interactables import action_objects
 
-        lines = [room["desc"], "", exit_diagram(room["exits"]), ""]
+        environment = snapshot_for(self, observed_at)
+        lines = [
+            room["desc"], "", ft.token("muted", description(environment)), "",
+            exit_diagram(room["exits"]), "",
+        ]
         pool = room_objects(looker, self)
         objects = [obj for obj in action_objects(self) if obj in pool]
         for name in dict.fromkeys(obj.key for obj in objects):

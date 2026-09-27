@@ -14,12 +14,14 @@ ROOMS = {**STARTER_ROOMS, **JUNGLE_ROOMS}
 REGIONS = {
     "outpost": {
         "name": "탐사대 전초구역",
+        "weather_zone": "island",
         "recommended_level": (1, 4),
         "entry": "dock",
         "rooms": tuple(STARTER_ROOMS),
     },
     "deep_jungle": {
         "name": "깊은 밀림",
+        "weather_zone": "island",
         "recommended_level": (4, 10),
         "entry": "jungle_edge",
         "rooms": tuple(JUNGLE_ROOMS),
