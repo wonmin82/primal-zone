@@ -171,9 +171,11 @@ def take_loot(caller, item=None, corpse=True, now=None, *, request=None):
 
 class Corpse(DefaultObject):
     def return_appearance(self, looker, **kwargs):
-        from world.state import loot_entries
+        from world.state import loot_controls, loot_entries
 
-        entries = loot_entries(self, looker, time())
+        now = time()
+        control = loot_controls(looker, now).get(self.id)
+        entries = control["loot"] if control else loot_entries(self, looker, now)
         lines = ["남아 있는 물건을 살펴본다.", ""]
         for entry in entries:
             rights = (
@@ -191,7 +193,10 @@ class Corpse(DefaultObject):
             )
         if not entries:
             lines.append("남은 전리품이 없다.")
-        lines.extend(["", ft.actions(["가져"] if entries else [])])
+        if control:
+            lines.extend(["", ft.text("지정: ", ft.token("remains", control["label"]))])
+            if entries:
+                lines.append(ft.text("회수: ", ft.usage(control["take_command"], {"가져"})))
         return ft.sheet(ft.token("remains", self.key), *lines)
 
     def at_object_creation(self):
@@ -248,9 +253,11 @@ class Corpse(DefaultObject):
 
 class DroppedLoot(DefaultObject):
     def return_appearance(self, looker, **kwargs):
-        from world.state import loot_entries
+        from world.state import loot_controls, loot_entries
 
-        entries = loot_entries(self, looker, time())
+        now = time()
+        control = loot_controls(looker, now).get(self.id)
+        entries = control["loot"] if control else loot_entries(self, looker, now)
         lines = ["남아 있는 물건을 살펴본다.", ""]
         for entry in entries:
             rights = (
@@ -268,7 +275,16 @@ class DroppedLoot(DefaultObject):
             )
         if not entries:
             lines.append("남은 전리품이 없다.")
-        lines.extend(["", ft.actions(["가져"] if entries else [])])
+        if control and entries:
+            lines.extend(
+                [
+                    "",
+                    ft.text(
+                        "회수: ",
+                        ft.usage(" · ".join(entry["take_command"] for entry in entries), {"가져"}),
+                    ),
+                ]
+            )
         return ft.sheet(ft.token("item", self.key), *lines)
 
     def at_object_creation(self):

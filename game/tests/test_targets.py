@@ -232,6 +232,60 @@ class TargetIntegrationTests(EvenniaCommandTest):
         self.assertIn("'시체 3'", output)
         self.assertNotIn("'시체 2'", output)
 
+    def test_single_corpse_detail_provides_executable_source_command(self):
+        corpse = self.source()
+        control = multiplayer_state(self.char1, 100)["corpses"][0]
+        output = self.look("시체")
+        self.assertIn("지정: 시체", output)
+        self.assertIn("회수: " + control["take_command"], output)
+        self.assertNotIn("시체 1", output)
+        self.assertNotIn("가능한 행동 : 가져", output)
+        self.assertIn({"role": "command", "text": "가져"}, output.segments)
+        self.char1.execute_cmd(control["take_command"])
+        self.assertEqual(corpse.db.entries, [])
+        self.assertEqual(self.char1.profile()["inventory"]["scrap"], 3)
+        empty = self.look("시체")
+        self.assertIn("남은 전리품이 없다", empty)
+        self.assertNotIn("회수:", empty)
+
+    def test_numbered_corpse_detail_matches_controls_and_current_order(self):
+        a, b, c = self.source(), self.source(), self.source(name="밀림의포식자의 시체")
+        b.db.decay_at = c.db.decay_at = 200
+        control = multiplayer_state(self.char1, 100)["corpses"][1]
+        self.assertEqual(control["id"], b.id)
+        output = self.look(control["look_command"].removesuffix(" 보기"))
+        self.assertIn("지정: 시체 2", output)
+        self.assertIn("회수: " + control["take_command"], output)
+        self.char1.execute_cmd(control["take_command"])
+        self.assertTrue(a.db.entries)
+        self.assertFalse(b.db.entries)
+        self.assertTrue(c.db.entries)
+        a.reconcile(130)
+        control = multiplayer_state(self.char1, 130)["corpses"][0]
+        self.assertEqual(control["id"], b.id)
+        self.assertEqual(control["label"], "시체 1")
+        self.assertIn("지정: 시체 1", self.look("시체 1"))
+        self.assertFalse(b.attributes.has("selector"))
+        self.assertFalse(b.attributes.has("index"))
+
+    def test_ground_detail_matches_entry_command_and_renumbers(self):
+        a = self.source(corpse=False, name="회수부품")
+        b = self.source(corpse=False, name="회수부품")
+        control = multiplayer_state(self.char1, 100)["ground_loot"][1]["loot"][0]
+        output = self.look("회수부품 2")
+        self.assertIn("회수: " + control["take_command"], output)
+        self.assertNotIn("가능한 행동 : 가져", output)
+        self.assertIn({"role": "command", "text": "가져"}, output.segments)
+        self.char1.execute_cmd(control["take_command"])
+        self.assertEqual(a.db.entries[0]["quantity"], 3)
+        self.assertEqual(b.db.entries[0]["quantity"], 2)
+        self.assertEqual(self.char1.profile()["inventory"]["scrap"], 1)
+        for _ in range(3):
+            self.take("회수부품")
+        control = multiplayer_state(self.char1, 100)["ground_loot"][0]["loot"][0]
+        self.assertEqual(control["take_command"], "회수부품 가져")
+        self.assertIn("회수: 회수부품 가져", self.look("회수부품"))
+
     def test_corpse_ttl_selects_current_pool_and_never_duplicates(self):
         a, b, c = self.source(), self.source(), self.source(name="밀림의포식자의 시체")
         b.db.decay_at = c.db.decay_at = 200
