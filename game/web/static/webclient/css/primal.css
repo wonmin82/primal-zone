@@ -17,3 +17,6 @@ body{font-synthesis:none;font-variant-ligatures:none}h1,h2,b,strong,.brand,.eyeb
 .log-entry.event{color:var(--semantic-text)}
 .semantic-text,.semantic-title{color:var(--semantic-text)}.semantic-muted{color:var(--semantic-muted)}.semantic-hostile,.semantic-error{color:var(--semantic-hostile)}.semantic-npc{color:var(--semantic-npc)}.semantic-player,.semantic-command,.semantic-direction,.semantic-success{color:var(--semantic-action)}.semantic-object,.semantic-reward,.semantic-warning{color:var(--semantic-gold)}.semantic-item{color:var(--semantic-item)}.semantic-remains{color:var(--semantic-remains)}
 .log-entry.sheet{word-break:keep-all;padding:12px 0;border-bottom:1px solid var(--line);line-height:1.6}.log-entry .semantic-command{font-size:inherit}.log-entry span{cursor:inherit}
+
+/* 환경은 서버 snapshot의 표시값만 사용한다. 좁은 화면에서는 자연스럽게 줄바꿈한다. */
+.terminal-heading>div{min-width:0}.terminal-heading .tag{flex-shrink:0;margin-left:8px}.environment-status{font-size:14px;color:var(--muted);margin-top:6px;overflow-wrap:anywhere}

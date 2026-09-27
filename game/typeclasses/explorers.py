@@ -100,14 +100,18 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
     def zone(self):
         return self.location.db.zone_id if self.location else None
 
-    def push_state(self):
+    def push_state(self, observed_at=None):
         if not self.sessions.count():
             return
+        from world.environment import display
+        from world.environment_state import snapshot_for
         from world.state import multiplayer_state
 
         from typeclasses.interactables import instructor_for
 
-        profile = self.profile()
+        observed_at = time() if observed_at is None else observed_at
+        environment = snapshot_for(self.location, observed_at)
+        profile = self.profile_snapshot()
         values = rules.stats(profile)
         zone = self.zone
         room = ROOMS.get(zone, {})
@@ -137,6 +141,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             "credits": profile["credits"],
             "room": room.get("name", "탐사 준비"),
             "zone": zone,
+            "environment": display(environment) if environment else None,
             "region": ROOM_REGION.get(zone),
             "region_name": REGIONS[ROOM_REGION[zone]]["name"] if zone in ROOM_REGION else None,
             "safe": room.get("safe", False),
@@ -144,9 +149,9 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             "equipment": {slot: ITEMS[identity]["name"] if identity else None for slot, identity in profile["equipment"].items()},
             "exits": list(room.get("exits", {})),
             "hint": room.get("hint", ""),
-            **multiplayer_state(self),
+            **multiplayer_state(self, now=observed_at),
             "player_round": profile["player_round"],
-            "heavy_ready": time() >= profile["heavy_ready_at"],
+            "heavy_ready": observed_at >= profile["heavy_ready_at"],
             "queued_action": profile["queued_action"],
             "quest": self.quest_text(profile),
             "visited": [ROOMS[key]["name"] for key in profile["visited"] if key in ROOMS],
@@ -217,7 +222,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
 
         from typeclasses.enemies import Enemy
 
-        enemy = object_by_id(self.profile().get("combat_target"))
+        enemy = object_by_id(self.profile_snapshot().get("combat_target"))
         return enemy if enemy and enemy.is_typeclass(Enemy, exact=True) else None
 
     def combat_snapshot(self):

@@ -205,7 +205,7 @@ class Instructor(ActionObject):
             self.location == caller.location
             and caller.zone == "dock"
             and ROOMS["dock"]["safe"]
-            and not caller.profile().get("combat_target")
+            and not caller.profile_snapshot().get("combat_target")
         )
 
     def act(self, caller, action, args):

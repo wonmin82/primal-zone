@@ -27,7 +27,7 @@ class DistantViewTests(EvenniaCommandTest):
         for module in ("typeclasses.enemies", "typeclasses.explorers", "typeclasses.loot"):
             self.enterContext(patch(module + ".delay"))
         for module in (
-            "world.lifecycle",
+            "commands.character", "typeclasses.zone_rooms", "world.lifecycle",
             "typeclasses.enemies",
             "typeclasses.loot",
             "world.distant_presentation",

@@ -1,5 +1,7 @@
 """character 영역의 명시적 게임 명령."""
 
+from time import time
+
 from evennia.commands.default.general import CmdLook
 from world import presentation as view
 from world import rules
@@ -18,8 +20,6 @@ class Look(CmdLook):
     aliases = ["look", "l", "둘러보기", "봐"]
 
     def func(self):
-        from time import time
-
         from typeclasses.exits import Exit
         from typeclasses.loot import Corpse
         from world.content import ITEMS
@@ -28,6 +28,7 @@ class Look(CmdLook):
         from world.targets import Mode, item_selector, names, parse_selector, resolve, room_objects
 
         name = self.args.strip()
+        observed_at = time()
         if name and self.caller.location:
             # 실제 Exit도 같은 selector로 선택한다. 관찰만 할 때는 로컬 갱신/at_desc도 실행하지 않는다.
             objects = room_objects(self.caller)
@@ -42,16 +43,19 @@ class Look(CmdLook):
                 try:
                     selected = resolve(objects, selector, self.caller)
                     self.caller.msg(
-                        ft.join([obj.return_appearance(self.caller) for obj in selected], "\n\n")
+                        ft.join(
+                            [obj.return_appearance(self.caller, observed_at=observed_at) for obj in selected],
+                            "\n\n",
+                        )
                     )
                 except rules.RuleError as error:
                     self.caller.msg(ft.token("error", str(error)))
                 return
-            reconcile_room(self.caller.location)
+            reconcile_room(self.caller.location, observed_at)
             objects = room_objects(self.caller)
             inventory = {
                 key: ITEMS[key]
-                for key, count in self.caller.profile()["inventory"].items()
+                for key, count in self.caller.profile_snapshot()["inventory"].items()
                 if count > 0
             }
             try:
@@ -68,23 +72,57 @@ class Look(CmdLook):
                         output = corpse_overview(
                             selected,
                             self.caller,
-                            time(),
+                            observed_at,
                             pool=[obj for obj in objects if isinstance(obj, Corpse)],
                         )
                     else:
-                        output = ft.join([self.caller.at_look(obj) for obj in selected], "\n\n")
+                        output = ft.join(
+                            [self.caller.at_look(obj, observed_at=observed_at) for obj in selected],
+                            "\n\n",
+                        )
                     self.caller.msg(output)
                 else:
                     identity = item_selector(name, inventory, "보기")
                     self.caller.msg(view.item_appearance(identity))
             except rules.RuleError as error:
                 self.caller.msg(ft.token("error", str(error)))
-                self.caller.push_state()
+                self.caller.push_state(observed_at=observed_at)
                 return
-            self.caller.push_state()
+            self.caller.push_state(observed_at=observed_at)
             return
-        super().func()
-        self.caller.push_state()
+        if self.caller.location:
+            self.caller.msg(self.caller.at_look(self.caller.location, observed_at=observed_at))
+        else:
+            super().func()
+        self.caller.push_state(observed_at=observed_at)
+
+
+class Weather(GameCommand):
+    category = "탐사"
+    usage = "날씨 · 환경"
+    summary = "현재 장소의 게임 시각·날씨·달·밝기와 계산된 시야 상태를 확인합니다."
+    key = "날씨"
+    aliases = ["환경"]
+
+    def func(self):
+        from world.environment import display
+        from world.environment_state import snapshot_for
+
+        observed_at = time()
+        environment = snapshot_for(self.caller.location, observed_at)
+        if environment is None:
+            self.caller.msg("이곳의 환경은 아직 확인할 수 없다.")
+            return
+        values = display(environment)
+        weather_label = ("바깥 날씨: " if environment.exposure == "indoor" else "") + values["weather"]["name"]
+        lines = [
+            f"{environment.game_day}일 {values['time']} · {values['period']['name']}",
+            f"{weather_label} · {values['light']['name']} · 시야 {values['visibility']['name']}",
+        ]
+        if environment.period == "night":
+            lines.append(values["moon"]["name"])
+        self.caller.msg(ft.compact(ft.token("title", "환경"), *lines))
+        self.caller.push_state(observed_at=observed_at)
 
 
 class Help(GameCommand):

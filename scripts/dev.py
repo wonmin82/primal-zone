@@ -64,7 +64,7 @@ def main():
         setup()
     elif command == "test":
         ensure_secret()
-        run("-m", "unittest", "world.test_rules")
+        run("-m", "unittest", "discover", "-s", "world", "-p", "test_*.py")
         run("-m", "evennia", "test", "tests", "--settings", "settings", "--noinput")
     elif command == "check":
         run("-m", "ruff", "check", "game", "scripts", cwd=ROOT)

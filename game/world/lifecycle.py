@@ -17,6 +17,9 @@ def reconcile_room(room, now=None):
 
 def reconcile_world(now=None, restart=False):
     now = time() if now is None else now
+    from world.environment_state import reconcile_environment
+
+    reconcile_environment(now, restart=restart)
     if restart:
         from typeclasses.explorers import Explorer
 
@@ -35,4 +38,4 @@ def reconcile_world(now=None, restart=False):
 
     for player in Explorer.objects.all():
         if player.sessions.count():
-            player.push_state()
+            player.push_state(observed_at=now)

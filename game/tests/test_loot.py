@@ -50,7 +50,7 @@ class LootTests(EvenniaCommandTest):
         self.assertEqual(self.char1.profile()["xp"], 22)
         self.assertNotIn("scrap", self.char1.profile()["inventory"])
         with patch("world.lifecycle.time", return_value=103):
-            self.assertIn(corpse.key, self.rooms["grass"].return_appearance(self.char1))
+            self.assertIn(corpse.key, self.rooms["grass"].return_appearance(self.char1, observed_at=103))
         self.assertEqual(room_enemies(self.rooms["grass"]), [])
         with self.assertRaises(RuleError):
             self.enemy.engage(self.char2, now=103)
