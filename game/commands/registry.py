@@ -14,7 +14,19 @@ from commands.character import (
 )
 from commands.combat import Attack, Flee, Guard, Heal, Heavy
 from commands.inventory import Buy, Equip, Equipment, Exchange, Inventory, Shop, Take, Wield
-from commands.items import Drink, Drop, Eat, Give, RemoveArmor, Retrieve, Store, Unwield
+from commands.items import (
+    Drink,
+    Drop,
+    Eat,
+    Give,
+    LightOff,
+    LightOn,
+    LightStatus,
+    RemoveArmor,
+    Retrieve,
+    Store,
+    Unwield,
+)
 from commands.party import (
     PartyAccept,
     PartyCommand,
@@ -61,6 +73,9 @@ COMMANDS = [
     Unwield,
     Store,
     Retrieve,
+    LightOn,
+    LightOff,
+    LightStatus,
     Attack,
     Heavy,
     Guard,

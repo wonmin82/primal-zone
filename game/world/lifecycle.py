@@ -24,6 +24,7 @@ def reconcile_world(now=None, restart=False):
         from typeclasses.explorers import Explorer
 
         for player in Explorer.objects.all():
+            player.reconcile_lights(now, turn_off=True)
             player.leave_combat()
     for party in Party.objects.all():
         party.reconcile(now)
@@ -38,4 +39,5 @@ def reconcile_world(now=None, restart=False):
 
     for player in Explorer.objects.all():
         if player.sessions.count():
+            player.reconcile_lights(now)
             player.push_state(observed_at=now)

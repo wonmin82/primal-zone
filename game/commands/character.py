@@ -6,7 +6,7 @@ from evennia.commands.default.general import CmdLook
 from world import presentation as view
 from world import rules
 from world import text as ft
-from world.content import REGIONS, ROOMS
+from world.content import ITEMS, REGIONS, ROOMS
 
 from commands.base import GameCommand
 
@@ -31,8 +31,9 @@ class Look(CmdLook):
         observed_at = time()
         if name and self.caller.location:
             # 실제 Exit도 같은 selector로 선택한다. 관찰만 할 때는 로컬 갱신/at_desc도 실행하지 않는다.
-            objects = room_objects(self.caller)
-            from world.targets import matching
+            from world.targets import matching, ordered, visible
+
+            objects = ordered(obj for obj in self.caller.location.exits if visible(obj, self.caller))
 
             try:
                 selector = parse_selector(name, [n for obj in objects for n in names(obj)])
@@ -52,7 +53,7 @@ class Look(CmdLook):
                     self.caller.msg(ft.token("error", str(error)))
                 return
             reconcile_room(self.caller.location, observed_at)
-            objects = room_objects(self.caller)
+            objects = room_objects(self.caller, observed_at=observed_at)
             inventory = {
                 key: ITEMS[key]
                 for key, count in self.caller.profile_snapshot()["inventory"].items()
@@ -65,7 +66,7 @@ class Look(CmdLook):
                     + [n for key, data in inventory.items() for n in (key, data["name"])],
                 )
                 if matching(objects, selector):
-                    selected = resolve(objects, selector, self.caller)
+                    selected = resolve(objects, selector, self.caller, observed_at=observed_at)
                     if selector.mode == Mode.ALL and all(
                         isinstance(obj, Corpse) for obj in selected
                     ):
@@ -117,10 +118,20 @@ class Weather(GameCommand):
         weather_label = ("바깥 날씨: " if environment.exposure == "indoor" else "") + values["weather"]["name"]
         lines = [
             f"{environment.game_day}일 {values['time']} · {values['period']['name']}",
-            f"{weather_label} · {values['light']['name']} · 시야 {values['visibility']['name']}",
+            f"{weather_label} · {values['light']['name']} · 환경 시야 {values['visibility']['name']}",
         ]
         if environment.period == "night":
             lines.append(values["moon"]["name"])
+        from world import lighting
+        from world.content.environment import VISIBILITIES
+        from world.observation import context_for
+
+        profile = self.caller.profile_snapshot()
+        sight = context_for(self.caller, observed_at=observed_at, environment=environment).snapshot
+        for identity, count in profile["inventory"].items():
+            if count and ITEMS[identity].get("light_source"):
+                lines.extend(["", ft.item(identity), lighting.status(profile, identity, observed_at)])
+        lines.append(f"현재 시야 {VISIBILITIES[sight.effective_visibility]}")
         self.caller.msg(ft.compact(ft.token("title", "환경"), *lines))
         self.caller.push_state(observed_at=observed_at)
 

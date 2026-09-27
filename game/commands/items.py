@@ -1,10 +1,19 @@
 """아이템 이전·소비·장비 해제. 조사는 공통 selector helper에서 추출한다."""
 
+from time import time
+
 from world import rules
 from world import text as ft
-from world.content import ITEMS, UNEQUIP_ACTIONS
+from world.content import ITEMS, UNEQUIP_ACTIONS, find_id
 from world.item_transfers import transfer
-from world.targets import names, parse_relation, resolve, room_objects, stack_selector
+from world.targets import (
+    names,
+    parse_relation,
+    require_single,
+    resolve,
+    room_objects,
+    stack_selector,
+)
 
 from commands.base import GameCommand
 
@@ -74,8 +83,65 @@ class Store(Drop):
     key = "넣어"
     aliases = ["store"]
     particle = "에"
-    usage = "보관상자에 붕대 넣어 · 보관상자 2에 붕대 모두 넣어 · 개인 보관함에 붕대 넣어"
-    summary = "한 보관함에 장착분을 제외한 물건을 보관합니다."
+    usage = "보관상자에 붕대 넣어 · 개인 보관함에 붕대 모두 넣어 · 탐사용손전등에 건전지 넣어"
+    summary = "한 보관함에 물건을 보관하거나 광원에 호환 전원 하나를 넣습니다."
+
+    def run(self):
+        from world import lighting
+
+        objects = room_objects(self.caller)
+        selector, value = parse_relation(
+            self.args, self.particle,
+            [name for obj in objects for name in names(obj)] + lighting.source_names(),
+        )
+        identity = find_id(ITEMS, selector.name)
+        if identity and ITEMS[identity].get("light_source"):
+            require_single(selector, self.key)
+            if selector.index:
+                raise rules.RuleError("가방의 광원은 번호 없이 지정하세요.")
+            power, _ = stack_selector(value, ITEMS, self.key, allow_all=False)
+            self.caller.change(lambda profile: lighting.insert_power(profile, identity, power, time()))
+            self.caller.msg(ft.text(ft.item(identity), "에 ", ft.item(power), " 한 개를 넣었다."))
+            return
+        super().run()
+
+
+class LightOn(GameCommand):
+    key = "켜"
+    category = "탐사"
+    input_style = "target"
+    usage = "손전등 켜 · 탐사용손전등 켜"
+    summary = "전원이 있는 가방의 광원을 켭니다."
+    enabled = True
+
+    def run(self):
+        from world import lighting
+
+        identity, _ = stack_selector(self.args, ITEMS, self.key, allow_all=False)
+        self.caller.change(lambda profile: lighting.switch(profile, identity, self.enabled, time()))
+        self.caller.msg(ft.text(ft.item(identity), ft.particle(ITEMS[identity]["name"], "을/를"),
+                               " 켰다." if self.enabled else " 껐다."))
+
+
+class LightOff(LightOn):
+    key = "꺼"
+    enabled = False
+    usage = "손전등 꺼"
+    summary = "광원을 끄고 남은 전원을 보존합니다."
+
+
+class LightStatus(GameCommand):
+    key = "확인"
+    category = "탐사"
+    input_style = "target"
+    usage = "손전등 확인"
+    summary = "광원의 상태, 전원 종류와 남은 사용 시간을 확인합니다."
+
+    def run(self):
+        from world import lighting
+
+        identity, _ = stack_selector(self.args, ITEMS, self.key, allow_all=False)
+        self.caller.msg(ft.compact(ft.item(identity), lighting.status(self.caller.profile_snapshot(), identity, time())))
 
 
 class Retrieve(Drop):

@@ -62,7 +62,7 @@ class ZoneRoom(DefaultRoom):
             room["desc"], "", ft.token("muted", description(environment)), "",
             exit_diagram(room["exits"]), "",
         ]
-        pool = room_objects(looker, self)
+        pool = room_objects(looker, self, observed_at)
         objects = [obj for obj in action_objects(self) if obj in pool]
         for name in dict.fromkeys(obj.key for obj in objects):
             group = [obj for obj in objects if obj.key == name]
@@ -97,9 +97,14 @@ class ZoneRoom(DefaultRoom):
                 lines.append(
                     ft.text(ft.item(entry["item"]), f" {entry['quantity']}개가 바닥에 떨어져 있다.")
                 )
-        others = [obj for obj in self.contents if obj != looker and obj.has_account]
+        others = [obj for obj in pool if obj != looker and obj.has_account]
         for obj in others:
             lines.append(
                 ft.text(ft.named("player", obj.key, "은/는"), " 이곳에서 주변을 살피고 있다.")
             )
+        from world.observation import context_for
+
+        sight = context_for(looker, self, observed_at, environment=environment).snapshot
+        if sight.effective_visibility != "clear":
+            lines.extend(["", "주변의 작은 흔적을 식별하기 어렵다. 광원을 사용하면 더 자세히 살펴볼 수 있다."])
         return ft.sheet(ft.token("title", room["name"]), *lines)

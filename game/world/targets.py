@@ -113,15 +113,18 @@ def names(obj):
     return values
 
 
-def room_objects(caller, room=None):
+def room_objects(caller, room=None, observed_at=None):
     from typeclasses.enemies import Enemy
 
+    from world.observation import can_perceive, context_for
+
     room = caller.location if room is None else room
+    context = context_for(caller, room, observed_at)
     return (
         ordered(
             obj
             for obj in room.contents
-            if visible(obj, caller) and (not isinstance(obj, Enemy) or obj.db.state == "alive")
+            if can_perceive(obj, context) and (not isinstance(obj, Enemy) or obj.db.state == "alive")
         )
         if room
         else []
@@ -132,7 +135,7 @@ def item_selector(value, collection, action):
     """장비/학습 등 단일 데이터 대상도 같은 접미 문법을 사용한다."""
     from world.content import find_id
 
-    known = [name for key, data in collection.items() for name in (key, data["name"])]
+    known = [name for key, data in collection.items() for name in (key, data["name"], *data.get("aliases", []))]
     selector = parse_selector(value, known)
     if action != "보기":
         require_single(selector, action)
@@ -147,7 +150,7 @@ def stack_selector(value, collection, action, *, allow_all=True):
     """가방/보관 아이템은 개체 번호가 아닌 스택이다."""
     from world.content import find_id
 
-    known = [name for key, data in collection.items() for name in (key, data["name"])]
+    known = [name for key, data in collection.items() for name in (key, data["name"], *data.get("aliases", []))]
     selector = parse_selector(value, known)
     if not allow_all:
         require_single(selector, action)
@@ -198,10 +201,15 @@ def select(candidates, selector):
     return [candidates[index - 1]]
 
 
-def resolve(objects, selector, caller, action=None, supports=None):
+def resolve(objects, selector, caller, action=None, supports=None, *, observed_at=None):
+    from world.observation import can_perceive, context_for
+
     if action:
         require_single(selector, action)
     candidates = matching(ordered(obj for obj in objects if visible(obj, caller)), selector)
+    if any(not obj.destination for obj in candidates):
+        context = context_for(caller, observed_at=observed_at)
+        candidates = [obj for obj in candidates if can_perceive(obj, context)]
     if supports and selector.mode == Mode.DEFAULT:
         candidates = [obj for obj in candidates if supports(obj)]
     selected = select(candidates, selector)

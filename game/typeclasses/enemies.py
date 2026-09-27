@@ -24,6 +24,10 @@ from world.multiplayer import (
 
 
 class Enemy(DistantPresenceMixin, DefaultObject):
+    @property
+    def detectability(self):
+        return ENEMIES[self.db.enemy_id].get("detectability", "normal")
+
     distant_visible = True
     distant_role = "hostile"
     distant_unit = "마리"
@@ -118,6 +122,10 @@ class Enemy(DistantPresenceMixin, DefaultObject):
             if self.db.state != "alive":
                 raise rules.RuleError("아직 다시 나타나지 않은 적입니다.")
             profile = player.profile()
+            from world.observation import can_perceive, context_for
+
+            if profile.get("combat_target") != self.id and not can_perceive(self, context_for(player, observed_at=now)):
+                raise rules.RuleError("지금은 그 상대를 식별할 수 없습니다. 광원을 사용하세요.")
             if profile.get("combat_target") not in (None, self.id):
                 raise rules.RuleError("현재 상대에게서 먼저 도주하세요.")
             if not self.can_attack(player):

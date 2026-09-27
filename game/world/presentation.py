@@ -232,6 +232,11 @@ def reward(xp, credits):
 def item_appearance(identity):
     data = ITEMS[identity]
     lines = [data.get("description", "탐사 중 사용하는 물품이다.")]
+    if data.get("light_source"):
+        lines.append(ft.usage(f"{data['name']} 확인 · {data['name']} 켜 · {data['name']} 꺼", {"확인", "켜", "꺼"}))
+        lines.append("전원 삽입: <광원>에 <전원 소스> 넣어")
+    if data.get("power_source"):
+        lines.append(f"사용 시간 약 {data['power_source']['capacity_seconds'] / 60:g}분 · 호환 광원에 넣어 사용한다.")
     for key, label in (("attack", "공격"), ("defense", "방어"), ("heal", "회복")):
         if data.get(key):
             lines.append(f"{label} +{data[key]}")

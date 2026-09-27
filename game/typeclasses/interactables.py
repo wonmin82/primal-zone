@@ -10,6 +10,7 @@ from world.progression import ATTRIBUTES, SKILLS
 
 class ActionObject(DistantPresenceMixin, DefaultObject):
     distant_visible = False
+    detectability = "subtle"
     actions = ()
     semantic_role = "object"
     presence = "가까이에서 살펴볼 수 있다."
@@ -35,13 +36,18 @@ class ActionObject(DistantPresenceMixin, DefaultObject):
         return action in self.actions
 
     def perform_action(self, caller, action, args=None):
+        from world.observation import can_perceive, context_for
+
         if self.location != caller.location or not self.supports_action(action):
             raise rules.RuleError("이곳에서 그 대상에게 할 수 없는 행동입니다.")
+        if not can_perceive(self, context_for(caller)):
+            raise rules.RuleError("지금은 그 대상을 식별할 수 없습니다. 광원을 사용하세요.")
         rules.require_peace(caller.profile())
         return self.act(caller, action, args)
 
 
 class Commander(ActionObject):
+    detectability = "conspicuous"
     distant_visible = True
     semantic_role = "npc"
     presence = "낡은 지도를 펼쳐 놓고 탐사대를 기다리고 있다."
@@ -84,6 +90,7 @@ class Container(ActionObject):
     """공용 스택 보관 공간. 개인 보관함은 caller의 profile만 사용한다."""
 
     distant_visible = True
+    detectability = "conspicuous"
     personal = False
     actions = ("넣어", "꺼내")
     presence = "부두 한쪽에 놓여 있다. 물품을 맡기거나 꺼낼 수 있다."
@@ -105,7 +112,7 @@ class Container(ActionObject):
         from evennia.utils.dbserialize import deserialize
         from world.targets import labels, room_objects
 
-        contents = looker.profile()["storage"] if self.personal else deserialize(self.db.items)
+        contents = looker.profile_snapshot()["storage"] if self.personal else deserialize(self.db.items)
         label = labels(room_objects(looker)).get(self.id, self.key)
         lines = [self.description]
         lines.extend(
@@ -175,6 +182,7 @@ class SupplyCache(ActionObject):
 
 
 class Generator(ActionObject):
+    detectability = "conspicuous"
     distant_visible = True
     presence = "낡은 외벽 너머로 희미한 경고등을 깜빡이고 있다."
     description = "능선 진입문에 전력을 공급하는 설비다. 정비기록과 부품이 필요하다."
@@ -182,18 +190,20 @@ class Generator(ActionObject):
 
     def act(self, caller, action, args):
         before = caller.profile()["xp"]
-        caller.change(rules.fix_generator)
-        caller.msg(
-            ft.text(
-                ft.named("object", self.key, "이/가"),
-                " 다시 돌아가기 시작했다. 능선 진입문이 열렸다.\n복구 작업으로 ",
-                ft.token("reward", f"경험치 {caller.profile()['xp'] - before}"),
-                "를 얻었다.",
-            )
-        )
+        from world.facilities import restore_outpost_power
+
+        restore_outpost_power(caller)
+        gained = caller.profile()["xp"] - before
+        body = ft.text(ft.named("object", self.key, "이/가"),
+                       " 다시 돌아가기 시작했다. 공용 조명에 전력이 들어왔다.")
+        if gained:
+            body = ft.text(body, " 능선 진입문이 열렸다.\n복구 작업으로 ",
+                           ft.token("reward", f"경험치 {gained}"), "를 얻었다.")
+        caller.msg(body)
 
 
 class Instructor(ActionObject):
+    detectability = "conspicuous"
     distant_visible = True
     semantic_role = "npc"
     presence = "탐사자의 전투 기록을 살피며 훈련 계획을 세우고 있다."
@@ -233,6 +243,7 @@ class Instructor(ActionObject):
 
 
 class Pathfinder(ActionObject):
+    detectability = "conspicuous"
     distant_visible = True
     semantic_role = "npc"
     presence = "젖은 지도 위에 선발대의 이동 경로를 표시하고 있다."
@@ -284,6 +295,7 @@ class WaterMarker(JungleMarker):
 
 
 class SignalDevice(ActionObject):
+    detectability = "conspicuous"
     distant_visible = True
     presence = "출입문 옆에서 신호등을 깜빡이고 있다."
     description = "두 탐사 표식의 좌표를 맞추면 연구구역의 문을 열 수 있다."
@@ -301,7 +313,18 @@ class JungleCache(ActionObject):
 
     def act(self, caller, action, args):
         caller.change(rules.claim_jungle_cache)
-        caller.msg(ft.text(ft.token("object", self.key), "에서 ", ft.item("bandage"), " 2개를 찾아 챙겼다."))
+        caller.msg(ft.text(ft.token("object", self.key), "에서 ", ft.item("bandage"), " 2개와 ", ft.item("battery"), " 2개를 찾아 챙겼다."))
+
+
+class EmergencyLightCache(ActionObject):
+    detectability = "conspicuous"
+    presence = "수송차 옆에 놓여 있다. 어둠 속에서도 큼직한 반사 표식이 눈에 띈다."
+    description = "탐사자용 손전등과 예비 전원이 든 비상 장비함이다. 각 탐사자가 한 번씩 받을 수 있다."
+    actions = ("조사",)
+
+    def act(self, caller, action, args):
+        caller.change(rules.claim_emergency_light_cache)
+        caller.msg(ft.text(ft.item("flashlight"), " 한 개와 ", ft.item("battery"), " 두 개를 챙겼다."))
 
 
 def action_objects(room):
@@ -317,6 +340,7 @@ def instructor_for(caller):
 
 
 INTERACTABLES = {
+    "emergency_light_cache": {"room": "wreck", "typeclass": "EmergencyLightCache", "name": "비상장비함", "aliases": ["비상함", "장비함"]},
     "shared_container": {"room": "dock", "typeclass": "Container", "name": "보관상자", "aliases": []},
     "personal_locker": {"room": "dock", "typeclass": "PersonalLocker", "name": "개인 보관함", "aliases": ["보관함"]},
     "commander": {"room": "dock", "typeclass": "Commander", "name": "윤대장", "aliases": ["대장"]},

@@ -1,6 +1,16 @@
 """아이템과 보급 가격. Stable ID는 저장 데이터와 연결된다."""
 
 ITEMS = {
+    "flashlight": {
+        "name": "탐사용손전등", "aliases": ["손전등"], "slot": "tool",
+        "description": "교체형 전원을 넣어 켜는 탐사용 광원이다. 현재 장소와 인접한 곳을 비춘다.",
+        "light_source": {"strength": 2, "range": 1, "power_type": "flashlight_battery"},
+    },
+    "battery": {
+        "name": "건전지", "slot": "consumable",
+        "description": "탐사용 광원에 넣는 전원이다. 실제 사용 시간 약 30분을 제공한다.",
+        "power_source": {"type": "flashlight_battery", "capacity_seconds": 1800},
+    },
     "machete": {"name": "낡은마체테", "slot": "weapon", "attack": 2, "defense": 0},
     "vest": {"name": "탐사조끼", "slot": "armor", "attack": 0, "defense": 1},
     "blade": {"name": "강철마체테", "slot": "weapon", "attack": 6, "defense": 0},
@@ -39,6 +49,8 @@ OPPOSITES = {"북": "n", "남": "s", "동": "e", "서": "w"}
 EQUIPMENT_ACTIONS = {"weapon": "무장", "armor": "착용"}
 UNEQUIP_ACTIONS = {"weapon": "해제", "armor": "벗어"}
 SHOP = {
+    "flashlight": 30,
+    "battery": 6,
     "bandage": 8,
     "field_ration": 4,
     "water": 3,
@@ -72,7 +84,8 @@ def find_id(catalog, name):
         (
             key
             for key, value in catalog.items()
-            if normalized in (key, value["name"].replace(" ", "").lower())
+            if normalized in [str(name).replace(" ", "").lower()
+                              for name in (key, value["name"], *value.get("aliases", []))]
         ),
         None,
     )

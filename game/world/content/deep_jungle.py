@@ -49,6 +49,7 @@ ENEMIES = {
     "jungle_apex": {
         "training_cap": 10,
         "name": "밀림의포식자",
+        "detectability": "conspicuous",
         "description": "깊은 숲을 지배하는 거대한 포식자다. 몸을 뒤틀어 도약하기 전에 숨을 고른다.",
         "presence": "휘어진 나무 아래를 오가며 둥지를 지키고 있다.",
         "distant_presence": "멀리 나무 아래를 오가고 있다.",

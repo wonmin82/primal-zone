@@ -65,9 +65,14 @@ def presence(objects, role, unit, sentence, source=False, pool=None):
 
 
 def corpse_overview(corpses, caller, now, pool=None):
+    from world.observation import can_inspect_loot, context_for
     from world.state import loot_entries
 
     lines = [ft.text("주변에 시체 ", count_word(len(corpses)), " 구가 남아 있다.")]
+    if not can_inspect_loot(context_for(caller, observed_at=now)):
+        lines.append("작은 전리품을 식별하기 어렵다. 광원을 사용하세요.")
+        lines.append(selector_hint(corpses, "remains", source=True, pool=pool))
+        return ft.join(lines)
     pool = ordered(corpses if pool is None else pool)
     for corpse in ordered(corpses):
         index = pool.index(corpse) + 1

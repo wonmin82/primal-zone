@@ -49,6 +49,7 @@ ENEMIES = {
     "alpha": {
         "training_cap": 10,
         "name": "능선의우두머리",
+        "detectability": "conspicuous",
         "description": "능선을 차지한 거대한 포식자다. 돌진하기 전 몸을 낮추는 습성이 있다.",
         "presence": "덩굴 사이를 묵직하게 오가며 능선을 지키고 있다.",
         "distant_presence": "멀리 덩굴 사이를 오가고 있다.",
@@ -69,6 +70,7 @@ ENEMIES = {
 ROOMS = {
     "dock": {
         "name": "탐사대 부두",
+        "facility_lights": [{"always_on": True, "strength": 4}],
         "exposure": "outdoor",
         "light_profile": "natural",
         "safe": True,
@@ -107,6 +109,7 @@ ROOMS = {
     },
     "office": {
         "name": "폐쇄된 관리동",
+        "facility_lights": [{"power": "outpost_power", "strength": 4}],
         "exposure": "indoor",
         "light_profile": "filtered",
         "enemies": [],
@@ -116,6 +119,7 @@ ROOMS = {
     },
     "generator": {
         "name": "멈춰 선 발전실",
+        "facility_lights": [{"power": "outpost_power", "strength": 4}],
         "exposure": "indoor",
         "light_profile": "dim",
         "enemies": ["sentinel"],

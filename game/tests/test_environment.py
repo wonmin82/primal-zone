@@ -25,7 +25,6 @@ from world.environment_state import reconcile_environment, snapshot_for
 from world.lifecycle import reconcile_world
 from world.multiplayer import world_change
 from world.state import multiplayer_state
-from world.targets import labels, room_objects
 
 
 class EnvironmentTests(EvenniaCommandTest):
@@ -113,7 +112,8 @@ class EnvironmentTests(EvenniaCommandTest):
                 reconcile_world(101)
             first.assert_called_once()
             second.assert_called_once()
-            self.assertEqual(first.call_args, second.call_args)
+            for message in (first.call_args.args[0], second.call_args.args[0]):
+                self.assertIn(WEATHERS["cloudy"]["presence"]["outdoor"], message)
             first.reset_mock()
             second.reset_mock()
             renewed = deserialize(self.script.db.environment)
@@ -214,18 +214,23 @@ class EnvironmentTests(EvenniaCommandTest):
                     Explorer.push_state(self.char1, observed_at=100)
         self.assertEqual(deserialize(self.char1.db.profile), legacy)
 
-    def test_weather_and_darkness_do_not_change_local_selector_or_multiplayer_permissions(self):
+    def test_weather_and_darkness_filter_targets_without_changing_claim_permissions(self):
         player = self.char1
-        before_objects = [obj.id for obj in room_objects(player)]
-        before_labels = labels(room_objects(player))
         before_state = multiplayer_state(player, now=100)
         self.state["clock"]["game_epoch"] = 22 * 3600
         self.state["zones"]["island"].update(weather="storm", next_change_at=100000)
         self.script.db.environment = self.state
         self.assertEqual(snapshot_for(player.location, 100).visibility, "poor")
-        self.assertEqual([obj.id for obj in room_objects(player)], before_objects)
-        self.assertEqual(labels(room_objects(player)), before_labels)
-        self.assertEqual(multiplayer_state(player, now=100), before_state)
+        self.assertEqual(multiplayer_state(player, now=100)["enemies"], [])
+        self.assertNotIn("어린청소룡", self.command("보기"))
+        from world import lighting
+
+        profile = player.profile()
+        profile["inventory"].update(flashlight=1, battery=1)
+        lighting.insert_power(profile, "flashlight", "battery", 100)
+        lighting.switch(profile, "flashlight", True, 100)
+        player.save_profile(profile)
+        self.assertEqual(multiplayer_state(player, now=100)["enemies"], before_state["enemies"])
         self.assertIn("어린청소룡", self.command("보기"))
 
     def test_blocked_exit_never_queries_environment_or_hidden_target(self):
@@ -360,6 +365,13 @@ class EnvironmentTests(EvenniaCommandTest):
         publish.assert_not_called()
 
     def test_local_static_and_object_presence_stay_equal_across_weather_changes(self):
+        from world import lighting
+
+        profile = self.char1.profile()
+        profile["inventory"].update(flashlight=1, battery=1)
+        lighting.insert_power(profile, "flashlight", "battery", 100)
+        lighting.switch(profile, "flashlight", True, 100)
+        self.char1.save_profile(profile)
         for zone, weathers in (
             ("dock", ("clear", "fog")),
             ("office", ("clear", "rain", "storm")),
@@ -391,8 +403,8 @@ class EnvironmentTests(EvenniaCommandTest):
 class EnvironmentWebTemplateTests(SimpleTestCase):
     def test_fresh_assets_and_field_guide_weather_entry_use_existing_command(self):
         html = render_to_string("webclient/webclient.html")
-        self.assertIn("webclient/css/primal.css?v=environment", html)
-        self.assertIn("webclient/js/primal.js?v=environment", html)
+        self.assertIn("webclient/css/primal.css?v=lighting", html)
+        self.assertIn("webclient/js/primal.js?v=lighting", html)
         self.assertNotIn("?v=compact", html)
         self.assertNotIn("?v=item-interactions", html)
         self.assertIn('data-command="날씨">환경 확인', html)

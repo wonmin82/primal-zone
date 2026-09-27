@@ -39,6 +39,9 @@ def errors(interactables):
             issues.append(f"{region_id}: 진입 Room이 Region에 없습니다.")
     spawns = []
     for zone, room in ROOMS.items():
+        for light in room.get("facility_lights", []):
+            if not positive_number(light.get("strength")) or not (light.get("always_on") or light.get("power") == "outpost_power"):
+                issues.append(f"{zone}: 시설 조명 정의가 유효하지 않습니다.")
         if room.get("exposure") not in EXPOSURES:
             issues.append(f"{zone}: exposure가 유효하지 않습니다.")
         if room.get("light_profile") not in LIGHT_PROFILES:
@@ -77,6 +80,13 @@ def errors(interactables):
     for key in SHOP.keys() | EXCHANGE.keys():
         if key not in ITEMS:
             issues.append(f"{key}: 상점 아이템 정의가 없습니다.")
+    for key, data in ITEMS.items():
+        source = data.get("power_source")
+        if source and (not isinstance(source.get("type"), str) or not source["type"].strip() or not positive_number(source.get("capacity_seconds"))):
+            issues.append(f"{key}: 전원 정의가 유효하지 않습니다.")
+        light = data.get("light_source")
+        if light and (not positive_number(light.get("strength")) or type(light.get("range")) is not int or light["range"] < 0 or not isinstance(light.get("power_type"), str) or not light["power_type"].strip()):
+            issues.append(f"{key}: 광원 정의가 유효하지 않습니다.")
     for identity, data in interactables.items():
         if data["room"] not in ROOMS:
             issues.append(f"{identity}: 대상 Room이 없습니다.")

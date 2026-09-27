@@ -5,6 +5,7 @@ from threading import RLock, local
 
 from django.db import transaction
 from evennia.objects.models import ObjectDB
+from evennia.scripts.models import ScriptDB
 
 PARTY_MAX_SIZE = 4
 PARTY_INVITE_TTL_SECONDS = 60
@@ -62,6 +63,13 @@ def world_change():
             for obj in ObjectDB.get_all_cached_instances():
                 if obj.pk not in existing:
                     ObjectDB.flush_cached_instance(obj)
+            # 공용 환경/시설도 Script attribute cache를 사용한다.
+            script_ids = set(ScriptDB.objects.values_list("pk", flat=True))
+            for script in ScriptDB.get_all_cached_instances():
+                if script.pk in script_ids:
+                    script.attributes.reset_cache()
+                else:
+                    ScriptDB.flush_cached_instance(script)
             raise
         finally:
             _context.depth -= 1

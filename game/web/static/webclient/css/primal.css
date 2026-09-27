@@ -20,3 +20,4 @@ body{font-synthesis:none;font-variant-ligatures:none}h1,h2,b,strong,.brand,.eyeb
 
 /* 환경은 서버 snapshot의 표시값만 사용한다. 좁은 화면에서는 자연스럽게 줄바꿈한다. */
 .terminal-heading>div{min-width:0}.terminal-heading .tag{flex-shrink:0;margin-left:8px}.environment-status{font-size:14px;color:var(--muted);margin-top:6px;overflow-wrap:anywhere}
+#inventory .lighting-item{flex-wrap:wrap}#inventory .lighting-item>span{flex:1 1 100%;overflow-wrap:anywhere}#inventory .lighting-item button{max-width:100%;overflow-wrap:anywhere}

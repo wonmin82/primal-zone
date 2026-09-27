@@ -17,6 +17,10 @@ def player_name(identity):
 
 
 def loot_entries(source, player, now):
+    from world.observation import can_inspect_loot, context_for
+
+    if not can_inspect_loot(context_for(player, observed_at=now)):
+        return []
     return [
         {
             **dict(entry),
@@ -31,7 +35,10 @@ def loot_entries(source, player, now):
 
 def loot_controls(player, now, objects=None):
     """상세 보기와 웹 control이 동일한 현재 출처/entry 번호를 사용한다."""
-    objects = room_objects(player) if objects is None else objects
+    from world.observation import can_inspect_loot, context_for
+
+    inspectable = can_inspect_loot(context_for(player, observed_at=now))
+    objects = room_objects(player, observed_at=now) if objects is None else objects
     corpses = [obj for obj in room_loot(player.location) if obj in objects]
     ground = [obj for obj in room_loot(player.location, corpse=False) if obj in objects]
     corpse_controls = labels(corpses, lambda obj: "시체")
@@ -58,6 +65,7 @@ def loot_controls(player, now, objects=None):
                 "label": corpse_controls[source.id],
                 "take_command": corpse_controls[source.id] + "에서 모두 가져",
                 "loot": with_loot_controls(source),
+                "loot_obscured": not inspectable,
             }
             for source in corpses
         },
@@ -72,7 +80,7 @@ def multiplayer_state(player, now=None):
     from world.lifecycle import reconcile_room
 
     reconcile_room(player.location, now)
-    objects = room_objects(player)
+    objects = room_objects(player, observed_at=now)
     enemies = [obj for obj in room_enemies(player.location) if obj in objects]
     corpses = [obj for obj in room_loot(player.location) if obj in objects]
     ground = [obj for obj in room_loot(player.location, corpse=False) if obj in objects]

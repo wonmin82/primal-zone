@@ -255,13 +255,13 @@ equipment 슬롯은 `None`을 정상 값으로 허용한다. 해제/벗어는 �
 
 Environment 저장 형식은 `ENVIRONMENT_VERSION = 1`로 식별한다. version 없는 초기 PR 값은 legacy v0로 읽고 순수 `normalize_state()`가 사본에 version만 추가한다. clock epoch, weather와 seed/step·기한은 보존하며 DB 기록은 기존 reconcile transaction에서 한 번 수행한다. 조회의 정규화는 저장하지 않고 두 번째 reconcile은 변경이 없으면 다시 쓰지 않는다. 지원 범위를 넘는 version은 명확한 오류를 발생시키며 초기화하지 않는다. 캐릭터 profile version과는 독립적이다.
 
-내부 weather/period 변화와 사용자 ambient 알림은 다르다. `publish_changes(before, after, zones, observed_at)`는 동일 시각의 `state_snapshot()`으로 저장된 전·후 period/weather를 유지해 문장을 비교한다. 일반 조회용 `snapshot()`은 현재 시각까지 순수 reconcile을 투영하므로 과거 상태 비교에 쓰지 않는다. 표현이 같은 고정 조명 실내의 period 변화는 메시지를 생략하고, rain→storm처럼 실제 실내 빗소리가 달라지면 발행한다. 웹은 두 경우 모두 기존 sweep로 최신 시간대/시각을 받는다. FIELD GUIDE의 환경 확인은 기존 data-command 경로로 날씨를 실행하고 CSS/JS query version은 환경 배포용 `environment`로 갱신한다.
+내부 weather/period 변화와 사용자 ambient 알림은 다르다. `publish_changes(before, after, zones, observed_at)`는 동일 시각의 `state_snapshot()`으로 저장된 전·후 period/weather를 유지해 문장을 비교한다. 일반 조회용 `snapshot()`은 현재 시각까지 순수 reconcile을 투영하므로 과거 상태 비교에 쓰지 않는다. 표현이 같은 고정 조명 실내의 period 변화는 메시지를 생략하고, rain→storm처럼 실제 실내 빗소리가 달라지면 발행한다. 웹은 두 경우 모두 기존 sweep로 최신 시간대/시각을 받는다. FIELD GUIDE의 환경 확인은 기존 data-command 경로로 날씨를 실행하고 CSS/JS query version은 광원 배포용 `lighting`이다.
 
 Room description은 지형·건축·분위기·지속되는 흔적, Environment는 현재 시간·날씨·달·밝기, Object presence는 현재 존재와 행동을 담당한다. 정적 Room 설명이나 Enemy presence에 현재 비/밤 정보를 복제하지 않는다. 현재 방은 `Room.desc → Environment 문장 → 방향도 → local presence`, 원거리는 `방향/이름 → Room.desc → Environment 문장 → distant presence` 순서다. 환경 문장은 기존 `muted` semantic role을 사용한다.
 
 `world/content/environment.py`는 시간대·달·날씨·전이·빛·노출별 문장의 선언형 SSOT다. `REGIONS[*].weather_zone`은 두 Region 모두 `island`를 가리킨다. 각 Room은 반드시 `exposure`(outdoor/sheltered/indoor)와 독립적인 `light_profile`(natural/filtered/dim/artificial)을 정의한다. office는 indoor/filtered, generator는 indoor/dim, jungle_watch는 sheltered/natural, jungle_nest는 sheltered/filtered이며 나머지는 콘텐츠의 하늘/수관 노출을 따른다. 무결성 검사는 누락·잘못된 값, Weather Zone 참조, 초기 날씨, 전이 대상·양수 가중치·지속 시간·노출별 문장을 검증한다.
 
-`world/environment.py`는 DB/Evennia 없는 순수 계산이다. 4배속 시계는 `game_epoch + (observed_at - real_epoch) * time_scale`로 계산하며 매 tick 시각을 저장하지 않는다. 05/07/18/20시 경계로 시간대를 선택한다. 게임 28일 중 1–4/25–28일은 삭, 12–18일은 보름, 나머지는 반달이며 빛은 0/2/1이다. 달빛은 밤에만 더한다. 자연광은 시간대 빛(밤0/새벽2/낮4/해질녘2)+달+기상 보정+profile 보정으로 계산한다. filtered는 -1, dim은 고정1, artificial은 고정3이다. 점수 4 이상 bright, 3 normal, 1–2 dim, 0 이하 dark다. 시야는 기상 악화와 밝기 악화의 큰 값이며 실내는 직접 기상 악화를 적용하지 않는다. 이 등급은 현재 resolver나 전투 공식에 연결하지 않는다.
+`world/environment.py`는 DB/Evennia 없는 순수 계산이다. 4배속 시계는 `game_epoch + (observed_at - real_epoch) * time_scale`로 계산하며 매 tick 시각을 저장하지 않는다. 05/07/18/20시 경계로 시간대를 선택한다. 게임 28일 중 1–4/25–28일은 삭, 12–18일은 보름, 나머지는 반달이며 빛은 0/2/1이다. 달빛은 밤에만 더한다. 자연광은 시간대 빛(밤0/새벽2/낮4/해질녘2)+달+기상 보정+profile 보정으로 계산한다. filtered는 -1, dim은 고정1, artificial은 고정3이다. 점수 4 이상 bright, 3 normal, 1–2 dim, 0 이하 dark다. 시야는 기상 악화와 밝기 악화의 큰 값이며 실내는 직접 기상 악화를 적용하지 않는다. 환경 등급은 Observation을 거쳐 실제 식별에 적용하며 전투 피해 공식은 바꾸지 않는다.
 
 불변 `EnvironmentSnapshot`은 observed_at·게임 날짜/시각·시간대·Weather Zone·날씨·달·exposure·light_profile·최종 밝기·시야를 담는다. 관찰 시작에 얻은 단일 observed_at을 Room, 기존 DistantViewContext, 날씨 명령과 웹 상태에 전달한다. `display()`는 안정적 ID와 한국어 표시명을 분리한다. 웹은 서버 payload를 textContent로 표시하며 자체 시계/기상 계산을 하지 않는다. 목적지 view lock/진행 관찰 차단은 환경 snapshot 계산보다 먼저 검사한다. 환경 조회는 profile migration을 저장하지 않는 profile_snapshot 경로를 사용하며 방문·임무·객체 lifecycle을 진행하지 않는다.
 
@@ -269,4 +269,25 @@ Room description은 지형·건축·분위기·지속되는 흔적, Environment�
 
 재시작 시 지난 deadline을 따라 최종 유효 구간까지 복구하고 과거 이벤트는 재생하지 않는다. 매우 긴 중단은 한 reconcile당 256회로 제한하고 이후 현재 시각에서 새 지속 구간을 시작한다. 이 제한을 넘는 중단은 세부 기상 이력을 재현하지 않는다. 변경은 기존 world_change transaction 안에서 저장하며 성공 후 callback으로 발행한다. 저장/외부 transaction 실패 시 상태와 알림을 되돌린다. 최종 weather 또는 period가 실제 달라진 zone의 **현재 session이 있는** 탐사자 중 해당 Room의 환경 표현이 달라진 사람에게만 1–2문장을 보낸다. 같은 날씨의 기간 갱신이나 매 sweep는 로그를 추가하지 않는다. 웹은 기존 sweep의 push_state(observed_at=now) 한 경로로 갱신한다.
 
-profile는 v5를 그대로 유지하며 환경 데이터는 캐릭터에 저장하지 않는다. 타이머·점유·참여 보상·Corpse/DroppedLoot·파티 정책도 유지한다. 다음 단계는 별도 visibility 정책과 플레이어 광원을 snapshot에 결합하는 것이며, 현재 계산과 targeting 사이의 경계를 먼저 유지한다. LOS·날씨 API·조도 전파 엔진·환경 피해는 이 범위에 없다.
+환경 데이터는 캐릭터에 저장하지 않는다. profile v6는 개인 광원 상태만 추가하며 타이머·점유·참여 보상·Corpse/DroppedLoot·파티 정책을 유지한다. LOS·날씨 API·조도 전파 엔진·환경 피해는 이 범위에 없다.
+
+
+## 관찰, 광원과 공용 시설
+
+EnvironmentSnapshot은 viewer-independent 공용 환경이다. Room은 장소, Object는 현재 존재와 행동, immutable ObservationContext/ObservationSnapshot은 특정 관찰자가 실제 식별할 수 있는 정보를 소유한다. `world/observation.py`의 순수 `observe()`는 공용 snapshot과 읽기 전용 profile 사본에서 effective_light/effective_visibility를 계산하며 손전등을 ambient_light에 넣지 않는다. 같은 방의 A/B에게 환경 값은 같고 손전등 사용자의 시야만 달라질 수 있다.
+
+시야 clear/reduced/poor와 객체 detectability conspicuous/normal/subtle을 중앙 matrix로 판정한다. clear는 모두, reduced는 conspicuous와 normal, poor는 conspicuous만 식별한다. Exit는 환경으로 숨기지 않는다. NPC·큰 시설·Container·Boss·비상장비함은 conspicuous, 일반 Enemy/Player/Corpse는 normal, 작은 기록·표식·보급품·DroppedLoot는 subtle이다. typeclass 기본값 또는 객체 `detectability` attribute로 확장한다. distant_visible의 기본 hidden/명시적 opt-in과 view lock은 먼저 유지하며 광원으로 우회하지 않는다.
+
+`targets.visible()`는 view permission, `can_perceive()`는 환경상 지각을 담당한다. 공통 room_objects/resolve, Room local/distant presence, 웹 SURROUNDINGS, ActionObject.perform_action, transfer와 신규 Enemy.engage가 같은 정책을 사용한다. 시체 존재와 내부 작은 전리품은 별도 해상도다. 내부 아이템·회수는 subtle 지각을 요구한다. 기존 combat_target은 전투 중 어두워져도 추적하며 신규 상대 획득만 제한한다. 잠긴 Exit는 destination Environment/Observation을 만들기 전에 차단한다. 원거리 관찰은 profile·임무·방문·lifecycle을 진행시키지 않는다.
+
+Light Source는 strength/range/power_type을, Power Source는 type/capacity_seconds를 선언한다. 호환성은 타입 일치로 판단하고 parser는 특정 battery ID를 분기하지 않는다. canonical 전원 삽입은 `<광원>에 <전원 소스> 넣어`이며 기존 parse_relation/stack_selector와 Store를 재사용한다. 예를 들어 `탐사용손전등에 고용량건전지 넣어`는 새 compatible 아이템 정의만 추가하면 같은 경로를 사용한다. 용량은 전원 정의가 소유하며 손전등 상수로 고정하지 않는다.
+
+profile v6의 `light_sources[item_id]`에는 on, power_source, charge_seconds, started_at을 저장한다. v1~v5 migration은 기존 inventory/equipment/storage/quest/growth/combat을 보존하고 빈 light_sources만 보완한다. 켠 동안의 잔량은 `charge_seconds - (now - started_at)`으로 투영한다. tick마다 차감·저장하지 않고 소진 때 한 번 off/0/전원 없음으로 확정한다. 꺼짐·마지막 session 종료·정상 서버 종료에는 잔량을 확정하며 오프라인 동안 사용하지 않는다. 강제 종료로 마지막 종료 hook이 실행되지 않으면 재시작에서 off로 정규화하며 종료 전 정확한 잔량은 보장하지 않는다.
+
+전원 삽입은 inventory 차감과 장치 상태 설정을 world_change transaction에 함께 저장한다. 잔량이 남은 전원은 교체를 거절하고 부분 충전 아이템 회수는 제공하지 않는다. stack 모델에서 마지막 광원을 이전하면 내부 전원은 폐기하고 안내한다. 여분 복사본만 이전할 때는 개인 active 상태를 보존한다. 전원/광원 일반 아이템의 이동 및 기존 장착·임무 아이템 보호는 공통 transfer 규칙을 유지한다.
+
+공용 시설은 WorldLifecycle의 별도 `db.facilities.outpost_power`에 저장하며 개인 generator_fixed에서 추론하지 않는다. 발전기 수리의 개인 부품/보상/진행과 shared flag는 하나의 transaction이다. A가 수리해도 B의 개인 조건은 그대로이며 물리 조명은 동일하다. Room `facility_lights`는 기본 light_profile에 상시 또는 전력 조건의 광량 floor를 합성한다. 부두 캠프는 상시 4, 관리동/발전실은 outpost_power일 때 4다. bootstrap은 이 runtime state를 초기화하지 않는다. Script attribute cache도 transaction rollback에서 복원한다. 광원이 환경 weather visibility까지 보완하는 것은 이번 matrix의 의도적 단순화이며 lux·LOS·전력망·연료·부분 전원 회수·은신·날씨 전투 modifier는 범위 밖이다.
+
+기존 버전에서 발전기 개인 복구를 마친 캐릭터도 공용 전력이 아직 꺼져 있으면 수리 명령으로 가동할 수 있다. 이때 부품·보상·개인 진행을 다시 변경하지 않으며, 이미 가동된 시설에는 중복 보상을 주지 않는다.
+
+웹은 environment와 observation을 분리하며 현재 시야와 손전등 상태를 표시한다. 가방의 켜기/끄기/확인은 서버 명령을 보내고 compatible 전원별 삽입 버튼은 실제 아이템 이름을 포함한다. 렌더링이나 시각 조회는 전원 소모를 저장하지 않는다.
