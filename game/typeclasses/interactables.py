@@ -4,14 +4,24 @@ from evennia.objects.objects import DefaultObject
 from world import rules
 from world import text as ft
 from world.content import ENEMIES, ROOMS
+from world.distant_presentation import DistantPresence, DistantPresenceMixin
 from world.progression import ATTRIBUTES, SKILLS
 
 
-class ActionObject(DefaultObject):
+class ActionObject(DistantPresenceMixin, DefaultObject):
+    distant_visible = True
     actions = ()
     semantic_role = "object"
     presence = "가까이에서 살펴볼 수 있다."
     description = "탐사 중에 발견한 물건이다."
+
+    def get_distant_presence(self, context):
+        return DistantPresence(
+            self.key,
+            self.semantic_role,
+            "명" if self.semantic_role == "npc" else "개",
+            "멀리 서 있다." if self.semantic_role == "npc" else "멀리 보인다.",
+        )
 
     def return_appearance(self, looker, **kwargs):
         return ft.sheet(
@@ -124,6 +134,7 @@ class PersonalLocker(Container):
 
 
 class MaintenanceLog(ActionObject):
+    distant_visible = False
     presence = "젖은 책상 위에 펼쳐져 있다."
     description = "발전기 복구 절차와 현장 전투 기록이 남아 있는 문서다."
     actions = ("조사",)
@@ -242,6 +253,7 @@ class Pathfinder(ActionObject):
 
 
 class JungleMarker(ActionObject):
+    distant_visible = False
     presence = "나무와 돌에 선발대의 흔적이 남아 있다."
     description = "선발대가 길을 잃지 않도록 남긴 현장 표식이다."
     actions = ("조사",)

@@ -11,11 +11,17 @@ from evennia.utils.dbserialize import deserialize
 from world import rules
 from world import text as ft
 from world.content import EQUIPMENT_ACTIONS, ITEMS, REGIONS, ROOM_REGION, ROOMS, UNEQUIP_ACTIONS
+from world.distant_presentation import DistantPresence, DistantPresenceMixin
 from world.multiplayer import after_change
 from world.quests import current_hint
 
 
-class Explorer(DefaultCharacter):
+class Explorer(DistantPresenceMixin, DefaultCharacter):
+    distant_visible = True
+
+    def get_distant_presence(self, context):
+        return DistantPresence("탐사자", "player", "명", "멀리 주변을 살피고 있다.")
+
     def return_appearance(self, looker, **kwargs):
         return ft.sheet(ft.token("player", self.key), "섬을 탐험하는 탐사자다.")
 

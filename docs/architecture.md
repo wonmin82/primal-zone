@@ -188,6 +188,16 @@ profile의 최신 버전은 5다. v1/v2의 개인 encounter 제거·전투 입�
 
 텍스트의 색은 클릭 기능이 아니다. SURROUNDINGS 버튼만 기존 명령을 전송하고 서버가 최종 허용 여부를 판단한다. 색이 없어도 대상 이름, 서술, `[착용]`, 임무의 `+ / > / -`, 위험 경고 문장으로 의미를 이해할 수 있다.
 
+### 현재 방 보기와 원거리 관찰
+
+`보기`의 정식 alias `봐`는 기존 DEFAULT/INDEX/ALL과 모든 조회 대상에 적용한다. 현재 방의 실제 Exit key/alias를 공통 resolver로 선택하므로 별도 방향 parser나 alias 목록은 없다. Exit 대상 관찰은 현재 방의 reconcile과 state push, at_desc trigger를 건너뛰며 이동/방문/임무 상태를 변경하지 않는다. 일반 현재 방·객체 보기의 기존 정밀 표시 경로는 유지한다.
+
+`Exit.return_appearance()`는 관찰 경로를 담은 `DistantViewContext`를 만들어 목적지 `ZoneRoom.return_distant_appearance(context)`에 위임한다. Room은 `world.distant_presentation`을 통해 static Room 설명과 제한된 존재 요약을 조립한다. 일반 `return_appearance()`를 호출하거나 그 결과에서 문자열을 지우지 않는다. context에는 viewer/source_room/target_room, 선택적인 via/direction, distance와 snapshot 시각 observed_at이 있다. 현재 명령은 인접 한 칸만 선택하며 distance는 탐색/LOS를 실행하지 않는 확장용 정보다. 방향 없이 다른 관찰 수단이 같은 Room API를 호출할 수 있다.
+
+객체의 `DistantPresenceMixin.is_distant_visible(context)`와 `get_distant_presence(context)`가 노출 정책과 의미별 이름/단위/문장을 제공한다. Room 조립기는 객체 종류를 분기하지 않고 이 contract의 동일 요약을 자연어 수량으로 묶는다. 기본은 숨김이며 Enemy, NPC/큰 ActionObject/Container, Corpse, Explorer가 참여한다. 작은 MaintenanceLog/JungleMarker와 DroppedLoot는 숨긴다. typeclass의 distant_visible 또는 객체 attribute override로 개별 콘텐츠를 조정할 수 있고, 기존 view access는 override와 무관하게 존중한다. Explorer는 익명 탐사자 수로만 표시하고 viewer 자신은 제외한다.
+
+원거리 경로는 profile·상자 contents·loot entries를 읽지 않고 local selector/labels·행동/권한/HP 정보를 생성하지 않는다. Enemy는 살아 있고 HP가 양수일 때만, Corpse는 observed_at이 decay_at 이전일 때만 표시한다. 만료 시체를 필터링해도 삭제나 DroppedLoot 전환은 수행하지 않는다. 재생성 시각이 지난 Enemy도 저장된 alive 상태가 아니면 숨기며, 실제 상태 갱신은 기존 lifecycle 소유자가 담당한다. Room view access가 없으면 장소명과 내부 객체를 보여주지 않는다.
+
 ### Compact 정보 조회
 
 `compact(title, *lines, summary=...)`는 기존 Text 조각을 보존하면서 제목과 요약을 한 줄에 놓고 첫 내용까지 빈 줄을 추가하지 않는다. 기존 `sheet`는 Room·대상 보기 등에 남긴다. 상태는 전투 수치·특성·장비 요약, 능력은 기본값과 투자값, 장비는 슬롯별 보정으로 역할을 나눈다. 가방은 비어 있지 않은 분류마다 한 행을 만들고, 기술은 SKILLS의 설명과 다음 조건을 그대로 한 항목에 표시한다. R은 Rank, C는 크레딧이며 비용 화면에 단위 안내를 둔다. 임무는 완료 수/전체 단계와 ASCII `+`(완료), `>`(현재), `-`(대기)로 구분한다.

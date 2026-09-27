@@ -32,6 +32,13 @@ def exit_diagram(exits):
 
 
 class ZoneRoom(DefaultRoom):
+    def return_distant_appearance(self, context):
+        from world.distant_presentation import distant_appearance
+
+        if context.target_room != self:
+            raise ValueError("관찰 context의 목적지와 Room이 다릅니다.")
+        return distant_appearance(context)
+
     def return_appearance(self, looker, **kwargs):
         from world.lifecycle import reconcile_room
 

@@ -8,6 +8,8 @@ for allowing Characters to traverse the exit to its destination.
 """
 
 from evennia.objects.objects import DefaultExit
+from world import text as ft
+from world.distant_presentation import DistantViewContext
 
 from .objects import ObjectParent
 
@@ -23,4 +25,17 @@ class Exit(ObjectParent, DefaultExit):
 
     """
 
-    pass
+    def return_appearance(self, looker, **kwargs):
+        destination = self.destination
+        appearance = getattr(destination, "return_distant_appearance", None)
+        if not appearance:
+            return ft.text("그 너머는 살펴볼 수 없다.")
+        return appearance(
+            DistantViewContext(
+                viewer=looker,
+                source_room=looker.location,
+                target_room=destination,
+                via=self,
+                direction=self.key,
+            )
+        )

@@ -9,6 +9,7 @@ from world import presentation as view
 from world import rules
 from world import text as ft
 from world.content import ENEMIES
+from world.distant_presentation import DistantPresenceMixin
 from world.multiplayer import (
     CLAIM_TIMEOUT_SECONDS,
     COMBAT_INTERVAL,
@@ -22,7 +23,19 @@ from world.multiplayer import (
 )
 
 
-class Enemy(DefaultObject):
+class Enemy(DistantPresenceMixin, DefaultObject):
+    distant_visible = True
+    distant_role = "hostile"
+    distant_unit = "마리"
+    distant_sentence = "멀리 움직이고 있다."
+
+    def is_distant_visible(self, context):
+        return (
+            self.db.state == "alive"
+            and (self.db.hp or 0) > 0
+            and super().is_distant_visible(context)
+        )
+
     def return_appearance(self, looker, **kwargs):
         definition = ENEMIES[self.db.enemy_id]
         alive = self.db.state == "alive"
