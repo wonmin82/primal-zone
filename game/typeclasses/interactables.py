@@ -9,7 +9,7 @@ from world.progression import ATTRIBUTES, SKILLS
 
 
 class ActionObject(DistantPresenceMixin, DefaultObject):
-    distant_visible = True
+    distant_visible = False
     actions = ()
     semantic_role = "object"
     presence = "가까이에서 살펴볼 수 있다."
@@ -42,6 +42,7 @@ class ActionObject(DistantPresenceMixin, DefaultObject):
 
 
 class Commander(ActionObject):
+    distant_visible = True
     semantic_role = "npc"
     presence = "낡은 지도를 펼쳐 놓고 탐사대를 기다리고 있다."
     description = "탐사대를 지휘하는 책임자다. 낡은 지도와 무전기를 늘 곁에 두고 있다."
@@ -82,6 +83,7 @@ class Commander(ActionObject):
 class Container(ActionObject):
     """공용 스택 보관 공간. 개인 보관함은 caller의 profile만 사용한다."""
 
+    distant_visible = True
     personal = False
     actions = ("넣어", "꺼내")
     presence = "부두 한쪽에 놓여 있다. 물품을 맡기거나 꺼낼 수 있다."
@@ -129,6 +131,7 @@ class Container(ActionObject):
 
 
 class PersonalLocker(Container):
+    distant_visible = True
     personal = True
     description = "탐사자 개인의 물품을 보관한다. 같은 보관함을 사용해도 내용은 각자에게만 보인다."
 
@@ -172,6 +175,7 @@ class SupplyCache(ActionObject):
 
 
 class Generator(ActionObject):
+    distant_visible = True
     presence = "낡은 외벽 너머로 희미한 경고등을 깜빡이고 있다."
     description = "능선 진입문에 전력을 공급하는 설비다. 정비기록과 부품이 필요하다."
     actions = ("수리",)
@@ -190,6 +194,7 @@ class Generator(ActionObject):
 
 
 class Instructor(ActionObject):
+    distant_visible = True
     semantic_role = "npc"
     presence = "탐사자의 전투 기록을 살피며 훈련 계획을 세우고 있다."
     description = "전투 기록을 분석하고 신체 훈련과 전술을 다시 설계하는 교관이다."
@@ -228,6 +233,7 @@ class Instructor(ActionObject):
 
 
 class Pathfinder(ActionObject):
+    distant_visible = True
     semantic_role = "npc"
     presence = "젖은 지도 위에 선발대의 이동 경로를 표시하고 있다."
     description = "밀림에서 돌아온 선발대 길잡이다. 두 갈래 탐사로의 표식을 찾고 있다."
@@ -278,7 +284,8 @@ class WaterMarker(JungleMarker):
 
 
 class SignalDevice(ActionObject):
-    presence = "닫힌 출입문 옆에서 신호등을 깜빡이고 있다."
+    distant_visible = True
+    presence = "출입문 옆에서 신호등을 깜빡이고 있다."
     description = "두 탐사 표식의 좌표를 맞추면 연구구역의 문을 열 수 있다."
     actions = ("조사",)
 

@@ -50,6 +50,8 @@ def errors(interactables):
     if len(spawns) != len(set(spawns)):
         issues.append("Enemy spawn ID가 중복되었습니다.")
     for enemy, data in ENEMIES.items():
+        if not data.get("presence") or not data.get("distant_presence"):
+            issues.append(f"{enemy}: 현재/원거리 존재 묘사가 없습니다.")
         if data["drop"] not in ITEMS:
             issues.append(f"{enemy}: 전리품 정의가 없습니다.")
         if data.get("boss_quest") and data["boss_quest"] not in QUESTS:

@@ -13,6 +13,7 @@ from world import text as ft
 from world.content import EQUIPMENT_ACTIONS, ITEMS, REGIONS, ROOM_REGION, ROOMS, UNEQUIP_ACTIONS
 from world.distant_presentation import DistantPresence, DistantPresenceMixin
 from world.multiplayer import after_change
+from world.navigation import entry_block
 from world.quests import current_hint
 
 
@@ -75,6 +76,11 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             profile = rules.migrate_profile(profile)
             self.db.profile = profile
         return profile
+
+    def profile_snapshot(self):
+        """관찰용 사본만 변환한다. 구버전 profile도 저장하거나 진행하지 않는다."""
+        saved = deserialize(self.db.profile)
+        return rules.migrate_profile(saved) if saved is not None else rules.new_profile()
 
     def save_profile(self, profile):
         with transaction.atomic():
@@ -187,11 +193,12 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
                     observer.msg(message, from_obj=self)
 
     def at_pre_move(self, destination, move_type="move", **kwargs):
-        if self.profile().get("combat_target"):
+        profile = self.profile()
+        if profile.get("combat_target"):
             self.msg("전투 중에는 이동할 수 없습니다. '도주'로 교전을 끝내세요.")
             return False
-        requirement = ROOMS.get(destination.db.zone_id, {}).get("requires")
-        if requirement and not self.profile()["quests"][requirement["quest"]][requirement["flag"]]:
+        requirement = entry_block(profile, destination.db.zone_id)
+        if requirement:
             self.msg(requirement["message"])
             return False
         return super().at_pre_move(destination, move_type=move_type, **kwargs)

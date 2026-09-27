@@ -103,5 +103,5 @@ def distant_appearance(context):
             )
         )
     if not groups:
-        lines.append("눈에 띄는 움직임은 없다.")
+        lines.append("그 밖에 눈에 띄는 것은 없다.")
     return ft.join(lines)

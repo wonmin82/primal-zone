@@ -5,7 +5,36 @@ from unittest.mock import patch
 
 from world import rules
 from world.content import ENEMIES, EQUIPMENT_ACTIONS, EXCHANGE, ITEMS, ROOMS, SHOP, find_id
+from world.navigation import entry_block
 from world.quests import QUESTS, current_hint
+
+
+class ObservationContentRulesTests(TestCase):
+    def test_navigation_requirements_are_pure_and_keep_existing_messages(self):
+        for zone, room in ROOMS.items():
+            profile = rules.new_profile()
+            before = deepcopy(profile)
+            block = entry_block(profile, zone)
+            self.assertEqual(block, room.get("requires"))
+            self.assertEqual(profile, before)
+            if block:
+                self.assertTrue(block["message"])
+                profile["quests"][block["quest"]][block["flag"]] = True
+                self.assertIsNone(entry_block(profile, zone))
+        self.assertIsNone(entry_block({}, "not_a_zone"))
+
+    def test_content_separates_static_traces_and_enemy_presentations(self):
+        for definition in ENEMIES.values():
+            self.assertTrue(definition["presence"])
+            self.assertTrue(definition["distant_presence"])
+            for room in ROOMS.values():
+                self.assertNotIn(definition["presence"], room["desc"])
+                self.assertNotIn(definition["distant_presence"], room["desc"])
+        for zone, trace in (("trail", "발톱 자국"), ("ridge", "철골"), ("jungle_road", "노면"), ("jungle_watch", "난간"), ("jungle_fen", "나무뿌리"), ("jungle_grove", "문틀"), ("jungle_gate", "외벽")):
+            self.assertIn(trace, ROOMS[zone]["desc"])
+        self.assertNotIn("신호 장치", ROOMS["jungle_grove"]["desc"])
+        self.assertNotIn("보급 주머니", ROOMS["jungle_fen"]["desc"])
+        self.assertNotIn("탐사 표식", ROOMS["jungle_watch"]["desc"])
 
 
 class ItemInteractionRulesTests(TestCase):

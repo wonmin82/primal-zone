@@ -13,6 +13,7 @@ from typeclasses.explorers import Explorer
 from typeclasses.interactables import Container, MaintenanceLog, PersonalLocker
 from typeclasses.loot import Corpse, DroppedLoot
 from typeclasses.zone_rooms import ZoneRoom
+from world import rules
 from world.bootstrap import build_world
 from world.content import ENEMIES, ROOMS
 from world.distant_presentation import DistantViewContext, direction_phrase
@@ -232,7 +233,7 @@ class DistantViewTests(EvenniaCommandTest):
         output = target.return_distant_appearance(self.context(target))
         for name in (enemy.key, hidden.key, record.key):
             self.assertNotIn(name, output)
-        self.assertIn("움직임은 없다", output)
+        self.assertIn("눈에 띄는 것은 없다", output)
         record.db.distant_visible = True
         self.assertIn(record.key, target.return_distant_appearance(self.context(target)))
         target.locks.add("view:false()")
@@ -249,7 +250,7 @@ class DistantViewTests(EvenniaCommandTest):
         item = create_object(DefaultObject, key="작은물건", location=room)
         output = room.return_distant_appearance(self.context(room, distance=3, via="sensor"))
         self.assertIn(room.db.desc, output)
-        self.assertIn("움직임은 없다", output)
+        self.assertIn("눈에 띄는 것은 없다", output)
         self.assertNotIn(item.key, output)
         self.char1.location = room
         output = room.return_distant_appearance(self.context(room))
@@ -284,9 +285,147 @@ class DistantViewTests(EvenniaCommandTest):
         self.assertIn("회수부품", self.command("시체 2 봐"))
 
     def test_gate_preview_does_not_unlock_or_traverse(self):
+        for source, destination in (
+            ("marsh", "ridge"),
+            ("ridge", "jungle_edge"),
+            ("jungle_grove", "jungle_gate"),
+        ):
+            with self.subTest(destination=destination):
+                self.char1.location = self.rooms[source]
+                target = self.rooms[destination]
+                box = create_object(Container, key="관찰차단상자", location=target)
+                box.db.items = {"water": 3}
+                self.corpse(target)
+                before_profile = deepcopy(self.char1.profile())
+                before = {
+                    obj.id: [(a.key, deserialize(a.value)) for a in obj.attributes.all()]
+                    for obj in target.contents
+                }
+                with patch.object(
+                    target,
+                    "return_distant_appearance",
+                    side_effect=AssertionError("blocked room read"),
+                ):
+                    output = self.command("북 봐")
+                self.assertIn("진입문에 막혀", output)
+                for secret in (target.key, ROOMS[destination]["desc"], box.key, "시체", "탐사자"):
+                    self.assertNotIn(secret, output)
+                self.assertFalse(
+                    any(
+                        s["role"] in ("hostile", "npc", "remains", "player")
+                        for s in output.segments
+                    )
+                )
+                self.char1.execute_cmd("북")
+                self.assertEqual(self.char1.location, self.rooms[source])
+                self.assertEqual(self.char1.profile(), before_profile)
+                requirement = ROOMS[destination]["requires"]
+                self.char1.change(
+                    lambda p: p["quests"][requirement["quest"]].update({requirement["flag"]: True})
+                )
+                unlocked = deepcopy(self.char1.profile())
+                output = self.command("북 봐")
+                self.assertIn(target.key, output)
+                self.assertIn(ROOMS[destination]["desc"], output)
+                self.assertIn(box.key, output)
+                self.assertEqual(self.char1.profile(), unlocked)
+                self.assertEqual(self.char1.location, self.rooms[source])
+                self.assertEqual(
+                    {
+                        obj.id: [(a.key, deserialize(a.value)) for a in obj.attributes.all()]
+                        for obj in target.contents
+                    },
+                    before,
+                )
+                self.char1.execute_cmd("북")
+                self.assertEqual(self.char1.location, target)
+
+    def test_observation_override_keeps_entry_locked_and_respects_room_access(self):
         self.char1.location = self.rooms["marsh"]
-        before = self.char1.profile()
-        self.assertIn(self.rooms["ridge"].key, self.command("북 봐"))
+        exit_obj = next(e for e in self.char1.location.exits if e.key == "북")
+        target = self.rooms["ridge"]
+        before = deepcopy(self.char1.profile())
+        exit_obj.db.blocks_distant_view = False
+        self.assertIn(target.key, self.command("북 봐"))
         self.char1.execute_cmd("북")
         self.assertEqual(self.char1.location, self.rooms["marsh"])
         self.assertEqual(self.char1.profile(), before)
+        target.locks.add("view:false()")
+        self.assertNotIn(target.key, self.command("북 봐"))
+        self.assertEqual(self.char1.profile(), before)
+
+    def test_gate_observation_uses_readonly_profile_snapshot_including_legacy_progress(self):
+        self.char1.location = self.rooms["marsh"]
+        legacy = rules.new_profile()
+        legacy.update(version=3, generator_fixed=False, quest_claimed=False)
+        legacy.pop("quests")
+        legacy.pop("storage")
+        self.char1.db.profile = legacy
+        with patch.object(
+            self.char1, "profile", side_effect=AssertionError("profile migration write")
+        ):
+            self.assertIn("진입문에 막혀", self.command("북 봐"))
+        self.assertEqual(deserialize(self.char1.db.profile), legacy)
+        legacy["generator_fixed"] = True
+        self.char1.db.profile = legacy
+        with patch.object(
+            self.char1, "profile", side_effect=AssertionError("profile migration write")
+        ):
+            self.assertIn(self.rooms["ridge"].key, self.command("북 봐"))
+        self.assertEqual(deserialize(self.char1.db.profile), legacy)
+
+    def test_action_objects_are_hidden_by_default_and_current_opt_ins_are_explicit(self):
+        from typeclasses import interactables
+
+        room = self.rooms["office"]
+        generic = create_object(interactables.ActionObject, key="새비밀장치", location=room)
+        context = self.context(room)
+        self.assertFalse(generic.is_distant_visible(context))
+        self.assertNotIn(generic.key, room.return_distant_appearance(context))
+        generic.db.distant_visible = True
+        self.assertIn(generic.key, room.return_distant_appearance(context))
+        visible = {
+            "Commander",
+            "Instructor",
+            "Pathfinder",
+            "Container",
+            "PersonalLocker",
+            "Generator",
+            "SignalDevice",
+        }
+        for definition in interactables.INTERACTABLES.values():
+            cls = getattr(interactables, definition["typeclass"])
+            obj = create_object(cls, key=definition["name"], location=room)
+            self.assertEqual(
+                bool(obj.is_distant_visible(context)), cls.__name__ in visible, cls.__name__
+            )
+
+    def test_enemy_local_and_distant_metadata_survive_alive_to_corpse_transition(self):
+        room = self.rooms["jungle_road"]
+        self.char1.location = room
+        self.enemy(room, "shellback")
+        enemies = room_enemies(room)
+        definition = ENEMIES["shellback"]
+        local = self.command("보기")
+        remote = room.return_distant_appearance(self.context(room))
+        self.assertIn("철갑등짐승 두 마리", local)
+        self.assertIn(definition["presence"], local)
+        self.assertIn(definition["distant_presence"], remote)
+        self.assertNotIn(definition["presence"], remote)
+        self.assertIn("옛 도로", ROOMS["jungle_road"]["desc"])
+        self.assertNotIn("짐승이 천천히 움직인다", ROOMS["jungle_road"]["desc"])
+        for enemy in enemies:
+            enemy.db.hp = 0
+            enemy.db.state = "respawning"
+            enemy.db.respawn_at = 200
+        corpse = create_object(Corpse, key="철갑등짐승의 시체", location=room)
+        corpse.db.decay_at = 130
+        corpse.db.entries = []
+        local = self.command("보기")
+        remote = room.return_distant_appearance(self.context(room))
+        for output in (local, remote):
+            self.assertIn(corpse.key, output)
+            self.assertIn(ROOMS["jungle_road"]["desc"], output)
+            self.assertFalse(any(s["role"] == "hostile" for s in output.segments))
+            self.assertNotIn(definition["presence"], output)
+            self.assertNotIn(definition["distant_presence"], output)

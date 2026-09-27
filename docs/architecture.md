@@ -194,9 +194,15 @@ profile의 최신 버전은 5다. v1/v2의 개인 encounter 제거·전투 입�
 
 `Exit.return_appearance()`는 관찰 경로를 담은 `DistantViewContext`를 만들어 목적지 `ZoneRoom.return_distant_appearance(context)`에 위임한다. Room은 `world.distant_presentation`을 통해 static Room 설명과 제한된 존재 요약을 조립한다. 일반 `return_appearance()`를 호출하거나 그 결과에서 문자열을 지우지 않는다. context에는 viewer/source_room/target_room, 선택적인 via/direction, distance와 snapshot 시각 observed_at이 있다. 현재 명령은 인접 한 칸만 선택하며 distance는 탐색/LOS를 실행하지 않는 확장용 정보다. 방향 없이 다른 관찰 수단이 같은 Room API를 호출할 수 있다.
 
-객체의 `DistantPresenceMixin.is_distant_visible(context)`와 `get_distant_presence(context)`가 노출 정책과 의미별 이름/단위/문장을 제공한다. Room 조립기는 객체 종류를 분기하지 않고 이 contract의 동일 요약을 자연어 수량으로 묶는다. 기본은 숨김이며 Enemy, NPC/큰 ActionObject/Container, Corpse, Explorer가 참여한다. 작은 MaintenanceLog/JungleMarker와 DroppedLoot는 숨긴다. typeclass의 distant_visible 또는 객체 attribute override로 개별 콘텐츠를 조정할 수 있고, 기존 view access는 override와 무관하게 존중한다. Explorer는 익명 탐사자 수로만 표시하고 viewer 자신은 제외한다.
+Room description은 장소의 지형·건축·분위기·지속되는 흔적만 설명한다. Enemy/NPC/Corpse/Interactable/Container의 현재 존재·행동·상태는 객체 presentation이 담당한다. 발톱 자국·바퀴 자국·부러진 나무 등 흔적은 환경에 포함할 수 있지만 숨겨야 하는 객체를 static description에서 다시 노출하지 않는다. 모든 15개 장소를 이 기준으로 점검했다. 선착장의 밧줄/장비, 관리동의 종잇장, 둥지의 오래된 장비는 조작 객체와 무관한 환경 흔적으로 남겼다.
 
-원거리 경로는 profile·상자 contents·loot entries를 읽지 않고 local selector/labels·행동/권한/HP 정보를 생성하지 않는다. Enemy는 살아 있고 HP가 양수일 때만, Corpse는 observed_at이 decay_at 이전일 때만 표시한다. 만료 시체를 필터링해도 삭제나 DroppedLoot 전환은 수행하지 않는다. 재생성 시각이 지난 Enemy도 저장된 alive 상태가 아니면 숨기며, 실제 상태 갱신은 기존 lifecycle 소유자가 담당한다. Room view access가 없으면 장소명과 내부 객체를 보여주지 않는다.
+Enemy content definition의 `presence`와 `distant_presence`는 종류별 현재/원거리 문장이다. Enemy의 `get_local_presence()`와 `get_distant_presence(context)`가 이를 제공하고 두 Room 조립기는 이름/문장별 자연어 grouping을 유지한다. 로컬은 자세한 행동과 selector 안내를, 원거리는 제한된 움직임과 수량만 제공한다. 새 Enemy는 두 문장을 함께 정의하며 integrity 검사로 누락을 검출한다.
+
+객체의 `DistantPresenceMixin.is_distant_visible(context)`와 `get_distant_presence(context)`가 노출 정책과 의미별 이름/단위/문장을 제공한다. Room 원거리 조립기는 객체 종류를 분기하지 않고 동일 요약을 자연어 수량으로 묶는다. Mixin과 ActionObject의 기본은 숨김이다. Commander/Instructor/Pathfinder, Container/PersonalLocker, Generator/SignalDevice만 ActionObject에서 명시적으로 opt-in하며 SupplyCache/MaintenanceLog/JungleMarker(WatchMarker/WaterMarker)/JungleCache는 숨긴다. 새 ActionObject는 설정 없이 원거리 노출되지 않는다. typeclass의 distant_visible 또는 객체 attribute override로 조정할 수 있고 기존 view access는 override와 무관하게 존중한다. Enemy/만료 전 Corpse/Explorer는 별도의 기존 노출 contract를 유지한다. Explorer는 익명 탐사자 수로만 표시하고 viewer 자신은 제외한다. 추가로 식별할 객체가 없으면 `그 밖에 눈에 띄는 것은 없다.`로 마무리한다.
+
+원거리 객체 조립은 profile·상자 contents·loot entries를 읽지 않고 local selector/labels·행동/권한/HP 정보를 생성하지 않는다. Enemy는 살아 있고 HP가 양수일 때만, Corpse는 observed_at이 decay_at 이전일 때만 표시한다. 만료 시체를 필터링해도 삭제나 DroppedLoot 전환은 수행하지 않는다. 재생성 시각이 지난 Enemy도 저장된 alive 상태가 아니면 숨기며 실제 상태 갱신은 기존 lifecycle 소유자가 담당한다. Room view access가 없으면 장소명과 내부 객체를 보여주지 않는다.
+
+`world.navigation.entry_block(profile, destination_zone)`는 Room requires와 임무 진행을 비교하는 pure helper다. 이동 hook은 이 결과의 기존 message로 이동을 거절한다. Exit의 `can_observe_through(context)`도 같은 결과를 사용하지만 이동 hook을 호출하지 않는다. 관찰에는 저장을 하지 않는 `Explorer.profile_snapshot()` 사본을 사용하여 구버전 데이터도 메모리에서만 변환한다. 현재 주요 진행문은 이동/관찰 모두 차단하고 목적지 이름·설명·객체를 읽거나 표시하지 않는다. 이동 가능성과 관찰 가능성은 별개 정책이며 투명 방벽 같은 미래 경계는 Exit의 `blocks_distant_view=False` attribute 또는 can_observe_through override로 관찰만 허용할 수 있다. 이 override는 이동 조건이나 view lock을 해제하지 않는다.
 
 ### Compact 정보 조회
 
