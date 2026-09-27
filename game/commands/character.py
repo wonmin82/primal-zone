@@ -11,15 +11,16 @@ from commands.base import GameCommand
 
 class Look(CmdLook):
     category = "탐사"
-    usage = "보기 · 대상 보기 · 대상 2 보기 · 대상 모두 보기 · 시체 모두 보기"
-    summary = "주변과 대상을 살펴봅니다."
+    usage = "보기 · 대상 보기 · 대상 봐 · 대상 2 보기 · 대상 모두 보기 · 시체 모두 보기 · 북 보기 · 북 봐"
+    summary = "주변과 대상을 살펴봅니다. 방향을 보면 이동 없이 인접 장소의 존재만 관찰합니다."
     input_style = "target"
     key = "보기"
-    aliases = ["look", "l", "둘러보기"]
+    aliases = ["look", "l", "둘러보기", "봐"]
 
     def func(self):
         from time import time
 
+        from typeclasses.exits import Exit
         from typeclasses.loot import Corpse
         from world.content import ITEMS
         from world.lifecycle import reconcile_room
@@ -28,6 +29,24 @@ class Look(CmdLook):
 
         name = self.args.strip()
         if name and self.caller.location:
+            # 실제 Exit도 같은 selector로 선택한다. 관찰만 할 때는 로컬 갱신/at_desc도 실행하지 않는다.
+            objects = room_objects(self.caller)
+            from world.targets import matching
+
+            try:
+                selector = parse_selector(name, [n for obj in objects for n in names(obj)])
+            except rules.RuleError:
+                selector = None  # 가방의 실제 이름도 포함하는 기존 보기 경로에서 검증한다.
+            candidates = matching(objects, selector) if selector else []
+            if candidates and all(isinstance(obj, Exit) for obj in candidates):
+                try:
+                    selected = resolve(objects, selector, self.caller)
+                    self.caller.msg(
+                        ft.join([obj.return_appearance(self.caller) for obj in selected], "\n\n")
+                    )
+                except rules.RuleError as error:
+                    self.caller.msg(ft.token("error", str(error)))
+                return
             reconcile_room(self.caller.location)
             objects = room_objects(self.caller)
             inventory = {
@@ -41,8 +60,6 @@ class Look(CmdLook):
                     [n for obj in objects for n in names(obj)]
                     + [n for key, data in inventory.items() for n in (key, data["name"])],
                 )
-                from world.targets import matching
-
                 if matching(objects, selector):
                     selected = resolve(objects, selector, self.caller)
                     if selector.mode == Mode.ALL and all(
@@ -140,6 +157,8 @@ class Help(GameCommand):
                     {"공격", "보기", "가져"},
                 ),
                 "모두 가져는 전리품 모두 가져의 축약이다. 여러 출처는 '모든 시체에서'로 지정한다.",
+                "가방·보관 아이템은 스택이다. 버려·줘·넣어·꺼내는 하나 또는 모두를 옮기며 장착분과 임무 핵심 물건은 남긴다.",
+                "에게(플레이어) · 에(보관함) · 에서(보관함)로 출처/목적지를 지정한다. 사용법은 개별 명령 도움말에서 확인한다.",
                 ft.text(
                     "단축어: ",
                     ft.join(

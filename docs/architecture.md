@@ -151,7 +151,7 @@ Corpse는 실제 방 객체이며 source spawn/enemy, created_at, decay_at과 lo
 
 ## 기존 데이터와 운영 범위
 
-profile의 최신 버전은 4다. v1/v2의 개인 encounter 제거·전투 입력 필드·성장 기본값 변환을 거친 뒤, v1~v3의 첫 임무 boolean을 `quests.radio_tower`의 진행 필드로 옮긴다. `cache_claimed`는 `discoveries.supply_cache`로 옮긴다. XP, HP, credits, inventory, equipment, kills, 완료 여부와 visited 및 개인 전투 상태를 유지한다. 이미 받은 보상은 재지급하지 않으며 v4 반복 로드·저장은 초기화하지 않는다.
+profile의 최신 버전은 5다. v1/v2의 개인 encounter 제거·전투 입력 필드·성장 기본값 변환을 거친 뒤, v1~v3의 첫 임무 boolean을 `quests.radio_tower`의 진행 필드로 옮긴다. `cache_claimed`는 `discoveries.supply_cache`로 옮긴다. v1~v4에는 개인 보관 `storage={}`의 기본값을 추가한다. XP, HP, credits, inventory, equipment(명시적 None 포함), kills, 완료 여부와 visited 및 개인 전투 상태를 유지한다. 이미 받은 보상은 재지급하지 않으며 v5 반복 로드·저장은 초기화하지 않는다.
 
 변환은 기존 프로필의 복사본에서 첫 임무·보급 boolean을 새 구조로 옮기고 오래된 key를 제거한다. 기존 플레이어는 현재 레벨에 해당하는 포인트를 즉시 사용할 수 있고, 무료 기본 기술 Rank 1과 미투자 특성은 기존 전투 성능을 유지한다. Party·Enemy·Corpse·DroppedLoot는 profile 밖에 있으므로 migration이 수정하지 않는다. 기존 DB의 로드 시 점진적으로 변환하며 DB 삭제·교체는 필요 없다. 위의 서버 재시작/재접속 전투 정리 정책과 migration 자체의 보존 정책은 별개다.
 
@@ -188,6 +188,24 @@ profile의 최신 버전은 4다. v1/v2의 개인 encounter 제거·전투 입�
 
 텍스트의 색은 클릭 기능이 아니다. SURROUNDINGS 버튼만 기존 명령을 전송하고 서버가 최종 허용 여부를 판단한다. 색이 없어도 대상 이름, 서술, `[착용]`, 임무의 `+ / > / -`, 위험 경고 문장으로 의미를 이해할 수 있다.
 
+### 현재 방 보기와 원거리 관찰
+
+`보기`의 정식 alias `봐`는 기존 DEFAULT/INDEX/ALL과 모든 조회 대상에 적용한다. 현재 방의 실제 Exit key/alias를 공통 resolver로 선택하므로 별도 방향 parser나 alias 목록은 없다. Exit 대상 관찰은 현재 방의 reconcile과 state push, at_desc trigger를 건너뛰며 이동/방문/임무 상태를 변경하지 않는다. 일반 현재 방·객체 보기의 기존 정밀 표시 경로는 유지한다.
+
+`Exit.return_appearance()`는 관찰 경로를 담은 `DistantViewContext`를 만들어 목적지 `ZoneRoom.return_distant_appearance(context)`에 위임한다. Room은 `world.distant_presentation`을 통해 static Room 설명과 제한된 존재 요약을 조립한다. 일반 `return_appearance()`를 호출하거나 그 결과에서 문자열을 지우지 않는다. context에는 viewer/source_room/target_room, 선택적인 via/direction, distance와 snapshot 시각 observed_at이 있다. 현재 명령은 인접 한 칸만 선택하며 distance는 탐색/LOS를 실행하지 않는 확장용 정보다. 방향 없이 다른 관찰 수단이 같은 Room API를 호출할 수 있다.
+
+Room description은 장소의 지형·건축·분위기·지속되는 흔적만 설명한다. Enemy/NPC/Corpse/Interactable/Container의 현재 존재·행동·상태는 객체 presentation이 담당한다. 발톱 자국·바퀴 자국·부러진 나무 등 흔적은 환경에 포함할 수 있지만 숨겨야 하는 객체를 static description에서 다시 노출하지 않는다. 모든 15개 장소를 이 기준으로 점검했다. 선착장의 밧줄/장비, 관리동의 종잇장, 둥지의 오래된 장비는 조작 객체와 무관한 환경 흔적으로 남겼다.
+
+Enemy content definition의 `presence`와 `distant_presence`는 종류별 현재/원거리 문장이다. Enemy의 `get_local_presence()`와 `get_distant_presence(context)`가 이를 제공하고 두 Room 조립기는 이름/문장별 자연어 grouping을 유지한다. 로컬은 자세한 행동과 selector 안내를, 원거리는 제한된 움직임과 수량만 제공한다. 새 Enemy는 두 문장을 함께 정의하며 integrity 검사로 누락을 검출한다.
+
+객체의 `DistantPresenceMixin.is_distant_visible(context)`와 `get_distant_presence(context)`가 노출 정책과 의미별 이름/단위/문장을 제공한다. Room 원거리 조립기는 객체 종류를 분기하지 않고 동일 요약을 자연어 수량으로 묶는다. Mixin과 ActionObject의 기본은 숨김이다. Commander/Instructor/Pathfinder, Container/PersonalLocker, Generator/SignalDevice만 ActionObject에서 명시적으로 opt-in하며 SupplyCache/MaintenanceLog/JungleMarker(WatchMarker/WaterMarker)/JungleCache는 숨긴다. 새 ActionObject는 설정 없이 원거리 노출되지 않는다. typeclass의 distant_visible 또는 객체 attribute override로 조정할 수 있고 기존 view access는 override와 무관하게 존중한다. Enemy/만료 전 Corpse/Explorer는 별도의 기존 노출 contract를 유지한다. Explorer는 익명 탐사자 수로만 표시하고 viewer 자신은 제외한다. 추가로 식별할 객체가 없으면 `그 밖에 눈에 띄는 것은 없다.`로 마무리한다.
+
+원거리 객체 조립은 profile·상자 contents·loot entries를 읽지 않고 local selector/labels·행동/권한/HP 정보를 생성하지 않는다. Enemy는 살아 있고 HP가 양수일 때만, Corpse는 observed_at이 decay_at 이전일 때만 표시한다. 만료 시체를 필터링해도 삭제나 DroppedLoot 전환은 수행하지 않는다. 재생성 시각이 지난 Enemy도 저장된 alive 상태가 아니면 숨기며 실제 상태 갱신은 기존 lifecycle 소유자가 담당한다. Room view access가 없으면 장소명과 내부 객체를 보여주지 않는다.
+
+`world.navigation.entry_block(profile, destination_zone)`는 Room requires와 임무 진행을 비교하는 pure helper다. 이동 hook은 이 결과의 기존 message로 이동을 거절한다. Exit의 `can_observe_through(context)`도 같은 결과를 사용하지만 이동 hook을 호출하지 않는다. 관찰에는 저장을 하지 않는 `Explorer.profile_snapshot()` 사본을 사용하여 구버전 데이터도 메모리에서만 변환한다. 현재 주요 진행문은 이동/관찰 모두 차단하고 목적지 이름·설명·객체를 읽거나 표시하지 않는다. 이동 가능성과 관찰 가능성은 별개 정책이며 투명 방벽 같은 미래 경계는 Exit의 `blocks_distant_view=False` attribute 또는 can_observe_through override로 관찰만 허용할 수 있다. 이 override는 이동 조건이나 view lock을 해제하지 않는다.
+
+Room `requires.message`는 이동 실패 안내, optional `requires.observe_message`는 정찰 차단 안내다. 조건 판정은 `entry_block()`에 그대로 남기고 Exit가 관찰이 차단된 경우에만 해당 콘텐츠 문구를 선택한다. observe_message는 방향과 독립적인 문장 뒷부분이며 Exit가 기존 direction_phrase와 direction semantic token을 앞에 붙인다. 누락 시 `그 방향은 아직 자세히 살펴볼 수 없다.`라는 물리적 구조를 가정하지 않는 fallback을 사용한다. 무결성 검사는 이 필드를 강제하지 않으며, 지정했다면 비어 있지 않은 문자열인지 검사한다. 실제 진입문/출입문만 문 표현을 사용하고 임무 보고 조건은 중립적인 안내를 사용한다. `blocks_distant_view=False`와 can_observe_through override는 이 문구 선택보다 먼저 적용하며 Room view lock을 우회하지 않는다.
+
 ### Compact 정보 조회
 
 `compact(title, *lines, summary=...)`는 기존 Text 조각을 보존하면서 제목과 요약을 한 줄에 놓고 첫 내용까지 빈 줄을 추가하지 않는다. 기존 `sheet`는 Room·대상 보기 등에 남긴다. 상태는 전투 수치·특성·장비 요약, 능력은 기본값과 투자값, 장비는 슬롯별 보정으로 역할을 나눈다. 가방은 비어 있지 않은 분류마다 한 행을 만들고, 기술은 SKILLS의 설명과 다음 조건을 그대로 한 항목에 표시한다. R은 Rank, C는 크레딧이며 비용 화면에 단위 안내를 둔다. 임무는 완료 수/전체 단계와 ASCII `+`(완료), `>`(현재), `-`(대기)로 구분한다.
@@ -203,6 +221,20 @@ profile의 최신 버전은 4다. v1/v2의 개인 encounter 제거·전투 입�
 대상 보기와 `pz_state.inventory[].equip_action`도 이 슬롯 대응을 사용한다. 웹은 전달된 행동을 기존 텍스트 명령 버튼으로 전송하며 장비 이름 목록을 따로 관리하지 않는다. `stats()`와 장비 화면은 양쪽 슬롯의 공격·방어를 모두 합산하므로 사냥창의 방어와 경량전술조끼의 공격도 적용된다.
 
 장비 수치·구매·교환 경로는 [README 장비 표](../README.md#장비와-획득-경로)를 따른다. 두 번째 지역도 기존 장비를 활용하며 새 무기·방어구를 추가하지 않는다. 기존 장비 ID와 획득 경로를 유지한다.
+
+## 아이템 이전·소비·보관
+
+가방과 보관 공간은 `item_id → quantity` 스택이다. `world.targets.stack_selector()`는 기존 DEFAULT/ALL을 재사용하고 inventory INDEX와 숫자 수량을 거절한다. `parse_relation()`이 `에게`/`에`/`에서`의 경계를 추출한 뒤 기존 selector와 room ordering으로 플레이어/상자 하나를 선택한다. 여러 플레이어·상자 동시 이전은 지원하지 않는다.
+
+`rules.move_item()`은 아이템의 명시적 `transferable` 정책, 보유 수량과 현재 equipment가 예약한 복사본 수를 검사한 뒤 source 차감·destination 증가·빈 스택 제거를 처리한다. 버려·줘·넣어·꺼내는 모두 이 규칙을 쓰며, `world.item_transfers.transfer()`가 기존 `world_change()`의 서버 잠금과 DB transaction 안에서 영속 소유자를 저장한다. 저장 실패 시 기존 DB/Evennia 캐시 rollback과 after_change 정책을 재사용한다. 마지막 공용 아이템의 두 요청도 같은 단일 서버에서 직렬 처리된다. 별도 거래/loot 권한 체계는 없다.
+
+공용 `Container.db.items`는 persistent shared storage다. `PersonalLocker`는 같은 world object를 보더라도 caller의 `profile.storage`만 읽고 쓴다. bootstrap은 정적 이름·위치만 동기화하며 contents를 초기화하지 않는다. 두 객체는 부두에 배치하고 기존 일회 조사 보급상자는 변경하지 않는다. 개인·공용 보관 용량과 nesting은 구현하지 않는다.
+
+밀림 신호전지는 `transferable=False`다. 다른 곳에 옮긴 뒤 수위 표식을 다시 조사하는 복제를 막기 위해 버려·줘·공용/개인 넣어 모두 차단한다. 회수부품과 보스 trophy는 반복 획득하거나 진행 flag로 판정하는 일반 물품이며 이동 가능하다. 직접 버린 물건과 corpse decay는 같은 DroppedLoot 생성 helper를 쓴다. 직접 버린 entry만 예약/배정 없이 protection_until=0으로 생성하고 기존 corpse 권한은 보존한다.
+
+equipment 슬롯은 `None`을 정상 값으로 허용한다. 해제/벗어는 소지 수량을 바꾸지 않으며 stats·상태·장비·전투 문장·웹 state에서 빈 슬롯을 처리한다. 맨손 공격은 기존 base attack과 성장 보정만 사용한다. migration은 명시적 None을 초기 장비로 되돌리지 않는다.
+
+야전식량/정제수의 `consume_action`과 `heal`이 소비 행동과 고정 효과의 출처다. 비전투 중 하나만 사용하고 최대 HP에서는 소비하지 않는다. 붕대 회복과 치료 숙련/성장 보정을 재사용하거나 변경하지 않는다. 모든 이전과 장비 해제도 비전투 중만 허용하며 줘의 받는 탐사자도 비전투 상태여야 한다. 웹은 서버의 remove_action/consume_action을 기존 텍스트 명령 버튼으로 전송한다.
 
 ## Region·임무·Gate 확장
 

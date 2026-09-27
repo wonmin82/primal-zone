@@ -54,6 +54,16 @@ class RegionTests(EvenniaCommandTest):
         )
         self.assertEqual(stale_definitions(), [])
 
+    def test_optional_observation_message_integrity(self):
+        requirement = ROOMS["ridge"]["requires"]
+        without_message = dict(requirement)
+        without_message.pop("observe_message")
+        with patch.dict(ROOMS["ridge"], {"requires": without_message}):
+            self.assertEqual(errors(INTERACTABLES), [])
+        for invalid in (None, "", "   ", 1):
+            with self.subTest(value=invalid), patch.dict(requirement, observe_message=invalid):
+                self.assertTrue(any("관찰 차단 문구" in error for error in errors(INTERACTABLES)))
+
     def test_bootstrap_updates_static_content_without_resetting_runtime(self):
         room = self.rooms["jungle_road"]
         enemy = room_enemies(room)[0]

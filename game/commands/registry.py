@@ -4,6 +4,7 @@ from commands.base import UnknownCommand
 from commands.character import Abilities, Experience, Help, Look, Map, Quest, Skills, Status
 from commands.combat import Attack, Flee, Guard, Heal, Heavy
 from commands.inventory import Buy, Equip, Equipment, Exchange, Inventory, Shop, Take, Wield
+from commands.items import Drink, Drop, Eat, Give, RemoveArmor, Retrieve, Store, Unwield
 from commands.party import (
     PartyAccept,
     PartyCommand,
@@ -41,6 +42,14 @@ COMMANDS = [
     Inventory,
     Wield,
     Equip,
+    Drop,
+    Give,
+    Eat,
+    Drink,
+    RemoveArmor,
+    Unwield,
+    Store,
+    Retrieve,
     Attack,
     Heavy,
     Guard,

@@ -10,12 +10,19 @@ from evennia.utils import delay
 from evennia.utils.dbserialize import deserialize
 from world import rules
 from world import text as ft
-from world.content import EQUIPMENT_ACTIONS, ITEMS, REGIONS, ROOM_REGION, ROOMS
+from world.content import EQUIPMENT_ACTIONS, ITEMS, REGIONS, ROOM_REGION, ROOMS, UNEQUIP_ACTIONS
+from world.distant_presentation import DistantPresence, DistantPresenceMixin
 from world.multiplayer import after_change
+from world.navigation import entry_block
 from world.quests import current_hint
 
 
-class Explorer(DefaultCharacter):
+class Explorer(DistantPresenceMixin, DefaultCharacter):
+    distant_visible = True
+
+    def get_distant_presence(self, context):
+        return DistantPresence("탐사자", "player", "명", "멀리 주변을 살피고 있다.")
+
     def return_appearance(self, looker, **kwargs):
         return ft.sheet(ft.token("player", self.key), "섬을 탐험하는 탐사자다.")
 
@@ -70,6 +77,11 @@ class Explorer(DefaultCharacter):
             self.db.profile = profile
         return profile
 
+    def profile_snapshot(self):
+        """관찰용 사본만 변환한다. 구버전 profile도 저장하거나 진행하지 않는다."""
+        saved = deserialize(self.db.profile)
+        return rules.migrate_profile(saved) if saved is not None else rules.new_profile()
+
     def save_profile(self, profile):
         with transaction.atomic():
             self.db.profile = profile
@@ -106,6 +118,8 @@ class Explorer(DefaultCharacter):
                 "count": count,
                 "slot": ITEMS[key]["slot"],
                 "equip_action": EQUIPMENT_ACTIONS.get(ITEMS[key]["slot"]),
+                "remove_action": UNEQUIP_ACTIONS.get(ITEMS[key]["slot"]),
+                "consume_action": ITEMS[key].get("consume_action"),
                 "equipped": key in profile["equipment"].values(),
             }
             for key, count in profile["inventory"].items()
@@ -127,6 +141,7 @@ class Explorer(DefaultCharacter):
             "region_name": REGIONS[ROOM_REGION[zone]]["name"] if zone in ROOM_REGION else None,
             "safe": room.get("safe", False),
             "inventory": inventory,
+            "equipment": {slot: ITEMS[identity]["name"] if identity else None for slot, identity in profile["equipment"].items()},
             "exits": list(room.get("exits", {})),
             "hint": room.get("hint", ""),
             **multiplayer_state(self),
@@ -178,11 +193,12 @@ class Explorer(DefaultCharacter):
                     observer.msg(message, from_obj=self)
 
     def at_pre_move(self, destination, move_type="move", **kwargs):
-        if self.profile().get("combat_target"):
+        profile = self.profile()
+        if profile.get("combat_target"):
             self.msg("전투 중에는 이동할 수 없습니다. '도주'로 교전을 끝내세요.")
             return False
-        requirement = ROOMS.get(destination.db.zone_id, {}).get("requires")
-        if requirement and not self.profile()["quests"][requirement["quest"]][requirement["flag"]]:
+        requirement = entry_block(profile, destination.db.zone_id)
+        if requirement:
             self.msg(requirement["message"])
             return False
         return super().at_pre_move(destination, move_type=move_type, **kwargs)

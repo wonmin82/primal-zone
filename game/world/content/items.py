@@ -14,9 +14,12 @@ ITEMS = {
     "heavy_suit": {"name": "중장방호복", "slot": "armor", "attack": 0, "defense": 6},
     "fang": {"name": "우두머리송곳니", "slot": "trophy", "attack": 0, "defense": 0},
     "bandage": {"name": "붕대", "slot": "consumable", "heal": 35},
+    "field_ration": {"name": "야전식량", "slot": "consumable", "heal": 12, "consume_action": "먹어", "description": "탐사 중 간단히 먹을 수 있는 보존식이다. 비전투 중 먹으면 체력을 회복한다."},
+    "water": {"name": "정제수", "slot": "consumable", "heal": 6, "consume_action": "마셔", "description": "안전하게 정제한 식수다. 비전투 중 마시면 체력을 조금 회복한다."},
     "scrap": {"name": "회수부품", "slot": "material"},
     "jungle_cell": {
         "name": "밀림 신호전지",
+        "transferable": False,
         "slot": "material",
         "description": "선발대가 수몰 도로에 남긴 전지다. 거목 군락의 신호 장치를 가동한다.",
     },
@@ -27,11 +30,18 @@ ITEMS = {
     },
 }
 
+# 일반 물품은 이동 가능하고 임무 핵심 물품은 정의에서 명시적으로 차단한다.
+for definition in ITEMS.values():
+    definition.setdefault("transferable", True)
+
 OPPOSITES = {"북": "n", "남": "s", "동": "e", "서": "w"}
 # 행동 선택은 아이템 이름이 아니라 slot만 사용한다.
 EQUIPMENT_ACTIONS = {"weapon": "무장", "armor": "착용"}
+UNEQUIP_ACTIONS = {"weapon": "해제", "armor": "벗어"}
 SHOP = {
     "bandage": 8,
+    "field_ration": 4,
+    "water": 3,
     "spear": 35,
     "blade": 60,
     "jungle_blade": 95,

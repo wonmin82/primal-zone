@@ -3,7 +3,7 @@
 from copy import deepcopy
 from random import Random
 
-from world.content import ENEMIES, EQUIPMENT_ACTIONS, EXCHANGE, ITEMS, SHOP
+from world.content import ENEMIES, EQUIPMENT_ACTIONS, EXCHANGE, ITEMS, SHOP, UNEQUIP_ACTIONS
 from world.progression import (
     ATTRIBUTES,
     PROFICIENCIES,
@@ -15,7 +15,7 @@ from world.progression import (
 from world.quests import progress_defaults
 
 MAX_LEVEL = 10
-PROFILE_VERSION = 4
+PROFILE_VERSION = 5
 
 
 class RuleError(ValueError):
@@ -31,6 +31,7 @@ def new_profile():
         "credits": 20,
         "inventory": {"machete": 1, "vest": 1, "bandage": 3},
         "equipment": {"weapon": "machete", "armor": "vest"},
+        "storage": {},
         "kills": 0,
         "quests": progress_defaults(),
         "discoveries": {},
@@ -54,7 +55,7 @@ def level_of(profile):
 
 def stats(profile):
     level = level_of(profile)
-    equipped = [ITEMS[item] for item in profile["equipment"].values()]
+    equipped = [ITEMS[item] for item in profile["equipment"].values() if item is not None]
     return {
         "level": level,
         "max_hp": 60 + (level - 1) * 10 + allocated(profile, "constitution") * 4,
@@ -126,6 +127,62 @@ def buy(profile, item_id, exchange=False):
     else:
         profile["credits"] -= price
     add_item(profile, item_id)
+
+
+def move_item(source, destination, item_id, *, all_items=False, equipment=None):
+    """스택 간 이동. 모든 검증 뒤 한 번에 변경하며 장착된 복사본만 남긴다."""
+    definition = ITEMS.get(item_id)
+    if not definition or not definition["transferable"]:
+        raise RuleError("임무에 필요한 물건은 버리거나 전달하거나 보관할 수 없습니다.")
+    if source is destination:
+        raise RuleError("같은 보관 공간으로 옮길 수 없습니다.")
+    reserved = sum(identity == item_id for identity in (equipment or {}).values())
+    available = source.get(item_id, 0) - reserved
+    if available < 1:
+        if reserved:
+            raise RuleError("현재 사용 중인 장비입니다. 무기는 먼저 해제하고 방어구는 벗으세요.")
+        raise RuleError(f"{definition['name']}이 없습니다.")
+    quantity = available if all_items else 1
+    remaining = source[item_id] - quantity
+    destination[item_id] = destination.get(item_id, 0) + quantity
+    if remaining:
+        source[item_id] = remaining
+    else:
+        del source[item_id]
+    return quantity
+
+
+def unequip(profile, item_id, expected_slot):
+    require_peace(profile)
+    definition = ITEMS[item_id]
+    slot = definition["slot"]
+    action = UNEQUIP_ACTIONS.get(slot)
+    if slot != expected_slot or not action:
+        hint = f"'{definition['name']} {action}'를 사용하세요." if action else "장비가 아닙니다."
+        raise RuleError(hint)
+    if profile["equipment"].get(slot) != item_id:
+        raise RuleError("현재 사용 중인 장비가 아닙니다.")
+    profile["equipment"][slot] = None
+
+
+def eat_or_drink(profile, item_id, action):
+    require_peace(profile)
+    definition = ITEMS[item_id]
+    supported = definition.get("consume_action")
+    if supported != action:
+        hint = (
+            f"'{definition['name']} {supported}'를 사용하세요."
+            if supported
+            else "먹거나 마실 수 없는 물건입니다."
+        )
+        raise RuleError(hint)
+    missing = stats(profile)["max_hp"] - profile["hp"]
+    if missing <= 0:
+        raise RuleError("이미 체력이 가득합니다.")
+    consume(profile, item_id)
+    restored = min(missing, definition["heal"])
+    profile["hp"] += restored
+    return restored
 
 
 def heal(profile, training_cap=SAFE_HEAL_TRAINING_CAP):
@@ -311,6 +368,7 @@ def migrate_profile(profile):
         result["quests"] = progress
         result["discoveries"] = {"supply_cache": bool(result.pop("cache_claimed", False))}
     if version < PROFILE_VERSION:
+        result.setdefault("storage", {})
         result["version"] = PROFILE_VERSION
     return result
 

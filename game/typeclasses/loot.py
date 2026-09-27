@@ -10,6 +10,7 @@ from evennia.utils.dbserialize import deserialize
 from world import rules
 from world import text as ft
 from world.content import ENEMIES, ITEMS, find_id
+from world.distant_presentation import DistantPresenceMixin
 from world.multiplayer import (
     CORPSE_TTL_SECONDS,
     LOOT_PROTECTION_SECONDS,
@@ -86,6 +87,14 @@ def room_loot(room, corpse=True):
         if room
         else []
     )
+
+
+def create_dropped_loot(room, entries, source_spawn=None):
+    """직접 버리기와 시체 decay가 같은 바닥 물건 표현을 사용한다."""
+    dropped = create_object(DroppedLoot, key=ITEMS[entries[0]["item"]]["name"], location=room)
+    dropped.db.entries = entries
+    dropped.db.source_spawn = source_spawn
+    return dropped
 
 
 def take_loot(caller, item=None, corpse=True, now=None, *, request=None):
@@ -169,7 +178,19 @@ def take_loot(caller, item=None, corpse=True, now=None, *, request=None):
     return received
 
 
-class Corpse(DefaultObject):
+class Corpse(DistantPresenceMixin, DefaultObject):
+    distant_visible = True
+    distant_role = "remains"
+    distant_unit = "구"
+    distant_sentence = "바닥에 남아 있다."
+
+    def is_distant_visible(self, context):
+        return (
+            self.db.decay_at is not None
+            and context.observed_at < self.db.decay_at
+            and super().is_distant_visible(context)
+        )
+
     def return_appearance(self, looker, **kwargs):
         from world.state import loot_controls, loot_entries
 
@@ -221,11 +242,7 @@ class Corpse(DefaultObject):
                 return
             room = self.location
             for entry in deserialize(self.db.entries):
-                dropped = create_object(
-                    DroppedLoot, key=ITEMS[entry["item"]]["name"], location=room
-                )
-                dropped.db.entries = [entry]
-                dropped.db.source_spawn = self.db.source_spawn
+                create_dropped_loot(room, [entry], self.db.source_spawn)
             self.db.entries = []
             task = self.ndb.lifecycle_task
             self.ndb.lifecycle_task = None
@@ -251,7 +268,7 @@ class Corpse(DefaultObject):
                     obj.push_state()
 
 
-class DroppedLoot(DefaultObject):
+class DroppedLoot(DistantPresenceMixin, DefaultObject):
     def return_appearance(self, looker, **kwargs):
         from world.state import loot_controls, loot_entries
 

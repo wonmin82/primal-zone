@@ -5,7 +5,115 @@ from unittest.mock import patch
 
 from world import rules
 from world.content import ENEMIES, EQUIPMENT_ACTIONS, EXCHANGE, ITEMS, ROOMS, SHOP, find_id
+from world.navigation import entry_block
 from world.quests import QUESTS, current_hint
+
+
+class ObservationContentRulesTests(TestCase):
+    def test_navigation_requirements_are_pure_and_keep_existing_messages(self):
+        for zone, room in ROOMS.items():
+            profile = rules.new_profile()
+            before = deepcopy(profile)
+            block = entry_block(profile, zone)
+            self.assertEqual(block, room.get("requires"))
+            self.assertEqual(profile, before)
+            if block:
+                self.assertTrue(block["message"])
+                profile["quests"][block["quest"]][block["flag"]] = True
+                self.assertIsNone(entry_block(profile, zone))
+        self.assertIsNone(entry_block({}, "not_a_zone"))
+
+    def test_content_separates_static_traces_and_enemy_presentations(self):
+        for definition in ENEMIES.values():
+            self.assertTrue(definition["presence"])
+            self.assertTrue(definition["distant_presence"])
+            for room in ROOMS.values():
+                self.assertNotIn(definition["presence"], room["desc"])
+                self.assertNotIn(definition["distant_presence"], room["desc"])
+        for zone, trace in (("trail", "발톱 자국"), ("ridge", "철골"), ("jungle_road", "노면"), ("jungle_watch", "난간"), ("jungle_fen", "나무뿌리"), ("jungle_grove", "문틀"), ("jungle_gate", "외벽")):
+            self.assertIn(trace, ROOMS[zone]["desc"])
+        self.assertNotIn("신호 장치", ROOMS["jungle_grove"]["desc"])
+        self.assertNotIn("보급 주머니", ROOMS["jungle_fen"]["desc"])
+        self.assertNotIn("탐사 표식", ROOMS["jungle_watch"]["desc"])
+
+
+class ItemInteractionRulesTests(TestCase):
+    def test_transfer_reserves_only_equipped_copies_and_removes_zero_stack(self):
+        profile = rules.new_profile()
+        profile["inventory"]["machete"] = 3
+        destination = {}
+        self.assertEqual(rules.move_item(profile["inventory"], destination, "machete", equipment=profile["equipment"]), 1)
+        self.assertEqual(rules.move_item(profile["inventory"], destination, "machete", equipment=profile["equipment"], all_items=True), 1)
+        self.assertEqual(profile["inventory"]["machete"], 1)
+        before = deepcopy(profile)
+        with self.assertRaises(rules.RuleError):
+            rules.move_item(profile["inventory"], destination, "machete", equipment=profile["equipment"])
+        self.assertEqual(profile, before)
+        rules.move_item(profile["inventory"], destination, "bandage", all_items=True)
+        self.assertNotIn("bandage", profile["inventory"])
+        self.assertEqual(destination, {"machete": 2, "bandage": 3})
+
+    def test_quest_key_cannot_be_moved_and_reacquisition_does_not_duplicate(self):
+        profile = rules.new_profile()
+        profile["quests"]["radio_tower"]["claimed"] = True
+        rules.jungle_talk(profile)
+        rules.jungle_mark(profile, "watch_marked")
+        rules.jungle_mark(profile, "road_marked")
+        before = deepcopy(profile)
+        destination = {}
+        with self.assertRaises(rules.RuleError):
+            rules.move_item(profile["inventory"], destination, "jungle_cell", all_items=True)
+        self.assertEqual(profile, before)
+        self.assertEqual(destination, {})
+        self.assertFalse(rules.jungle_mark(profile, "road_marked"))
+        self.assertEqual(profile["inventory"]["jungle_cell"], 1)
+        rules.open_jungle_gate(profile)
+        self.assertNotIn("jungle_cell", profile["inventory"])
+
+    def test_consumption_uses_metadata_without_training_and_preserves_failure(self):
+        for identity, action in (("field_ration", "먹어"), ("water", "마셔")):
+            with self.subTest(identity=identity):
+                profile = rules.new_profile()
+                rules.buy(profile, identity)
+                profile["hp"] = 20
+                before = deepcopy(profile["proficiencies"])
+                self.assertEqual(rules.eat_or_drink(profile, identity, action), ITEMS[identity]["heal"])
+                self.assertEqual(profile["hp"], 20 + ITEMS[identity]["heal"])
+                self.assertEqual(profile["proficiencies"], before)
+                self.assertNotIn(identity, profile["inventory"])
+                self.assertLess(ITEMS[identity]["heal"] / SHOP[identity], ITEMS["bandage"]["heal"] / SHOP["bandage"])
+        for identity, action, hp, combat in (
+            ("field_ration", "마셔", 20, None), ("water", "먹어", 20, None),
+            ("bandage", "먹어", 20, None), ("water", "마셔", 60, None),
+            ("field_ration", "먹어", 20, 123),
+        ):
+            profile = rules.new_profile()
+            profile["inventory"][identity] = 1
+            profile.update(hp=hp, combat_target=combat)
+            before = deepcopy(profile)
+            with self.assertRaises(rules.RuleError):
+                rules.eat_or_drink(profile, identity, action)
+            self.assertEqual(profile, before)
+
+    def test_empty_slots_stats_unequip_errors_and_migration_preserve_data(self):
+        profile = rules.new_profile()
+        before = rules.stats(profile)
+        rules.unequip(profile, "machete", "weapon")
+        rules.unequip(profile, "vest", "armor")
+        after = rules.stats(profile)
+        self.assertEqual((before["attack"] - after["attack"], before["defense"] - after["defense"]), (2, 1))
+        for identity, slot in (("machete", "weapon"), ("machete", "armor"), ("vest", "weapon")):
+            snapshot = deepcopy(profile)
+            with self.assertRaises(rules.RuleError):
+                rules.unequip(profile, identity, slot)
+            self.assertEqual(profile, snapshot)
+        old = deepcopy(profile)
+        old.update(version=4, xp=333, credits=88)
+        old.pop("storage")
+        migrated = rules.migrate_profile(old)
+        self.assertEqual(migrated, {**old, "version": rules.PROFILE_VERSION, "storage": {}})
+        migrated["storage"]["bandage"] = 2
+        self.assertEqual(rules.migrate_profile(migrated), migrated)
 
 
 class QuestHintTests(TestCase):
@@ -319,7 +427,7 @@ class GrowthRuleTests(TestCase):
             boss_defeated=True, quest_claimed=True, cache_claimed=True,
         )
         migrated = rules.migrate_profile(old)
-        self.assertEqual(migrated["version"], 4)
+        self.assertEqual(migrated["version"], rules.PROFILE_VERSION)
         self.assertEqual(migrated["quests"]["radio_tower"], {
             "started": True, "record_read": True, "generator_fixed": True,
             "boss_defeated": True, "claimed": True,
@@ -399,7 +507,7 @@ class GrowthRuleTests(TestCase):
                     self.assertEqual(migrated[key], value)
             self.assertTrue(migrated["quests"]["radio_tower"]["record_read"])
             self.assertTrue(migrated["discoveries"]["supply_cache"])
-            self.assertEqual(migrated["version"], 4)
+            self.assertEqual(migrated["version"], rules.PROFILE_VERSION)
             self.assertEqual(rules.migrate_profile(migrated), migrated)
             self.assertEqual(old, before)
             self.assertEqual(rules.stats(old), rules.stats(migrated))

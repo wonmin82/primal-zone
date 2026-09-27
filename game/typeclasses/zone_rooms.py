@@ -32,6 +32,13 @@ def exit_diagram(exits):
 
 
 class ZoneRoom(DefaultRoom):
+    def return_distant_appearance(self, context):
+        from world.distant_presentation import distant_appearance
+
+        if context.target_room != self:
+            raise ValueError("관찰 context의 목적지와 Room이 다릅니다.")
+        return distant_appearance(context)
+
     def return_appearance(self, looker, **kwargs):
         from world.lifecycle import reconcile_room
 
@@ -58,15 +65,14 @@ class ZoneRoom(DefaultRoom):
                     pool=pool,
                 )
             )
-        lines.extend(
-            presence(
-                [obj for obj in room_enemies(self) if obj in pool],
-                "hostile",
-                "마리",
-                "주변을 경계하며 서성이고 있다.",
-                pool=pool,
+        enemies = [obj for obj in room_enemies(self) if obj in pool]
+        for sentence in dict.fromkeys(obj.get_local_presence() for obj in enemies):
+            lines.extend(
+                presence(
+                    [obj for obj in enemies if obj.get_local_presence() == sentence],
+                    "hostile", "마리", sentence, pool=pool,
+                )
             )
-        )
         lines.extend(
             presence(
                 [obj for obj in room_loot(self) if obj in pool],

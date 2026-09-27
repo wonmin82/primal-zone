@@ -4,14 +4,24 @@ from evennia.objects.objects import DefaultObject
 from world import rules
 from world import text as ft
 from world.content import ENEMIES, ROOMS
+from world.distant_presentation import DistantPresence, DistantPresenceMixin
 from world.progression import ATTRIBUTES, SKILLS
 
 
-class ActionObject(DefaultObject):
+class ActionObject(DistantPresenceMixin, DefaultObject):
+    distant_visible = False
     actions = ()
     semantic_role = "object"
     presence = "가까이에서 살펴볼 수 있다."
     description = "탐사 중에 발견한 물건이다."
+
+    def get_distant_presence(self, context):
+        return DistantPresence(
+            self.key,
+            self.semantic_role,
+            "명" if self.semantic_role == "npc" else "개",
+            "멀리 서 있다." if self.semantic_role == "npc" else "멀리 보인다.",
+        )
 
     def return_appearance(self, looker, **kwargs):
         return ft.sheet(
@@ -32,6 +42,7 @@ class ActionObject(DefaultObject):
 
 
 class Commander(ActionObject):
+    distant_visible = True
     semantic_role = "npc"
     presence = "낡은 지도를 펼쳐 놓고 탐사대를 기다리고 있다."
     description = "탐사대를 지휘하는 책임자다. 낡은 지도와 무전기를 늘 곁에 두고 있다."
@@ -69,7 +80,64 @@ class Commander(ActionObject):
         caller.msg(ft.text(ft.token("npc", self.key), "\n\n", body))
 
 
+class Container(ActionObject):
+    """공용 스택 보관 공간. 개인 보관함은 caller의 profile만 사용한다."""
+
+    distant_visible = True
+    personal = False
+    actions = ("넣어", "꺼내")
+    presence = "부두 한쪽에 놓여 있다. 물품을 맡기거나 꺼낼 수 있다."
+    description = "탐사자들이 함께 쓰는 보관상자다. 넣은 물건은 누구나 꺼낼 수 있다."
+
+    def at_object_creation(self):
+        super().at_object_creation()
+        self.db.items = {}
+
+    def act(self, caller, action, args):
+        from world.item_transfers import transfer
+
+        identity, all_items = args
+        return transfer(
+            caller, identity, all_items=all_items, container=self, withdraw=action == "꺼내"
+        )
+
+    def return_appearance(self, looker, **kwargs):
+        from evennia.utils.dbserialize import deserialize
+        from world.targets import labels, room_objects
+
+        contents = looker.profile()["storage"] if self.personal else deserialize(self.db.items)
+        label = labels(room_objects(looker)).get(self.id, self.key)
+        lines = [self.description]
+        lines.extend(
+            ft.text(ft.item(identity), f" ×{quantity}") for identity, quantity in contents.items()
+        )
+        if not contents:
+            lines.append("비어 있다.")
+        lines.append(ft.text("보관: ", ft.usage(f"{label}에 아이템이름 넣어", {"넣어"})))
+        if contents:
+            identity = next(iter(contents))
+            lines.append(
+                ft.text(
+                    "회수: ",
+                    ft.token("object", label),
+                    "에서 ",
+                    ft.item(identity),
+                    " ",
+                    ft.token("command", "꺼내"),
+                    " · 아이템 뒤에 모두를 붙이면 스택 전부를 옮긴다.",
+                )
+            )
+        return ft.compact(ft.token("object", label), *lines)
+
+
+class PersonalLocker(Container):
+    distant_visible = True
+    personal = True
+    description = "탐사자 개인의 물품을 보관한다. 같은 보관함을 사용해도 내용은 각자에게만 보인다."
+
+
 class MaintenanceLog(ActionObject):
+    distant_visible = False
     presence = "젖은 책상 위에 펼쳐져 있다."
     description = "발전기 복구 절차와 현장 전투 기록이 남아 있는 문서다."
     actions = ("조사",)
@@ -107,6 +175,7 @@ class SupplyCache(ActionObject):
 
 
 class Generator(ActionObject):
+    distant_visible = True
     presence = "낡은 외벽 너머로 희미한 경고등을 깜빡이고 있다."
     description = "능선 진입문에 전력을 공급하는 설비다. 정비기록과 부품이 필요하다."
     actions = ("수리",)
@@ -125,6 +194,7 @@ class Generator(ActionObject):
 
 
 class Instructor(ActionObject):
+    distant_visible = True
     semantic_role = "npc"
     presence = "탐사자의 전투 기록을 살피며 훈련 계획을 세우고 있다."
     description = "전투 기록을 분석하고 신체 훈련과 전술을 다시 설계하는 교관이다."
@@ -163,6 +233,7 @@ class Instructor(ActionObject):
 
 
 class Pathfinder(ActionObject):
+    distant_visible = True
     semantic_role = "npc"
     presence = "젖은 지도 위에 선발대의 이동 경로를 표시하고 있다."
     description = "밀림에서 돌아온 선발대 길잡이다. 두 갈래 탐사로의 표식을 찾고 있다."
@@ -188,6 +259,7 @@ class Pathfinder(ActionObject):
 
 
 class JungleMarker(ActionObject):
+    distant_visible = False
     presence = "나무와 돌에 선발대의 흔적이 남아 있다."
     description = "선발대가 길을 잃지 않도록 남긴 현장 표식이다."
     actions = ("조사",)
@@ -212,7 +284,8 @@ class WaterMarker(JungleMarker):
 
 
 class SignalDevice(ActionObject):
-    presence = "닫힌 출입문 옆에서 신호등을 깜빡이고 있다."
+    distant_visible = True
+    presence = "출입문 옆에서 신호등을 깜빡이고 있다."
     description = "두 탐사 표식의 좌표를 맞추면 연구구역의 문을 열 수 있다."
     actions = ("조사",)
 
@@ -244,6 +317,8 @@ def instructor_for(caller):
 
 
 INTERACTABLES = {
+    "shared_container": {"room": "dock", "typeclass": "Container", "name": "보관상자", "aliases": []},
+    "personal_locker": {"room": "dock", "typeclass": "PersonalLocker", "name": "개인 보관함", "aliases": ["보관함"]},
     "commander": {"room": "dock", "typeclass": "Commander", "name": "윤대장", "aliases": ["대장"]},
     "instructor": {"room": "dock", "typeclass": "Instructor", "name": "탐사대 훈련관", "aliases": ["훈련관", "교관"]},
     "maintenance_log": {"room": "office", "typeclass": "MaintenanceLog", "name": "정비기록", "aliases": ["기록"]},
