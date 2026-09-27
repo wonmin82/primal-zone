@@ -47,6 +47,10 @@ def errors(interactables):
             not in {flag for flag, *_ in QUESTS[requirement["quest"]]["steps"]}
         ):
             issues.append(f"{zone}: Gate 진행 필드가 없습니다.")
+        if requirement and "observe_message" in requirement:
+            message = requirement["observe_message"]
+            if not isinstance(message, str) or not message.strip():
+                issues.append(f"{zone}: 관찰 차단 문구는 비어 있지 않은 문자열이어야 합니다.")
     if len(spawns) != len(set(spawns)):
         issues.append("Enemy spawn ID가 중복되었습니다.")
     for enemy, data in ENEMIES.items():

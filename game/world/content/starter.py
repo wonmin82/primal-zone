@@ -124,6 +124,11 @@ ROOMS = {
         "desc": "통신탑을 둘러싼 덩굴이 능선을 뒤덮고 있다. 녹슨 철골 사이로 바람이 낮은 소리를 낸다.",
         "hint": "우두머리가 몸을 낮추면 다음 공격을 방어하자.",
         "exits": {"남": "marsh", "북": "jungle_edge"},
-        "requires": {"quest": "radio_tower", "flag": "generator_fixed", "message": "통신탑 진입문이 잠겨 있습니다. 정비기록을 읽고 발전기를 수리하세요."},
+        "requires": {
+            "quest": "radio_tower",
+            "flag": "generator_fixed",
+            "message": "통신탑 진입문이 잠겨 있습니다. 정비기록을 읽고 발전기를 수리하세요.",
+            "observe_message": "난 길은 잠긴 진입문에 막혀 있다.",
+        },
     },
 }

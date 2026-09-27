@@ -54,8 +54,13 @@ class Exit(ObjectParent, DefaultExit):
             direction=self.key,
         )
         if not self.can_observe_through(context):
+            requirement = ROOMS.get(destination.db.zone_id, {}).get("requires") or {}
+            message = requirement.get("observe_message")
+            if not message:
+                return ft.text("그 방향은 아직 자세히 살펴볼 수 없다.")
             return ft.text(
                 ft.token("direction", direction_phrase(self.key)),
-                " 난 길은 닫힌 진입문에 막혀 있다.",
+                " ",
+                message,
             )
         return appearance(context)

@@ -285,10 +285,10 @@ class DistantViewTests(EvenniaCommandTest):
         self.assertIn("회수부품", self.command("시체 2 봐"))
 
     def test_gate_preview_does_not_unlock_or_traverse(self):
-        for source, destination in (
-            ("marsh", "ridge"),
-            ("ridge", "jungle_edge"),
-            ("jungle_grove", "jungle_gate"),
+        for source, destination, reason in (
+            ("marsh", "ridge", "잠긴 진입문"),
+            ("ridge", "jungle_edge", "아직 자세히 살펴볼 수 없다"),
+            ("jungle_grove", "jungle_gate", "닫힌 출입문"),
         ):
             with self.subTest(destination=destination):
                 self.char1.location = self.rooms[source]
@@ -307,7 +307,10 @@ class DistantViewTests(EvenniaCommandTest):
                     side_effect=AssertionError("blocked room read"),
                 ):
                     output = self.command("북 봐")
-                self.assertIn("진입문에 막혀", output)
+                self.assertIn(reason, output)
+                if destination == "jungle_edge":
+                    for physical_gate in ("진입문", "출입문", "닫힌 문", "문이 잠겨"):
+                        self.assertNotIn(physical_gate, output)
                 for secret in (target.key, ROOMS[destination]["desc"], box.key, "시체", "탐사자"):
                     self.assertNotIn(secret, output)
                 self.assertFalse(
@@ -316,10 +319,12 @@ class DistantViewTests(EvenniaCommandTest):
                         for s in output.segments
                     )
                 )
-                self.char1.execute_cmd("북")
+                requirement = ROOMS[destination]["requires"]
+                with patch.object(self.char1, "msg") as message:
+                    self.char1.execute_cmd("북")
+                message.assert_any_call(requirement["message"])
                 self.assertEqual(self.char1.location, self.rooms[source])
                 self.assertEqual(self.char1.profile(), before_profile)
-                requirement = ROOMS[destination]["requires"]
                 self.char1.change(
                     lambda p: p["quests"][requirement["quest"]].update({requirement["flag"]: True})
                 )
@@ -328,6 +333,7 @@ class DistantViewTests(EvenniaCommandTest):
                 self.assertIn(target.key, output)
                 self.assertIn(ROOMS[destination]["desc"], output)
                 self.assertIn(box.key, output)
+                self.assertNotIn(requirement["observe_message"], output)
                 self.assertEqual(self.char1.profile(), unlocked)
                 self.assertEqual(self.char1.location, self.rooms[source])
                 self.assertEqual(
@@ -339,6 +345,30 @@ class DistantViewTests(EvenniaCommandTest):
                 )
                 self.char1.execute_cmd("북")
                 self.assertEqual(self.char1.location, target)
+
+    def test_observation_message_is_optional_and_fallback_does_not_read_destination(self):
+        self.char1.location = self.rooms["ridge"]
+        target = self.rooms["jungle_edge"]
+        requirement = dict(ROOMS["jungle_edge"]["requires"])
+        requirement.pop("observe_message")
+        before = deepcopy(self.char1.profile())
+        with (
+            patch.dict(ROOMS["jungle_edge"], {"requires": requirement}),
+            patch.object(
+                target,
+                "return_distant_appearance",
+                side_effect=AssertionError("blocked room read"),
+            ),
+        ):
+            output = self.command("북 봐")
+            self.assertIn("아직 자세히 살펴볼 수 없다", output)
+            for secret in (target.key, ROOMS["jungle_edge"]["desc"], "진입문", "닫힌 문"):
+                self.assertNotIn(secret, output)
+            with patch.object(self.char1, "msg") as message:
+                self.char1.execute_cmd("북")
+            message.assert_any_call(requirement["message"])
+        self.assertEqual(self.char1.profile(), before)
+        self.assertEqual(self.char1.location, self.rooms["ridge"])
 
     def test_observation_override_keeps_entry_locked_and_respects_room_access(self):
         self.char1.location = self.rooms["marsh"]

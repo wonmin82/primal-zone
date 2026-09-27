@@ -204,6 +204,8 @@ Enemy content definition의 `presence`와 `distant_presence`는 종류별 현재
 
 `world.navigation.entry_block(profile, destination_zone)`는 Room requires와 임무 진행을 비교하는 pure helper다. 이동 hook은 이 결과의 기존 message로 이동을 거절한다. Exit의 `can_observe_through(context)`도 같은 결과를 사용하지만 이동 hook을 호출하지 않는다. 관찰에는 저장을 하지 않는 `Explorer.profile_snapshot()` 사본을 사용하여 구버전 데이터도 메모리에서만 변환한다. 현재 주요 진행문은 이동/관찰 모두 차단하고 목적지 이름·설명·객체를 읽거나 표시하지 않는다. 이동 가능성과 관찰 가능성은 별개 정책이며 투명 방벽 같은 미래 경계는 Exit의 `blocks_distant_view=False` attribute 또는 can_observe_through override로 관찰만 허용할 수 있다. 이 override는 이동 조건이나 view lock을 해제하지 않는다.
 
+Room `requires.message`는 이동 실패 안내, optional `requires.observe_message`는 정찰 차단 안내다. 조건 판정은 `entry_block()`에 그대로 남기고 Exit가 관찰이 차단된 경우에만 해당 콘텐츠 문구를 선택한다. observe_message는 방향과 독립적인 문장 뒷부분이며 Exit가 기존 direction_phrase와 direction semantic token을 앞에 붙인다. 누락 시 `그 방향은 아직 자세히 살펴볼 수 없다.`라는 물리적 구조를 가정하지 않는 fallback을 사용한다. 무결성 검사는 이 필드를 강제하지 않으며, 지정했다면 비어 있지 않은 문자열인지 검사한다. 실제 진입문/출입문만 문 표현을 사용하고 임무 보고 조건은 중립적인 안내를 사용한다. `blocks_distant_view=False`와 can_observe_through override는 이 문구 선택보다 먼저 적용하며 Room view lock을 우회하지 않는다.
+
 ### Compact 정보 조회
 
 `compact(title, *lines, summary=...)`는 기존 Text 조각을 보존하면서 제목과 요약을 한 줄에 놓고 첫 내용까지 빈 줄을 추가하지 않는다. 기존 `sheet`는 Room·대상 보기 등에 남긴다. 상태는 전투 수치·특성·장비 요약, 능력은 기본값과 투자값, 장비는 슬롯별 보정으로 역할을 나눈다. 가방은 비어 있지 않은 분류마다 한 행을 만들고, 기술은 SKILLS의 설명과 다음 조건을 그대로 한 항목에 표시한다. R은 Rank, C는 크레딧이며 비용 화면에 단위 안내를 둔다. 임무는 완료 수/전체 단계와 ASCII `+`(완료), `>`(현재), `-`(대기)로 구분한다.

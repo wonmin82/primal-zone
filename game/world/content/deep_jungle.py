@@ -79,6 +79,7 @@ ROOMS = {
             "quest": "radio_tower",
             "flag": "claimed",
             "message": "먼저 통신탑 복구 임무를 마치고 윤대장에게 보고하세요.",
+            "observe_message": "이어지는 길 너머는 아직 자세히 살펴볼 수 없다.",
         },
     },
     "jungle_watch": {
@@ -119,6 +120,7 @@ ROOMS = {
             "quest": "deep_jungle",
             "flag": "gate_open",
             "message": "연구구역 문이 닫혀 있습니다. 두 탐사 표식을 확인하고 거목의 신호 장치를 조사하세요.",
+            "observe_message": "난 길은 닫힌 출입문에 막혀 있다.",
         },
     },
     "jungle_nest": {
