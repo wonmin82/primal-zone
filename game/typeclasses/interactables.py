@@ -69,6 +69,60 @@ class Commander(ActionObject):
         caller.msg(ft.text(ft.token("npc", self.key), "\n\n", body))
 
 
+class Container(ActionObject):
+    """공용 스택 보관 공간. 개인 보관함은 caller의 profile만 사용한다."""
+
+    personal = False
+    actions = ("넣어", "꺼내")
+    presence = "부두 한쪽에 놓여 있다. 물품을 맡기거나 꺼낼 수 있다."
+    description = "탐사자들이 함께 쓰는 보관상자다. 넣은 물건은 누구나 꺼낼 수 있다."
+
+    def at_object_creation(self):
+        super().at_object_creation()
+        self.db.items = {}
+
+    def act(self, caller, action, args):
+        from world.item_transfers import transfer
+
+        identity, all_items = args
+        return transfer(
+            caller, identity, all_items=all_items, container=self, withdraw=action == "꺼내"
+        )
+
+    def return_appearance(self, looker, **kwargs):
+        from evennia.utils.dbserialize import deserialize
+        from world.targets import labels, room_objects
+
+        contents = looker.profile()["storage"] if self.personal else deserialize(self.db.items)
+        label = labels(room_objects(looker)).get(self.id, self.key)
+        lines = [self.description]
+        lines.extend(
+            ft.text(ft.item(identity), f" ×{quantity}") for identity, quantity in contents.items()
+        )
+        if not contents:
+            lines.append("비어 있다.")
+        lines.append(ft.text("보관: ", ft.usage(f"{label}에 아이템이름 넣어", {"넣어"})))
+        if contents:
+            identity = next(iter(contents))
+            lines.append(
+                ft.text(
+                    "회수: ",
+                    ft.token("object", label),
+                    "에서 ",
+                    ft.item(identity),
+                    " ",
+                    ft.token("command", "꺼내"),
+                    " · 아이템 뒤에 모두를 붙이면 스택 전부를 옮긴다.",
+                )
+            )
+        return ft.compact(ft.token("object", label), *lines)
+
+
+class PersonalLocker(Container):
+    personal = True
+    description = "탐사자 개인의 물품을 보관한다. 같은 보관함을 사용해도 내용은 각자에게만 보인다."
+
+
 class MaintenanceLog(ActionObject):
     presence = "젖은 책상 위에 펼쳐져 있다."
     description = "발전기 복구 절차와 현장 전투 기록이 남아 있는 문서다."
@@ -244,6 +298,8 @@ def instructor_for(caller):
 
 
 INTERACTABLES = {
+    "shared_container": {"room": "dock", "typeclass": "Container", "name": "보관상자", "aliases": []},
+    "personal_locker": {"room": "dock", "typeclass": "PersonalLocker", "name": "개인 보관함", "aliases": ["보관함"]},
     "commander": {"room": "dock", "typeclass": "Commander", "name": "윤대장", "aliases": ["대장"]},
     "instructor": {"room": "dock", "typeclass": "Instructor", "name": "탐사대 훈련관", "aliases": ["훈련관", "교관"]},
     "maintenance_log": {"room": "office", "typeclass": "MaintenanceLog", "name": "정비기록", "aliases": ["기록"]},

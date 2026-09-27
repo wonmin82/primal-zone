@@ -8,7 +8,7 @@ from evennia.utils.ansi import parse_ansi, strip_raw_ansi
 from evennia.utils.test_resources import EvenniaCommandTest
 from typeclasses.enemies import room_enemies
 from typeclasses.explorers import Explorer
-from typeclasses.interactables import action_objects
+from typeclasses.interactables import Container, action_objects
 from typeclasses.loot import room_loot, take_loot
 from typeclasses.parties import invite, respond
 from world import presentation as view
@@ -55,7 +55,12 @@ class SemanticTextTests(EvenniaCommandTest):
             self.char1.location = room
             for obj in action_objects(room):
                 output = obj.return_appearance(self.char1)
-                self.assertEqual(tokens(output, "command"), list(obj.actions))
+                if isinstance(obj, Container):
+                    # 빈 보관함은 보관 방법만 안내하며 실제 내용이 있을 때 회수를 안내한다.
+                    self.assertIn("넣어", tokens(output, "command"))
+                    self.assertTrue(set(tokens(output, "command")) <= set(obj.actions))
+                else:
+                    self.assertEqual(tokens(output, "command"), list(obj.actions))
                 self.assertIn(obj.key, tokens(output, obj.semantic_role))
         self.char1.location = self.rooms["grass"]
         enemy = room_enemies(self.char1.location)[0]

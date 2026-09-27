@@ -14,7 +14,7 @@ class Attack(GameCommand):
     summary = "공유 적에게 2.5초 간격으로 기본 공격합니다."
     input_style = "target"
     key = "공격"
-    aliases = ["사냥", "attack"]
+    aliases = ["사냥", "attack", "때려"]
 
     def run(self):
         from typeclasses.enemies import Enemy

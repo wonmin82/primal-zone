@@ -10,7 +10,7 @@ from evennia.utils import delay
 from evennia.utils.dbserialize import deserialize
 from world import rules
 from world import text as ft
-from world.content import EQUIPMENT_ACTIONS, ITEMS, REGIONS, ROOM_REGION, ROOMS
+from world.content import EQUIPMENT_ACTIONS, ITEMS, REGIONS, ROOM_REGION, ROOMS, UNEQUIP_ACTIONS
 from world.multiplayer import after_change
 from world.quests import current_hint
 
@@ -106,6 +106,8 @@ class Explorer(DefaultCharacter):
                 "count": count,
                 "slot": ITEMS[key]["slot"],
                 "equip_action": EQUIPMENT_ACTIONS.get(ITEMS[key]["slot"]),
+                "remove_action": UNEQUIP_ACTIONS.get(ITEMS[key]["slot"]),
+                "consume_action": ITEMS[key].get("consume_action"),
                 "equipped": key in profile["equipment"].values(),
             }
             for key, count in profile["inventory"].items()
@@ -127,6 +129,7 @@ class Explorer(DefaultCharacter):
             "region_name": REGIONS[ROOM_REGION[zone]]["name"] if zone in ROOM_REGION else None,
             "safe": room.get("safe", False),
             "inventory": inventory,
+            "equipment": {slot: ITEMS[identity]["name"] if identity else None for slot, identity in profile["equipment"].items()},
             "exits": list(room.get("exits", {})),
             "hint": room.get("hint", ""),
             **multiplayer_state(self),

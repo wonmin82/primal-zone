@@ -143,6 +143,37 @@ def item_selector(value, collection, action):
     return identity
 
 
+def stack_selector(value, collection, action, *, allow_all=True):
+    """가방/보관 아이템은 개체 번호가 아닌 스택이다."""
+    from world.content import find_id
+
+    known = [name for key, data in collection.items() for name in (key, data["name"])]
+    selector = parse_selector(value, known)
+    if not allow_all:
+        require_single(selector, action)
+    if selector.mode == Mode.INDEX:
+        raise RuleError("가방과 보관 아이템은 번호 없이 하나, 또는 '모두'로 지정하세요.")
+    identity = find_id(collection, selector.name)
+    if not identity:
+        raise RuleError("아이템 이름을 확인하세요.")
+    return identity, selector.mode == Mode.ALL
+
+
+def parse_relation(value, particle, known_names=()):
+    """에게/에/에서의 경계만 추출하고 개체 선택은 기존 parser에 맡긴다."""
+    parts = value.split()
+    known = {normalized(name) for name in known_names}
+    for index, part in enumerate(parts[:-1]):
+        if not part.endswith(particle):
+            continue
+        left = " ".join([*parts[:index], part[: -len(particle)]]).strip()
+        selector = parse_selector(left, known_names)
+        if known and normalized(selector.name) not in known:
+            continue
+        return selector, " ".join(parts[index + 1 :])
+    raise RuleError(f"대상 뒤에 '{particle}'를 붙이고 아이템을 지정하세요.")
+
+
 def visible(obj, caller):
     return obj.access(caller, "view")
 

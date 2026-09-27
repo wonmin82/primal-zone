@@ -2,7 +2,7 @@
 
 from .deep_jungle import ENEMIES as JUNGLE_ENEMIES
 from .deep_jungle import ROOMS as JUNGLE_ROOMS
-from .items import EQUIPMENT_ACTIONS, EXCHANGE, ITEMS, OPPOSITES, SHOP, find_id
+from .items import EQUIPMENT_ACTIONS, EXCHANGE, ITEMS, OPPOSITES, SHOP, UNEQUIP_ACTIONS, find_id
 from .starter import ENEMIES as STARTER_ENEMIES
 from .starter import ROOMS as STARTER_ROOMS
 
@@ -39,6 +39,7 @@ __all__ = [
     "EXCHANGE",
     "OPPOSITES",
     "EQUIPMENT_ACTIONS",
+    "UNEQUIP_ACTIONS",
     "find_id",
     "ENEMIES",
     "ROOMS",

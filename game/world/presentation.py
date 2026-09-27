@@ -14,6 +14,9 @@ def equipment(profile):
     lines = []
     attack = defense = 0
     for slot, identity in profile["equipment"].items():
+        if identity is None:
+            lines.append(ft.row("무기" if slot == "weapon" else "방어구", "없음", 8))
+            continue
         data = ITEMS[identity]
         attack += data.get("attack", 0)
         defense += data.get("defense", 0)
@@ -49,7 +52,7 @@ def status(name, profile):
             f"{v['name']}{profile['attributes'][k]['base'] + rules.allocated(profile, k)}"
             for k, v in ATTRIBUTES.items()
         ),
-        ft.text("장비 | ", ft.join([ft.item(i) for i in profile["equipment"].values()], " · ")),
+        ft.text("장비 | ", ft.join([ft.item(i) if i else ("무기 없음" if slot == "weapon" else "방어구 없음") for slot, i in profile["equipment"].items()], " · ")),
         summary=ft.text(ft.token("player", name), f" · Lv.{values['level']}"),
     )
 
@@ -202,10 +205,10 @@ def outgoing_attack(profile, enemy_name, outcome, damage):
     if outcome["action"] == "heal":
         return healing(outcome["amount"])
     verb = "강하게 내리쳐" if outcome["action"] == "heavy" else "공격해"
+    weapon = profile["equipment"]["weapon"]
+    tool = ft.text(ft.item(weapon), ft.particle(ITEMS[weapon]["name"], "으로/로"), " ") if weapon else "맨손으로 "
     return ft.text(
-        ft.item(profile["equipment"]["weapon"]),
-        ft.particle(ITEMS[profile["equipment"]["weapon"]]["name"], "으로/로"),
-        " ",
+        tool,
         ft.named("hostile", enemy_name, "을/를"),
         f" {verb} {damage}의 피해를 입혔다.",
         " 이어서 방어 자세를 취했다." if outcome["action"] == "guard" else "",
@@ -237,6 +240,8 @@ def item_appearance(identity):
         if data["slot"] in EQUIPMENT_ACTIONS
         else ["회복"]
         if identity == "bandage"
+        else [data["consume_action"]]
+        if data.get("consume_action")
         else []
     )
     return ft.sheet(ft.item(identity), *lines, "", ft.actions(actions))

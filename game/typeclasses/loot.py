@@ -88,6 +88,14 @@ def room_loot(room, corpse=True):
     )
 
 
+def create_dropped_loot(room, entries, source_spawn=None):
+    """직접 버리기와 시체 decay가 같은 바닥 물건 표현을 사용한다."""
+    dropped = create_object(DroppedLoot, key=ITEMS[entries[0]["item"]]["name"], location=room)
+    dropped.db.entries = entries
+    dropped.db.source_spawn = source_spawn
+    return dropped
+
+
 def take_loot(caller, item=None, corpse=True, now=None, *, request=None):
     """선택 범위/수량만 확장한다. 지급 권한은 recipient_for 한 곳에서 판단한다."""
     from world.lifecycle import reconcile_room
@@ -221,11 +229,7 @@ class Corpse(DefaultObject):
                 return
             room = self.location
             for entry in deserialize(self.db.entries):
-                dropped = create_object(
-                    DroppedLoot, key=ITEMS[entry["item"]]["name"], location=room
-                )
-                dropped.db.entries = [entry]
-                dropped.db.source_spawn = self.db.source_spawn
+                create_dropped_loot(room, [entry], self.db.source_spawn)
             self.db.entries = []
             task = self.ndb.lifecycle_task
             self.ndb.lifecycle_task = None
