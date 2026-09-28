@@ -60,7 +60,7 @@ class WebStateTests(WorldCommandTest):
     def test_growth_web_state_matches_rules_and_training_location(self):
         from world import rules
 
-        self.char1.location = self.rooms["dock"]
+        self.char1.location = self.rooms["training_room"]
         self.char1.change(
             lambda profile: rules.allocate_attribute(profile, "constitution", 2, safe=True)
         )

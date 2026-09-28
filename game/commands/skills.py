@@ -14,7 +14,7 @@ class Learn(GameCommand):
     input_style = "target"
     category = "성장"
     usage = "강타 배워 · 방어 배워 · 응급치료 배워"
-    summary = "부두 교관에게 기술점수와 크레딧으로 다음 Rank를 배웁니다."
+    summary = "주변 훈련관에게 기술점수와 크레딧으로 다음 Rank를 배웁니다."
 
     def run(self):
         skill = item_selector(self.args, SKILLS, self.key)
@@ -28,7 +28,7 @@ class Allocate(GameCommand):
     input_style = "target"
     category = "성장"
     usage = "힘 1 배분 · 민첩 1 배분 · 체질 1 배분 · 지혜 1 배분"
-    summary = "부두 교관에게 미사용 특성 포인트를 투자합니다."
+    summary = "주변 훈련관에게 미사용 특성 포인트를 투자합니다."
 
     def run(self):
         parts = self.args.strip().split()
@@ -48,7 +48,7 @@ class Retrain(GameCommand):
     input_style = "target"
     category = "성장"
     usage = "특성 재분배 · 기술 재분배 · 전체 재훈련"
-    summary = "부두 교관에게 무료로 투자 포인트를 반환받습니다. 숙련과 탐사 기록은 유지합니다."
+    summary = "주변 훈련관에게 무료로 투자 포인트를 반환받습니다. 숙련과 탐사 기록은 유지합니다."
 
     def run(self):
         scope = {"특성": "attributes", "기술": "skills", "전체": "all"}.get(self.args.strip())

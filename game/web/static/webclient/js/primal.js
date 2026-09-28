@@ -95,7 +95,7 @@
     if (nextKey === growthKey) return;
     growthKey = nextKey;
     const growth = state.growth, available = state.training_available;
-    byId("training-location").textContent = available ? "탐사대 훈련관 · 훈련 가능" : "학습·배분·재훈련은 비전투 상태로 부두 교관에게서 이용하세요.";
+    byId("training-location").textContent = available ? "탐사대 훈련관 · 훈련 가능" : "학습·배분·재훈련은 훈련관이 있는 안전한 곳에서 비전투 상태로 이용하세요.";
     byId("attribute-points").textContent = "· 남은 포인트 " + growth.attribute_points;
     byId("skill-points").textContent = "· 남은 점수 " + growth.skill_points;
     byId("attributes").replaceChildren(...growth.attributes.map((attribute) => {

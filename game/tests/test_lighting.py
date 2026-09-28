@@ -244,6 +244,9 @@ class LightingTests(WorldCommandTest):
         self.char1.location = self.rooms["dock"]
         self.assertEqual(snapshot_for(self.char1.location, 100).ambient_light, "bright")
         self.assertIn("윤대장", self.command("보기"))
+        self.assertFalse(any(isinstance(obj, Container) for obj in room_objects(self.char1, observed_at=100)))
+        self.char1.location = self.rooms["storage_room"]
+        self.assertEqual(snapshot_for(self.char1.location, 100).ambient_light, "normal")
         self.assertTrue(any(isinstance(obj, Container) for obj in room_objects(self.char1, observed_at=100)))
 
     def test_loot_details_and_known_item_take_are_hidden_until_lit(self):

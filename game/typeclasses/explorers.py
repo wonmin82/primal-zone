@@ -135,10 +135,10 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             }
             for key, count in profile["inventory"].items()
         ]
-        instructor = instructor_for(self)
+        instructor = instructor_for(self, observed_at=observed_at)
         payload = {
             "growth": rules.growth_state(profile),
-            "training_available": bool(instructor and instructor.available(self)),
+            "training_available": bool(instructor),
             "name": self.key,
             "hp": profile["hp"],
             **values,

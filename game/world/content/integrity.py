@@ -110,6 +110,12 @@ def elevator_errors():
 
 def errors(interactables):
     issues = headquarters_errors() + elevator_errors()
+    for identity, room in (
+        ("shared_container", "storage_room"), ("personal_locker", "storage_room"),
+        ("instructor", "training_room"),
+    ):
+        if interactables.get(identity, {}).get("room") != room:
+            issues.append(f"{identity}: 본부 서비스는 {room}에 배치해야 합니다.")
     for identity, definition in FACILITIES.items():
         if not isinstance(identity, str) or not identity.strip() or not isinstance(definition, dict):
             issues.append(f"{identity}: 시설 상태 정의가 유효하지 않습니다.")

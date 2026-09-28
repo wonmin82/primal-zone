@@ -26,7 +26,7 @@ class GrowthIntegrationTests(WorldCommandTest):
         super().setUp()
         self.rooms = self.world_rooms()
         for player in (self.char1, self.char2):
-            player.location = self.rooms["dock"]
+            player.location = self.rooms["training_room"]
             player.home = self.rooms["dock"]
             player.push_state = Mock()
         self.enterContext(patch("typeclasses.enemies.delay"))
@@ -56,7 +56,7 @@ class GrowthIntegrationTests(WorldCommandTest):
             resolve_action(self.char1, "배워")
         with self.assertRaises(rules.RuleError):
             instructor.perform_action(self.char1, "재분배", "all")
-        self.char1.location = self.rooms["dock"]
+        self.char1.location = self.rooms["training_room"]
         self.char1.change(lambda p: p.update(combat_target=999))
         before = self.char1.profile()
         with self.assertRaises(rules.RuleError):

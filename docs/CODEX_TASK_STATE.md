@@ -1,18 +1,34 @@
 # Current Task State
 
-확인일: 2026-09-28. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
+확인일: 2026-09-29. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
 
 ## Objective
 
 본부 재설계 1단계와 방향 정정은 [PR #13](https://github.com/wonmin82/primal-zone/pull/13)으로 병합됐다. 병합 커밋은 `f9fcd52feb7c449eb94519d9e36f3504558056f4`다. 중앙홀 남/1층 중앙 북과 남쪽 폐쇄 출입구, 대기실 남/중앙홀 북과 중앙홀 서/부두 동을 유지한다. 상세 설계는 [본부 Room 구조 1단계](architecture.md#본부-room-구조-1단계)를 따른다.
 
-테스트 성능 개선은 [PR #14](https://github.com/wonmin82/primal-zone/pull/14)로 병합됐으며 병합 커밋은 `ada6487f254beb3a662340ce81fa75771092cce1`다. 작업 시작 시 fetch 후 실제 최신 origin/main도 같은 SHA였고 main 작업 트리는 깨끗했다. PR #13·#14의 MERGED와 main CI 성공을 직접 확인했다. 인계의 PR #14 진행 중 서술보다 실제 병합 상태가 최신이다.
+테스트 성능 개선은 [PR #14](https://github.com/wonmin82/primal-zone/pull/14)로 병합됐으며 병합 커밋은 `ada6487f254beb3a662340ce81fa75771092cce1`다. 2026-09-28 승강기 작업 시작 시 fetch 후 실제 최신 origin/main도 같은 SHA였고 main 작업 트리는 깨끗했다. 당시 PR #13·#14의 MERGED와 main CI 성공을 직접 확인했다. 아래 테스트 성능 개선 기록은 해당 시점의 결과다.
 
-현재 작업은 본부 2단계 공용 승강기 구현이다. 최신 origin/main에서 `codex/hq-elevator`를 만들었다. 코드·테스트·문서 갱신과 commit/push/PR 생성을 포함하며 PR은 병합하지 않는다. 귀환·패배·기존 서비스는 계속 부두에 둔다.
+본부 2단계 공용 승강기는 [PR #15](https://github.com/wonmin82/primal-zone/pull/15)로 병합됐다. 이번 작업 시작 시 unstaged/staged diff가 없는 main에서 fetch했고 로컬 HEAD와 최신 origin/main은 모두 `7cf42145551ea364b5f1a1b69fa68c3e5567bee8`이었다. PR #15의 MERGED 및 해당 main [Game checks](https://github.com/wonmin82/primal-zone/actions/runs/36434012910) success를 직접 확인했다. 로그는 순수 77개·통합 213개, 총 290개 통과이며 통합 52.911초·runner 56.367초다. 아래 PR #15 OPEN 서술은 PR 생성 시점의 과거 기록이다.
 
-기존 광원 기능은 PR #11로 완료됐고 인계 문서는 PR #12로 병합됐다. 아래 광원·본부 1단계·테스트 성능 개선의 설계·검증은 시점별 과거 기록이며 보존한다. 승강기 이후에도 서비스 이전, 의료/귀환/사망 개편, 단일 화폐/정산, NPC 상점, 통합 closeout은 후속 범위다.
+본부 3단계 보관·훈련 서비스 이전은 구현·로컬 자동/브라우저 검증과 commit/push를 완료했다. 최신 origin/main에서 만든 `codex/hq-service-relocation`의 [PR #16](https://github.com/wonmin82/primal-zone/pull/16)은 OPEN이며 구현 HEAD의 CI는 success다. 아래 원격 기록을 문서 후속 커밋에 포함하고 최종 문서 HEAD의 CI는 푸시 후 별도로 확인해 PR Validation에 반영한다. 기존 세 객체의 stable ID와 저장 데이터를 유지한 채 보관실·훈련실로 이전하고 실제 객체·가시성·안전·비전투 상태를 기준으로 이용 가능 여부를 맞췄다. PR은 병합하지 않는다. 귀환·패배·상점·휴식·윤대장은 계속 부두에 둔다.
 
-### 본부 2단계 구현과 검증 (2026-09-28)
+기존 광원 기능은 PR #11로 완료됐고 인계 문서는 PR #12로 병합됐다. 아래 광원·본부 1·2단계·테스트 성능 개선의 설계·검증은 시점별 과거 기록이며 보존한다. 3단계 이후 의료/귀환/사망 개편, 단일 화폐/정산, NPC 상점, 통합 closeout은 후속 범위다.
+
+### 본부 3단계 구현과 검증 (2026-09-29)
+
+- 시작 기준은 `7cf42145551ea364b5f1a1b69fa68c3e5567bee8`이며 작업 브랜치는 `codex/hq-service-relocation`이다. 최종 로컬 검토를 위한 재fetch에서도 origin/main은 같아 rebase 재작성은 필요 없었다. PR #13/#14/#15는 병합 완료이며 승강기는 재설계하지 않았다.
+- `shared_container`/`personal_locker`는 `storage_room`, `instructor`는 `training_room`으로 정의 위치만 이전한다. stable `primal_interactable` tag로 기존 DB 객체를 재사용하고 bootstrap이 key/location/alias를 갱신한다. 기존 다중 alias 전달이 두 번째 이름을 category로 처리하던 문제를 수정해 목록 전체를 보존한다. 삭제·재생성·profile version 변경은 없다.
+- 공용 `Container.db.items`, 각 `profile.storage`와 개인 inventory/equipment/growth/skills/proficiency/visited·기존 캐릭터 위치는 bootstrap이 쓰지 않는다. 자동 및 별도 DB의 반복 이전 검사에서 객체 ID·전체 객체 수·Room ID와 모든 개인 profile·shared contents를 보존했다. 검증 DB의 세 객체 ID는 134/135/137로 그대로이며 `stale_definitions()`는 빈 목록이다. A/B가 같은 개인 보관함을 사용해도 자신의 contents만 보인다.
+- 보관은 기존 current-room Container resolve·selector·Observation과 transfer transaction을 유지한다. 훈련은 실제 Instructor의 같은 Room·현재 Room safe·비전투·can_perceive/view 조건을 검사한다. `instructor_for`는 기존 `room_objects`의 관찰 가능한 풀과 같은 availability를 사용하며 `push_state`는 같은 observed_at으로 `training_available`을 계산한다. unsafe/없는/숨긴 NPC와 전투 중에는 웹과 명령 모두 훈련할 수 없다. 다른 안전 Room에 실제 객체를 옮겨도 서비스는 객체를 따른다.
+- Web은 기존 server-owned interactables/training_available과 동일 텍스트 명령을 유지하고 훈련 안내와 JS cache query만 갱신했다. storage_room/training_room client zone 특례가 없으며 dock 상점·휴식 UI, 윤대장, home/귀환/패배 목적지는 그대로다. distant는 보관 contents/개인 정보/훈련 행동·기술 상태를 노출하지 않는다. 세 정적 서비스 배치는 integrity에 추가했다.
+- 최종 production 기준의 `scripts/dev.py check` 통과, 전체 `scripts/dev.py test` 순수 78개(0.080초)·통합 219개(78.633초), 총 297개 통과·실패/skip 없음이다. 통합 runner는 88.088초이며 근거 `work/hq-services-final-full-success.log`다. 관련 순수 51개(0.091초), 새 이전 suite 역순·병렬 6개(10.204초, runner 19.491초)도 통과했다. 새 suite는 WorldCommandTest 5개와 이전 lifecycle을 직접 검증하는 GameCommandTest 1개로 나뉜다.
+- 첫 관련 검사의 새 오류 문구 기대값·다중 alias 문제와 최초 전체의 옛 부두 상자 조명 fixture를 수정했다. 실패한 조명 1개(2.557초)부터 통과시킨 뒤 위 전체를 실행했다. 최종 전체 이후 production 변경은 없고, 기존 물건 전달 테스트의 실제 NPC 거절 경계를 유지하기 위해 부두 fixture를 명시한 뒤 해당 1개만 재검증했다(2.506초, runner 11.083초, `work/hq-services-give-recheck.log`). 문서·PR 갱신만을 이유로 전체 검사를 반복하지 않는다.
+- JavaScript 문법·diff 검사 통과, game과 별도 검증 서버 정적 파일을 수집했다. Chrome 두 일반 계정으로 보관실 객체/보기/공용·개인 넣기·꺼내기·개인 분리, 실제 승강기 훈련실 동선·대화·배분/학습 버튼과 직접 명령의 동등한 결과·특성/기술/전체 재훈련, 부두의 대상 실패·훈련 비활성·상점/휴식/윤대장과 부두 귀환을 확인했다. 실제 JS query는 hq-services다. 앱 console 오류는 발견하지 않았으나 로그인 Chrome 확장 메시지 채널 종료 오류가 계정별 2건 있었다. 포트 4301의 Windows 바인딩 오류는 격리 서버를 5401 계열로 바꿔 해결했다. 검증 서버·탭은 종료했고 플레이 DB는 읽거나 변경하지 않았다. [상세 검증 기록](playtest.md#본부-3단계-보관훈련-이전-확인)을 따른다.
+- 전체 smoke는 현재 파일에 보관/훈련 Flow가 없고 관련 자동/브라우저 검증으로 확인해 미실행이다. UI layout 변경이 없어 좁은 화면을 반복하지 않았다. 실제 OS IME·이번 변경의 재시작 재접속·운영 플레이 DB 적용은 미실행이며 이전 승강기 기록을 이번 실행처럼 쓰지 않는다.
+- 원격 기록 작성 시 branch는 `codex/hq-service-relocation`, 로컬/원격/PR 구현 HEAD는 모두 `c3abbff934b419aa17bf99a5fc378f4c93e0447f`였고 working tree는 깨끗했다. 최종 재fetch에서도 origin/main은 시작 SHA와 같고 이미 포함돼 rebase 재작성은 필요 없었다. [PR #16](https://github.com/wonmin82/primal-zone/pull/16)은 OPEN·비Draft·MERGEABLE이며 이 구현 HEAD의 [Game checks](https://github.com/wonmin82/primal-zone/actions/runs/36457348765) success와 headSha를 직접 대조했다. 원격 check 통과, 순수 78개(0.044초)·통합 219개(76.276초), 총 297개 통과이며 통합 runner는 81.926초다. 근거 `work/hq-services-first-ci.log`.
+- 이 기록은 PR 생성 후 문서 전용 후속 커밋에 포함한다. 위 SHA와 CI는 기능 구현의 확인 기준이며 최종 HEAD는 이 문서 커밋 이후의 실제 Git/PR에서 확인한다. 실행 코드·테스트가 같아 로컬 전체 검사는 반복하지 않고 문서 내용·링크·diff를 검사한다. 최신 문서 HEAD의 원격 CI는 푸시 후 직접 확인해 PR Validation과 완료 보고에 기록하며 이전 구현 CI를 최신 HEAD 결과로 대신하지 않는다. 이번 요청은 PR 병합을 허용하지 않는다. 다음 단계는 3단계 PR 검토·병합 후 최신 main에서 별도 요청으로 시작하는 의료·귀환·사망 흐름이다.
+
+### 본부 2단계 구현과 검증 (2026-09-28, 과거 기록)
 
 - `support_elevator` 실제 ZoneRoom을 headquarters에 추가했다. 본부 26개·전체 41개 Room이며 승강기의 사방 Exit는 없다. 기존 HQ 방향·폐쇄 출입구·출구 migration과 부두 서비스는 보존한다.
 - `world/content/elevator.py`의 `ELEVATOR_STOPS`가 `1f/2f/3f/roof`와 세 중앙 복도·옥상의 대응 SSOT다. 승강기 Room의 persistent `db.current_stop`은 모든 승객이 공유한다. bootstrap은 새/invalid 값만 1층으로 정규화하고 정상 층·Room/Exit ID·플레이어 위치는 보존한다.
@@ -149,7 +165,7 @@
 
 ## Partially Implemented / In Progress
 
-본부 PR #13과 테스트 성능 개선 PR #14는 병합 완료다. 본부 2단계 승강기는 구현·로컬 자동/브라우저 검증을 완료했으며 PR 검토·병합을 남긴다. 실제 branch/HEAD/diff/원격 CI를 직접 확인한다. 3단계 서비스 이전, 의료·귀환·사망, 경제·상점, 통합 closeout은 미구현이다. optional 지역 climate presentation profile과 향후 관찰 수단/거리 확장도 구현 완료로 간주하지 않는다.
+본부 PR #13, 테스트 성능 개선 PR #14, 승강기 PR #15는 병합 완료다. 3단계 보관·훈련 이전은 구현·로컬 검증 완료이며 PR 검토·병합을 남긴다. 실제 branch/HEAD/diff/원격 CI를 직접 확인한다. 의료·귀환·사망, 경제·상점, 통합 closeout은 미구현이다. optional 지역 climate presentation profile과 향후 관찰 수단/거리 확장도 구현 완료로 간주하지 않는다.
 
 ## Validation
 
@@ -182,7 +198,7 @@
 
 ## Remaining Work
 
-1. 새 세션에서 인계 문서와 Git/원격/CI 상태를 대조한다. 이 문서는 별도 문서 PR로 보존하며 최초 작성 당시의 미추적 상태와 현재 추적·PR 상태를 구분한다. 미커밋 변경이 있다면 브랜치 전환 시 보존하고 main에 직접 commit하지 않는다.
+1. 새 세션에서 인계 문서와 Git/원격/CI 상태를 대조한다. 이 문서는 현재 기능 PR에 함께 갱신하며 최초 작성 당시의 미추적 상태와 현재 추적·PR 상태를 구분한다. 미커밋 변경이 있다면 브랜치 전환 시 보존하고 main에 직접 commit하지 않는다.
 2. 다음 기능/수정 목표를 사용자와 확정한다. 이 문서의 부채 목록은 자동 구현 요청이 아니다.
 3. 발전기 시나리오를 선택한다면 먼저 이미 켜진 시설/개인 미완료/기존 완료 캐릭터의 현재 흐름과 비용·보상 의미를 재현·설계한다. 합의 없이 비용·flag·gate를 수정하지 않는다.
 4. push 중복을 선택한다면 실제 callback 횟수와 UI 영향부터 측정한다. 단순 중복 가능성만으로 저장/알림 경계를 다시 설계하지 않는다.
@@ -191,9 +207,9 @@
 
 ## Recommended Next Step
 
-먼저 AGENTS와 이 문서를 읽고 `git status --short`, unstaged/staged diff, `git fetch origin`, branch/HEAD/origin/main 및 원격 PR·CI 상태를 확인한다. 승강기 PR을 검토하고 사용자의 별도 병합 요청을 기다린다. 이번 구현 요청은 병합을 허용하지 않는다. 동일 코드의 성공 검사는 PR 생성만을 이유로 반복하지 않는다.
+먼저 AGENTS와 이 문서를 읽고 `git status --short`, unstaged/staged diff, `git fetch origin`, branch/HEAD/origin/main 및 원격 PR·CI 상태를 확인한다. 3단계 보관·훈련 PR을 검토하고 사용자의 별도 병합 요청을 기다린다. 이번 구현 요청은 병합을 허용하지 않는다. 동일 코드의 성공 검사는 PR 생성만을 이유로 반복하지 않는다.
 
-다음 계획은 **3단계 — 기존 비상업 서비스의 지원동 이전**이다. 승강기 PR 검토·병합 후 최신 main에서 별도 사용자 요청으로 진행한다. 보관함/공용 보관상자는 보관실, Instructor는 훈련실로 옮기고 보관·훈련의 dock 기반 특례를 제거한다. 현재 PR이 열린 동안 바로 구현하지 않는다. 의료·귀환·사망, 단일 화폐/회수부품 정산, NPC 상점과 통합 closeout은 이후 단계다.
+다음 계획은 **4단계 — 의료 시스템 및 복귀 흐름**이다. 3단계 PR 검토·병합 후 최신 main에서 별도 사용자 요청으로 진행한다. Doctor/Bed를 의무실에 준비하고 귀환은 옥상, 패배/사망은 의무실로 바꾸며 사망 최소 복구와 일반 치료를 분리한다. 현재 PR이 열린 동안 구현을 시작하지 않는다. 단일 화폐/회수부품 정산, NPC 상점과 통합 closeout은 이후 단계다.
 
 ## Important Files
 
@@ -215,7 +231,8 @@
 | `game/world/lifecycle.py`, `game/world/bootstrap.py`, `game/typeclasses/scripts.py` | tick/restart 소유권, idempotent 월드 구성, persistent WorldLifecycle |
 | `game/typeclasses/zone_rooms.py`, `game/typeclasses/exits.py`, `game/typeclasses/enemies.py`, `game/typeclasses/interactables.py`, `game/typeclasses/loot.py`, `game/typeclasses/explorers.py` | 실제 객체와 Room/Exit appearance·action·지각·저장/웹/전투 훅 |
 | `game/commands/character.py`, `game/commands/items.py`, `game/commands/inventory.py`, `game/commands/combat.py`, `game/commands/registry.py` | Look/Weather, 이전/광원/소비/해제, 구매/회수, 기존 공격, help 등록 |
-| `game/web/templates/webclient/webclient.html`, `game/web/static/webclient/js/primal.js`, `game/web/static/webclient/css/primal.css` | 웹 표시/controls/lighting cache query |
+| `game/web/templates/webclient/webclient.html`, `game/web/static/webclient/js/primal.js`, `game/web/static/webclient/css/primal.css` | 웹 표시/controls/cache query |
+| `game/tests/test_hq_services.py`, `game/tests/test_growth.py`, `game/world/test_headquarters.py` | 보관·훈련 이전/저장 보존/객체·가시성 정책, 성장 회귀와 본부 배치 integrity |
 | `game/world/test_lighting.py`, `game/world/test_environment.py`, `game/world/test_rules.py` | pure 규칙·migration·환경/광원 테스트 |
 | `game/tests/test_lighting.py`, `game/tests/test_environment.py`, `game/tests/test_distant_view.py`, `game/tests/test_item_interactions.py` | 통합 광원/시설/hint, 환경 저장, 정찰 privacy, stack 이전 |
 | `game/tests/test_targets.py`, `game/tests/test_loot.py`, `game/tests/test_combat.py`, `game/tests/test_lifecycle.py`, `game/tests/test_web_state.py` | selector/권한/전투/lifecycle/웹 회귀 |
