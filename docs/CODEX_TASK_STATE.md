@@ -10,7 +10,7 @@
 
 본부 2단계 공용 승강기는 [PR #15](https://github.com/wonmin82/primal-zone/pull/15)로 병합됐다. 이번 작업 시작 시 unstaged/staged diff가 없는 main에서 fetch했고 로컬 HEAD와 최신 origin/main은 모두 `7cf42145551ea364b5f1a1b69fa68c3e5567bee8`이었다. PR #15의 MERGED 및 해당 main [Game checks](https://github.com/wonmin82/primal-zone/actions/runs/36434012910) success를 직접 확인했다. 로그는 순수 77개·통합 213개, 총 290개 통과이며 통합 52.911초·runner 56.367초다. 아래 PR #15 OPEN 서술은 PR 생성 시점의 과거 기록이다.
 
-현재 승인된 작업은 본부 3단계 보관·훈련 서비스 이전이다. 최신 origin/main에서 `codex/hq-service-relocation`을 만들었다. 구현과 로컬 자동/브라우저 검증을 완료했으며 commit/push/PR 생성과 최신 CI 확인을 진행한다. 기존 세 객체의 stable ID와 저장 데이터를 유지한 채 보관실·훈련실로 이전하고 실제 객체·가시성·안전·비전투 상태를 기준으로 이용 가능 여부를 맞췄다. PR은 병합하지 않는다. 귀환·패배·상점·휴식·윤대장은 계속 부두에 둔다.
+본부 3단계 보관·훈련 서비스 이전은 구현·로컬 자동/브라우저 검증과 commit/push를 완료했다. 최신 origin/main에서 만든 `codex/hq-service-relocation`의 [PR #16](https://github.com/wonmin82/primal-zone/pull/16)은 OPEN이며 구현 HEAD의 CI는 success다. 아래 원격 기록을 문서 후속 커밋에 포함하고 최종 문서 HEAD의 CI는 푸시 후 별도로 확인해 PR Validation에 반영한다. 기존 세 객체의 stable ID와 저장 데이터를 유지한 채 보관실·훈련실로 이전하고 실제 객체·가시성·안전·비전투 상태를 기준으로 이용 가능 여부를 맞췄다. PR은 병합하지 않는다. 귀환·패배·상점·휴식·윤대장은 계속 부두에 둔다.
 
 기존 광원 기능은 PR #11로 완료됐고 인계 문서는 PR #12로 병합됐다. 아래 광원·본부 1·2단계·테스트 성능 개선의 설계·검증은 시점별 과거 기록이며 보존한다. 3단계 이후 의료/귀환/사망 개편, 단일 화폐/정산, NPC 상점, 통합 closeout은 후속 범위다.
 
@@ -25,7 +25,8 @@
 - 첫 관련 검사의 새 오류 문구 기대값·다중 alias 문제와 최초 전체의 옛 부두 상자 조명 fixture를 수정했다. 실패한 조명 1개(2.557초)부터 통과시킨 뒤 위 전체를 실행했다. 최종 전체 이후 production 변경은 없고, 기존 물건 전달 테스트의 실제 NPC 거절 경계를 유지하기 위해 부두 fixture를 명시한 뒤 해당 1개만 재검증했다(2.506초, runner 11.083초, `work/hq-services-give-recheck.log`). 문서·PR 갱신만을 이유로 전체 검사를 반복하지 않는다.
 - JavaScript 문법·diff 검사 통과, game과 별도 검증 서버 정적 파일을 수집했다. Chrome 두 일반 계정으로 보관실 객체/보기/공용·개인 넣기·꺼내기·개인 분리, 실제 승강기 훈련실 동선·대화·배분/학습 버튼과 직접 명령의 동등한 결과·특성/기술/전체 재훈련, 부두의 대상 실패·훈련 비활성·상점/휴식/윤대장과 부두 귀환을 확인했다. 실제 JS query는 hq-services다. 앱 console 오류는 발견하지 않았으나 로그인 Chrome 확장 메시지 채널 종료 오류가 계정별 2건 있었다. 포트 4301의 Windows 바인딩 오류는 격리 서버를 5401 계열로 바꿔 해결했다. 검증 서버·탭은 종료했고 플레이 DB는 읽거나 변경하지 않았다. [상세 검증 기록](playtest.md#본부-3단계-보관훈련-이전-확인)을 따른다.
 - 전체 smoke는 현재 파일에 보관/훈련 Flow가 없고 관련 자동/브라우저 검증으로 확인해 미실행이다. UI layout 변경이 없어 좁은 화면을 반복하지 않았다. 실제 OS IME·이번 변경의 재시작 재접속·운영 플레이 DB 적용은 미실행이며 이전 승강기 기록을 이번 실행처럼 쓰지 않는다.
-- 커밋·PR 생성 후 실제 기능 HEAD/PR 번호와 최신 CI를 후속 원격 기록에 추가한다. 이번 요청은 PR 병합을 허용하지 않는다. 다음 단계는 3단계 PR 검토·병합 후 최신 main에서 별도 요청으로 시작하는 의료·귀환·사망 흐름이다.
+- 원격 기록 작성 시 branch는 `codex/hq-service-relocation`, 로컬/원격/PR 구현 HEAD는 모두 `c3abbff934b419aa17bf99a5fc378f4c93e0447f`였고 working tree는 깨끗했다. 최종 재fetch에서도 origin/main은 시작 SHA와 같고 이미 포함돼 rebase 재작성은 필요 없었다. [PR #16](https://github.com/wonmin82/primal-zone/pull/16)은 OPEN·비Draft·MERGEABLE이며 이 구현 HEAD의 [Game checks](https://github.com/wonmin82/primal-zone/actions/runs/36457348765) success와 headSha를 직접 대조했다. 원격 check 통과, 순수 78개(0.044초)·통합 219개(76.276초), 총 297개 통과이며 통합 runner는 81.926초다. 근거 `work/hq-services-first-ci.log`.
+- 이 기록은 PR 생성 후 문서 전용 후속 커밋에 포함한다. 위 SHA와 CI는 기능 구현의 확인 기준이며 최종 HEAD는 이 문서 커밋 이후의 실제 Git/PR에서 확인한다. 실행 코드·테스트가 같아 로컬 전체 검사는 반복하지 않고 문서 내용·링크·diff를 검사한다. 최신 문서 HEAD의 원격 CI는 푸시 후 직접 확인해 PR Validation과 완료 보고에 기록하며 이전 구현 CI를 최신 HEAD 결과로 대신하지 않는다. 이번 요청은 PR 병합을 허용하지 않는다. 다음 단계는 3단계 PR 검토·병합 후 최신 main에서 별도 요청으로 시작하는 의료·귀환·사망 흐름이다.
 
 ### 본부 2단계 구현과 검증 (2026-09-28, 과거 기록)
 
