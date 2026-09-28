@@ -1,14 +1,15 @@
 from unittest.mock import patch
 
 from evennia import create_object
-from evennia.utils.test_resources import EvenniaCommandTest
 from typeclasses.explorers import Explorer
 from typeclasses.parties import Party, invitation_for, invite, party_for, respond
 from world.multiplayer import object_by_id
 from world.rules import RuleError
 
+from tests.base import GameCommandTest
 
-class PartyTests(EvenniaCommandTest):
+
+class PartyTests(GameCommandTest):
     character_typeclass = Explorer
 
     def test_invite_accept_persistence_and_duplicate(self):

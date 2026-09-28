@@ -6,7 +6,6 @@ from unittest.mock import Mock, patch
 from evennia import create_object, search_tag
 from evennia.objects.objects import DefaultObject
 from evennia.utils.dbserialize import deserialize
-from evennia.utils.test_resources import EvenniaCommandTest
 from typeclasses.enemies import Enemy, room_enemies
 from typeclasses.exits import Exit
 from typeclasses.explorers import Explorer
@@ -14,12 +13,13 @@ from typeclasses.interactables import Container, MaintenanceLog, PersonalLocker
 from typeclasses.loot import Corpse, DroppedLoot
 from typeclasses.zone_rooms import ZoneRoom
 from world import rules
-from world.bootstrap import build_world
 from world.content import ENEMIES, ROOMS
 from world.distant_presentation import DistantViewContext, direction_phrase
 
+from tests.base import WorldCommandTest
 
-class DistantViewTests(EvenniaCommandTest):
+
+class DistantViewTests(WorldCommandTest):
     character_typeclass = Explorer
 
     def setUp(self):
@@ -33,7 +33,7 @@ class DistantViewTests(EvenniaCommandTest):
             "world.distant_presentation",
         ):
             self.enterContext(patch(module + ".time", return_value=100))
-        self.rooms = build_world()
+        self.rooms = self.world_rooms()
         self.char1.location = self.rooms["grass"]
         self.char2.location = self.rooms["dock"]
         self.char1.push_state = Mock()

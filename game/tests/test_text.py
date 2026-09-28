@@ -5,7 +5,6 @@ import evennia
 from commands.character import Help, Look
 from evennia.objects.objects import DefaultCharacter
 from evennia.utils.ansi import parse_ansi, strip_raw_ansi
-from evennia.utils.test_resources import EvenniaCommandTest
 from typeclasses.enemies import room_enemies
 from typeclasses.explorers import Explorer
 from typeclasses.interactables import Container, action_objects
@@ -14,21 +13,22 @@ from typeclasses.parties import invite, respond
 from world import presentation as view
 from world import rules
 from world import text as ft
-from world.bootstrap import build_world
 from world.content import EXCHANGE, ITEMS, ROOMS, SHOP
 from world.progression import ATTRIBUTES, SKILLS
+
+from tests.base import WorldCommandTest
 
 
 def tokens(message, role):
     return [part["text"] for part in message.segments if part["role"] == role]
 
 
-class SemanticTextTests(EvenniaCommandTest):
+class SemanticTextTests(WorldCommandTest):
     character_typeclass = Explorer
 
     def setUp(self):
         super().setUp()
-        self.rooms = build_world()
+        self.rooms = self.world_rooms()
         for player in (self.char1, self.char2):
             player.location = self.rooms["dock"]
             player.home = self.rooms["dock"]

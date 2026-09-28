@@ -240,8 +240,10 @@ uv run python scripts/dev.py stop
 ```
 
 CSS·JavaScript·글꼴 변경 후에는 'game' 폴더에서 'uv run python -m evennia collectstatic --noinput'을 실행하고 브라우저를 새로고침한다.
-테스트는 별도 테스트 DB를 사용하며 플레이 DB를 지우지 않는다.
-게임 규칙 테스트와 Evennia 통합 테스트를 GitHub Actions에서도 실행한다.
+테스트는 전용 메모리 DB와 빠른 비밀번호 해시를 사용하며 플레이 DB·운영 인증 설정을 변경하지 않는다.
+통합 테스트는 CPU 수에 따라 최대 4개 프로세스로 실행한다. `uv run python scripts/dev.py test --parallel 1`로 직렬 실행할 수 있다.
+관련 통합 검사만 실행하려면 `uv run python scripts/dev.py test tests.test_headquarters --parallel 2`처럼 테스트 경로를 지정한다. 경로를 생략한 기본 명령은 순수·통합 검사를 모두 실행한다. `--reverse`는 실행 순서를 뒤집어 테스트 격리를 확인한다.
+게임 규칙 테스트와 Evennia 통합 테스트를 GitHub Actions에서도 실행한다. CI는 PR과 main push에서 검사하며 통합 테스트는 2개 프로세스를 사용한다.
 
 실행 중인 로컬 서버의 실제 가입·사냥·장비·재접속 흐름은 다음 명령으로 검사한다:
 

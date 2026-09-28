@@ -261,6 +261,14 @@ equipment 슬롯은 `None`을 정상 값으로 허용한다. 해제/벗어는 �
 밀림 신호전지는 두 번째 지역 임무 전용 열쇠다. 수위 표식은 문이 닫혀 있고 전지가 없을 때만 한 개를 지급하며, 신호 장치 가동은 조건을 모두 확인한 뒤 전지 한 개를 소비하고 gate_open을 기록한다. 철갑등짐승은 신호전지 대신 일반 회수부품을 확률적으로 남긴다. 이미 문을 연 개발 데이터의 잔여 전지는 bootstrap이나 profile 변환에서 임의로 삭제하지 않는다.
 
 
+## 자동 테스트의 월드 준비와 격리
+
+`scripts/dev.py test`는 순수 규칙 검사를 실행한 뒤 `server.conf.settings_test`로 Evennia 통합 검사를 실행한다. 테스트 설정만 메모리 SQLite·빠른 비밀번호 해시를 사용하며 운영 DB와 인증 설정은 유지한다. 로컬은 최대 4개, CI는 2개 프로세스를 사용하고 Django의 테스트 DB 복제·rollback·결과 수집을 재사용한다. `server.conf.test_runner`는 Windows spawn worker의 설정 모듈 경로와 Evennia 초기화를 보완한다. 병렬 traceback 전달에는 개발 의존성 `tblib`를 사용한다. 실패한 `subTest`는 테스트 객체 전체 대신 이름·조건을 전달해 Evennia 캐시·Mock 직렬화 오류를 피하고 원래 예외와 traceback을 보존한다.
+
+`tests.base.WorldCommandTest`는 클래스 transaction에 실제 `build_world()` 결과를 준비하고 Room ID만 보관한다. 테스트별 준비에서는 ID로 실제 Room을 일괄 조회하므로 ORM 객체·Attribute·NDb를 공유하지 않는다. 테스트 본문의 `build_world()`는 실제 bootstrap을 수행해 반복 생성·정적 갱신·migration 경계를 계속 검증한다. 최초 로그인 전에 월드가 없어야 하는 본부 검사는 `GameCommandTest`로 기존 준비 순서를 유지한다.
+
+DB rollback만으로 Evennia의 NDb와 전역 명령 캐시는 복원되지 않는다. 공통 테스트 base는 기존 계정·세션 teardown을 수행한 뒤 DB rollback 경계에서 idmapper와 명령 merge cache를 비우고 GC를 한 번 수행한다. 클래스 transaction 종료에도 캐시를 비워 다음 그룹을 격리한다. 이 처리는 테스트 전용이며 서버의 캐시·타이머·월드 동작을 변경하지 않는다. `tests/test_fixtures.py`는 Room·출구·적 HP·보관함·추가 객체·NDb 상태를 변형하고 정순·역순 모두 다음 테스트에 남지 않는지 검증한다.
+
 ## 동적 환경: Room / Environment / Object
 
 장소 고유의 기후 성향과 흔적은 static description에 둘 수 있지만 현재 기상 상태를 직접 표현하지 않는다. 부두의 해안·숲, 관리동의 오래된 누수 흔적, 습지의 지속적인 습기는 static이며 실제 안개·강우는 Environment가 소유한다. 새 표현의 회귀 검사는 특정 금지 단어 전체가 아니라 알려진 충돌 문구와 clear/fog/rain 전후의 static·객체 불변을 검증한다.

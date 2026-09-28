@@ -4,9 +4,21 @@
 
 ## Objective
 
-본부 재설계 1단계는 [PR #13](https://github.com/wonmin82/primal-zone/pull/13)에 포함됐다. 현재 승인된 작업은 중앙홀 `남 → support_1f_c`, 1층 중앙 `북 → hq_concourse`로 연결을 수정하고 복귀 방향 예외를 제거하며 코드·테스트·문서·PR 설명을 갱신하는 것이다. 1층 중앙의 남쪽은 폐쇄 출입구다. 대기실 남/중앙홀 북과 중앙홀 서/부두 동은 유지한다. 상세 설계와 동선은 [본부 Room 구조 1단계](architecture.md#본부-room-구조-1단계)를 따른다. PR #13의 병합은 아직 요청되지 않았다.
+본부 재설계 1단계와 방향 정정은 [PR #13](https://github.com/wonmin82/primal-zone/pull/13)으로 병합됐다. 병합 커밋은 `f9fcd52feb7c449eb94519d9e36f3504558056f4`다. 중앙홀 남/1층 중앙 북과 남쪽 폐쇄 출입구, 대기실 남/중앙홀 북과 중앙홀 서/부두 동을 유지한다. 상세 설계는 [본부 Room 구조 1단계](architecture.md#본부-room-구조-1단계)를 따른다.
+
+현재 승인된 작업은 확인된 자동 테스트 성능 개선에 중복 정리·Room 조회 개선과 프로세스 병렬 실행을 추가 적용하는 것이다. 게임 실행 코드는 변경하지 않으며 작은 전용 월드로 테스트를 나누는 후속 개선은 이번 범위에 포함하지 않는다. 구현과 로컬 검증은 완료했다. 사용자 요청으로 `codex/test-performance`의 변경을 커밋·푸시하여 PR에 포함한다. 최신 commit/PR/CI 상태는 실제 Git과 GitHub에서 확인한다.
 
 기존 광원 기능은 PR #11로 완료됐고 인계 문서는 PR #12로 병합됐다. 아래 광원 설계·완료 항목·검증은 과거 기록이며 보존한다. 본부 1단계에서도 기존 서비스·귀환·패배 목적지는 부두다. 승강기, 서비스 이전, 의료/귀환/사망 개편, 단일 화폐/정산, NPC 상점, 통합 closeout은 후속 범위다.
+
+### 자동 테스트 성능 개선 (2026-09-28)
+
+- 시작 시 작업 트리는 깨끗했고 main과 fetch 후 origin/main은 `f9fcd52`로 같았다. 열린 PR은 없고 해당 main CI는 성공이었다. 인계의 PR #13 OPEN 상태보다 실제 병합 상태가 최신임을 확인했다. 최신 원격에서 `codex/test-performance`를 만들었다.
+- `settings_test`에 테스트 전용 메모리 SQLite·빠른 해시를 두고 `tests.base`에 클래스별 실제 월드 생성, Room ID 공유·일괄 조회, DB rollback 후 강제 객체/명령 캐시 정리와 한 번의 GC를 구현했다. 최초 로그인 검사는 기존 월드 준비 순서를 유지한다. 기존 통합 199개 본문·assertion은 변경하지 않았다.
+- 로컬 기본은 CPU 수에 따라 최대 4개 프로세스다. `--parallel 1`, 선택한 통합 테스트 경로, `--reverse`를 지원한다. Django의 DB 복제·rollback·결과 수집을 사용하고 Evennia worker 초기화·설정 모듈 경로·실패한 subTest의 요약 전달을 보완했다. `tblib 3.2.2`는 병렬 traceback 전달용 개발 의존성이다.
+- CI는 2개 프로세스, PR과 main push로 변경했다. 로컬 검증 시점에는 푸시 전이므로 새 구성의 원격 CI는 미실행이었다. 푸시 후 최신 PR HEAD의 CI를 직접 확인하며 기존 main CI를 이 변경의 통과 근거로 사용하지 않는다.
+- 최종 `scripts/dev.py check` 통과. `scripts/dev.py test`는 순수 72개(0.075초)와 통합 205개(60.975초), 총 277개 통과이며 실패·skip은 없다. DB 준비 등을 포함한 통합 runner 시간은 70.112초다. 근거 `work/test-optimization-final-full.log`. 이후 변경은 기록 문서뿐이다.
+- 오류 전달 보완 전 직렬 전체는 통합 204개 251.349초, 병렬 전체는 204개 99.704초로 통과했다. 최종 추가된 1개 오류 전달 검사와 관련 보완은 해당 직렬 2개 검사 및 최종 전체 병렬로 확인했다. 직렬 전체의 기준 차이를 최종 205개 성공으로 바꿔 쓰지 않는다. 관련 역순 병렬 49개도 통과했다.
+- 실제 2개 worker에서 일반 실패와 Evennia 객체를 가진 subTest 실패를 의도적으로 발생시켜 원래 조건·traceback·실패 종료 코드 1과 `failures=2`를 확인했다. 이는 별도 실패 경로 진단이며 정식 전체 suite의 실패가 아니다. 근거 `work/test-optimization-worker-failure-final.log`. 임시 DB 복제본은 제거됐고 플레이 DB는 변경하지 않았다. 브라우저·smoke는 게임/UI 동작 변경이 없어 미실행이다.
 
 ### 본부 작업 시작 상태
 
@@ -122,7 +134,7 @@
 
 ## Partially Implemented / In Progress
 
-본부 1단계 PR #13은 OPEN이며 사용자 요청에 따라 같은 `codex/hq-room-skeleton`에서 연결 방향 정정과 로컬 검증을 완료했다. 현재 Git·PR·최신 HEAD CI 상태는 직접 확인한다. 광원 PR #11에는 남은 수정이 없고 인계 문서 PR #12도 병합 완료다. 승강기·서비스 이전 등 후속 본부 기능은 다음 사용자 범위를 확인하기 전에는 구현하지 않는다. optional 지역 climate presentation profile, 향후 관찰 수단/거리 확장 등은 구현 완료로 간주하지 않는다.
+본부 PR #13, 광원 PR #11과 인계 PR #12는 병합 완료다. 자동 테스트 성능 개선은 로컬 검증을 마쳤고 사용자 요청으로 PR에 포함한다. 실제 branch/diff/원격 상태를 직접 확인한다. 승강기·서비스 이전 등 후속 본부 기능은 다음 사용자 범위를 확인하기 전에는 구현하지 않는다. optional 지역 climate presentation profile, 향후 관찰 수단/거리 확장 등은 구현 완료로 간주하지 않는다.
 
 ## Validation
 
@@ -164,13 +176,14 @@
 
 ## Recommended Next Step
 
-AGENTS와 이 문서를 읽고 `git status --short`, `git diff`, `git diff --cached`, `git fetch origin`, 현재 branch/HEAD/origin/main 및 원격 PR·CI 상태를 확인한다. 본부 1단계의 실제 구현·검증·Git 상태를 짧게 재구성한다. 완료된 Room 골격을 재구현하지 말고 다음 사용자 작업 범위를 확인한다. 승강기나 서비스 이전 등 후속 기능을 새 승인 없이 시작하지 않는다.
+AGENTS와 이 문서를 읽고 `git status --short`, `git diff`, `git diff --cached`, `git fetch origin`, 현재 branch/HEAD/origin/main 및 원격 PR·CI 상태를 확인한다. 자동 테스트 성능 개선의 최종 검증 근거와 남은 미커밋 변경을 보존한다. 사용자 요청에 따라 PR에 포함한 변경을 검토하고 최신 HEAD의 원격 CI를 직접 확인한다. 동일 코드의 성공 검사를 PR 생성만을 이유로 반복하지 않는다. PR 병합은 별도 명시 요청이 있을 때 수행한다. 완료된 Room 골격을 재구현하거나 승강기·서비스 이전 등 후속 기능을 새 승인 없이 시작하지 않는다.
 
 ## Important Files
 
 | 파일 | 역할 |
 | --- | --- |
 | `AGENTS.md`, `README.md`, `pyproject.toml`, `uv.lock` | 프로젝트 지침/사용법/실제 의존성 |
+| `scripts/dev.py`, `game/server/conf/settings_test.py`, `game/server/conf/test_runner.py`, `game/tests/base.py`, `game/tests/test_fixtures.py` | 테스트 전용 설정, 프로세스 병렬 실행·오류 전달, 실제 월드 fixture 재사용과 DB/runtime 격리 |
 | `docs/architecture.md`, `docs/playtest.md`, `docs/text-examples.md` | 설계 SSOT, 수동 절차·시점별 결과, 실제 표현 예시 |
 | `game/world/content/starter.py`, `game/world/content/deep_jungle.py` | Room desc/hints/requires, Enemy local/distant metadata |
 | `game/world/content/headquarters.py`, `game/world/test_headquarters.py`, `game/tests/test_headquarters.py` | 본부 Room/폐쇄 방향 정의, 순수 integrity·동선 검사와 실제 이동·접속·bootstrap·기존 서비스 회귀 |

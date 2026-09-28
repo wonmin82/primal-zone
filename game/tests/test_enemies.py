@@ -1,13 +1,14 @@
 from time import time
 
-from evennia.utils.test_resources import EvenniaCommandTest
 from typeclasses.enemies import Enemy, room_enemies
 from typeclasses.explorers import Explorer
 from world.bootstrap import build_world
 from world.content import ROOMS
 
+from tests.base import GameCommandTest
 
-class EnemySpawnTests(EvenniaCommandTest):
+
+class EnemySpawnTests(GameCommandTest):
     character_typeclass = Explorer
 
     def test_idempotent_bootstrap_preserves_hp_and_state(self):

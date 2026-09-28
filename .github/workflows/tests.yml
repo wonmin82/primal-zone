@@ -1,6 +1,7 @@
 name: Game checks
 on:
   push:
+    branches: [main]
   pull_request:
 permissions:
   contents: read
@@ -16,4 +17,4 @@ jobs:
           prune-cache: true
       - run: uv sync --locked --python 3.13
       - run: uv run python scripts/dev.py check
-      - run: uv run python scripts/dev.py test
+      - run: uv run python scripts/dev.py test --parallel 2

@@ -6,7 +6,6 @@ from unittest.mock import Mock, patch
 
 from evennia import create_object, create_script
 from evennia.utils.dbserialize import deserialize
-from evennia.utils.test_resources import EvenniaCommandTest
 from typeclasses.enemies import room_enemies
 from typeclasses.explorers import Explorer
 from typeclasses.interactables import INTERACTABLES, Container, EmergencyLightCache, MaintenanceLog
@@ -28,8 +27,10 @@ from world.room_hints import render as room_hint
 from world.state import multiplayer_state
 from world.targets import TargetSelector, resolve, room_objects
 
+from tests.base import WorldCommandTest
 
-class LightingTests(EvenniaCommandTest):
+
+class LightingTests(WorldCommandTest):
     character_typeclass = Explorer
 
     def setUp(self):
@@ -40,7 +41,7 @@ class LightingTests(EvenniaCommandTest):
                        "typeclasses.enemies", "world.item_transfers", "typeclasses.loot"):
             self.enterContext(patch(module + ".time", return_value=100))
         self.enterContext(patch("commands.items.time", create=True, return_value=100))
-        self.rooms = build_world()
+        self.rooms = self.world_rooms()
         self.script = create_script(WorldLifecycle, autostart=False)
         self.state = environment.new_environment(100, Random(3))
         self.state["clock"]["game_epoch"] = 22 * 3600

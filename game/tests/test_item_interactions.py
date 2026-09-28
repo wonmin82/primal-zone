@@ -4,26 +4,26 @@ from unittest.mock import Mock, patch
 
 from evennia import create_object, search_tag
 from evennia.utils.dbserialize import deserialize
-from evennia.utils.test_resources import EvenniaCommandTest
 from typeclasses.enemies import Enemy, room_enemies
 from typeclasses.explorers import Explorer
 from typeclasses.interactables import Container
 from typeclasses.loot import DroppedLoot, room_loot, take_loot
 from world import presentation as view
 from world import rules
-from world.bootstrap import build_world
 from world.content import ENEMIES, ITEMS, SHOP
 from world.item_transfers import transfer
 from world.state import multiplayer_state
 from world.targets import Mode, TargetSelector, parse_relation, parse_selector, stack_selector
 
+from tests.base import WorldCommandTest
 
-class ItemInteractionTests(EvenniaCommandTest):
+
+class ItemInteractionTests(WorldCommandTest):
     character_typeclass = Explorer
 
     def setUp(self):
         super().setUp()
-        self.rooms = build_world()
+        self.rooms = self.world_rooms()
         for player in (self.char1, self.char2):
             player.location = self.rooms["dock"]
             player.push_state = Mock()

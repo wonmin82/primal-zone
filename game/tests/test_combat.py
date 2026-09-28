@@ -1,18 +1,18 @@
 from random import Random
 from unittest.mock import Mock, patch
 
-from evennia.utils.test_resources import EvenniaCommandTest
 from typeclasses.enemies import room_enemies
 from typeclasses.explorers import Explorer
-from world.bootstrap import build_world
+
+from tests.base import WorldCommandTest
 
 
-class SharedCombatTests(EvenniaCommandTest):
+class SharedCombatTests(WorldCommandTest):
     character_typeclass = Explorer
 
     def setUp(self):
         super().setUp()
-        self.rooms = build_world()
+        self.rooms = self.world_rooms()
         for player in (self.char1, self.char2):
             player.location = self.rooms["ridge"]
             player.home = self.rooms["dock"]

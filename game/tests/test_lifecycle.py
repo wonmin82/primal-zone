@@ -1,22 +1,22 @@
 from random import Random
 from unittest.mock import Mock, patch
 
-from evennia.utils.test_resources import EvenniaCommandTest
 from typeclasses.enemies import room_enemies
 from typeclasses.explorers import Explorer
 from typeclasses.loot import Corpse, DroppedLoot, room_loot, take_loot
 from typeclasses.parties import invitation_for, invite
-from world.bootstrap import build_world
 from world.lifecycle import reconcile_world
 from world.multiplayer import object_by_id
 
+from tests.base import WorldCommandTest
 
-class LifecycleTests(EvenniaCommandTest):
+
+class LifecycleTests(WorldCommandTest):
     character_typeclass = Explorer
 
     def setUp(self):
         super().setUp()
-        self.rooms = build_world()
+        self.rooms = self.world_rooms()
         for player in (self.char1, self.char2):
             player.location = self.rooms["grass"]
             player.push_state = Mock()
