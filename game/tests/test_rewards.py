@@ -2,20 +2,20 @@ from random import Random
 from unittest.mock import Mock, patch
 
 from evennia import create_object
-from evennia.utils.test_resources import EvenniaCommandTest
 from typeclasses.enemies import room_enemies
 from typeclasses.explorers import Explorer
 from typeclasses.parties import invite, respond
-from world.bootstrap import build_world
 from world.rules import RuleError
 
+from tests.base import WorldCommandTest
 
-class RewardTests(EvenniaCommandTest):
+
+class RewardTests(WorldCommandTest):
     character_typeclass = Explorer
 
     def setUp(self):
         super().setUp()
-        self.rooms = build_world()
+        self.rooms = self.world_rooms()
         self.players = [self.char1, self.char2] + [
             create_object(Explorer, key=f"기여탐사자{i}") for i in range(3)
         ]

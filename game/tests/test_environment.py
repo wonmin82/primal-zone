@@ -9,14 +9,12 @@ from django.template.loader import render_to_string
 from django.test import SimpleTestCase
 from evennia import create_object, create_script
 from evennia.utils.dbserialize import deserialize
-from evennia.utils.test_resources import EvenniaCommandTest
 from typeclasses.enemies import room_enemies
 from typeclasses.explorers import Explorer
 from typeclasses.interactables import INTERACTABLES, Container
 from typeclasses.loot import Corpse
 from typeclasses.scripts import WorldLifecycle
 from world import environment as env
-from world.bootstrap import build_world
 from world.content import REGIONS, ROOMS
 from world.content.environment import WEATHERS
 from world.content.integrity import errors
@@ -26,8 +24,10 @@ from world.lifecycle import reconcile_world
 from world.multiplayer import world_change
 from world.state import multiplayer_state
 
+from tests.base import WorldCommandTest
 
-class EnvironmentTests(EvenniaCommandTest):
+
+class EnvironmentTests(WorldCommandTest):
     character_typeclass = Explorer
 
     def setUp(self):
@@ -35,7 +35,7 @@ class EnvironmentTests(EvenniaCommandTest):
         for module in ("typeclasses.enemies", "typeclasses.explorers", "typeclasses.loot"):
             self.enterContext(patch(module + ".delay"))
         self.enterContext(patch("commands.character.time", return_value=100))
-        self.rooms = build_world()
+        self.rooms = self.world_rooms()
         self.script = create_script(WorldLifecycle, autostart=False)
         self.state = env.new_environment(100, Random(3))
         self.script.db.environment = self.state

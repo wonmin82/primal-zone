@@ -7,7 +7,6 @@ from unittest.mock import Mock, patch
 from evennia import create_object, search_tag
 from evennia.objects.models import ObjectDB
 from evennia.objects.objects import DefaultCharacter
-from evennia.utils.test_resources import EvenniaCommandTest
 from typeclasses.enemies import room_enemies
 from typeclasses.exits import Exit
 from typeclasses.explorers import Explorer
@@ -16,8 +15,10 @@ from world.bootstrap import CATEGORY, EXIT_CATEGORY, build_world, stale_definiti
 from world.content import OPPOSITES, ROOMS
 from world.content.headquarters import ROOMS as HQ_ROOMS
 
+from tests.base import GameCommandTest
 
-class HeadquartersTests(EvenniaCommandTest):
+
+class HeadquartersTests(GameCommandTest):
     character_typeclass = Explorer
 
     def setUp(self):

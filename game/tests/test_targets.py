@@ -4,14 +4,12 @@ from unittest.mock import Mock, patch
 
 from commands.character import Look
 from evennia import create_object
-from evennia.utils.test_resources import EvenniaCommandTest
 from typeclasses.enemies import Enemy, room_enemies
 from typeclasses.explorers import Explorer
 from typeclasses.interactables import SupplyCache
 from typeclasses.loot import Corpse, DroppedLoot, room_loot, take_loot
 from typeclasses.parties import invite, respond
 from world import rules
-from world.bootstrap import build_world
 from world.state import multiplayer_state
 from world.targets import (
     Mode,
@@ -23,6 +21,8 @@ from world.targets import (
     parse_selector,
     resolve,
 )
+
+from tests.base import WorldCommandTest
 
 
 class SelectorGrammarTests(TestCase):
@@ -77,12 +77,12 @@ class SelectorGrammarTests(TestCase):
                 parse_loot(value)
 
 
-class TargetIntegrationTests(EvenniaCommandTest):
+class TargetIntegrationTests(WorldCommandTest):
     character_typeclass = Explorer
 
     def setUp(self):
         super().setUp()
-        self.rooms = build_world()
+        self.rooms = self.world_rooms()
         for player in (self.char1, self.char2):
             player.location = self.rooms["grass"]
             player.push_state = Mock()

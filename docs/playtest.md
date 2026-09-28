@@ -349,8 +349,24 @@ Set-Location -LiteralPath 'E:\Work\primal-zone'
 | `test` 두 번째 단계 | 월드 생성, DB 저장, 실제 입력 문법·채팅·임무, 인증 입력과 명령 권한 등 통합 검사 | 실제 출력의 `Ran N tests` 다음 `OK` |
 
 규칙 테스트와 통합 테스트를 모두 확인합니다. 첫 단계가 실패하면 다음 단계가 실행되지 않습니다.
-통합 테스트는 별도 테스트 DB를 생성하고 종료 시 삭제하며 플레이 DB를 지우지 않습니다.
-동일한 코드 검사와 테스트가 GitHub Actions의 `Game checks`에도 설정되어 있습니다.
+통합 테스트는 `server.conf.settings_test`의 메모리 SQLite DB와 테스트 전용 빠른 해시를 사용합니다. 플레이 DB와 운영 인증 설정은 변경하지 않습니다. Windows 병렬 실행에서 Django가 만드는 임시 DB 복제본은 종료 시 제거됩니다.
+기본 통합 실행은 CPU 수에 따라 최대 4개 프로세스를 사용합니다. 각 프로세스는 Evennia를 초기화하고 독립 DB를 사용합니다. GitHub Actions의 `Game checks`는 PR과 main push에서 동일한 검사와 2개 프로세스의 통합 테스트를 실행합니다.
+
+```powershell
+# 전체 검사를 직렬로 실행해 비교하거나 실패를 조사합니다.
+.\.venv\Scripts\python.exe scripts/dev.py test --parallel 1
+# 관련 통합 검사만 실행합니다. 경로를 지정하면 순수 검사 단계는 생략합니다.
+.\.venv\Scripts\python.exe scripts/dev.py test tests.test_headquarters --parallel 2
+# 준비 데이터와 임시 상태가 다음 테스트에 남지 않는지 역순으로도 확인합니다.
+.\.venv\Scripts\python.exe scripts/dev.py test tests.test_fixtures --parallel 2 --reverse
+```
+
+적합한 통합 테스트는 `tests.base.WorldCommandTest`로 클래스마다 전체 월드를 한 번 준비합니다. Room ID만 공유하고 각 테스트는 객체를 일괄 조회합니다. DB rollback 후 Evennia 객체·명령 캐시를 정리하고 GC를 수행하므로 저장 값과 NDb 임시 상태가 다음 검사에 남지 않아야 합니다. 최초 로그인 순서가 중요한 본부 검사는 `GameCommandTest`로 기존 테스트별 월드 생성 순서를 유지합니다. 테스트 본문의 실제 bootstrap·migration·재접속 검사는 그대로 실행합니다.
+인증 알고리즘 호환 검사에는 해당 해시를 명시적으로 지정합니다. `tblib` 개발 의존성은 병렬 worker의 실패 traceback을 부모 프로세스에 전달하기 위한 것입니다. 실패한 `subTest`는 이름·조건과 예외를 전달하고 Evennia 캐시·Mock를 가진 테스트 객체 전체는 전달하지 않습니다. 병렬 실패가 나오면 해당 테스트 경로와 `--parallel 1`로 재현할 수 있습니다.
+
+**성능 개선 검증 (2026-09-28):** main `f9fcd52`에서 시작한 `codex/test-performance`의 미커밋 변경으로 `scripts/dev.py check`와 최종 기본 `scripts/dev.py test`를 통과했습니다. 순수 72개(0.075초)·통합 205개(60.975초), 총 277개이며 DB 준비 등을 포함한 통합 runner 시간은 70.112초입니다. 기존 199개 통합 테스트 본문·assertion은 그대로이며 격리·해시 호환·병렬 오류 전달 검사 6개를 추가했습니다. 실제 2개 worker의 일반 실패와 Evennia subTest 실패는 별도 의도적 실패 진단에서 원래 조건·traceback 및 종료 코드 1을 확인했습니다. 근거는 `work/test-optimization-final-full.log`와 `work/test-optimization-worker-failure-final.log`입니다.
+
+최종 subTest 전달 검사 추가 전 직렬 전체는 통합 204개·251.349초, 4개 프로세스 전체는 204개·99.704초로 통과했습니다. 관련 역순 병렬 49개도 통과했고 최종 오류 전달 보완은 관련 직렬 검사 2개와 최종 전체 병렬로 확인했습니다. 실행 편차와 기준 차이를 고려하며 최신 직렬 전체를 205개 성공으로 표현하지 않습니다. 이전 표준 실행의 통합 199개·1153.144초는 과거 비교 기록입니다. 이 로컬 검증 시점에는 푸시 전이므로 새 구성의 CI 시간·성공은 미검증이었습니다. 최신 PR HEAD의 원격 CI는 PR Validation에서 별도로 확인합니다. 게임/UI 변경이 없어 브라우저와 smoke는 실행하지 않았습니다.
 
 ### 실행 중인 서버 자동 검사
 

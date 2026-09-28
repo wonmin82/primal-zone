@@ -7,7 +7,6 @@ from commands.default_cmdsets import CharacterCmdSet, UnloggedinCmdSet
 from evennia import CmdSet, Command
 from evennia.commands.cmdparser import cmdparser as default_parser
 from evennia.typeclasses.models import Attribute
-from evennia.utils.test_resources import EvenniaCommandTest
 from server.conf.cmdparser import cmdparser
 from server.conf.primal_inputfuncs import pz_auth
 from typeclasses.enemies import room_enemies
@@ -15,13 +14,15 @@ from typeclasses.explorers import Explorer
 from world.bootstrap import build_world
 from world.content import ROOMS
 
+from tests.base import GameCommandTest, WorldCommandTest
 
-class GameplayIntegrationTests(EvenniaCommandTest):
+
+class GameplayIntegrationTests(WorldCommandTest):
     character_typeclass = Explorer
 
     def setUp(self):
         super().setUp()
-        self.rooms = build_world()
+        self.rooms = self.world_rooms()
         for character in (self.char1, self.char2):
             character.location = self.rooms["dock"]
             character.home = self.rooms["dock"]
@@ -290,7 +291,7 @@ class GameplayIntegrationTests(EvenniaCommandTest):
                 )
 
 
-class AuthenticationTests(EvenniaCommandTest):
+class AuthenticationTests(GameCommandTest):
     def test_structured_registration_does_not_echo_password(self):
         session = Mock(account=None, address="127.0.0.1")
         account_class = Mock()

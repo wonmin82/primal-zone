@@ -59,13 +59,28 @@ def main():
     parser.add_argument(
         "command", choices=["setup", "start", "stop", "reload", "test", "check", "admin-password"]
     )
-    command = parser.parse_args().command
+    parser.add_argument("test_labels", nargs="*", help="선택한 Evennia 테스트 경로")
+    parser.add_argument("--parallel", type=int, help="통합 테스트 프로세스 수 (기본 최대 4)")
+    parser.add_argument("--reverse", action="store_true", help="테스트 순서를 뒤집어 격리 확인")
+    args = parser.parse_args()
+    command = args.command
+    if command != "test" and (args.test_labels or args.parallel is not None or args.reverse):
+        parser.error("테스트 경로와 --parallel/--reverse는 test에만 사용할 수 있습니다.")
+    if args.parallel is not None and args.parallel < 1:
+        parser.error("--parallel은 1 이상의 정수여야 합니다.")
     if command == "setup":
         setup()
     elif command == "test":
         ensure_secret()
-        run("-m", "unittest", "discover", "-s", "world", "-p", "test_*.py")
-        run("-m", "evennia", "test", "tests", "--settings", "settings", "--noinput")
+        if not args.test_labels:
+            run("-m", "unittest", "discover", "-s", "world", "-p", "test_*.py")
+        workers = args.parallel or min(4, os.process_cpu_count() or 1)
+        options = ["--reverse"] if args.reverse else []
+        run(
+            "-m", "evennia", "test", *(args.test_labels or ["tests"]),
+            "--settings", "settings_test", "--noinput", "--parallel", str(workers),
+            "--timing", *options,
+        )
     elif command == "check":
         run("-m", "ruff", "check", "game", "scripts", cwd=ROOT)
     elif command == "admin-password":

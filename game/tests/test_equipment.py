@@ -5,24 +5,24 @@ from unittest.mock import Mock, patch
 
 from commands.character import Help, Look
 from commands.registry import COMMANDS
-from evennia.utils.test_resources import EvenniaCommandTest
 from typeclasses.explorers import Explorer
 from world import presentation as view
 from world import rules
-from world.bootstrap import build_world
 from world.content import EQUIPMENT_ACTIONS, ITEMS, SHOP
+
+from tests.base import WorldCommandTest
 
 
 def tokens(message, role):
     return [s["text"] for s in message.segments if s["role"] == role]
 
 
-class EquipmentTests(EvenniaCommandTest):
+class EquipmentTests(WorldCommandTest):
     character_typeclass = Explorer
 
     def setUp(self):
         super().setUp()
-        self.char1.location = build_world()["dock"]
+        self.char1.location = self.world_rooms()["dock"]
         self.char1.push_state = Mock()
 
     def test_all_gear_commands_save_only_the_matching_slot_and_emit_item_role(self):

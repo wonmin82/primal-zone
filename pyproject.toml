@@ -8,6 +8,7 @@ dependencies = ["evennia==6.1.0"]
 [dependency-groups]
 dev = [
     "ruff>=0.12,<1",
+    "tblib>=3,<4",
     "websockets>=15,<17",
 ]
 
