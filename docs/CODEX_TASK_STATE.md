@@ -22,7 +22,8 @@
 - 관련 순수 50개·통합 31개(51.656초), 승강기 역순 8개(17.995초)도 통과했다. `--parallel 2 --reverse`는 테스트 클래스가 하나여서 실제 worker 하나를 사용하며 관련 31개와 전체 검사는 여러 worker로 수행했다. 최초 전체의 기존 Room 명령 없음/옛 JS query 기대값 2건은 승강기 controls와 새 query를 정확히 검증하도록 갱신하고 해당 2개부터 통과시킨 뒤 전체를 재검증했다.
 - JavaScript 문법 검사와 diff 검사 통과, game과 별도 검증 환경의 정적 파일을 수집했다. 별도 SQLite DB의 두 계정으로 네 호출 버튼·내부 버튼/직접 명령·공용 층·외부 호출·독립 하차·재접속·지도·폐쇄 방향·승강기 밖 unknown·부두 귀환을 확인했다. 정상 서버 종료·재시작 후 승객 Room과 옥상 current stop 보존·하차도 확인했다. 실제 390px 문서 375/375px·로그 339/339px로 넘침이 없었고 데스크톱도 확인했다. 앱 코드 console 오류는 없었으나 로그인 시 자동완성 확장 오류와 일시 UI 차단이 있었다. 검증 서버·임시 탭은 종료했고 플레이 DB를 보존했다. 상세 근거는 [승강기 검증 기록](playtest.md#본부-2단계-공용-승강기-확인)을 따른다.
 - 전체 smoke는 기존 사냥/귀환 Flow를 변경하지 않아 미실행이며 관련 자동/브라우저 검증으로 확인했다. 실제 OS IME·강제 종료·운영 배포 검증은 미실행이다. 플레이 DB는 초기화하거나 변경하지 않았다.
-- 현재 branch는 `codex/hq-elevator`다. commit/push/PR와 최신 CI 확인을 완료한 뒤 아래 원격 기록을 갱신한다. PR은 사용자 요청대로 병합하지 않는다.
+- 원격 기록 작성 시 branch는 `codex/hq-elevator`, 로컬/원격/PR HEAD는 `5b07ba7ae7be0ef2c00bf5d72cdcf256a54df878`로 같고 작업 트리는 깨끗했다. fetch 후 origin/main은 시작 시와 같은 `ada6487f254beb3a662340ce81fa75771092cce1`이며 이미 포함돼 rebase 재작성은 필요 없었다. [PR #15](https://github.com/wonmin82/primal-zone/pull/15)는 OPEN·비Draft·MERGEABLE이다. 이 구현 HEAD의 [Game checks](https://github.com/wonmin82/primal-zone/actions/runs/36432069851)는 success이며 SHA를 직접 대조했다.
+- 이 원격 기록은 PR 생성 후의 문서 전용 후속 커밋에 포함한다. 위 SHA는 기능 구현·CI의 확인 기준이고 문서 커밋 이후의 최종 HEAD는 실제 `git rev-parse HEAD`와 PR에서 확인한다. 실행 코드·테스트가 같아 로컬 전체 검사는 반복하지 않으며 최종 문서 HEAD의 CI는 푸시 후 별도로 확인해 PR Validation에 기록한다. PR은 사용자 요청대로 병합하지 않는다.
 
 ### 자동 테스트 성능 개선 (2026-09-28)
 
