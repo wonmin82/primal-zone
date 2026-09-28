@@ -77,6 +77,7 @@ def multiplayer_state(player, now=None):
     now = time() if now is None else now
     from typeclasses.interactables import ActionObject, Container
 
+    from world.elevator import snapshot as elevator_snapshot
     from world.lifecycle import reconcile_room
 
     reconcile_room(player.location, now)
@@ -101,6 +102,7 @@ def multiplayer_state(player, now=None):
         }
     invited, invitation = invitation_for(player, now)
     return {
+        "elevator": elevator_snapshot(player.location),
         "enemies": [
             {
                 "id": enemy.id,

@@ -1,4 +1,6 @@
-"""본부 1단계: 서비스 이전과 층간 운송 없이 준비하는 stable Room 구조."""
+"""본부의 stable Room 구조. 기존 서비스는 아직 부두에 둔다."""
+
+from .elevator import ELEVATOR_ROOM, ELEVATOR_STOPS
 
 ROOMS = {
     "staging_room": {
@@ -141,6 +143,12 @@ ROOMS = {
     "support_roof": {
         "name": "지원동 옥상",
         "desc": "콘크리트 난간이 지원동의 옥상을 둘러싸고 있다. 낡은 바닥 너머로 본부의 지붕과 섬의 숲이 보인다.",
+        "exits": {},
+    },
+    ELEVATOR_ROOM: {
+        "name": "지원동 승강기",
+        "desc": "금속 벽으로 둘러싸인 승강기다. 조작반에는 "
+        + ", ".join(stop["label"] for stop in ELEVATOR_STOPS.values()) + " 버튼이 있다.",
         "exits": {},
     },
 }

@@ -13,6 +13,7 @@ from world.content import (
     SHOP,
     spawn_id_for,
 )
+from world.content.elevator import ELEVATOR_DEFAULT_STOP, ELEVATOR_ROOM, ELEVATOR_STOPS
 from world.content.environment import EXPOSURES, LIGHT_PROFILES, WEATHER_ZONES, WEATHERS
 from world.content.facilities import FACILITIES
 from world.quests import QUESTS
@@ -25,7 +26,7 @@ def positive_number(value):
 
 
 def headquarters_errors():
-    """본부 1단계의 고정 동선과 시설 위치를 검사한다. 층간 출구는 아직 없다."""
+    """본부의 고정 방향 동선과 시설 위치를 검사한다. 승강기는 별도 이동이다."""
     expected = {
         "staging_room": {"남": "hq_concourse"},
         "hq_concourse": {"북": "staging_room", "서": "dock", "남": "support_1f_c"},
@@ -72,8 +73,43 @@ def headquarters_errors():
     return issues
 
 
+def elevator_errors():
+    issues = []
+    room = ROOMS.get(ELEVATOR_ROOM)
+    if room is None:
+        issues.append("승강기 Room이 없습니다.")
+    elif room.get("exits") != {}:
+        issues.append("승강기 Room에는 방향 출구를 만들 수 없습니다.")
+    if ELEVATOR_ROOM not in REGIONS.get("headquarters", {}).get("rooms", ()):
+        issues.append("승강기 Room은 headquarters Region에 속해야 합니다.")
+    if ELEVATOR_DEFAULT_STOP not in ELEVATOR_STOPS:
+        issues.append("승강기 기본 정류 층이 없습니다.")
+    targets, labels = [], []
+    for key, stop in ELEVATOR_STOPS.items():
+        if not isinstance(key, str) or not key.strip() or not isinstance(stop, dict):
+            issues.append("승강기 정류 층 ID/정의가 유효하지 않습니다.")
+            continue
+        label, target = stop.get("label"), stop.get("room")
+        if not isinstance(label, str) or not label.strip():
+            issues.append(f"{key}: 승강기 층 표시명이 유효하지 않습니다.")
+        else:
+            labels.append(label)
+        if not isinstance(target, str) or target not in ROOMS:
+            issues.append(f"{key}: 승강기 대상 Room이 없습니다.")
+        if isinstance(target, str):
+            targets.append(target)
+    if len(labels) != len(set(labels)):
+        issues.append("승강기 층 표시명이 중복되었습니다.")
+    expected = {"support_1f_c", "support_2f_c", "support_3f_c", "support_roof"}
+    if len(targets) != len(expected) or set(targets) != expected:
+        issues.append("승강기 정류 층은 세 중앙 복도와 옥상이어야 합니다.")
+    if any(ELEVATOR_ROOM in data["exits"].values() for data in ROOMS.values()):
+        issues.append("승강기에 연결하는 가짜 방향 출구가 있습니다.")
+    return issues
+
+
 def errors(interactables):
-    issues = headquarters_errors()
+    issues = headquarters_errors() + elevator_errors()
     for identity, definition in FACILITIES.items():
         if not isinstance(identity, str) or not identity.strip() or not isinstance(definition, dict):
             issues.append(f"{identity}: 시설 상태 정의가 유효하지 않습니다.")

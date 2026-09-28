@@ -6,9 +6,24 @@
 
 본부 재설계 1단계와 방향 정정은 [PR #13](https://github.com/wonmin82/primal-zone/pull/13)으로 병합됐다. 병합 커밋은 `f9fcd52feb7c449eb94519d9e36f3504558056f4`다. 중앙홀 남/1층 중앙 북과 남쪽 폐쇄 출입구, 대기실 남/중앙홀 북과 중앙홀 서/부두 동을 유지한다. 상세 설계는 [본부 Room 구조 1단계](architecture.md#본부-room-구조-1단계)를 따른다.
 
-현재 승인된 작업은 확인된 자동 테스트 성능 개선에 중복 정리·Room 조회 개선과 프로세스 병렬 실행을 추가 적용하는 것이다. 게임 실행 코드는 변경하지 않으며 작은 전용 월드로 테스트를 나누는 후속 개선은 이번 범위에 포함하지 않는다. 구현과 로컬 검증은 완료했다. 사용자 요청으로 `codex/test-performance`의 변경을 커밋·푸시하여 PR에 포함한다. 최신 commit/PR/CI 상태는 실제 Git과 GitHub에서 확인한다.
+테스트 성능 개선은 [PR #14](https://github.com/wonmin82/primal-zone/pull/14)로 병합됐으며 병합 커밋은 `ada6487f254beb3a662340ce81fa75771092cce1`다. 작업 시작 시 fetch 후 실제 최신 origin/main도 같은 SHA였고 main 작업 트리는 깨끗했다. PR #13·#14의 MERGED와 main CI 성공을 직접 확인했다. 인계의 PR #14 진행 중 서술보다 실제 병합 상태가 최신이다.
 
-기존 광원 기능은 PR #11로 완료됐고 인계 문서는 PR #12로 병합됐다. 아래 광원 설계·완료 항목·검증은 과거 기록이며 보존한다. 본부 1단계에서도 기존 서비스·귀환·패배 목적지는 부두다. 승강기, 서비스 이전, 의료/귀환/사망 개편, 단일 화폐/정산, NPC 상점, 통합 closeout은 후속 범위다.
+현재 작업은 본부 2단계 공용 승강기 구현이다. 최신 origin/main에서 `codex/hq-elevator`를 만들었다. 코드·테스트·문서 갱신과 commit/push/PR 생성을 포함하며 PR은 병합하지 않는다. 귀환·패배·기존 서비스는 계속 부두에 둔다.
+
+기존 광원 기능은 PR #11로 완료됐고 인계 문서는 PR #12로 병합됐다. 아래 광원·본부 1단계·테스트 성능 개선의 설계·검증은 시점별 과거 기록이며 보존한다. 승강기 이후에도 서비스 이전, 의료/귀환/사망 개편, 단일 화폐/정산, NPC 상점, 통합 closeout은 후속 범위다.
+
+### 본부 2단계 구현과 검증 (2026-09-28)
+
+- `support_elevator` 실제 ZoneRoom을 headquarters에 추가했다. 본부 26개·전체 41개 Room이며 승강기의 사방 Exit는 없다. 기존 HQ 방향·폐쇄 출입구·출구 migration과 부두 서비스는 보존한다.
+- `world/content/elevator.py`의 `ELEVATOR_STOPS`가 `1f/2f/3f/roof`와 세 중앙 복도·옥상의 대응 SSOT다. 승강기 Room의 persistent `db.current_stop`은 모든 승객이 공유한다. bootstrap은 새/invalid 값만 1층으로 정규화하고 정상 층·Room/Exit ID·플레이어 위치는 보존한다.
+- 호출 Room의 location CmdSet은 `승강기`, 내부 CmdSet은 층 선택과 `내리기`를 제공한다. 밖에서는 내부 명령을 일반 unknown-command로 처리한다. `world_change()`와 실제 `move_to()`를 재사용하며 외부 호출에도 기존 승객은 내부에 남고 하차는 한 명씩이다. 성공 후 승객 알림과 기존 접속자 state push를 사용한다. 지연·문 상태 머신은 없다.
+- 텍스트와 `pz_state.elevator`는 같은 서버 controls를 사용한다. 웹은 현재 층과 서버 actions를 렌더링하고 동일 명령을 전송한다. client zone 분기·가짜 cardinal Exit는 없다. 지도는 방문한 Room을 기존 목록에 표시한다. integrity와 cardinal/transport reachability 검사를 분리해 보완했다.
+- 최종 로컬 기준은 `ada6487f254beb3a662340ce81fa75771092cce1` 위의 이 기능 미커밋 변경이다. `scripts/dev.py check` 통과, `scripts/dev.py test` 순수 77개(0.071초)·통합 213개(78.955초), 총 290개 통과다. 통합 runner는 88.978초이며 실패·skip은 없다. 근거 `work/elevator-final-full.log`. 이후 변경은 기록 문서뿐이다.
+- 관련 순수 50개·통합 31개(51.656초), 승강기 역순 8개(17.995초)도 통과했다. `--parallel 2 --reverse`는 테스트 클래스가 하나여서 실제 worker 하나를 사용하며 관련 31개와 전체 검사는 여러 worker로 수행했다. 최초 전체의 기존 Room 명령 없음/옛 JS query 기대값 2건은 승강기 controls와 새 query를 정확히 검증하도록 갱신하고 해당 2개부터 통과시킨 뒤 전체를 재검증했다.
+- JavaScript 문법 검사와 diff 검사 통과, game과 별도 검증 환경의 정적 파일을 수집했다. 별도 SQLite DB의 두 계정으로 네 호출 버튼·내부 버튼/직접 명령·공용 층·외부 호출·독립 하차·재접속·지도·폐쇄 방향·승강기 밖 unknown·부두 귀환을 확인했다. 정상 서버 종료·재시작 후 승객 Room과 옥상 current stop 보존·하차도 확인했다. 실제 390px 문서 375/375px·로그 339/339px로 넘침이 없었고 데스크톱도 확인했다. 앱 코드 console 오류는 없었으나 로그인 시 자동완성 확장 오류와 일시 UI 차단이 있었다. 검증 서버·임시 탭은 종료했고 플레이 DB를 보존했다. 상세 근거는 [승강기 검증 기록](playtest.md#본부-2단계-공용-승강기-확인)을 따른다.
+- 전체 smoke는 기존 사냥/귀환 Flow를 변경하지 않아 미실행이며 관련 자동/브라우저 검증으로 확인했다. 실제 OS IME·강제 종료·운영 배포 검증은 미실행이다. 플레이 DB는 초기화하거나 변경하지 않았다.
+- 원격 기록 작성 시 branch는 `codex/hq-elevator`, 로컬/원격/PR HEAD는 `5b07ba7ae7be0ef2c00bf5d72cdcf256a54df878`로 같고 작업 트리는 깨끗했다. fetch 후 origin/main은 시작 시와 같은 `ada6487f254beb3a662340ce81fa75771092cce1`이며 이미 포함돼 rebase 재작성은 필요 없었다. [PR #15](https://github.com/wonmin82/primal-zone/pull/15)는 OPEN·비Draft·MERGEABLE이다. 이 구현 HEAD의 [Game checks](https://github.com/wonmin82/primal-zone/actions/runs/36432069851)는 success이며 SHA를 직접 대조했다.
+- 이 원격 기록은 PR 생성 후의 문서 전용 후속 커밋에 포함한다. 위 SHA는 기능 구현·CI의 확인 기준이고 문서 커밋 이후의 최종 HEAD는 실제 `git rev-parse HEAD`와 PR에서 확인한다. 실행 코드·테스트가 같아 로컬 전체 검사는 반복하지 않으며 최종 문서 HEAD의 CI는 푸시 후 별도로 확인해 PR Validation에 기록한다. PR은 사용자 요청대로 병합하지 않는다.
 
 ### 자동 테스트 성능 개선 (2026-09-28)
 
@@ -134,7 +149,7 @@
 
 ## Partially Implemented / In Progress
 
-본부 PR #13, 광원 PR #11과 인계 PR #12는 병합 완료다. 자동 테스트 성능 개선은 로컬 검증을 마쳤고 사용자 요청으로 PR에 포함한다. 실제 branch/diff/원격 상태를 직접 확인한다. 승강기·서비스 이전 등 후속 본부 기능은 다음 사용자 범위를 확인하기 전에는 구현하지 않는다. optional 지역 climate presentation profile, 향후 관찰 수단/거리 확장 등은 구현 완료로 간주하지 않는다.
+본부 PR #13과 테스트 성능 개선 PR #14는 병합 완료다. 본부 2단계 승강기는 구현·로컬 자동/브라우저 검증을 완료했으며 PR 검토·병합을 남긴다. 실제 branch/HEAD/diff/원격 CI를 직접 확인한다. 3단계 서비스 이전, 의료·귀환·사망, 경제·상점, 통합 closeout은 미구현이다. optional 지역 climate presentation profile과 향후 관찰 수단/거리 확장도 구현 완료로 간주하지 않는다.
 
 ## Validation
 
@@ -176,7 +191,9 @@
 
 ## Recommended Next Step
 
-AGENTS와 이 문서를 읽고 `git status --short`, `git diff`, `git diff --cached`, `git fetch origin`, 현재 branch/HEAD/origin/main 및 원격 PR·CI 상태를 확인한다. 자동 테스트 성능 개선의 최종 검증 근거와 남은 미커밋 변경을 보존한다. 사용자 요청에 따라 PR에 포함한 변경을 검토하고 최신 HEAD의 원격 CI를 직접 확인한다. 동일 코드의 성공 검사를 PR 생성만을 이유로 반복하지 않는다. PR 병합은 별도 명시 요청이 있을 때 수행한다. 완료된 Room 골격을 재구현하거나 승강기·서비스 이전 등 후속 기능을 새 승인 없이 시작하지 않는다.
+먼저 AGENTS와 이 문서를 읽고 `git status --short`, unstaged/staged diff, `git fetch origin`, branch/HEAD/origin/main 및 원격 PR·CI 상태를 확인한다. 승강기 PR을 검토하고 사용자의 별도 병합 요청을 기다린다. 이번 구현 요청은 병합을 허용하지 않는다. 동일 코드의 성공 검사는 PR 생성만을 이유로 반복하지 않는다.
+
+다음 계획은 **3단계 — 기존 비상업 서비스의 지원동 이전**이다. 승강기 PR 검토·병합 후 최신 main에서 별도 사용자 요청으로 진행한다. 보관함/공용 보관상자는 보관실, Instructor는 훈련실로 옮기고 보관·훈련의 dock 기반 특례를 제거한다. 현재 PR이 열린 동안 바로 구현하지 않는다. 의료·귀환·사망, 단일 화폐/회수부품 정산, NPC 상점과 통합 closeout은 이후 단계다.
 
 ## Important Files
 
@@ -187,6 +204,7 @@ AGENTS와 이 문서를 읽고 `git status --short`, `git diff`, `git diff --cac
 | `docs/architecture.md`, `docs/playtest.md`, `docs/text-examples.md` | 설계 SSOT, 수동 절차·시점별 결과, 실제 표현 예시 |
 | `game/world/content/starter.py`, `game/world/content/deep_jungle.py` | Room desc/hints/requires, Enemy local/distant metadata |
 | `game/world/content/headquarters.py`, `game/world/test_headquarters.py`, `game/tests/test_headquarters.py` | 본부 Room/폐쇄 방향 정의, 순수 integrity·동선 검사와 실제 이동·접속·bootstrap·기존 서비스 회귀 |
+| `game/world/content/elevator.py`, `game/world/elevator.py`, `game/commands/elevator.py`, `game/world/test_elevator.py`, `game/tests/test_elevator.py` | 정류 층 SSOT, 공용 승강기 상태·표시·실제 이동, location CmdSet, 순수/통합/웹/멀티플레이·격리 검증 |
 | `game/world/content/items.py`, `game/world/content/environment.py`, `game/world/content/facilities.py`, `game/world/content/integrity.py` | item/가격/전원, 환경 상수, 시설 정의, 참조·형식 integrity |
 | `game/world/environment.py`, `game/world/environment_state.py` | pure 환경 version/계산, DB 저장·읽기 전용 snapshot·전환 알림 |
 | `game/world/observation.py`, `game/world/lighting.py` | 지각 matrix/context, metadata 전원·timestamp charge·status |

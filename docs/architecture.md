@@ -23,15 +23,29 @@
 
 ## 본부 Room 구조 1단계
 
-`world/content/headquarters.py`는 출정 대기실·본부 중앙홀, 지원동 1~3층의 복도 각 5칸, 시설 7곳과 옥상 등 Room 25개를 정의한다. 기존 `dock`과 탐사 구역 15곳은 유지한다. 새 Region `headquarters`는 방문한 실제 Room을 기존 지도에 묶어 표시한다.
+`world/content/headquarters.py`는 1단계의 출정 대기실·본부 중앙홀, 지원동 1~3층의 복도 각 5칸, 시설 7곳과 옥상 등 Room 25개에 2단계 공용 승강기 Room을 더해 26개를 정의한다. 기존 `dock`과 탐사 구역 15곳은 유지한다. Region `headquarters`는 방문한 실제 Room을 기존 지도에 묶어 표시한다.
 
-출정 대기실의 유일한 출구는 `남 → hq_concourse`다. 중앙홀은 `북 → staging_room`, `서 → dock`, `남 → support_1f_c`이며 부두의 `북 → grass`는 그대로다. 1층 중앙은 `북 → hq_concourse`, `서 → support_1f_w1`, `동 → support_1f_e1`이며 남쪽 출입구는 폐쇄되어 있다. 향후 승강기는 1층 중앙에 연결할 예정이지만 이번 단계에는 구현하지 않는다. 모든 출구는 기존 사방 반대 방향으로 복귀하며 별도 복귀 방향 예외는 없다. 각 층의 복도는 동서로 연결되고 시설은 북쪽으로 진입·남쪽으로 복귀한다. 2·3층과 옥상에는 아직 층간 연결이 없다.
+출정 대기실의 유일한 출구는 `남 → hq_concourse`다. 중앙홀은 `북 → staging_room`, `서 → dock`, `남 → support_1f_c`이며 부두의 `북 → grass`는 그대로다. 1층 중앙은 `북 → hq_concourse`, `서 → support_1f_w1`, `동 → support_1f_e1`이며 남쪽 출입구는 폐쇄되어 있다. 모든 출구는 기존 사방 반대 방향으로 복귀하며 별도 복귀 방향 예외는 없다. 각 층의 복도는 동서로 연결되고 시설은 북쪽으로 진입·남쪽으로 복귀한다. 층별 방향 그래프는 분리되어 있으며 2단계 승강기 명령으로 각 중앙 복도와 옥상을 오간다.
 
 `blocked_exits`는 방향과 폐쇄 안내 문구만 저장하며 목적지·Exit 객체를 만들지 않는다. `world.navigation.blocked_exit_message()`가 기존 방향 alias로 조회하고, 미등록 명령 fallback에서 이동 입력을 처리한다. 보기 역시 목적지 조회 전에 같은 안내를 반환한다. 기존 관리 Exit가 폐쇄 방향에 남아 있으면 Exit 훅에서 이동·정찰을 차단하고 bootstrap이 해당 stable tag의 관리 Exit만 제거한다. 일반 stale 객체 감사 정책은 유지한다.
 
 Room의 local/distant 표시 경로는 정적 설명 다음에 폐쇄 문구를 넣는다. 지도는 방문한 실제 Room의 방향 목록에 폐쇄 방향을 표시하며 1층 중앙은 `북: 본부 중앙홀`, `남: 폐쇄`다. 방향도·웹 이동 버튼·`pz_state.exits`는 실제 출구만 사용하며 1층 중앙은 서·동·북만 제공한다. 폐쇄 방향을 지도 노드나 동작 버튼으로 만들지 않는다. 기능 없는 시설에는 NPC·보관함·가짜 action hint를 추가하지 않는다.
 
 새 캐릭터는 기존 최초 puppet의 비월드 위치 fallback에서 출정 대기실로 배치되고 새 profile의 `visited`도 대기실에서 시작한다. 재접속 시 유효한 저장 위치와 기존 방문 기록을 보존한다. `home`은 계속 부두이며 귀환·패배 목적지, 기존 서비스 위치·거래·훈련·보관 방식은 변경하지 않는다. bootstrap은 기존 stable tag로 Room/실제 Exit를 재사용·갱신하며 개인 기록을 초기화하지 않는다. 이전 본부 배치의 중앙홀 동쪽·1층 중앙 남쪽 관리 Exit는 같은 목적지를 유지하며 새 남쪽·북쪽 stable tag와 alias로 갱신한다. 이미 새 출구가 있다면 해당 옛 관리 Exit만 제거한다. integrity는 목적지·정반대 방향의 양방향 연결·폐쇄 문구/충돌·본부 고정 배치·시설의 유일 진입·Region membership을 검사한다.
+
+## 본부 2단계: 공용 승강기
+
+`support_elevator`는 safe·실내·인공광·적 없음의 실제 `ZoneRoom`이다. `exits={}`이며 승강기 호출/하차를 cardinal Exit로 만들지 않는다. 기존 중앙 복도의 폐쇄 방향도 유지한다. `world/content/elevator.py`의 `ELEVATOR_STOPS`가 안정적인 정류 층 ID(`1f`, `2f`, `3f`, `roof`)와 한국어 label·목적지 Room의 SSOT다. Command·표시·웹 상태·bootstrap·검사는 이를 재사용한다.
+
+공용 현재 층은 승강기 Room의 persistent `db.current_stop`에 저장하며 개인 profile에는 넣지 않는다. 초기값은 `ELEVATOR_DEFAULT_STOP`이고 bootstrap은 새 Room 또는 유효하지 않은 값만 정규화한다. 정상 층은 월드 재구성·reload/restart 뒤에도 보존한다. 기존 Room·Exit stable ID와 본부 출구 migration은 유지한다.
+
+`ZoneRoom.at_cmdset_get()`은 각 중앙 복도/옥상에 호출용 CmdSet, 승강기 내부에 층 선택/하차용 CmdSet을 제공한다. `승강기`는 호출과 탑승을 한 번에 수행한다. `1층`·`2층`·`3층`·`옥상`은 공용 층만 바꾸고 모든 승객의 location은 승강기 Room이다. `내리기`는 해당 플레이어만 현재 정류 층 Room으로 이동한다. 외부 호출은 기존 승객을 승강기에 둔 채 공용 층을 호출자의 층으로 바꾼다. 같은 층 재선택은 안내만 하며 층 attribute를 다시 저장하지 않는다. 밖에서는 내부 명령이 CmdSet에 없으므로 일반 unknown-command 처리를 따른다. 전역 명령 registry와 도움말에는 내부 층 명령을 추가하지 않는다.
+
+`world.elevator`는 기존 `world_change()`의 단일 서버 잠금·DB transaction으로 동작을 직렬화한다. 탑승·하차는 실제 `move_to()`로 관찰·presence·visited 훅을 재사용하고 실패하면 공용 층 변경도 rollback한다. 승객 이동 알림은 `after_change()`로 성공 뒤 전달하고 기존 GameCommand의 접속자 state push로 함께 갱신한다. 실제 대기 시간·비동기 작업·문 상태 머신은 없다.
+
+Room 본문은 기존 `world.text` semantic 조각으로 호출 방법 또는 현재 층·가능한 명령을 표시한다. `pz_state.elevator`는 서버가 결정한 `inside`, 내부의 `current_stop/current_floor`, `actions[{label, command}]`를 제공하며 이용 불가능한 곳에서는 null이다. 클라이언트는 이 값을 주변 행동에 렌더링하고 같은 텍스트 명령을 보낸다. zone ID 분기나 별도 웹 이동 API는 없다. 지도는 방문한 승강기·상층·옥상을 기존 Room 목록에 표시하며 가짜 방향 연결을 추가하지 않는다. 순수 검사는 cardinal graph와 stop을 포함한 transport reachability를 따로 확인한다.
+
+Integrity는 승강기 Room·headquarters 소속, default·정류 층 ID/label/목적지의 유효성·중복, 정확히 세 중앙 복도와 옥상인 정류 구성, 가짜 방향 출구 금지와 기존 HQ reverse/blocked 검증을 함께 수행한다. 귀환·패배는 계속 dock이며 의료·휴식·보관·훈련·상점과 경제 이전은 후속 단계다.
 
 ## 공통 대상 선택
 

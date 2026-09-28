@@ -126,7 +126,7 @@ Set-Location -LiteralPath 'E:\Work\primal-zone'
 - 중앙홀에서 `서`로 부두, 부두에서 `동`으로 중앙홀을 오간다. 부두의 `북`은 기존 초지로 이어지며 윤대장·교관·상점·휴식·개인/공용 보관은 기존 위치에서 작동한다.
 - 중앙홀 `남`으로 지원동 1층 중앙에 들어간다. `북`으로 중앙홀에 돌아오고 복도의 동서 5칸, 북쪽 자원 정산소·보관실·보급품 상점의 남쪽 복귀를 확인한다. 시설은 Room만 있고 서비스나 action hint는 없다.
 - 1층 중앙에서 `남`, `s`, `ㄴ`, `남 보기`는 폐쇄 안내만 표시하고 위치·방문 기록을 바꾸지 않는다. Room 본문은 북쪽 중앙홀 통로와 남쪽 폐쇄 문을 표현한다. 방문 지도에는 `북: 본부 중앙홀`, `남: 폐쇄`, 웹 이동 버튼에는 실제 `서/동/북`만 나타난다. 미래 시설 이름이나 dummy 목적지가 없어야 한다.
-- 2·3층 복도·의무실·훈련실·방어구점·무기점·옥상은 DB와 자동 테스트에서 구조를 확인한다. 승강기나 층간 연결이 없으므로 일반 동선에서 아직 접근할 수 없다. `귀환`·패배는 계속 부두를 사용한다.
+- 2단계에서는 승강기로 2·3층 중앙과 옥상에 도달하고 복도를 통해 각 시설 Room을 확인한다. 시설 서비스는 아직 옮기지 않았으며 `귀환`·패배는 계속 부두를 사용한다. 아래 1단계 검증 기록의 상층 접근 제한은 당시 상태다.
 - 자동 검증은 `world.test_headquarters`의 데이터/무결성/기존 profile 보존과 `tests.test_headquarters`의 실제 명령·재접속·표시/state·bootstrap 반복·기존 서비스 회귀를 사용한다. 전체 명령은 `scripts/dev.py check`, `scripts/dev.py test`다.
 
 **본부 브라우저 기록 (2026-09-28, 방향 수정 전):** 아래 결과는 `bef94dd`에 포함된 옛 중앙홀 동/1층 중앙 남 연결의 확인 기록이며 현재 방향 변경의 브라우저 검증으로 간주하지 않는다. `fd3e884`에서 시작한 본부 변경을 별도 SQLite DB·일반 검증 계정으로 확인했다. 최초 접속은 출정 대기실이었으며 `남` 버튼으로 중앙홀, `동` 버튼으로 지원동 1층 중앙에 진입했다. `북`과 `북 보기`는 같은 폐쇄 안내를 출력하고 현재 위치를 유지했다. 지도는 방문한 실제 Room과 `북: 폐쇄`를 표시했으며 SURROUNDINGS에는 실제 `서/동/남`만 있었다. `남` 명령으로 중앙홀에 돌아가 `서` 버튼으로 부두, `북` 명령으로 초지에 진입했고 `귀환`은 부두였다. 종료·재연결·로그인 후에도 부두 위치가 유지됐다.
@@ -140,6 +140,39 @@ Set-Location -LiteralPath 'E:\Work\primal-zone'
 검증 탭의 console 오류/경고는 0개였고 화면 캡처는 Git 제외 `work/hq-direction.png`다. 검증 서버·탭을 종료했고 플레이 DB는 보존했다. JavaScript/CSS/글꼴 변경이 없어 정적 파일 수집을 반복하지 않았다. 실제 OS IME·전체 smoke는 이번에도 미실행이다.
 
 **본부 방향 정정 자동 검증 (2026-09-28):** 기준 HEAD `bef94dd`와 위 방향 수정·bootstrap·테스트의 최종 미커밋 변경에서 `.\.venv\Scripts\python.exe scripts/dev.py check` 통과, `.\.venv\Scripts\python.exe scripts/dev.py test` 순수 72개·통합 199개, 총 271개 통과다. 통합 1153.144초, 근거 `work/hq-direction-full.log`. 본부 순수 개별 7개도 통과했다. 관련 통합 20개에서는 옛 출구 갱신 후 미사용 tag가 남는 회귀 1개를 발견했다(`work/hq-direction-related.log`). 해당 본부 tag 정리 후 실패한 bootstrap 테스트를 먼저 재실행해 1개 통과(10.257초, `work/hq-direction-migration.log`)했고, 최종 전체 검사에서 회귀가 없음을 확인했다. 테스트 실패는 이번 변경의 tag 정리 누락이었으며 환경 실패는 없었다. 전체 성공 후 실행 코드·테스트·의존성은 변경하지 않고 문서만 마무리한다. 최신 수정 커밋의 원격 CI는 푸시 후 별도로 확인하고 PR 설명에 기록한다.
+
+### 본부 2단계 공용 승강기 확인
+
+1. 신규 탐사자의 대기실에서 `남`으로 중앙홀, 다시 `남`으로 1층 중앙에 이동한다. 사방 이동 버튼은 서/동/북, 남쪽은 계속 폐쇄이며 주변 행동에 `승강기`가 있어야 한다.
+2. 버튼 또는 `승강기`로 탑승한다. 실제 Room은 지원동 승강기, 현재 위치는 1층이다. 내부 버튼은 층 SSOT의 1층/2층/3층/옥상과 내리기이며 사방 출구는 없다.
+3. `2층`과 `내리기`로 2층 중앙에 도착한다. 호출 버튼을 확인하고 같은 순서로 3층·옥상에 이동한다. 옥상에서도 호출할 수 있어야 한다. 각 층의 기존 북/남 폐쇄 문은 바뀌지 않는다.
+4. 같은 층 버튼을 누르면 이미 그 층이라는 안내만 나온다. 동/서 복도·중앙홀·부두에는 호출 버튼이 없으며 승강기 밖의 `1층`/`2층`/`3층`/`옥상`/`내리기`는 일반 알 수 없는 명령으로 처리한다.
+5. A를 승강기 내부에 두고 B가 다른 층에서 호출한다. A는 내부에 남고 현재 층과 웹 표시가 B의 층으로 함께 바뀌어야 한다. B도 같은 Room에 탑승한다. A의 층 선택이 양쪽 현재 위치에 반영되는지, A만 내릴 때 B가 내부에 남는지 확인한다.
+6. 내부에서 접속을 끊고 다른 사용자가 층을 바꾼 후 재접속한다. 저장된 Room이 승강기이며 현재 공용 층으로 내리는지 확인한다. 서버 정상 재시작과 bootstrap 이후 현재 층을 보존해야 한다.
+7. 승강기·상층·옥상 방문 후 `지도`가 오류 없이 표시되고 가짜 방향 출구가 없는지 확인한다. `귀환` 목적지와 기존 보관·훈련·상점·휴식은 계속 부두여야 한다.
+8. 데스크톱·좁은 화면에서 승강기 현재 위치와 버튼을 확인한다. 버튼과 직접 명령의 목적지·공용 층이 같고 두 사용자 상태가 갱신되는지, console 오류와 가로 넘침이 없는지 확인한다.
+
+관련 자동 검사는 `world.test_elevator`와 `tests.test_elevator`다. `scripts/dev.py test tests.test_elevator --parallel 2 --reverse`로 실행 순서에 따른 shared attribute 누수가 없는지 확인한다. 최종 검증은 저장소 표준 `scripts/dev.py check`와 `scripts/dev.py test`를 사용한다. 기존 사냥/귀환 smoke Flow를 바꾸지 않아 전체 `scripts/smoke.py`는 기본 실행하지 않으며 미실행 사유를 결과에 남긴다.
+
+**승강기 자동 검증 (2026-09-28):** 최신 `origin/main=ada6487f254beb3a662340ce81fa75771092cce1`에서 시작한 `codex/hq-elevator`의 최종 실행 코드·테스트에서 다음을 확인했다. PR #14의 settings_test·메모리 SQLite·빠른 해시·병렬 fixture를 사용했고 인프라는 변경하지 않았다.
+
+| 실행 명령 (저장소 루트, 별도 표시 제외) | 실제 결과 |
+| --- | --- |
+| `.\.venv\Scripts\python.exe scripts/dev.py check` | 통과 |
+| `.\.venv\Scripts\python.exe scripts/dev.py test` | 순수 77개 0.071초·통합 213개 78.955초, 총 290개 통과. 통합 runner 88.978초, 실패/skip 없음 |
+| `game`에서 `..\.venv\Scripts\python.exe -m unittest world.test_elevator world.test_headquarters world.test_rules` | 50개 통과, 0.094초 |
+| `.\.venv\Scripts\python.exe scripts/dev.py test tests.test_elevator tests.test_headquarters tests.test_regions tests.test_web_state --parallel 2` | 관련 통합 31개 통과, 51.656초 (runner 65.791초) |
+| `.\.venv\Scripts\python.exe scripts/dev.py test tests.test_elevator --parallel 2 --reverse` | 역순 8개 통과, 17.995초 (runner 27.391초). 한 TestCase 클래스여서 실제 worker는 하나이며 관련/전체 검사는 여러 worker 사용 |
+| `scripts/dev.py test tests.test_text.SemanticTextTests.test_room_roles_come_from_objects_and_real_exits tests.test_environment.EnvironmentWebTemplateTests --parallel 2` (같은 Python) | 최초 전체에서 실패한 기존 기대값 2건을 수정한 뒤 2개 통과, 8.308초. 이후 위 최종 전체 통과 |
+| `node --check game/web/static/webclient/js/primal.js`, `git diff --check` | 통과 |
+
+최초 전체의 두 실패는 모든 Room에 명령 token이 없다는 가정과 이전 JS query 주소였다. 서버 승강기 actions와 새 `?v=elevator`를 정확히 확인하도록 갱신했으며 기존 assertion을 무관하게 느슨하게 만들거나 삭제하지 않았다. 근거는 `work/elevator-final-full.log`, `work/elevator-related.log`, `work/elevator-reverse.log`, `work/elevator-failed-recheck.log`다. 전체 성공 후 실행 코드·테스트·의존성은 고정하고 문서만 마무리했다. 최신 PR HEAD CI는 PR Validation과 인계 원격 기록에서 별도로 확인한다.
+
+**승강기 브라우저 검증 (2026-09-28):** 플레이 DB와 분리한 SQLite·일반 계정 두 개로 대기실→중앙홀→1층, 네 정류 층 호출 버튼과 내부 층 선택/내리기를 확인했다. 직접 `3층` 입력과 버튼이 같은 공용 상태를 바꿨고 외부 1층 호출에도 기존 승객은 내부에 남았다. 두 계정의 현재 위치가 함께 갱신되며 한 명만 3층/옥상으로 하차할 수 있었다. A 로그아웃 후 B가 옥상으로 이동하고 A가 재접속했을 때 내부의 현재 위치는 옥상이었으며 옥상으로 내렸다. 방문 지도에는 승강기·2/3층·옥상이 표시되고 가짜 방향 출구는 없었다. 1층 남쪽 폐쇄, 서쪽 복도의 호출 버튼 없음/`2층` unknown 처리, `귀환`의 부두 목적지와 기존 부두 서비스 표시를 확인했다.
+
+game과 별도 검증 서버에서 정적 파일을 수집했고 JS는 `?v=elevator`, CSS는 기존 `?v=lighting`을 사용한다. 데스크톱과 실제 390px 화면에서 현재 층·다섯 내부 버튼을 확인했다. 390px 문서 clientWidth/scrollWidth는 375/375px, 로그는 339/339px로 가로 넘침이 없었다. 근거 `work/elevator-390.png`, `work/elevator-390-actions.png`. 최초 화면 크기 설정이 반영되지 않았던 캡처는 390px 근거로 사용하지 않았다. 확인한 console에는 앱 코드 오류가 없었으나 로그인 시 암호 자동완성 확장 프로그램의 `insertBefore` 오류가 있었고 확장 UI가 조작을 일시 차단했다. 앱 오류 0과 브라우저 전체 오류 0을 구분한다.
+
+별도 서버를 정상 종료·재시작한 뒤 B가 재접속했을 때 실제 Room은 승강기, 공용 현재 층은 종료 전과 같은 옥상이었고 `내리기`로 옥상에 도착했다. 이후 검증 서버와 임시 탭을 종료하고 DB/로그는 보존했다. 전체 smoke 미실행 — 기존 smoke의 사냥/귀환 Flow를 변경하지 않았고 승강기는 관련 자동/브라우저 검증으로 확인했다. 실제 OS 한글 IME·강제 프로세스 종료·운영 배포 검증은 미실행이다. 통합 테스트로 bootstrap 반복/invalid state 정규화·DB cache reload·재접속·실패 rollback을 확인했다. 검증 계정·DB·로그·수집 파일은 Git에 포함하지 않는다.
 
 ## 3. 첫 임무 끝까지 진행하기
 
@@ -574,7 +607,7 @@ Compact 최종 자동 검증은 PR #3의 `064e616` 이후 추가 커밋과 동�
 후속 정합성 확인에는 다음을 포함한다.
 
 - 부두 clear/fog, 관리동 clear/rain/storm, 습지 clear/fog에서 static 설명은 같고 환경 문장만 달라지는지 확인한다. 부두의 고정 안개, 관리동의 현재 강우, 습지의 안개 중복이 없어야 한다.
-- 실제 CSS/JS URL의 `?v=lighting`과 환경 헤더를 확인한다. 데스크톱 `환경 확인` 버튼과 직접 `날씨` 입력의 정보가 같아야 한다. 모바일에서는 기존 FIELD GUIDE 숨김 정책을 유지하며 가로 넘침이 없어야 한다.
+- 실제 CSS `?v=lighting`·JS `?v=elevator` URL과 환경 헤더를 확인한다. 데스크톱 `환경 확인` 버튼과 직접 `날씨` 입력의 정보가 같아야 한다. 모바일에서는 기존 FIELD GUIDE 숨김 정책을 유지하며 가로 넘침이 없어야 한다.
 - 같은 period 경계에서 야외는 메시지 한 번, 발전실 indoor/dim은 동일 문장 메시지 없이 헤더만 갱신되어야 한다. rain→storm은 발전실에서도 바깥 빗소리 변화 메시지 한 번이어야 한다.
 - 별도 DB의 version 없는 state를 읽을 때 DB를 쓰지 않고, reconcile 후 version 1만 추가되는지 확인한다. clock/현재 weather/seed/step/기한을 비교하고 다시 실행하면 migration 쓰기가 없어야 한다. 미래 version은 데이터를 보존하며 오류를 반환해야 한다.
 

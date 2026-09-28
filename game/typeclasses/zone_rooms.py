@@ -34,6 +34,17 @@ def exit_diagram(exits):
 
 
 class ZoneRoom(DefaultRoom):
+    def at_cmdset_get(self, **kwargs):
+        super().at_cmdset_get(**kwargs)
+        from commands.elevator import ElevatorInsideCmdSet, ElevatorLandingCmdSet
+        from world.content.elevator import ELEVATOR_ROOM
+        from world.elevator import stop_for_room
+
+        cmdset = (ElevatorInsideCmdSet if self.db.zone_id == ELEVATOR_ROOM else
+                  ElevatorLandingCmdSet if stop_for_room(self.db.zone_id) else None)
+        if cmdset and not self.cmdset.has_cmdset(cmdset.key, must_be_default=True):
+            self.cmdset.add_default(cmdset, persistent=False)
+
     def return_distant_appearance(self, context):
         from world.distant_presentation import distant_appearance
 
@@ -63,6 +74,9 @@ class ZoneRoom(DefaultRoom):
             "", ft.token("muted", description(environment)), "",
             exit_diagram(room["exits"]), "",
         ]
+        from world.elevator import presentation as elevator_presentation
+
+        lines.extend(elevator_presentation(self))
         pool = room_objects(looker, self, observed_at)
         objects = [obj for obj in action_objects(self) if obj in pool]
         for name in dict.fromkeys(obj.key for obj in objects):
