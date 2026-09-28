@@ -16,6 +16,7 @@ from world.quests import progress_defaults
 
 MAX_LEVEL = 10
 PROFILE_VERSION = 6
+DEFEAT_RECOVERY_HP = 1
 
 
 class RuleError(ValueError):
@@ -249,7 +250,7 @@ def player_attack(profile, enemy_id, now, interval, rng=None):
 
 
 def enemy_attack(profile, enemy_id, enemy_round, now, rng=None):
-    """독립된 적 차례의 피해와 구조 여부를 구조화된 값으로 반환한다."""
+    """독립된 적 차례의 피해와 패배 여부만 계산한다."""
     rng = rng or Random()
     enemy = ENEMIES[enemy_id]
     damage = max(1, enemy["attack"] + rng.randint(-1, 1) - stats(profile)["defense"])
@@ -267,10 +268,41 @@ def enemy_attack(profile, enemy_id, enemy_round, now, rng=None):
     train_proficiency(profile, "defense", prevented, enemy["training_cap"])
     profile["hp"] -= damage
     defeated = profile["hp"] <= 0
-    if defeated:
-        profile["credits"] -= min(profile["credits"], 10)
-        profile["hp"] = stats(profile)["max_hp"]
     return {"damage": damage, "charged": charged, "defeated": defeated, "prevented": prevented}
+
+
+def apply_defeat(profile):
+    """패배의 최소 생존 회복과 기존 크레딧 패널티. 일반 의료와 독립이다."""
+    if profile["hp"] > 0:
+        raise RuleError("패배한 상태가 아닙니다.")
+    lost = min(profile["credits"], 10)
+    profile["credits"] -= lost
+    profile["hp"] = DEFEAT_RECOVERY_HP
+    return lost
+
+
+def _medical_maximum(profile, safe):
+    require_peace(profile)
+    if not safe:
+        raise RuleError("안전한 곳에서만 의료 서비스를 이용할 수 있습니다.")
+    maximum = stats(profile)["max_hp"]
+    if profile["hp"] >= maximum:
+        raise RuleError("이미 체력이 가득합니다.")
+    return maximum
+
+
+def treat(profile, *, safe=False):
+    maximum = _medical_maximum(profile, safe)
+    restored = maximum - profile["hp"]
+    profile["hp"] = maximum
+    return restored
+
+
+def rest(profile, *, safe=False):
+    maximum = _medical_maximum(profile, safe)
+    restored = maximum - profile["hp"]
+    profile["hp"] = maximum
+    return restored
 
 
 def boss_telegraph(enemy_id, enemy_round):

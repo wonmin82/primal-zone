@@ -318,10 +318,10 @@ class LightingTests(WorldCommandTest):
         self.clear()
         self.char1.location = self.rooms["dock"]
         context = context_for(self.char1, observed_at=100)
-        self.assertEqual(room_hint(context), "윤대장 대화 · 상점 · 휴식")
+        self.assertEqual(room_hint(context), "윤대장 대화 · 상점")
         commander = next(obj for obj in context.room.contents if obj.tags.has("commander", category="primal_interactable"))
         commander.locks.add("view:false()")
-        self.assertEqual(room_hint(context), "상점 · 휴식")
+        self.assertEqual(room_hint(context), "상점")
         self.assertNotIn("윤대장", str(multiplayer_state(self.char1, 100)))
 
     def test_hint_declaration_order_is_preserved_for_interleaved_text_and_targets(self):

@@ -103,6 +103,28 @@ def count_item(state, item):
     return sum(entry["count"] for entry in state["inventory"] if entry["id"] == item)
 
 
+async def route(player, steps):
+    for command, zone in steps:
+        await player.act(command, lambda state, zone=zone: state["zone"] == zone)
+
+
+async def return_to_dock(player):
+    await route(player, (("귀환", "support_roof"), ("승강기", "support_elevator")))
+    await player.act("1층", lambda state: state["elevator"]["current_stop"] == "1f")
+    await route(player, (("내리기", "support_1f_c"), ("북", "hq_concourse"), ("서", "dock")))
+
+
+async def recover_and_resume(player):
+    await route(player, (("귀환", "support_roof"), ("승강기", "support_elevator")))
+    await player.act("2층", lambda state: state["elevator"]["current_stop"] == "2f")
+    await route(player, (("내리기", "support_2f_c"), ("서", "support_2f_w1"), ("북", "infirmary")))
+    if player.state["hp"] < player.state["max_hp"]:
+        await player.act("침대 휴식", lambda state: state["hp"] == state["max_hp"])
+    await route(player, (("남", "support_2f_w1"), ("동", "support_2f_c"), ("승강기", "support_elevator")))
+    await player.act("1층", lambda state: state["elevator"]["current_stop"] == "1f")
+    await route(player, (("내리기", "support_1f_c"), ("북", "hq_concourse"), ("서", "dock"), ("북", "grass")))
+
+
 async def main():
     suffix = secrets.token_hex(3)
     players = [
@@ -158,9 +180,7 @@ async def main():
         await second.until(lambda state: state["party"]["is_leader"])
         await outsider.act("동", lambda state: state["zone"] == "wreck")
         for index in range(5):
-            await first.act("귀환", lambda state: state["zone"] == "dock")
-            await first.act("휴식", lambda state: state["hp"] == state["max_hp"])
-            await first.act("북", lambda state: state["zone"] == "grass")
+            await recover_and_resume(first)
             if index % 2 == 0:
                 await first.act("동", lambda state: state["zone"] == "wreck")
             await first.fight()
@@ -188,7 +208,7 @@ async def main():
         )
         await outsider.act("모두 가져", lambda state: count_item(state, "scrap") > 0)
         print("PASS: 시체 소멸·바닥 전리품·보호 만료 후 외부 회수", flush=True)
-        await first.act("귀환", lambda state: state["zone"] == "dock")
+        await return_to_dock(first)
         if not count_item(first.state, "blade"):
             await first.act("강철마체테 구매", lambda state: count_item(state, "blade") > 0)
         before_attack = first.state["attack"]

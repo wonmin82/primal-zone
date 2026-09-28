@@ -1,4 +1,4 @@
-"""본부의 stable Room 구조. 기존 서비스는 아직 부두에 둔다."""
+"""본부의 stable Room 구조. 서비스 존재는 실제 객체로 표현한다."""
 
 from .elevator import ELEVATOR_ROOM, ELEVATOR_STOPS
 
@@ -124,6 +124,7 @@ ROOMS = {
         "name": "의무실",
         "desc": "밝은 타일로 마감된 넓은 공간이다. 벽의 수납장은 비어 있고 남쪽 문은 2층 복도로 이어진다.",
         "exits": {"남": "support_2f_w1"},
+        "hints": [{"target": "doctor", "action": "치료"}, {"target": "infirmary_bed", "action": "휴식"}],
     },
     "training_room": {
         "name": "훈련실",

@@ -215,10 +215,8 @@ class HeadquartersTests(GameCommandTest):
         south = next(obj for obj in self.char1.location.exits if obj.key == "남")
         self.assertIn("남쪽 출입문은 현재 폐쇄되어 있다.", south.return_appearance(self.char1))
 
-    def test_dock_services_return_and_defeat_destinations_remain_available(self):
-        self.char1.location = self.rooms["support_1f_c"]
-        self.char1.execute_cmd("귀환")
-        self.assertEqual(self.char1.zone, "dock")
+    def test_dock_keeps_shop_and_commander_without_storage_training_or_medical(self):
+        self.char1.location = self.rooms["dock"]
         self.assertEqual(search_tag("commander", category="primal_interactable")[0].location, self.rooms["dock"])
         for key in ("instructor", "personal_locker", "shared_container"):
             self.assertNotEqual(search_tag(key, category="primal_interactable")[0].location, self.rooms["dock"])
@@ -229,15 +227,23 @@ class HeadquartersTests(GameCommandTest):
         self.assertEqual(self.char1.profile()["storage"], {})
         self.char1.change(lambda profile: profile.update(hp=1))
         self.char1.execute_cmd("휴식")
-        self.assertEqual(self.char1.profile()["hp"], 60)
+        self.assertEqual(self.char1.profile()["hp"], 1)
         self.char1.execute_cmd("윤대장 대화")
         self.assertTrue(self.char1.profile()["quests"]["radio_tower"]["started"])
+        for zone in HQ_ROOMS:
+            expected = [key for key, definition in INTERACTABLES.items() if definition["room"] == zone]
+            self.assertEqual(len(action_objects(self.rooms[zone])), len(expected))
+
+    def test_return_and_defeat_have_separate_support_destinations(self):
+        self.char1.location = self.rooms["grass"]
+        self.char1.execute_cmd("귀환")
+        self.assertEqual(self.char1.zone, "support_roof")
+        self.assertEqual(self.char1.home, self.rooms["dock"])
         self.char1.location = self.rooms["grass"]
         self.char1.change(lambda profile: profile.update(hp=1))
         enemy = room_enemies(self.char1.location)[0]
         enemy.engage(self.char1, now=100)
         enemy.enemy_tick(now=102.5, rng=Random(1))
-        self.assertEqual(self.char1.location, self.rooms["dock"])
-        for zone in HQ_ROOMS:
-            expected = [key for key, definition in INTERACTABLES.items() if definition["room"] == zone]
-            self.assertEqual(len(action_objects(self.rooms[zone])), len(expected))
+        self.assertEqual(self.char1.location, self.rooms["infirmary"])
+        self.assertEqual(self.char1.profile()["hp"], 1)
+        self.assertEqual(self.char1.home, self.rooms["dock"])

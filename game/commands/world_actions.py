@@ -1,7 +1,7 @@
 """world_actions 영역의 명시적 게임 명령."""
 
 from world import rules
-from world.targets import TargetSelector, names, parse_selector, resolve, room_objects
+from world.targets import TargetSelector, names, normalized, parse_selector, resolve, room_objects
 
 from commands.base import GameCommand
 
@@ -9,7 +9,7 @@ from commands.base import GameCommand
 class Return(GameCommand):
     category = "탐사"
     usage = "귀환"
-    summary = "비전투 상태에서 부두로 돌아갑니다."
+    summary = "비전투 상태에서 지원동 옥상으로 돌아갑니다."
     key = "귀환"
     aliases = ["home"]
 
@@ -17,20 +17,51 @@ class Return(GameCommand):
         from world.bootstrap import get_room
 
         self.peaceful()
-        self.caller.move_to(get_room("dock"), quiet=True)
+        self.caller.move_to(get_room("support_roof"), quiet=True)
 
 
 class Rest(GameCommand):
     category = "보급"
-    usage = "휴식"
-    summary = "부두 의무실에서 체력을 회복합니다."
+    input_style = "target"
+    usage = "휴식 · 침대 휴식 · 침대에서 휴식"
+    summary = "주변 침대에서 무료로 체력을 모두 회복합니다."
     key = "휴식"
     aliases = ["rest"]
 
     def run(self):
-        self.at_dock()
-        self.caller.change(lambda profile: profile.update(hp=rules.stats(profile)["max_hp"]))
-        self.caller.msg("부두 의무실에서 체력을 모두 회복했습니다.")
+        resolve_medical(self.caller, self.key, self.args).perform_action(self.caller, self.key)
+
+
+class Treat(GameCommand):
+    category = "보급"
+    input_style = "target"
+    usage = "치료 · 의무관 치료 · 의무관에게 치료"
+    summary = "주변 의무관에게 무료로 체력을 모두 회복합니다."
+    key = "치료"
+    aliases = ["treat"]
+
+    def run(self):
+        resolve_medical(self.caller, self.key, self.args).perform_action(self.caller, self.key)
+
+
+def resolve_medical(caller, action, name=""):
+    """의료 bare 입력은 보이는 서비스가 정확히 하나일 때만 선택한다."""
+    from typeclasses.interactables import Bed, Doctor
+
+    kind = Doctor if action == "치료" else Bed
+    objects = [obj for obj in room_objects(caller) if isinstance(obj, kind)]
+    name = name.strip()
+    known = [n for obj in objects for n in names(obj)]
+    if not name:
+        if not objects:
+            raise rules.RuleError("이곳에서 이용할 대상을 찾지 못했습니다. '보기'로 주변을 살펴보세요.")
+        if len(objects) > 1:
+            raise rules.RuleError(f"이용할 대상이 여러 개입니다. 대상 이름과 번호를 지정해 {action}하세요.")
+        return objects[0]
+    particle = "에게" if action == "치료" else "에서"
+    if normalized(name) not in {normalized(n) for n in known} and name.endswith(particle):
+        name = name[:-len(particle)].strip()
+    return resolve(objects, parse_selector(name, known), caller, action)[0]
 
 
 def resolve_action(caller, action, name=None):

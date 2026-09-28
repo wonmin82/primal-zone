@@ -53,12 +53,17 @@ def world_change():
                     attribute.db_value = values[attribute.pk]
                 else:
                     Attribute.flush_cached_instance(attribute)
-            existing = set(ObjectDB.objects.values_list("pk", flat=True))
+            locations = dict(ObjectDB.objects.values_list("pk", "db_location_id"))
+            existing = set(locations)
             for obj, identity in cached:
                 if identity in existing:
                     obj.pk = identity
                     obj._is_deleted = False
+                    # 실패한 move_to가 바꾼 FK/관계 캐시도 DB의 rollback 위치로 복구한다.
+                    obj.db_location_id = locations[identity]
                     obj.attributes.reset_cache()
+            for obj, identity in cached:
+                if identity in existing:
                     obj.contents_cache.init()
             for obj in ObjectDB.get_all_cached_instances():
                 if obj.pk not in existing:
