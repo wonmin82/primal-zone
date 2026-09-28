@@ -77,7 +77,7 @@ ROOMS = {
         "enemies": [],
         "desc": "낡은 선착장 너머로 섬의 해안과 숲이 이어진다. 밧줄과 장비가 가지런히 놓여 있다.\n"
         "정박한 배 사이로 잔물결이 일고, 먼 숲에서 새소리가 들려온다.",
-        "hint": "윤대장 대화 · 상점 · 휴식",
+        "hints": [{"target": "commander", "action": "대화"}, {"text": "상점 · 휴식"}],
         "exits": {"북": "grass"},
     },
     "grass": {
@@ -86,7 +86,7 @@ ROOMS = {
         "light_profile": "natural",
         "enemies": ["scavenger"],
         "desc": "무릎 높이의 풀 사이로 작은 발자국이 이어진다. 첫 사냥에 적당한 곳이다.",
-        "hint": "어린청소룡 공격 · 강타 · 상태",
+        "hints": [{"text": "사냥할 대상을 살펴보고 체력을 확인하자."}],
         "exits": {"남": "dock", "동": "wreck", "북": "trail"},
     },
     "wreck": {
@@ -95,7 +95,7 @@ ROOMS = {
         "light_profile": "natural",
         "enemies": ["scavenger"],
         "desc": "수송차가 옆으로 뒤집힌 채 풀숲에 박혀 있다. 찌그러진 차체 틈으로 녹과 젖은 흙 냄새가 스며 나온다.",
-        "hint": "보급상자 조사",
+        "hints": [{"target": "emergency_light_cache", "action": "조사"}, {"target": "supply_cache", "action": "조사"}],
         "exits": {"서": "grass"},
     },
     "trail": {
@@ -104,7 +104,7 @@ ROOMS = {
         "light_profile": "natural",
         "enemies": ["hunter"],
         "desc": "나무마다 깊은 발톱 자국이 남아 있다. 좁은 길 양옆으로 눌린 수풀과 오래된 사냥 흔적이 이어진다.",
-        "hint": "장비를 바꾸고 체력을 확인하자.",
+        "hints": [{"text": "장비를 바꾸고 체력을 확인하자."}],
         "exits": {"남": "grass", "동": "office", "북": "marsh"},
     },
     "office": {
@@ -114,7 +114,7 @@ ROOMS = {
         "light_profile": "filtered",
         "enemies": [],
         "desc": "물이 샌 흔적이 남은 천장 아래로 습기에 젖은 책상이 보인다. 바람이 들어올 때마다 종잇장이 들썩인다.",
-        "hint": "정비기록 조사",
+        "hints": [{"target": "maintenance_log", "action": "조사"}],
         "exits": {"서": "trail", "동": "generator"},
     },
     "generator": {
@@ -124,7 +124,7 @@ ROOMS = {
         "light_profile": "dim",
         "enemies": ["sentinel"],
         "desc": "기름 냄새가 밴 발전실에 녹슨 배관이 얽혀 있다. 바닥에는 오래된 기름 자국이 남아 있다.",
-        "hint": "발전기 수리",
+        "hints": [{"target": "generator", "action": "수리"}],
         "exits": {"서": "office"},
     },
     "marsh": {
@@ -133,7 +133,7 @@ ROOMS = {
         "light_profile": "natural",
         "enemies": ["hunter", "sentinel"],
         "desc": "진흙 위로 생물의 흔적과 기계의 궤적이 교차한다. 물기 어린 공기와 짙은 습기가 능선 아래에 고여 있다.",
-        "hint": "능선 진입 전 강화조끼와 붕대를 준비하자.",
+        "hints": [{"text": "능선 진입 전 강화조끼와 붕대를 준비하자."}],
         "exits": {"남": "trail", "북": "ridge"},
     },
     "ridge": {
@@ -142,7 +142,7 @@ ROOMS = {
         "light_profile": "natural",
         "enemies": ["alpha"],
         "desc": "통신탑을 둘러싼 덩굴이 능선을 뒤덮고 있다. 녹슨 철골 사이로 바람이 낮은 소리를 낸다.",
-        "hint": "우두머리가 몸을 낮추면 다음 공격을 방어하자.",
+        "hints": [{"text": "우두머리가 몸을 낮추면 다음 공격을 방어하자."}],
         "exits": {"남": "marsh", "북": "jungle_edge"},
         "requires": {
             "quest": "radio_tower",

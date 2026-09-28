@@ -286,7 +286,13 @@ profile v6의 `light_sources[item_id]`에는 on, power_source, charge_seconds, s
 
 전원 삽입은 inventory 차감과 장치 상태 설정을 world_change transaction에 함께 저장한다. 잔량이 남은 전원은 교체를 거절하고 부분 충전 아이템 회수는 제공하지 않는다. stack 모델에서 마지막 광원을 이전하면 내부 전원은 폐기하고 안내한다. 여분 복사본만 이전할 때는 개인 active 상태를 보존한다. 전원/광원 일반 아이템의 이동 및 기존 장착·임무 아이템 보호는 공통 transfer 규칙을 유지한다.
 
-공용 시설은 WorldLifecycle의 별도 `db.facilities.outpost_power`에 저장하며 개인 generator_fixed에서 추론하지 않는다. 발전기 수리의 개인 부품/보상/진행과 shared flag는 하나의 transaction이다. A가 수리해도 B의 개인 조건은 그대로이며 물리 조명은 동일하다. Room `facility_lights`는 기본 light_profile에 상시 또는 전력 조건의 광량 floor를 합성한다. 부두 캠프는 상시 4, 관리동/발전실은 outpost_power일 때 4다. bootstrap은 이 runtime state를 초기화하지 않는다. Script attribute cache도 transaction rollback에서 복원한다. 광원이 환경 weather visibility까지 보완하는 것은 이번 matrix의 의도적 단순화이며 lux·LOS·전력망·연료·부분 전원 회수·은신·날씨 전투 modifier는 범위 밖이다.
+공용 시설은 WorldLifecycle의 별도 `db.facilities = {"version": 1, "states": {"outpost_power": bool}}`에 저장하며 개인 generator_fixed에서 추론하지 않는다. `content/facilities.py`의 FACILITIES는 ID/초기값, Room `facility_lights`는 조명 연결, 저장 state는 현재 on/off를 소유한다. FACILITY_STATE_VERSION과 순수 new/normalize helper는 legacy bare dict의 True를 보존하고 None/빈 값에 기본값을 보완한다. 지원하지 않는 미래 버전은 오류로 중단하며 덮어쓰지 않는다. light_for 조회는 정규화 사본만 읽고 lifecycle/mutation transaction에서만 변환을 저장한다. 조명은 양수 strength와 always_on/power 중 정확히 하나를 선언한다.
+
+발전기 수리의 개인 부품/보상/진행과 shared flag는 하나의 transaction이다. A가 수리해도 B의 개인 조건은 그대로이며 물리 조명은 동일하다. base light는 시간대·달·날씨·light_profile에서, facility light는 상시/공용 전력에서 계산하고 ambient light는 두 값의 최대다. 시설 조명이 존재하는 것과 밝기를 실제로 개선하는 것은 다르다. facility가 base보다 강할 때만 시설 문장으로 강조하며 맑은 낮 부두는 낮빛 표현을 유지한다. 부두 캠프는 상시 4, 관리동/발전실은 outpost_power일 때 4다. False→True에서 영향권 접속자에게 시설 가동 사건을 한 번 보내고 True→True는 반복하지 않는다. 기존 상태 push도 유지한다. bootstrap은 runtime state를 초기화하지 않고 Script attribute cache도 rollback에서 복원한다.
+
+Room `hints`는 stable INTERACTABLES ID/action 또는 일반 text를 참조한다. 대상 이름은 INTERACTABLES가 SSOT이며 실제 방 객체의 태그·지원 행동과 can_perceive를 검사해 안내한다. hint와 SURROUNDINGS/selector는 같은 observed_at의 Observation 정책을 공유한다. 보이는 대상 안내가 있으면 우선 출력하고, 없으며 시야가 제한된 경우 광원 안내로 대체한다. clear에서 일반 text 안내를 제공한다. 숨겨진 객체 이름을 일반 text에 넣지 않는다. wreck의 conspicuous 비상장비함은 poor에서도 안내하고 subtle 보급상자는 clear에서 안내한다.
+
+광원 보기는 정적 item_appearance에 Look이 읽기 전용 lighting.status를 전달해 설명·상태·사용법을 조합한다. presentation은 player DB를 읽지 않는다. 확인은 같은 status helper를 쓰는 빠른 조회이며 동일 observed_at에서 보기/웹 잔량도 같은 ceil 분 표시를 사용한다. 일반 아이템 보기는 정적 정보를 유지한다. 광원이 환경 weather visibility까지 보완하는 것은 이번 matrix의 의도적 단순화이며 lux·LOS·전력망·연료·부분 전원 회수·은신·날씨 전투 modifier는 범위 밖이다.
 
 기존 버전에서 발전기 개인 복구를 마친 캐릭터도 공용 전력이 아직 꺼져 있으면 수리 명령으로 가동할 수 있다. 이때 부품·보상·개인 진행을 다시 변경하지 않으며, 이미 가동된 시설에는 중복 보상을 주지 않는다.
 

@@ -8,6 +8,12 @@ from unittest.mock import patch
 
 from world import environment, lighting, rules
 from world.content import ITEMS
+from world.content.facilities import FACILITIES
+from world.facility_state import (
+    FACILITY_STATE_VERSION,
+    new_facility_state,
+    normalize_facility_state,
+)
 from world.observation import observe, perceives
 from world.targets import parse_relation, stack_selector
 
@@ -18,6 +24,47 @@ class LightingRulesTests(TestCase):
         self.profile["inventory"].update(flashlight=1, battery=2)
         state = environment.new_environment(100, Random(3))
         self.environment = replace(environment.snapshot(state, "grass", 100), ambient_light="dark", visibility="poor")
+
+    def test_facility_schema_defaults_legacy_and_no_mutation(self):
+        expected = {"version": FACILITY_STATE_VERSION, "states": {"outpost_power": False}}
+        self.assertEqual(new_facility_state(), expected)
+        for state in (None, {}):
+            self.assertEqual(normalize_facility_state(state), expected)
+        legacy = {"outpost_power": True}
+        self.assertTrue(normalize_facility_state(legacy)["states"]["outpost_power"])
+        self.assertEqual(legacy, {"outpost_power": True})
+        migrated = normalize_facility_state(legacy)
+        self.assertEqual(normalize_facility_state(migrated), migrated)
+
+    def test_future_facility_version_is_rejected_without_reset(self):
+        future = {"version": FACILITY_STATE_VERSION + 1, "states": {"outpost_power": True}}
+        before = deepcopy(future)
+        with self.assertRaisesRegex(ValueError, "지원하지 않는 시설"):
+            normalize_facility_state(future)
+        self.assertEqual(future, before)
+
+    def test_facility_definitions_extend_default_state_without_id_branch(self):
+        with patch.dict(FACILITIES, test_power={"default": True}):
+            self.assertTrue(new_facility_state()["states"]["test_power"])
+            self.assertTrue(normalize_facility_state({})["states"]["test_power"])
+
+    def test_facility_presence_only_replaces_base_light_when_it_contributes(self):
+        state = environment.new_environment(100, Random(3))
+        day = environment.snapshot(state, "dock", 100, facility_light=4)
+        self.assertFalse(day.facility_light_effective)
+        self.assertIn("낮빛", environment.description(day))
+        self.assertNotIn("시설 조명", environment.description(day))
+        state["clock"]["game_epoch"] = 22 * 3600
+        night = environment.snapshot(state, "dock", 100, facility_light=4)
+        self.assertTrue(night.facility_light_effective)
+        self.assertIn("시설 조명", environment.description(night))
+        for zone in ("office", "generator"):
+            off = environment.snapshot(state, zone, 100)
+            on = environment.snapshot(state, zone, 100, facility_light=4)
+            self.assertNotIn("시설 조명", environment.description(off))
+            self.assertIn("시설 조명", environment.description(on))
+            self.assertEqual(on.base_light_score, off.base_light_score)
+            self.assertEqual(on.ambient_light, "bright")
 
     def test_timestamp_on_off_and_exact_exhaustion(self):
         lighting.insert_power(self.profile, "flashlight", "battery", 100)

@@ -170,9 +170,11 @@ class GameplayIntegrationTests(EvenniaCommandTest):
         self.call(gameplay.Investigate(), "정비기록", "정비기록을 펼쳐", caller=self.char1)
         self.char1.change(lambda profile: profile["inventory"].update(scrap=3))
         self.char1.location = self.rooms["generator"]
-        self.call(
-            gameplay.Repair(), "발전기", "발전기가 다시 돌아가기 시작했다.", caller=self.char1
-        )
+        output = self.call(gameplay.Repair(), "발전기", caller=self.char1)
+        self.assertIn("시설 조명이 하나둘 켜진다.", output)
+        self.assertIn("발전기가 다시 돌아가기 시작했다.", output)
+        self.assertEqual(self.char1.profile()["inventory"].get("scrap", 0), 0)
+        self.assertEqual(self.char1.profile()["xp"], 50)
         self.char1.change(lambda profile: profile["quests"]["radio_tower"].update(boss_defeated=True))
         self.char1.location = self.rooms["dock"]
         self.call(gameplay.Talk(), "윤대장", "윤대장", caller=self.char1)

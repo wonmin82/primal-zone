@@ -76,7 +76,7 @@ ROOMS = {
         "light_profile": "filtered",
         "enemies": ["dartclaw"],
         "desc": "통신탑 뒤편 길이 빽빽한 밀림으로 이어진다. 선발대가 남긴 발자국이 젖은 흙 위에 남아 있다.",
-        "hint": "선발대 길잡이 대화",
+        "hints": [{"target": "pathfinder", "action": "대화"}],
         "exits": {"남": "ridge", "북": "jungle_watch", "동": "jungle_road", "서": "jungle_fen"},
         "requires": {
             "quest": "radio_tower",
@@ -91,7 +91,7 @@ ROOMS = {
         "light_profile": "natural",
         "enemies": ["dartclaw"],
         "desc": "나무 위 관측소가 덩굴에 뒤덮인 채 기울어 있다. 무너진 난간 사이로 주변 밀림이 내려다보인다.",
-        "hint": "관측 표식 조사",
+        "hints": [{"target": "watch_marker", "action": "조사"}],
         "exits": {"남": "jungle_edge", "동": "jungle_grove"},
     },
     "jungle_road": {
@@ -100,7 +100,7 @@ ROOMS = {
         "light_profile": "natural",
         "enemies": ["shellback"],
         "desc": "옛 도로가 검은 물 아래로 반쯤 잠겨 있다. 갈라진 노면 사이로 물풀과 진흙이 쌓여 있다.",
-        "hint": "수위 표식 조사",
+        "hints": [{"target": "water_marker", "action": "조사"}],
         "exits": {"서": "jungle_edge", "북": "jungle_grove"},
     },
     "jungle_fen": {
@@ -109,7 +109,7 @@ ROOMS = {
         "light_profile": "filtered",
         "enemies": ["stalker"],
         "desc": "검은 물 사이로 좁은 진흙길이 갈라진다. 썩은 나무뿌리와 물풀이 물가를 뒤덮고 있다.",
-        "hint": "늪지 보급품 조사",
+        "hints": [{"target": "jungle_cache", "action": "조사"}],
         "exits": {"동": "jungle_edge"},
     },
     "jungle_grove": {
@@ -118,7 +118,7 @@ ROOMS = {
         "light_profile": "filtered",
         "enemies": ["shellback", "stalker"],
         "desc": "거목 뿌리 사이에서 관측소와 도로의 흔적이 만난다. 숲 안쪽으로 이어지는 문틀에는 덩굴과 녹이 깊이 엉겨 있다.",
-        "hint": "신호 장치 조사",
+        "hints": [{"target": "signal_device", "action": "조사"}],
         "exits": {"서": "jungle_watch", "남": "jungle_road", "북": "jungle_gate"},
     },
     "jungle_gate": {
@@ -127,7 +127,7 @@ ROOMS = {
         "light_profile": "natural",
         "enemies": ["stalker"],
         "desc": "낡은 문 너머로 무너진 연구시설의 외벽이 이어진다. 숲 안쪽에는 부러진 나무와 깊게 패인 흙길이 남아 있다.",
-        "hint": "둥지로 들어가기 전 장비와 붕대를 확인하자.",
+        "hints": [{"text": "둥지로 들어가기 전 장비와 붕대를 확인하자."}],
         "exits": {"남": "jungle_grove", "북": "jungle_nest"},
         "requires": {
             "quest": "deep_jungle",
@@ -142,7 +142,7 @@ ROOMS = {
         "light_profile": "filtered",
         "enemies": ["jungle_apex"],
         "desc": "휘어진 나무 아래에 거대한 둥지가 있다. 바닥에는 오래된 탐사대 장비가 흩어져 있다.",
-        "hint": "포식자가 숨을 고르면 방어 자세를 취하자.",
+        "hints": [{"text": "포식자가 숨을 고르면 방어 자세를 취하자."}],
         "exits": {"남": "jungle_gate"},
     },
 }

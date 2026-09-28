@@ -18,7 +18,9 @@ def reconcile_room(room, now=None):
 def reconcile_world(now=None, restart=False):
     now = time() if now is None else now
     from world.environment_state import reconcile_environment
+    from world.facilities import reconcile_facilities
 
+    reconcile_facilities()
     reconcile_environment(now, restart=restart)
     if restart:
         from typeclasses.explorers import Explorer

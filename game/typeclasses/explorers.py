@@ -105,6 +105,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             return
         from world.environment import display
         from world.environment_state import snapshot_for
+        from world.room_hints import render as room_hint
         from world.state import multiplayer_state
 
         from typeclasses.interactables import instructor_for
@@ -155,7 +156,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             "inventory": inventory,
             "equipment": {slot: ITEMS[identity]["name"] if identity else None for slot, identity in profile["equipment"].items()},
             "exits": list(room.get("exits", {})),
-            "hint": room.get("hint", "") if observation.snapshot.effective_visibility == "clear" else "작은 흔적을 식별하기 어렵다. 광원을 사용해 주변을 살펴보자.",
+            "hint": room_hint(observation),
             **multiplayer_state(self, now=observed_at),
             "player_round": profile["player_round"],
             "heavy_ready": observed_at >= profile["heavy_ready_at"],

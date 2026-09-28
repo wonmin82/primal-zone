@@ -113,6 +113,11 @@ class EnvironmentSnapshot:
     ambient_light: str
     visibility: str
     facility_light: int = 0
+    base_light_score: int = 0
+
+    @property
+    def facility_light_effective(self):
+        return self.facility_light > 0 and self.facility_light > self.base_light_score
 
 
 def snapshot(state, zone, observed_at, facility_light=0):
@@ -138,6 +143,7 @@ def state_snapshot(state, zone, observed_at, facility_light=0):
         + WEATHERS[weather]["light_modifier"]
         + light.get("offset", 0),
     )
+    base_light_score = score
     score = max(score, facility_light)
     grade = "bright" if score >= 4 else "normal" if score >= 3 else "dim" if score >= 1 else "dark"
     weather_visibility = WEATHERS[weather]["visibility"] if exposure != "indoor" else 0
@@ -157,13 +163,14 @@ def state_snapshot(state, zone, observed_at, facility_light=0):
         grade,
         ("clear", "reduced", "poor")[visibility],
         facility_light,
+        base_light_score,
     )
 
 
 def description(environment):
     """환경만 1~2문장으로 표현한다. 객체나 플레이어 상태를 읽지 않는다."""
     first = WEATHERS[environment.weather]["presence"][environment.exposure]
-    if environment.facility_light:
+    if environment.facility_light_effective:
         second = "시설 조명이 주변을 비추고 있다."
     elif environment.light_profile in ("dim", "artificial"):
         second = (

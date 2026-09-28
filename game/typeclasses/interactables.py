@@ -356,6 +356,10 @@ INTERACTABLES = {
 }
 
 
+for definition in INTERACTABLES.values():
+    definition["actions"] = globals()[definition["typeclass"]].actions
+
+
 def content_name(identity):
     """콘텐츠 정의의 실제 이름과 타입으로 대화/임무에서 대상을 표현한다."""
     definition = INTERACTABLES[identity]

@@ -54,9 +54,10 @@ class Look(CmdLook):
                 return
             reconcile_room(self.caller.location, observed_at)
             objects = room_objects(self.caller, observed_at=observed_at)
+            profile = self.caller.profile_snapshot()
             inventory = {
                 key: ITEMS[key]
-                for key, count in self.caller.profile_snapshot()["inventory"].items()
+                for key, count in profile["inventory"].items()
                 if count > 0
             }
             try:
@@ -84,7 +85,10 @@ class Look(CmdLook):
                     self.caller.msg(output)
                 else:
                     identity = item_selector(name, inventory, "보기")
-                    self.caller.msg(view.item_appearance(identity))
+                    from world import lighting
+
+                    status = lighting.status(profile, identity, observed_at) if ITEMS[identity].get("light_source") else None
+                    self.caller.msg(view.item_appearance(identity, light_status=status))
             except rules.RuleError as error:
                 self.caller.msg(ft.token("error", str(error)))
                 self.caller.push_state(observed_at=observed_at)
