@@ -29,7 +29,7 @@ def content_targets():
 
 class HeadquartersRulesTests(TestCase):
     def test_hub_layout_and_prepared_rooms_are_valid(self):
-        self.assertEqual(len(HQ_ROOMS), 25)
+        self.assertEqual(len(HQ_ROOMS), 26)
         self.assertEqual(errors(content_targets()), [])
         self.assertEqual(ROOMS["staging_room"]["exits"], {"남": "hq_concourse"})
         self.assertEqual(ROOMS["hq_concourse"]["exits"], {

@@ -4,6 +4,8 @@ from evennia import create_object, search_tag
 from evennia.typeclasses.tags import Tag
 
 from world.content import ENEMIES, OPPOSITES, ROOMS, spawn_id_for
+from world.content.elevator import ELEVATOR_ROOM
+from world.elevator import normalized_stop
 from world.multiplayer import world_change
 
 CATEGORY = "primal_zone_room"
@@ -29,6 +31,10 @@ def _build_world():
         room.key = data["name"]
         room.db.zone_id = zone_id
         room.db.desc = data["desc"]
+        if zone_id == ELEVATOR_ROOM:
+            current = room.db.current_stop
+            if current != normalized_stop(current):
+                room.db.current_stop = normalized_stop(current)
         rooms[zone_id] = room
         for enemy_id in data["enemies"]:
             spawn_id = spawn_id_for(zone_id, enemy_id)
