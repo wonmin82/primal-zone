@@ -227,6 +227,8 @@ game과 격리 서버의 정적 파일을 수집하고 실제 DOM의 JS `?v=hq-s
 
 전체 smoke 미실행 — 일반 계정 가입 rate limit의 610초 대기와 반복 실제 전투 때문에, 수정된 의료/귀환/구매 경로는 관련 자동 및 별도 DB 브라우저로 검증했다. 실제 OS 한글 IME·전체 서버 재시작 재접속·운영 DB 적용은 이번 수동 검증에서 수행하지 않았다. UI layout을 변경하지 않아 좁은 화면을 반복하지 않았다. 멀티플레이 패배·move False 및 부분 이동 rollback은 자동 integration에서 확인했으며 수동으로 확인한 결과와 구분한다.
 
+**원격 검증 (같은 날짜, 구현 HEAD):** [PR #17](https://github.com/wonmin82/primal-zone/pull/17)의 `61c0effd4f0295394fd25daba22c3949f64f8967`과 [Game checks](https://github.com/wonmin82/primal-zone/actions/runs/36498164252)의 headSha가 같고 success임을 확인했다. 원격 `uv run python scripts/dev.py check` 통과, `uv run python scripts/dev.py test --parallel 2` 순수 82개(0.046초)·통합 231개(86.100초), 총 313개 통과·runner 92.199초다. 이 결과를 문서 전용 후속 커밋에 기록하며 최종 문서 HEAD의 CI는 별도 확인하여 PR Validation에 반영한다. 로컬 결과와 CI 시간을 구분하며 같은 코드의 로컬 전체 검사를 반복하지 않는다.
+
 ## 3. 첫 임무 끝까지 진행하기
 
 ### 3-1. 장비와 재료 준비

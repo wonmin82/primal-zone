@@ -12,7 +12,7 @@
 
 본부 3단계는 [PR #16](https://github.com/wonmin82/primal-zone/pull/16)으로 병합됐다. 이번 작업 시작 시 깨끗한 main에서 fetch 후 HEAD와 origin/main은 모두 `a10623ba92df9bcd412994fd3eb0a69a2f44e18b`이었다. PR #13/#14/#15/#16 MERGED이며 PR #16 및 해당 main [Game checks](https://github.com/wonmin82/primal-zone/actions/runs/36491116507) success를 실제 확인했다. 해당 병합 CI는 순수 78개(0.027초)·통합 219개(51.605초), 총 297개·runner 55.717초 통과다. 현재 승인된 작업은 새 `codex/hq-medical-lifecycle` 브랜치의 4단계 의료 시스템 및 복귀·패배 흐름이다. 아래 PR #16 OPEN/부두 귀환·휴식 서술은 3단계 당시 기록이며 현재 상태보다 우선하지 않는다.
 
-기존 광원 기능은 PR #11로 완료됐고 인계 문서는 PR #12로 병합됐다. 아래 광원·본부 1~3단계·테스트 성능 개선의 설계·검증은 시점별 과거 기록이며 보존한다. 4단계 의료·복귀·패배는 구현·로컬 검증 완료이며 단일 화폐/정산, NPC 상점, 통합 closeout은 후속 범위다.
+기존 광원 기능은 PR #11로 완료됐고 인계 문서는 PR #12로 병합됐다. 아래 광원·본부 1~3단계·테스트 성능 개선의 설계·검증은 시점별 과거 기록이며 보존한다. 4단계 의료·복귀·패배는 구현·로컬/브라우저 검증·commit/push 완료이며 [PR #17](https://github.com/wonmin82/primal-zone/pull/17)은 OPEN이다. 구현 HEAD의 CI는 success이고 이 원격 기록을 문서 후속 커밋에 포함한다. 단일 화폐/정산, NPC 상점, 통합 closeout은 후속 범위다.
 
 ### 본부 4단계 구현과 검증 (2026-09-29)
 
@@ -25,7 +25,8 @@
 - 최종 `scripts/dev.py check` 통과, 전체 `scripts/dev.py test` 순수 82개(0.069초)·통합 231개(79.003초), 총 313개 통과·실패/skip 없음이다. 통합 runner는 88.001초이고 근거는 `work/medical-final-full.log`다. 의료 전용 역순·병렬 11개도 통과했다(12.440초, runner 21.135초, `work/medical-reverse.log`). 역순 검사는 최종 presence/부두 안내 문구 조정 전이며 의료 실행 규칙은 같고 최종 전체에서 해당 조정도 검증했다. 최종 전체 이후 문서만 수정하므로 로컬 전체 검사를 반복하지 않는다.
 - JS `node --check game/web/static/webclient/js/primal.js`, smoke Python syntax, diff 검사 통과다. game과 별도 검증 서버에서 최종 정적 파일을 수집했다. 별도 SQLite DB의 일반 계정으로 실제 Enemy 패배→의무실 HP 1/10크레딧 손실/전투 종료, 의무관 버튼 full HP, 탐사 지역 직접 귀환→옥상, 승강기 2층→의무실·침대 버튼 full HP, 승강기 1층→부두·상점·윤대장·부두 휴식 대상 실패를 확인했다. 앱 코드 console 오류는 발견하지 않았으나 Chrome 비동기 listener 채널 종료 메시지 2건을 관찰했다. 검증 서버·탭은 종료했고 플레이 DB는 읽거나 변경하지 않았다. 상세 결과는 [4단계 검증](playtest.md#본부-4단계-의료복귀패배-확인)을 따른다.
 - 전체 smoke 미실행 — 일반 계정 가입 rate limit의 610초 대기와 반복 실제 전투 때문에 변경된 경로는 관련 자동 및 별도 DB 브라우저로 검증했다. 실제 OS IME·이번 변경의 전체 서버 재시작 재접속·좁은 화면 재검사·운영 DB 적용도 미실행이며 UI layout은 변경하지 않았다. 멀티플레이와 실패 rollback은 자동 integration으로 확인했다.
-- commit/push/PR 생성 및 최신 HEAD CI 결과는 원격 확인 후 아래에 기록한다. PR은 병합하지 않는다. 다음 기능은 이 PR 검토·병합 후 최신 main에서 별도 요청으로 시작하는 5단계 단일 화폐 및 회수 자원 정산이다.
+- 원격 기록 작성 시 브랜치는 `codex/hq-medical-lifecycle`, 로컬/원격/PR 구현 HEAD는 `61c0effd4f0295394fd25daba22c3949f64f8967`로 같고 작업 트리는 깨끗했다. 최종 재fetch에서도 origin/main은 시작 SHA와 같고 이미 포함하므로 rebase로 이력을 재작성하지 않았다. [PR #17](https://github.com/wonmin82/primal-zone/pull/17)은 OPEN·비Draft·MERGEABLE이다. 이 구현 HEAD의 [Game checks](https://github.com/wonmin82/primal-zone/actions/runs/36498164252)는 success이며 headSha를 직접 대조했다. 원격 check 통과, 순수 82개(0.046초)·통합 231개(86.100초), 총 313개 통과·통합 runner 92.199초다. 근거 `work/medical-first-ci.log`.
+- 이 원격 기록은 PR 생성 뒤 문서 전용 후속 커밋에 포함한다. 위 SHA/CI는 기능 구현의 확인 기준이며 문서 커밋 이후 최종 HEAD는 실제 Git/PR에서 확인한다. 실행 코드·테스트가 같아 로컬 전체 검사는 반복하지 않고 문서 내용·링크·diff를 검사한다. 최신 문서 HEAD의 CI는 푸시 후 별도로 직접 확인해 PR Validation과 완료 보고에 기록하며 구현 CI를 최신 HEAD 결과로 대신하지 않는다. PR은 병합하지 않는다. 다음 기능은 이 PR 검토·병합 후 최신 main에서 별도 요청으로 시작하는 5단계 단일 화폐 및 회수 자원 정산이다.
 
 ### 본부 3단계 구현과 검증 (2026-09-29, 과거 기록)
 
@@ -178,7 +179,7 @@
 
 ## Partially Implemented / In Progress
 
-본부 1~3단계와 테스트 성능 개선은 PR #13/#14/#15/#16으로 병합 완료다. 4단계 의료·귀환·패배의 코드·문서·로컬/브라우저 검증은 완료했고 commit/push/PR·최신 CI 확인을 진행한다. 경제·상점 및 통합 closeout은 이번 범위가 아니다.
+본부 1~3단계와 테스트 성능 개선은 PR #13/#14/#15/#16으로 병합 완료다. 4단계 의료·귀환·패배는 구현·로컬/브라우저 검증 완료이며 PR #17 검토·병합을 남긴다. 구현 HEAD의 CI는 성공이고 문서 후속 커밋의 최신 CI는 실제 GitHub와 PR Validation을 따른다. 경제·상점 및 통합 closeout은 이번 범위가 아니다.
 
 ## Validation
 
