@@ -15,7 +15,7 @@ from world.progression import (
 from world.quests import progress_defaults
 
 MAX_LEVEL = 10
-PROFILE_VERSION = 5
+PROFILE_VERSION = 6
 
 
 class RuleError(ValueError):
@@ -32,6 +32,7 @@ def new_profile():
         "inventory": {"machete": 1, "vest": 1, "bandage": 3},
         "equipment": {"weapon": "machete", "armor": "vest"},
         "storage": {},
+        "light_sources": {},
         "kills": 0,
         "quests": progress_defaults(),
         "discoveries": {},
@@ -369,6 +370,7 @@ def migrate_profile(profile):
         result["discoveries"] = {"supply_cache": bool(result.pop("cache_claimed", False))}
     if version < PROFILE_VERSION:
         result.setdefault("storage", {})
+        result.setdefault("light_sources", {})
         result["version"] = PROFILE_VERSION
     return result
 
@@ -544,7 +546,17 @@ def claim_jungle_cache(profile):
     if profile["discoveries"].get("jungle_cache"):
         raise RuleError("이미 늪지의 보급품을 챙겼습니다.")
     add_item(profile, "bandage", 2)
+    add_item(profile, "battery", 2)
     profile["discoveries"]["jungle_cache"] = True
+
+
+def claim_emergency_light_cache(profile):
+    require_peace(profile)
+    if profile["discoveries"].get("emergency_light_cache"):
+        raise RuleError("이미 비상장비함의 탐사 장비를 챙겼습니다.")
+    add_item(profile, "flashlight")
+    add_item(profile, "battery", 2)
+    profile["discoveries"]["emergency_light_cache"] = True
 
 
 def growth_state(profile):

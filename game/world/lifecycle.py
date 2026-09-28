@@ -18,12 +18,15 @@ def reconcile_room(room, now=None):
 def reconcile_world(now=None, restart=False):
     now = time() if now is None else now
     from world.environment_state import reconcile_environment
+    from world.facilities import reconcile_facilities
 
+    reconcile_facilities()
     reconcile_environment(now, restart=restart)
     if restart:
         from typeclasses.explorers import Explorer
 
         for player in Explorer.objects.all():
+            player.reconcile_lights(now, turn_off=True)
             player.leave_combat()
     for party in Party.objects.all():
         party.reconcile(now)
@@ -38,4 +41,5 @@ def reconcile_world(now=None, restart=False):
 
     for player in Explorer.objects.all():
         if player.sessions.count():
+            player.reconcile_lights(now)
             player.push_state(observed_at=now)

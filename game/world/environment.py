@@ -112,13 +112,19 @@ class EnvironmentSnapshot:
     light_profile: str
     ambient_light: str
     visibility: str
+    facility_light: int = 0
+    base_light_score: int = 0
+
+    @property
+    def facility_light_effective(self):
+        return self.facility_light > 0 and self.facility_light > self.base_light_score
 
 
-def snapshot(state, zone, observed_at):
-    return state_snapshot(reconcile(state, observed_at), zone, observed_at)
+def snapshot(state, zone, observed_at, facility_light=0):
+    return state_snapshot(reconcile(state, observed_at), zone, observed_at, facility_light)
 
 
-def state_snapshot(state, zone, observed_at):
+def state_snapshot(state, zone, observed_at, facility_light=0):
     """알림 전/후 비교용: 같은 시각에서 저장된 period/weather를 진행시키지 않고 읽는다."""
     current = normalize_state(state)
     seconds = game_seconds(current["clock"], observed_at)
@@ -137,6 +143,8 @@ def state_snapshot(state, zone, observed_at):
         + WEATHERS[weather]["light_modifier"]
         + light.get("offset", 0),
     )
+    base_light_score = score
+    score = max(score, facility_light)
     grade = "bright" if score >= 4 else "normal" if score >= 3 else "dim" if score >= 1 else "dark"
     weather_visibility = WEATHERS[weather]["visibility"] if exposure != "indoor" else 0
     visibility = max(weather_visibility, {"bright": 0, "normal": 0, "dim": 1, "dark": 2}[grade])
@@ -154,13 +162,17 @@ def state_snapshot(state, zone, observed_at):
         profile,
         grade,
         ("clear", "reduced", "poor")[visibility],
+        facility_light,
+        base_light_score,
     )
 
 
 def description(environment):
     """환경만 1~2문장으로 표현한다. 객체나 플레이어 상태를 읽지 않는다."""
     first = WEATHERS[environment.weather]["presence"][environment.exposure]
-    if environment.light_profile in ("dim", "artificial"):
+    if environment.facility_light_effective:
+        second = "시설 조명이 주변을 비추고 있다."
+    elif environment.light_profile in ("dim", "artificial"):
         second = (
             "실내에는 어스름한 빛이 머문다."
             if environment.light_profile == "dim"

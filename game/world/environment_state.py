@@ -26,7 +26,9 @@ def snapshot_for(room, observed_at=None):
     state = deserialize(script.db.environment) if script else None
     # 아직 서버 bootstrap 전인 fixture/비게임 Room 조회도 쓰기 없이 처리한다.
     state = state or model.new_environment(observed_at, Random(0))
-    return model.snapshot(state, zone, observed_at)
+    from world.facilities import light_for
+
+    return model.snapshot(state, zone, observed_at, light_for(zone))
 
 
 def reconcile_environment(now, restart=False):
@@ -64,11 +66,14 @@ def reconcile_environment(now, restart=False):
 def publish_changes(before, after, zones, observed_at):
     from typeclasses.explorers import Explorer
 
+    from world.facilities import light_for
+
     for player in Explorer.objects.all():
         region = ROOM_REGION.get(player.zone)
         if player.sessions.count() and region and REGIONS[region]["weather_zone"] in zones:
-            previous = model.description(model.state_snapshot(before, player.zone, observed_at))
-            current = model.description(model.state_snapshot(after, player.zone, observed_at))
+            light = light_for(player.zone)
+            previous = model.description(model.state_snapshot(before, player.zone, observed_at, light))
+            current = model.description(model.state_snapshot(after, player.zone, observed_at, light))
             if previous != current:
                 player.msg(ft.token("muted", current))
     # 웹 상태는 같은 reconcile_world() sweep의 기존 push_state 경로로 갱신한다.

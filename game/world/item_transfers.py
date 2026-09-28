@@ -1,5 +1,7 @@
 """순수 스택 이동 규칙과 영속 소유자를 연결하는 transaction 경계."""
 
+from time import time
+
 from evennia.utils.dbserialize import deserialize
 
 from world import rules
@@ -10,6 +12,9 @@ def transfer(caller, item_id, *, all_items=False, recipient=None, container=None
     from typeclasses.explorers import Explorer
     from typeclasses.interactables import Container
     from typeclasses.loot import create_dropped_loot
+
+    from world.lighting import normalize
+    from world.observation import can_perceive, context_for
 
     with world_change():
         profile = caller.profile()
@@ -22,6 +27,7 @@ def transfer(caller, item_id, *, all_items=False, recipient=None, container=None
                 not isinstance(recipient, Explorer)
                 or recipient == caller
                 or recipient.location != caller.location
+                or not can_perceive(recipient, context_for(caller))
             ):
                 raise rules.RuleError("같은 장소의 다른 탐사자에게만 물건을 줄 수 있습니다.")
             other = recipient.profile()
@@ -31,7 +37,7 @@ def transfer(caller, item_id, *, all_items=False, recipient=None, container=None
             if (
                 not isinstance(container, Container)
                 or container.location != caller.location
-                or not container.access(caller, "view")
+                or not can_perceive(container, context_for(caller))
             ):
                 raise rules.RuleError("이곳에서 사용할 수 있는 보관함이 아닙니다.")
             contents = profile["storage"] if container.personal else deserialize(container.db.items)
@@ -47,6 +53,8 @@ def transfer(caller, item_id, *, all_items=False, recipient=None, container=None
             all_items=all_items,
             equipment=None if withdraw else profile["equipment"],
         )
+        lost_power = item_id in profile.get("light_sources", {}) and not profile["inventory"].get(item_id)
+        normalize(profile, time())
         caller.save_profile(profile)
         if recipient is not None:
             recipient.save_profile(other)
@@ -67,4 +75,8 @@ def transfer(caller, item_id, *, all_items=False, recipient=None, container=None
                     }
                 ],
             )
+        if lost_power:
+            from world.multiplayer import after_change
+
+            after_change(lambda: caller.msg("마지막 광원을 옮겨 내부 전원 상태를 비웠다. 남은 전원은 폐기된다."))
         return quantity

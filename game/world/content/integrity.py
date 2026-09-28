@@ -14,6 +14,7 @@ from world.content import (
     spawn_id_for,
 )
 from world.content.environment import EXPOSURES, LIGHT_PROFILES, WEATHER_ZONES, WEATHERS
+from world.content.facilities import FACILITIES
 from world.quests import QUESTS
 
 OPPOSITE = {"북": "남", "남": "북", "동": "서", "서": "동"}
@@ -25,6 +26,11 @@ def positive_number(value):
 
 def errors(interactables):
     issues = []
+    for identity, definition in FACILITIES.items():
+        if not isinstance(identity, str) or not identity.strip() or not isinstance(definition, dict):
+            issues.append(f"{identity}: 시설 상태 정의가 유효하지 않습니다.")
+        elif type(definition.get("default")) is not bool:
+            issues.append(f"{identity}: 시설 기본 상태는 참/거짓이어야 합니다.")
     if len(ENEMIES) != sum(len(enemies) for enemies in REGION_ENEMIES.values()):
         issues.append("Enemy type ID가 지역 사이에서 중복되었습니다.")
     membership = [zone for region in REGIONS.values() for zone in region["rooms"]]
@@ -39,6 +45,26 @@ def errors(interactables):
             issues.append(f"{region_id}: 진입 Room이 Region에 없습니다.")
     spawns = []
     for zone, room in ROOMS.items():
+        for light in room.get("facility_lights", []):
+            always_on = light.get("always_on") is True
+            powered = light.get("power") in FACILITIES
+            if not positive_number(light.get("strength")) or not (
+                (always_on and "power" not in light) or (powered and "always_on" not in light)
+            ):
+                issues.append(f"{zone}: 시설 조명 정의가 유효하지 않습니다.")
+        for hint in room.get("hints", []):
+            if not isinstance(hint, dict):
+                issues.append(f"{zone}: 안내는 target/action 또는 text여야 합니다.")
+                continue
+            if set(hint) == {"text"}:
+                if not isinstance(hint["text"], str) or not hint["text"].strip():
+                    issues.append(f"{zone}: 일반 안내는 비어 있지 않은 문자열이어야 합니다.")
+            elif set(hint) == {"target", "action"}:
+                definition = interactables.get(hint["target"], {})
+                if definition.get("room") != zone or hint["action"] not in definition.get("actions", ()):
+                    issues.append(f"{zone}: 안내 대상의 장소 또는 행동이 유효하지 않습니다.")
+            else:
+                issues.append(f"{zone}: 안내는 target/action 또는 text여야 합니다.")
         if room.get("exposure") not in EXPOSURES:
             issues.append(f"{zone}: exposure가 유효하지 않습니다.")
         if room.get("light_profile") not in LIGHT_PROFILES:
@@ -77,6 +103,13 @@ def errors(interactables):
     for key in SHOP.keys() | EXCHANGE.keys():
         if key not in ITEMS:
             issues.append(f"{key}: 상점 아이템 정의가 없습니다.")
+    for key, data in ITEMS.items():
+        source = data.get("power_source")
+        if source and (not isinstance(source.get("type"), str) or not source["type"].strip() or not positive_number(source.get("capacity_seconds"))):
+            issues.append(f"{key}: 전원 정의가 유효하지 않습니다.")
+        light = data.get("light_source")
+        if light and (not positive_number(light.get("strength")) or type(light.get("range")) is not int or light["range"] < 0 or not isinstance(light.get("power_type"), str) or not light["power_type"].strip()):
+            issues.append(f"{key}: 광원 정의가 유효하지 않습니다.")
     for identity, data in interactables.items():
         if data["room"] not in ROOMS:
             issues.append(f"{identity}: 대상 Room이 없습니다.")

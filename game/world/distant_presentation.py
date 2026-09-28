@@ -32,6 +32,7 @@ class DistantPresenceMixin:
     """기본은 숨김. typeclass 또는 객체의 distant_visible attribute로 정책을 정한다."""
 
     distant_visible = False
+    detectability = "normal"
     distant_role = "object"
     distant_unit = "개"
     distant_sentence = "멀리 보인다."
@@ -70,8 +71,11 @@ def distant_appearance(context):
         return ft.text("그 너머는 살펴볼 수 없다.")
     from world.environment import description as environment_description
     from world.environment_state import snapshot_for
+    from world.observation import can_perceive, context_for
 
     environment = snapshot_for(room, context.observed_at)
+    observation = context_for(context.viewer, room, context.observed_at, context.distance,
+                              environment=environment)
     definition = ROOMS.get(room.db.zone_id)
     description = definition["desc"] if definition else (room.db.desc or "")
     heading = (
@@ -88,7 +92,7 @@ def distant_appearance(context):
     for obj in ordered(room.contents):
         visibility = getattr(obj, "is_distant_visible", None)
         presence = getattr(obj, "get_distant_presence", None)
-        if visibility and presence and obj.access(context.viewer, "view") and visibility(context):
+        if visibility and presence and can_perceive(obj, observation) and visibility(context):
             summary = presence(context)
             if summary is not None:
                 groups[summary] = groups.get(summary, 0) + 1
@@ -108,6 +112,9 @@ def distant_appearance(context):
                 summary.sentence,
             )
         )
-    if not groups:
+    if observation.snapshot.effective_visibility != "clear":
+        lines.append("멀리 있는 형체는 분간하기 어렵다." if observation.snapshot.effective_visibility == "poor"
+                     else "작고 희미한 흔적은 멀리서 식별하기 어렵다.")
+    elif not groups:
         lines.append("그 밖에 눈에 띄는 것은 없다.")
     return ft.join(lines)

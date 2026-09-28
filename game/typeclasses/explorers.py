@@ -105,6 +105,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             return
         from world.environment import display
         from world.environment_state import snapshot_for
+        from world.room_hints import render as room_hint
         from world.state import multiplayer_state
 
         from typeclasses.interactables import instructor_for
@@ -112,6 +113,10 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         observed_at = time() if observed_at is None else observed_at
         environment = snapshot_for(self.location, observed_at)
         profile = self.profile_snapshot()
+        from world.observation import context_for
+        from world.observation import display as observation_display
+
+        observation = context_for(self, observed_at=observed_at, environment=environment)
         values = rules.stats(profile)
         zone = self.zone
         room = ROOMS.get(zone, {})
@@ -125,6 +130,8 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
                 "remove_action": UNEQUIP_ACTIONS.get(ITEMS[key]["slot"]),
                 "consume_action": ITEMS[key].get("consume_action"),
                 "equipped": key in profile["equipment"].values(),
+                "light_source": ITEMS[key].get("light_source"),
+                "power_source": ITEMS[key].get("power_source"),
             }
             for key, count in profile["inventory"].items()
         ]
@@ -142,13 +149,14 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             "room": room.get("name", "탐사 준비"),
             "zone": zone,
             "environment": display(environment) if environment else None,
+            "observation": observation_display(observation, profile),
             "region": ROOM_REGION.get(zone),
             "region_name": REGIONS[ROOM_REGION[zone]]["name"] if zone in ROOM_REGION else None,
             "safe": room.get("safe", False),
             "inventory": inventory,
             "equipment": {slot: ITEMS[identity]["name"] if identity else None for slot, identity in profile["equipment"].items()},
             "exits": list(room.get("exits", {})),
-            "hint": room.get("hint", ""),
+            "hint": room_hint(observation),
             **multiplayer_state(self, now=observed_at),
             "player_round": profile["player_round"],
             "heavy_ready": observed_at >= profile["heavy_ready_at"],
@@ -177,8 +185,24 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
 
     def at_post_unpuppet(self, account=None, session=None, **kwargs):
         if not self.sessions.count():
+            self.reconcile_lights(time(), turn_off=True)
             self.leave_combat()
         super().at_post_unpuppet(account=account, session=session, **kwargs)
+
+    def reconcile_lights(self, observed_at, *, turn_off=False):
+        from world import lighting
+        from world.multiplayer import world_change
+
+        with world_change():
+            profile = self.profile_snapshot()
+            if lighting.normalize(profile, observed_at, turn_off=turn_off):
+                self.save_profile(profile)
+                if not turn_off:
+                    after_change(lambda: self.msg("광원의 전원이 다 되어 빛이 꺼졌다."))
+
+    def at_server_shutdown(self):
+        self.reconcile_lights(time(), turn_off=True)
+        super().at_server_shutdown()
 
     def announce_move_from(self, destination, msg=None, mapping=None, move_type="move", **kwargs):
         if msg is not None:
@@ -191,10 +215,12 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         self._announce_presence(self.location, " 이곳에 도착했다.")
 
     def _announce_presence(self, room, sentence):
+        from world.observation import can_perceive, context_for
+
         if room:
             message = ft.text(ft.named("player", self.key, "이/가"), sentence)
             for observer in room.contents:
-                if observer != self and observer.has_account:
+                if observer != self and observer.has_account and can_perceive(self, context_for(observer, room)):
                     observer.msg(message, from_obj=self)
 
     def at_pre_move(self, destination, move_type="move", **kwargs):

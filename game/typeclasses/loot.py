@@ -18,7 +18,7 @@ from world.multiplayer import (
     object_by_id,
     world_change,
 )
-from world.targets import LootRequest, Mode, TargetSelector, ordered, select, visible
+from world.targets import LootRequest, Mode, TargetSelector, ordered, select
 
 
 def build_entries(enemy, groups, now, rng=None):
@@ -100,6 +100,7 @@ def create_dropped_loot(room, entries, source_spawn=None):
 def take_loot(caller, item=None, corpse=True, now=None, *, request=None):
     """선택 범위/수량만 확장한다. 지급 권한은 recipient_for 한 곳에서 판단한다."""
     from world.lifecycle import reconcile_room
+    from world.observation import can_inspect_loot, can_perceive, context_for
     from world.target_presentation import count_word
 
     now = time() if now is None else now
@@ -117,7 +118,10 @@ def take_loot(caller, item=None, corpse=True, now=None, *, request=None):
     # 만료 처리는 회수 실패와 별개로 확정한다. 회수 중에는 yield하지 않는다.
     reconcile_room(caller.location, now)
     with world_change():
-        sources = [obj for obj in room_loot(caller.location, corpse) if visible(obj, caller)]
+        context = context_for(caller, observed_at=now)
+        if not can_inspect_loot(context):
+            raise rules.RuleError("지금은 작은 전리품을 식별할 수 없습니다. 광원을 사용하세요.")
+        sources = [obj for obj in room_loot(caller.location, corpse) if can_perceive(obj, context)]
         if corpse:
             sources = select(sources, request.source)
         candidates = [
@@ -194,7 +198,7 @@ class Corpse(DistantPresenceMixin, DefaultObject):
     def return_appearance(self, looker, **kwargs):
         from world.state import loot_controls, loot_entries
 
-        now = time()
+        now = kwargs.get("observed_at", time())
         control = loot_controls(looker, now).get(self.id)
         entries = control["loot"] if control else loot_entries(self, looker, now)
         lines = ["남아 있는 물건을 살펴본다.", ""]
@@ -213,7 +217,9 @@ class Corpse(DistantPresenceMixin, DefaultObject):
                 )
             )
         if not entries:
-            lines.append("남은 전리품이 없다.")
+            from world.observation import can_inspect_loot, context_for
+
+            lines.append("작은 전리품을 식별하기 어렵다. 광원을 사용하세요." if not can_inspect_loot(context_for(looker, observed_at=now)) else "남은 전리품이 없다.")
         if control:
             lines.extend(["", ft.text("지정: ", ft.token("remains", control["label"]))])
             if entries:
@@ -269,6 +275,7 @@ class Corpse(DistantPresenceMixin, DefaultObject):
 
 
 class DroppedLoot(DistantPresenceMixin, DefaultObject):
+    detectability = "subtle"
     def return_appearance(self, looker, **kwargs):
         from world.state import loot_controls, loot_entries
 

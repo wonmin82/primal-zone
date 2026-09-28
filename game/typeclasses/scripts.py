@@ -107,10 +107,13 @@ class WorldLifecycle(DefaultScript):
     """예약 작업이 유실되어도 영속 시각을 기준으로 월드를 복구한다."""
 
     def at_script_creation(self):
+        from world.facility_state import new_facility_state
+
         self.key = "primal_world_lifecycle"
         self.interval = 5
         self.start_delay = True
         self.persistent = True
+        self.db.facilities = new_facility_state()
 
     def at_repeat(self):
         from world.lifecycle import reconcile_world

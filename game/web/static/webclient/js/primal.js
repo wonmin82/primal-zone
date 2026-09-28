@@ -142,6 +142,8 @@
     byId("environment-status").textContent = environment
       ? environment.time + " · " + environment.weather.name + " · " + environment.period.name + " · " + environment.light.name
       : "";
+    const observation = state.observation;
+    if (observation) byId("environment-status").textContent += " · 현재 시야 " + observation.effective_visibility.name + (observation.light_source?.active ? " · 손전등 켜짐" : "");
     byId("hp").max = state.max_hp; byId("hp").value = state.hp;
     byId("xp").max = state.xp_next - state.xp_floor;
     byId("xp").value = state.level >= 10 ? byId("xp").max : state.xp - state.xp_floor;
@@ -165,7 +167,7 @@
       if (corpse.loot.length) {
         const all = button(corpse.label + " 전리품 회수", corpse.take_command);
         all.disabled = !corpse.loot.some((item) => item.can_take); actions.push(all);
-      } else { const empty = document.createElement("small"); empty.textContent = "남은 전리품 없음"; actions.push(empty); }
+      } else { const empty = document.createElement("small"); empty.textContent = corpse.loot_obscured ? "전리품을 식별하기 어려움" : "남은 전리품 없음"; actions.push(empty); }
       for (const item of corpse.loot) {
         const el = button(item.label + " ×" + item.quantity + " → " + (item.protected ? item.assigned_name : "자유 획득"), item.take_command);
         el.replaceChildren(semantic("item", item.label), " ×" + item.quantity + " → ", semantic(item.protected ? "player" : "muted", item.protected ? item.assigned_name : "자유 획득"));
@@ -202,6 +204,7 @@
     byId("context-actions").replaceChildren(...actions);
     const rows = state.inventory.map((item) => {
       const row = document.createElement("li"), name = document.createElement("span");
+      if (item.light_source || item.power_source) row.classList.add("lighting-item");
       name.append(semantic("item", item.name), " ×" + item.count);
       row.append(name);
       if (item.equipped) {
@@ -210,6 +213,15 @@
       } else if (item.equip_action) row.append(button(item.equip_action, item.name + " " + item.equip_action));
       else if (item.consume_action) row.append(button(item.consume_action, item.name + " " + item.consume_action));
       else if (item.id === "bandage") row.append(button("사용", "회복"));
+      if (item.light_source) {
+        const active = observation?.light_source?.id === item.id && observation.light_source.active;
+        row.append(button(active ? "끄기" : "켜기", item.name + (active ? " 꺼" : " 켜")), button("확인", item.name + " 확인"));
+      }
+      if (item.power_source) {
+        for (const source of state.inventory.filter((device) => device.light_source?.power_type === item.power_source.type)) {
+          row.append(button(source.name + "에 넣기", source.name + "에 " + item.name + " 넣어"));
+        }
+      }
       return row;
     });
     const emptySlots = Object.entries(state.equipment || {}).filter(([, name]) => !name);
