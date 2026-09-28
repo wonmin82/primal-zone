@@ -30,6 +30,12 @@ class Look(CmdLook):
         name = self.args.strip()
         observed_at = time()
         if name and self.caller.location:
+            from world.navigation import blocked_exit_message
+
+            message = blocked_exit_message(self.caller.zone, name)
+            if message:
+                self.caller.msg(ft.text(message))
+                return
             # 실제 Exit도 같은 selector로 선택한다. 관찰만 할 때는 로컬 갱신/at_desc도 실행하지 않는다.
             from world.targets import matching, ordered, visible
 
@@ -276,7 +282,8 @@ class Map(GameCommand):
                             ROOMS[target]["name"] if target in visited else "미탐사",
                         )
                         for direction, target in room["exits"].items()
-                    ],
+                    ] + [ft.text(ft.token("direction", direction), ": 폐쇄")
+                         for direction in room.get("blocked_exits", {})],
                     ", ",
                 )
                 lines.append(ft.text(room["name"], mark, " / ", exits))

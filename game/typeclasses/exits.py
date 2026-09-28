@@ -11,7 +11,7 @@ from evennia.objects.objects import DefaultExit
 from world import text as ft
 from world.content import ROOMS
 from world.distant_presentation import DistantViewContext, direction_phrase
-from world.navigation import entry_block
+from world.navigation import blocked_exit_message, entry_block
 
 from .objects import ObjectParent
 
@@ -29,6 +29,13 @@ class Exit(ObjectParent, DefaultExit):
 
     blocks_distant_view = True
 
+    def at_traverse(self, traversing_object, target_location, **kwargs):
+        message = blocked_exit_message(self.location.db.zone_id, self.key)
+        if message:
+            traversing_object.msg(ft.text(message))
+            return
+        return super().at_traverse(traversing_object, target_location, **kwargs)
+
     def can_observe_through(self, context):
         """진행 조건과 시야는 별개다. 투명한 경계는 attribute/override로 관찰을 허용한다."""
         blocks = (
@@ -42,6 +49,9 @@ class Exit(ObjectParent, DefaultExit):
         return entry_block(context.viewer.profile_snapshot(), zone) is None
 
     def return_appearance(self, looker, **kwargs):
+        message = blocked_exit_message(self.location.db.zone_id, self.key)
+        if message:
+            return ft.text(message)
         destination = self.destination
         appearance = getattr(destination, "return_distant_appearance", None)
         if not appearance:

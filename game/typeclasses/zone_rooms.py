@@ -59,7 +59,8 @@ class ZoneRoom(DefaultRoom):
 
         environment = snapshot_for(self, observed_at)
         lines = [
-            room["desc"], "", ft.token("muted", description(environment)), "",
+            room["desc"], *room.get("blocked_exits", {}).values(),
+            "", ft.token("muted", description(environment)), "",
             exit_diagram(room["exits"]), "",
         ]
         pool = room_objects(looker, self, observed_at)

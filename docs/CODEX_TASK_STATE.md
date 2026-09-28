@@ -4,9 +4,33 @@
 
 ## Objective
 
-최근 작업의 목표는 Environment의 표시용 시야를 실제 관찰·대상 선택에 연결하고 탐사 광원, 교체형 전원, 공용 시설 조명과 일관된 안내를 제공하는 것이었다. PR #11과 두 후속 수정은 완료되어 병합됐다. 현재 작업 범위는 사용자가 요청한 인계 문서의 별도 PR 생성이며 새 기능이나 리팩터링은 승인된 작업이 아니다.
+본부 재설계 1단계는 [PR #13](https://github.com/wonmin82/primal-zone/pull/13)에 포함됐다. 현재 승인된 작업은 중앙홀 `남 → support_1f_c`, 1층 중앙 `북 → hq_concourse`로 연결을 수정하고 복귀 방향 예외를 제거하며 코드·테스트·문서·PR 설명을 갱신하는 것이다. 1층 중앙의 남쪽은 폐쇄 출입구다. 대기실 남/중앙홀 북과 중앙홀 서/부두 동은 유지한다. 상세 설계와 동선은 [본부 Room 구조 1단계](architecture.md#본부-room-구조-1단계)를 따른다. PR #13의 병합은 아직 요청되지 않았다.
 
-완료 조건은 최신 코드·설계·검증 근거·의도적으로 남긴 문제를 이 문서로 구분해 새 채팅이 완료 기능을 재구현하지 않도록 하는 것이다.
+기존 광원 기능은 PR #11로 완료됐고 인계 문서는 PR #12로 병합됐다. 아래 광원 설계·완료 항목·검증은 과거 기록이며 보존한다. 본부 1단계에서도 기존 서비스·귀환·패배 목적지는 부두다. 승강기, 서비스 이전, 의료/귀환/사망 개편, 단일 화폐/정산, NPC 상점, 통합 closeout은 후속 범위다.
+
+### 본부 작업 시작 상태
+
+- fetch 후 `main`과 `origin/main`은 PR #12 병합 커밋 `fd3e884fd6cc426b95b267b7960c216ab7abc70d`로 같았고 unstaged/staged diff가 없었다. PR #12는 병합·소스 브랜치 삭제 완료, 해당 main CI는 성공이었다.
+- 최신 `origin/main`에서 `codex/hq-room-skeleton`을 만들었다. 이 작업의 Git·검증 상태는 완료 기록과 실제 저장소에서 확인한다.
+- 기존 `architecture.md`의 profile 최신 버전 설명은 5였지만 코드는 6이다. 이번 작업에서 저장 schema를 바꾸지 않았으며 기존 방문 기록·위치를 보존한다. 본부 설계만 추가하고 과거 migration 설명의 별도 정비는 하지 않았다.
+
+### 본부 1단계 최초 완료 기록 (방향 수정 전)
+
+- Room 25개 추가, 월드 총 40개·Region 3개다. 대기실 남/중앙홀 북, 중앙홀 서/부두 동과 중앙홀 동/1층 중앙 남의 동선을 구현했다. 부두 북/초지와 기존 서비스 객체는 보존했다.
+- 복도 15칸·시설 7곳·옥상, 폐쇄 방향 22개를 정의했다. 시설은 Room만 생성하고 기능 없는 hint/NPC는 없다. 2·3층과 옥상은 층간 이동을 구현하지 않아 일반 동선에 연결하지 않았다.
+- 폐쇄 입력/정찰은 안내만 반환한다. local/distant/지도에 기존 표시 방식을 사용하고 웹 출구에는 실제 이동 방향만 보낸다. stable tag로 bootstrap 재사용·갱신 및 명시적 폐쇄 관리 Exit 정리를 검증했다.
+- 새 최초 접속/visited는 대기실이고 유효한 재접속 위치·기존 profile 방문 기록은 유지한다. home/귀환/패배는 dock다.
+- `.\.venv\Scripts\python.exe scripts/dev.py check` 통과, `scripts/dev.py test` 순수 72 + 통합 198 = 총 270 통과. 근거 `work/hq-final-full.log`, 통합 1010.005초. 관련 통합 19개도 통과했으며 상세는 [본부 확인 기록](playtest.md#본부-room-구조-1단계-확인)을 따른다. 전체 성공 뒤에는 기록 문서만 수정했다.
+- 별도 DB 브라우저에서 최초 대기실, 버튼/명령 이동·폐쇄 입력/보기·지도, 부두/초지·귀환·재접속 위치 보존을 확인했다. 1366/390px 가로 넘침 및 탭 오류/경고 없음. 검증 서버 종료, 플레이 DB 보존. 실제 OS IME와 플레이 DB에 계정을 남기는 전체 smoke는 미실행이다.
+- 구현 완료 보고 시점의 fetch에서 origin/main은 여전히 `fd3e884`였고 해당 기존 main CI는 성공이었다. 당시 본부 변경은 브랜치의 미커밋 변경으로 보존했고 commit/push/PR 생성·병합하지 않았다. 이후 사용자 요청으로 같은 변경을 커밋·푸시하여 PR에 포함한다. 최신 commit/PR/CI 상태는 실제 Git과 GitHub에서 확인하며 기존 main CI를 본부 변경의 CI 성공 근거로 사용하지 않는다.
+
+### 본부 방향 정정 (2026-09-28)
+
+- 시작 시 `codex/hq-room-skeleton` HEAD와 PR #13 HEAD는 `bef94dd0129317b6a74570b3fb137c5030dd418c`였고 작업 트리는 깨끗했다. fetch 후 `origin/main`은 `fd3e884`였으며 PR은 OPEN, 해당 기존 HEAD의 push·PR CI는 모두 성공이었다. 인계의 PR 생성 예정 문구보다 실제 PR 생성 상태가 최신이다.
+- 중앙홀 남/1층 중앙 북으로 통일하고 남쪽 폐쇄 출입구, Room 설명·지도·웹 출구 기대값을 수정했다. 본부의 복귀 방향 데이터와 검사 예외는 제거하고 일반 정반대 방향 검증을 사용한다.
+- bootstrap은 옛 본부 관리 Exit 두 개만 같은 Room/목적지에서 새 방향 tag·alias로 재사용한다. Room ID·캐릭터 위치·진행·서비스 객체와 일반 stale 감사 정책은 보존한다.
+- 별도 DB에서 기존 본부 Exit 2개의 ID를 보존한 갱신과 새 일반 계정의 대기실 남/중앙홀 남 이동, 북 명령 복귀·부두 왕복, 남쪽 폐쇄 이동/보기·지도·실제 버튼, 부두 귀환·지원동 재접속 위치 보존을 확인했다. console 오류/경고 0개, 근거 `work/hq-direction.png`. 검증 서버·탭 종료, 플레이 DB 보존. 이전 브라우저 기록은 방향 수정 전 근거로 구분한다.
+- 최종 `scripts/dev.py check` 통과, `scripts/dev.py test` 순수 72 + 통합 199 = 총 271 통과(통합 1153.144초, `work/hq-direction-full.log`). 관련 통합에서 발견한 미사용 옛 tag 잔존을 수정하고 실패한 bootstrap 1개를 먼저 통과시킨 뒤 전체를 실행했다. 전체 성공 후 실행 코드·테스트는 고정했다. 상세는 [본부 확인 기록](playtest.md#본부-room-구조-1단계-확인)에 남긴다. 수정 커밋을 같은 PR에 푸시하며 최신 HEAD의 원격 CI는 GitHub/PR 설명에서 직접 확인한다.
 
 ## Current Repository State
 
@@ -98,11 +122,11 @@
 
 ## Partially Implemented / In Progress
 
-진행 중인 기능·PR #11의 남은 수정은 없다. 인계 문서 작성 당시에는 이 문서만 미추적 상태였으며, 이후 사용자 요청으로 별도 문서 PR을 생성한다. 새로운 개발 범위는 사용자가 지정해야 한다. optional 지역 climate presentation profile, 향후 관찰 수단/거리 확장 등은 구현 완료로 간주하지 않는다.
+본부 1단계 PR #13은 OPEN이며 사용자 요청에 따라 같은 `codex/hq-room-skeleton`에서 연결 방향 정정과 로컬 검증을 완료했다. 현재 Git·PR·최신 HEAD CI 상태는 직접 확인한다. 광원 PR #11에는 남은 수정이 없고 인계 문서 PR #12도 병합 완료다. 승강기·서비스 이전 등 후속 본부 기능은 다음 사용자 범위를 확인하기 전에는 구현하지 않는다. optional 지역 climate presentation profile, 향후 관찰 수단/거리 확장 등은 구현 완료로 간주하지 않는다.
 
 ## Validation
 
-검증 기준과 실행 시점을 구분한다. 아래는 이전 구현/병합에서 실제 실행한 결과를 로그·GitHub로 재확인한 것이며 이번 문서 작성에서 게임 테스트를 재실행한 결과가 아니다.
+검증 기준과 실행 시점을 구분한다. 본부 1단계는 별도 완료 기록을 추가한다. 아래 표는 이전 광원 구현/병합에서 실제 실행한 결과를 로그·GitHub로 재확인한 것이며 본부 변경의 검증 결과로 간주하지 않는다.
 
 | 기준 | 검증 근거/결과 |
 | --- | --- |
@@ -113,7 +137,7 @@
 | 최종 후속 브라우저 | 별도 SQLite DB에서 1366px dock·wreck poor/clear/손전등 hint와 SURROUNDINGS, 390px 줄바꿈 확인. 문서 client/scroll width 1351/1351, 375/375px, 최종 탭 오류 0/경고 0. 캡처 `work/lighting-hints-1366.jpg`, `work/lighting-hints-390.jpg` |
 | 앞선 광원/시설 구현 | 당시 JS 문법·collectstatic, 전원 없음/삽입/켜기/소진/재접속, 시설 off/on·개인/shared 분리 등을 별도 DB 브라우저에서 검증. 시점별 상세 근거는 docs/playtest.md |
 
-최종 후속 수정은 JS/CSS를 바꾸지 않아 node/collectstatic을 반복하지 않았다. 이번 인계 문서 PR은 문서만 추가하므로 AGENTS 기준 로컬 게임 테스트·브라우저·smoke·정적 파일 수집을 반복하지 않는다. 문서의 경로·링크·명령과 구현·Git 상태·기존 로그/CI를 대조하고 `git diff --cached --check`로 문서 diff를 검사한다. 문서 PR의 최신 CI는 위의 기존 기능 검증과 별도로 확인하며 PR Validation에 기록한다.
+과거 광원 최종 후속 수정은 JS/CSS를 바꾸지 않아 node/collectstatic을 반복하지 않았다. 인계 문서 PR #12는 문서만 추가했으므로 당시 로컬 게임 테스트·브라우저·smoke·정적 파일 수집을 반복하지 않았다. 문서 경로·링크·명령과 구현·Git 상태·기존 로그/CI를 대조하고 문서 diff를 검사했다. 이 과거 판단은 현재 본부 구현의 검사 범위를 제한하지 않는다.
 
 핵심 테스트는 전원 30/60분 동일 parser·실패 rollback·잔량 projection·migration, 시설 legacy/future/cache rollback·actual contribution, hint/selector/SURROUNDINGS SSOT, 광원 보기/확인/웹 시간 일치, locked privacy와 기존 combat/loot/quest 회귀다.
 
@@ -140,7 +164,7 @@
 
 ## Recommended Next Step
 
-AGENTS와 이 문서를 읽고 `git status --short`, `git diff`, `git diff --cached`, `git fetch origin`, 현재 branch/HEAD/origin/main 및 원격 PR·CI 상태를 확인한다. “PR #11은 병합됐고 기능 작업은 완료”라는 상태와 인계 문서 PR의 현재 상태를 짧게 재구성한 후 다음 사용자 작업 범위를 확인한다. 새 범위가 지정되기 전에는 기능 구현을 시작하지 않는다.
+AGENTS와 이 문서를 읽고 `git status --short`, `git diff`, `git diff --cached`, `git fetch origin`, 현재 branch/HEAD/origin/main 및 원격 PR·CI 상태를 확인한다. 본부 1단계의 실제 구현·검증·Git 상태를 짧게 재구성한다. 완료된 Room 골격을 재구현하지 말고 다음 사용자 작업 범위를 확인한다. 승강기나 서비스 이전 등 후속 기능을 새 승인 없이 시작하지 않는다.
 
 ## Important Files
 
@@ -149,6 +173,7 @@ AGENTS와 이 문서를 읽고 `git status --short`, `git diff`, `git diff --cac
 | `AGENTS.md`, `README.md`, `pyproject.toml`, `uv.lock` | 프로젝트 지침/사용법/실제 의존성 |
 | `docs/architecture.md`, `docs/playtest.md`, `docs/text-examples.md` | 설계 SSOT, 수동 절차·시점별 결과, 실제 표현 예시 |
 | `game/world/content/starter.py`, `game/world/content/deep_jungle.py` | Room desc/hints/requires, Enemy local/distant metadata |
+| `game/world/content/headquarters.py`, `game/world/test_headquarters.py`, `game/tests/test_headquarters.py` | 본부 Room/폐쇄 방향 정의, 순수 integrity·동선 검사와 실제 이동·접속·bootstrap·기존 서비스 회귀 |
 | `game/world/content/items.py`, `game/world/content/environment.py`, `game/world/content/facilities.py`, `game/world/content/integrity.py` | item/가격/전원, 환경 상수, 시설 정의, 참조·형식 integrity |
 | `game/world/environment.py`, `game/world/environment_state.py` | pure 환경 version/계산, DB 저장·읽기 전용 snapshot·전환 알림 |
 | `game/world/observation.py`, `game/world/lighting.py` | 지각 matrix/context, metadata 전원·timestamp charge·status |

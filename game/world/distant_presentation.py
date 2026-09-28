@@ -96,7 +96,7 @@ def distant_appearance(context):
             summary = presence(context)
             if summary is not None:
                 groups[summary] = groups.get(summary, 0) + 1
-    lines = [heading, "", description, ""]
+    lines = [heading, "", description, *(definition or {}).get("blocked_exits", {}).values(), ""]
     if environment:
         lines.extend([ft.token("muted", environment_description(environment)), ""])
     for summary, count in groups.items():

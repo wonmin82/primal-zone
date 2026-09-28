@@ -2,6 +2,7 @@
 
 from .deep_jungle import ENEMIES as JUNGLE_ENEMIES
 from .deep_jungle import ROOMS as JUNGLE_ROOMS
+from .headquarters import ROOMS as HEADQUARTERS_ROOMS
 from .items import EQUIPMENT_ACTIONS, EXCHANGE, ITEMS, OPPOSITES, SHOP, UNEQUIP_ACTIONS, find_id
 from .starter import ENEMIES as STARTER_ENEMIES
 from .starter import ROOMS as STARTER_ROOMS
@@ -10,8 +11,15 @@ REGION_ENEMIES = {"outpost": STARTER_ENEMIES, "deep_jungle": JUNGLE_ENEMIES}
 ENEMIES = {
     identity: data for enemies in REGION_ENEMIES.values() for identity, data in enemies.items()
 }
-ROOMS = {**STARTER_ROOMS, **JUNGLE_ROOMS}
+ROOMS = {**HEADQUARTERS_ROOMS, **STARTER_ROOMS, **JUNGLE_ROOMS}
 REGIONS = {
+    "headquarters": {
+        "name": "탐사대 본부",
+        "weather_zone": "island",
+        "recommended_level": (1, 1),
+        "entry": "staging_room",
+        "rooms": tuple(HEADQUARTERS_ROOMS),
+    },
     "outpost": {
         "name": "탐사대 전초구역",
         "weather_zone": "island",

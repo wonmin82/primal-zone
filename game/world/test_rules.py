@@ -340,7 +340,7 @@ class RuleTests(TestCase):
             rules.claim_quest(profile)
         self.assertEqual(profile, before)
 
-    def test_all_locations_are_reachable_and_exits_are_valid(self):
+    def test_active_locations_are_reachable_and_prepared_upper_floors_stay_separate(self):
         visited, pending = set(), ["dock"]
         while pending:
             key = pending.pop()
@@ -350,7 +350,10 @@ class RuleTests(TestCase):
             for target in ROOMS[key]["exits"].values():
                 self.assertIn(target, ROOMS)
                 pending.append(target)
-        self.assertEqual(visited, set(ROOMS))
+        prepared = {zone for zone in ROOMS if zone.startswith(("support_2f_", "support_3f_"))}
+        prepared.update({"infirmary", "training_room", "armor_shop", "weapon_shop", "support_roof"})
+        self.assertEqual(len(prepared), 15)
+        self.assertEqual(visited, set(ROOMS) - prepared)
 
     def test_prepared_solo_player_can_beat_boss_across_rng_seeds(self):
         for seed in range(20):

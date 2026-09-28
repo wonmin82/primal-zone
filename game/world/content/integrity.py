@@ -24,8 +24,56 @@ def positive_number(value):
     return isinstance(value, Real) and not isinstance(value, bool) and isfinite(value) and value > 0
 
 
-def errors(interactables):
+def headquarters_errors():
+    """본부 1단계의 고정 동선과 시설 위치를 검사한다. 층간 출구는 아직 없다."""
+    expected = {
+        "staging_room": {"남": "hq_concourse"},
+        "hq_concourse": {"북": "staging_room", "서": "dock", "남": "support_1f_c"},
+        "dock": {"북": "grass", "동": "hq_concourse"},
+        "support_roof": {},
+    }
+    positions = ("w2", "w1", "c", "e1", "e2")
+    corridors = []
+    for floor in (1, 2, 3):
+        row = [f"support_{floor}f_{position}" for position in positions]
+        corridors.extend(row)
+        for index, zone in enumerate(row):
+            expected[zone] = {}
+            if index:
+                expected[zone]["서"] = row[index - 1]
+            if index < len(row) - 1:
+                expected[zone]["동"] = row[index + 1]
+    expected["support_1f_c"]["북"] = "hq_concourse"
+    facilities = (
+        ("salvage_office", "support_1f_w2"),
+        ("storage_room", "support_1f_w1"),
+        ("supply_shop", "support_1f_e1"),
+        ("infirmary", "support_2f_w1"),
+        ("training_room", "support_2f_e1"),
+        ("armor_shop", "support_3f_w1"),
+        ("weapon_shop", "support_3f_e1"),
+    )
+    for facility, corridor in facilities:
+        expected[facility] = {"남": corridor}
+        expected[corridor]["북"] = facility
     issues = []
+    for zone, exits in expected.items():
+        if ROOMS.get(zone, {}).get("exits") != exits:
+            issues.append(f"{zone}: 본부 1단계 출구 배치가 올바르지 않습니다.")
+    for zone in corridors:
+        blocked = ROOMS.get(zone, {}).get("blocked_exits", {})
+        if not isinstance(blocked, dict) or set(blocked) != {"북", "남"} - set(expected[zone]):
+            issues.append(f"{zone}: 지원동 폐쇄 출입구 배치가 올바르지 않습니다.")
+    for facility, corridor in facilities:
+        incoming = [(zone, direction) for zone, room in ROOMS.items()
+                    for direction, target in room["exits"].items() if target == facility]
+        if incoming != [(corridor, "북")]:
+            issues.append(f"{facility}: 시설 Room은 지정 복도에서만 연결되어야 합니다.")
+    return issues
+
+
+def errors(interactables):
+    issues = headquarters_errors()
     for identity, definition in FACILITIES.items():
         if not isinstance(identity, str) or not identity.strip() or not isinstance(definition, dict):
             issues.append(f"{identity}: 시설 상태 정의가 유효하지 않습니다.")
@@ -71,6 +119,17 @@ def errors(interactables):
             issues.append(f"{zone}: light_profile이 유효하지 않습니다.")
         if set(room.get("spawn_ids", {})) - set(room["enemies"]):
             issues.append(f"{zone}: 사용되지 않는 spawn ID 지정이 있습니다.")
+        blocked = room.get("blocked_exits", {})
+        if not isinstance(blocked, dict):
+            issues.append(f"{zone}: blocked_exits는 방향과 문구의 dict여야 합니다.")
+            blocked = {}
+        for direction, message in blocked.items():
+            if direction not in OPPOSITE:
+                issues.append(f"{zone}: 폐쇄 출입구 방향이 유효하지 않습니다.")
+            if direction in room["exits"]:
+                issues.append(f"{zone}:{direction}: 실제 출구와 폐쇄 출입구가 겹칩니다.")
+            if not isinstance(message, str) or not message.strip():
+                issues.append(f"{zone}:{direction}: 폐쇄 출입구 문구는 비어 있지 않은 문자열이어야 합니다.")
         for direction, target in room["exits"].items():
             if target not in ROOMS:
                 issues.append(f"{zone}:{direction}: 대상 Room이 없습니다.")

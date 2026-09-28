@@ -176,8 +176,10 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         dock = get_room("dock")
         if dock:
             self.home = dock
-            if self.zone not in ROOMS:
-                self.location = dock
+        if self.zone not in ROOMS:
+            start = get_room("staging_room")
+            if start:
+                self.location = start
         super().at_post_puppet(**kwargs)
         self.msg("|g원시구역에 오신 것을 환영합니다.|n '도움말'로 명령을 확인하세요.")
         self.leave_combat()
