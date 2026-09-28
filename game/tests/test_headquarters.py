@@ -39,6 +39,10 @@ class HeadquartersTests(EvenniaCommandTest):
         self.assertEqual(self.char1.profile()["visited"], ["staging_room"])
         self.char1.execute_cmd("남")
         self.assertEqual(self.char1.zone, "hq_concourse")
+        self.char1.execute_cmd("남")
+        self.assertEqual(self.char1.zone, "support_1f_c")
+        self.char1.execute_cmd("북")
+        self.assertEqual(self.char1.zone, "hq_concourse")
         self.char1.execute_cmd("서")
         self.assertEqual(self.char1.zone, "dock")
         self.char1.execute_cmd("북")
@@ -87,10 +91,10 @@ class HeadquartersTests(EvenniaCommandTest):
                 self.assertEqual(self.char1.profile(), before)
                 self.assertNotIn(direction, {exit_obj.key for exit_obj in self.rooms[zone].exits})
         self.char1.location = self.rooms["support_1f_c"]
-        for command in ("n", "N", "ㅂ", "북 보기", "n 봐"):
+        for command in ("s", "S", "ㄴ", "남 보기", "s 봐"):
             with self.subTest(command=command), patch.object(self.char1, "msg") as output:
                 self.char1.execute_cmd(command)
-                self.assertIn("북쪽 출입문은 현재 폐쇄되어 있다.", str(output.call_args_list))
+                self.assertIn("남쪽 출입문은 현재 폐쇄되어 있다.", str(output.call_args_list))
                 self.assertEqual(self.char1.zone, "support_1f_c")
         self.char1.execute_cmd("ㅅ")
         self.assertEqual(self.char1.zone, "support_1f_w1")
@@ -119,45 +123,96 @@ class HeadquartersTests(EvenniaCommandTest):
 
     def test_preexisting_managed_closed_exit_cannot_traverse_or_reveal_then_is_removed(self):
         source = self.rooms["support_1f_c"]
-        old = create_object(Exit, key="북", aliases=["n"], location=source, destination=self.rooms["infirmary"])
-        old.tags.add("support_1f_c:북", category=EXIT_CATEGORY)
+        old = create_object(Exit, key="남", aliases=["s"], location=source, destination=self.rooms["infirmary"])
+        old.tags.add("support_1f_c:남", category=EXIT_CATEGORY)
         identity = old.id
         self.char1.location = source
         with patch.object(self.rooms["infirmary"], "return_distant_appearance") as appearance:
-            self.char1.execute_cmd("북")
+            self.char1.execute_cmd("남")
             self.assertEqual(self.char1.location, source)
-            self.char1.execute_cmd("북 보기")
+            self.char1.execute_cmd("남 보기")
             appearance.assert_not_called()
         build_world()
         build_world()
         self.assertFalse(ObjectDB.objects.filter(pk=identity).exists())
-        self.assertFalse(search_tag("support_1f_c:북", category=EXIT_CATEGORY))
-        self.assertEqual({obj.key for obj in source.exits}, {"서", "동", "남"})
+        self.assertFalse(search_tag("support_1f_c:남", category=EXIT_CATEGORY))
+        self.assertEqual({obj.key for obj in source.exits}, {"서", "동", "북"})
+
+    def test_bootstrap_migrates_old_hub_directions_without_duplicate_exits(self):
+        identities = {}
+        for zone, current, old, alias in (
+            ("hq_concourse", "남", "동", "e"),
+            ("support_1f_c", "북", "남", "s"),
+        ):
+            exit_obj = search_tag(f"{zone}:{current}", category=EXIT_CATEGORY)[0]
+            identities[zone] = exit_obj.id
+            exit_obj.tags.remove(f"{zone}:{current}", category=EXIT_CATEGORY)
+            exit_obj.tags.add(f"{zone}:{old}", category=EXIT_CATEGORY)
+            exit_obj.key = old
+            exit_obj.aliases.clear()
+            exit_obj.aliases.add(alias)
+        self.char1.location = self.rooms["support_1f_c"]
+        before = deepcopy(self.char1.profile())
+        count = ObjectDB.objects.count()
+        for _ in range(2):
+            build_world()
+            self.assertEqual(ObjectDB.objects.count(), count)
+            for zone, current, old in (("hq_concourse", "남", "동"), ("support_1f_c", "북", "남")):
+                exit_obj = search_tag(f"{zone}:{current}", category=EXIT_CATEGORY)[0]
+                self.assertEqual(exit_obj.id, identities[zone])
+                self.assertEqual(exit_obj.aliases.all(), [OPPOSITES[current]])
+                self.assertFalse(search_tag(f"{zone}:{old}", category=EXIT_CATEGORY))
+                self.assertEqual({obj.key for obj in self.rooms[zone].exits}, set(ROOMS[zone]["exits"]))
+        self.assertEqual(self.char1.location, self.rooms["support_1f_c"])
+        self.assertEqual(self.char1.profile(), before)
+        self.assertEqual(stale_definitions(), [])
+        self.char1.execute_cmd("북")
+        self.assertEqual(self.char1.zone, "hq_concourse")
+        self.char1.execute_cmd("남")
+        self.assertEqual(self.char1.zone, "support_1f_c")
+
+        # 새 출구와 옛 출구가 함께 남은 부분 갱신 상태에서도 새 출구만 보존한다.
+        old_ids = []
+        for zone, old, target in (("hq_concourse", "동", "support_1f_c"), ("support_1f_c", "남", "hq_concourse")):
+            old_exit = create_object(Exit, key=old, location=self.rooms[zone], destination=self.rooms[target])
+            old_exit.tags.add(f"{zone}:{old}", category=EXIT_CATEGORY)
+            old_ids.append(old_exit.id)
+        for _ in range(2):
+            build_world()
+            self.assertEqual(ObjectDB.objects.count(), count)
+            self.assertEqual(stale_definitions(), [])
+            self.assertFalse(ObjectDB.objects.filter(pk__in=old_ids).exists())
+            for zone, current in (("hq_concourse", "남"), ("support_1f_c", "북")):
+                self.assertEqual(search_tag(f"{zone}:{current}", category=EXIT_CATEGORY)[0].id, identities[zone])
 
     def test_presentation_map_and_web_expose_only_current_rooms_and_real_controls(self):
         self.char1.location = self.rooms["support_1f_c"]
         local = self.char1.location.return_appearance(self.char1)
-        self.assertIn("북쪽 출입문은 현재 폐쇄되어 있다.", local)
+        self.assertIn("북쪽 통로는 본부 중앙홀로 이어진다.", local)
+        self.assertIn("남쪽 출입문은 현재 폐쇄되어 있다.", local)
         self.char1.db.profile = {**self.char1.profile(), "visited": list(HQ_ROOMS)}
         with patch.object(self.char1, "msg") as output:
             self.char1.execute_cmd("지도")
         map_text = str(output.call_args_list)
         self.assertIn("[탐사대 본부]", map_text)
-        self.assertIn("북: 폐쇄", map_text)
+        central_row = next(row for row in map_text.split("\\n") if "지원동 1층 중앙 복도 ← 현재" in row)
+        self.assertIn("북: 본부 중앙홀", central_row)
+        self.assertIn("남: 폐쇄", central_row)
+        self.assertNotIn("북: 폐쇄", central_row)
         self.assertIn("지원동 옥상", map_text)
         self.assertNotIn("특수장비점", map_text)
         self.assertNotIn("공사 중", map_text)
         with patch.object(self.char1, "msg") as output:
             Explorer.push_state(self.char1)
         state = output.call_args.kwargs["pz_state"][0][0]
-        self.assertEqual(state["exits"], ["서", "동", "남"])
+        self.assertEqual(state["exits"], ["서", "동", "북"])
         self.assertEqual(state["region"], "headquarters")
         self.assertEqual(state["interactables"], [])
         self.assertEqual(state["hint"], "")
         self.assertFalse(state["training_available"])
         self.char1.location = self.rooms["hq_concourse"]
-        east = next(obj for obj in self.char1.location.exits if obj.key == "동")
-        self.assertIn("북쪽 출입문은 현재 폐쇄되어 있다.", east.return_appearance(self.char1))
+        south = next(obj for obj in self.char1.location.exits if obj.key == "남")
+        self.assertIn("남쪽 출입문은 현재 폐쇄되어 있다.", south.return_appearance(self.char1))
 
     def test_dock_services_return_and_defeat_destinations_remain_available(self):
         self.char1.location = self.rooms["support_1f_c"]

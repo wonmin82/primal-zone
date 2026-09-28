@@ -10,9 +10,8 @@ ROOMS = {
     "hq_concourse": {
         "name": "본부 중앙홀",
         "desc": "높은 천장 아래로 본부의 넓은 중앙홀이 펼쳐진다. 북쪽 문은 출정 대기실로 이어진다.\n"
-        "서쪽 통로에서는 바닷바람이 들어오고, 동쪽으로는 지원동의 긴 복도가 이어진다.",
-        "exits": {"북": "staging_room", "서": "dock", "동": "support_1f_c"},
-        "return_directions": {"동": "남"},
+        "서쪽 통로에서는 바닷바람이 들어오고, 남쪽으로는 지원동의 긴 복도가 이어진다.",
+        "exits": {"북": "staging_room", "서": "dock", "남": "support_1f_c"},
     },
     "support_1f_w2": {
         "name": "지원동 1층 서쪽 끝 복도",
@@ -28,10 +27,9 @@ ROOMS = {
     },
     "support_1f_c": {
         "name": "지원동 1층 중앙 복도",
-        "desc": "지원동 1층의 중앙에서 복도가 동서로 뻗어 있다. 남쪽 통로는 모퉁이를 돌아 본부 중앙홀로 이어진다.",
-        "exits": {"서": "support_1f_w1", "동": "support_1f_e1", "남": "hq_concourse"},
-        "return_directions": {"남": "동"},
-        "blocked_exits": {"북": "북쪽 출입문은 현재 폐쇄되어 있다."},
+        "desc": "지원동 1층의 중앙에서 복도가 동서로 뻗어 있다. 북쪽 통로는 본부 중앙홀로 이어진다.",
+        "exits": {"서": "support_1f_w1", "동": "support_1f_e1", "북": "hq_concourse"},
+        "blocked_exits": {"남": "남쪽 출입문은 현재 폐쇄되어 있다."},
     },
     "support_1f_e1": {
         "name": "지원동 1층 동쪽 복도",

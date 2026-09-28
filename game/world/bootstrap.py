@@ -1,6 +1,7 @@
 """Idempotent zone creation; never clears characters or player progress."""
 
 from evennia import create_object, search_tag
+from evennia.typeclasses.tags import Tag
 
 from world.content import ENEMIES, OPPOSITES, ROOMS, spawn_id_for
 from world.multiplayer import world_change
@@ -50,6 +51,21 @@ def _build_world():
                 enemy.db.hp = min(enemy.db.hp, definition["hp"])
                 if not enemy.db.combatants and enemy.location != room:
                     enemy.location = room
+    # 이전 본부 배치의 두 관리 출구를 새 방향으로 재사용한다. 다른 stale 객체는 보존한다.
+    for zone, old_direction, new_direction, target in (
+        ("hq_concourse", "동", "남", "support_1f_c"),
+        ("support_1f_c", "남", "북", "hq_concourse"),
+    ):
+        old_identity, new_identity = f"{zone}:{old_direction}", f"{zone}:{new_direction}"
+        for existing in search_tag(old_identity, category=EXIT_CATEGORY):
+            if existing.location == rooms[zone] and existing.destination == rooms[target]:
+                if search_tag(new_identity, category=EXIT_CATEGORY):
+                    existing.delete()
+                else:
+                    existing.tags.remove(old_identity, category=EXIT_CATEGORY)
+                    existing.tags.add(new_identity, category=EXIT_CATEGORY)
+        if not search_tag(old_identity, category=EXIT_CATEGORY):
+            Tag.objects.filter(db_key=old_identity, db_category=EXIT_CATEGORY).delete()
     for zone_id, data in ROOMS.items():
         room = rooms[zone_id]
         # 명시적으로 폐쇄된 방향의 기존 관리 출구만 제거한다. 일반 stale 객체는 보존한다.
@@ -108,8 +124,6 @@ def stale_definitions():
     }
     result = []
     for category, identities in expected.items():
-        from evennia.typeclasses.tags import Tag
-
         for tag in Tag.objects.filter(db_category=category):
             if tag.db_key not in identities:
                 result.append((category, tag.db_key))

@@ -28,7 +28,7 @@ def headquarters_errors():
     """본부 1단계의 고정 동선과 시설 위치를 검사한다. 층간 출구는 아직 없다."""
     expected = {
         "staging_room": {"남": "hq_concourse"},
-        "hq_concourse": {"북": "staging_room", "서": "dock", "동": "support_1f_c"},
+        "hq_concourse": {"북": "staging_room", "서": "dock", "남": "support_1f_c"},
         "dock": {"북": "grass", "동": "hq_concourse"},
         "support_roof": {},
     }
@@ -43,7 +43,7 @@ def headquarters_errors():
                 expected[zone]["서"] = row[index - 1]
             if index < len(row) - 1:
                 expected[zone]["동"] = row[index + 1]
-    expected["support_1f_c"]["남"] = "hq_concourse"
+    expected["support_1f_c"]["북"] = "hq_concourse"
     facilities = (
         ("salvage_office", "support_1f_w2"),
         ("storage_room", "support_1f_w1"),
@@ -130,19 +130,10 @@ def errors(interactables):
                 issues.append(f"{zone}:{direction}: 실제 출구와 폐쇄 출입구가 겹칩니다.")
             if not isinstance(message, str) or not message.strip():
                 issues.append(f"{zone}:{direction}: 폐쇄 출입구 문구는 비어 있지 않은 문자열이어야 합니다.")
-        returns = room.get("return_directions", {})
-        if not isinstance(returns, dict):
-            issues.append(f"{zone}: 복귀 방향 정의는 dict여야 합니다.")
-            returns = {}
-        for direction, reverse in returns.items():
-            if direction not in room["exits"] or not isinstance(reverse, str) or reverse not in OPPOSITE:
-                issues.append(f"{zone}:{direction}: 복귀 방향이 유효하지 않습니다.")
-        returns = {direction: reverse for direction, reverse in returns.items()
-                   if isinstance(reverse, str) and reverse in OPPOSITE}
         for direction, target in room["exits"].items():
             if target not in ROOMS:
                 issues.append(f"{zone}:{direction}: 대상 Room이 없습니다.")
-            elif direction in OPPOSITE and ROOMS[target]["exits"].get(returns.get(direction, OPPOSITE[direction])) != zone:
+            elif direction in OPPOSITE and ROOMS[target]["exits"].get(OPPOSITE[direction]) != zone:
                 issues.append(f"{zone}:{direction}: 되돌아오는 출구가 없습니다.")
         for enemy in room["enemies"]:
             if enemy not in ENEMIES:

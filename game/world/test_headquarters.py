@@ -33,9 +33,12 @@ class HeadquartersRulesTests(TestCase):
         self.assertEqual(errors(content_targets()), [])
         self.assertEqual(ROOMS["staging_room"]["exits"], {"남": "hq_concourse"})
         self.assertEqual(ROOMS["hq_concourse"]["exits"], {
-            "북": "staging_room", "서": "dock", "동": "support_1f_c",
+            "북": "staging_room", "서": "dock", "남": "support_1f_c",
         })
-        self.assertEqual(ROOMS["support_1f_c"]["exits"]["남"], "hq_concourse")
+        self.assertEqual(ROOMS["support_1f_c"]["exits"], {
+            "서": "support_1f_w1", "동": "support_1f_e1", "북": "hq_concourse",
+        })
+        self.assertEqual(ROOMS["support_1f_c"]["blocked_exits"], {"남": "남쪽 출입문은 현재 폐쇄되어 있다."})
         self.assertEqual(ROOMS["dock"]["exits"], {"북": "grass", "동": "hq_concourse"})
         self.assertEqual(ROOMS["support_roof"]["exits"], {})
         for room in HQ_ROOMS.values():
@@ -68,31 +71,26 @@ class HeadquartersRulesTests(TestCase):
                 self.assertNotIn(direction, room["exits"])
                 self.assertEqual(blocked_exit_message(zone, direction), message)
         self.assertEqual(count, 22)
-        for direction in ("북", "n", " N "):
-            self.assertEqual(blocked_exit_message("support_1f_c", direction), "북쪽 출입문은 현재 폐쇄되어 있다.")
-        self.assertIsNone(blocked_exit_message("support_1f_c", "남"))
+        for direction in ("남", "s", " S "):
+            self.assertEqual(blocked_exit_message("support_1f_c", direction), "남쪽 출입문은 현재 폐쇄되어 있다.")
+        self.assertIsNone(blocked_exit_message("support_1f_c", "북"))
         self.assertIsNone(blocked_exit_message("unknown", "북"))
-        self.assertIsNone(blocked_exit_message("support_1f_c", "북 모두"))
+        self.assertIsNone(blocked_exit_message("support_1f_c", "남 모두"))
         self.assertEqual(ROOMS, before)
 
-    def test_invalid_destination_reverse_and_bent_return_are_detected(self):
-        with patch.dict(ROOMS["hq_concourse"]["exits"], 동="missing_room"):
+    def test_invalid_destination_and_non_opposite_return_are_detected(self):
+        with patch.dict(ROOMS["hq_concourse"]["exits"], 남="missing_room"):
             self.assertTrue(any("대상 Room이 없습니다" in issue for issue in errors(content_targets())))
         with patch.dict(ROOMS["storage_room"]["exits"], 남="support_1f_w2"):
             self.assertTrue(any("되돌아오는 출구" in issue for issue in errors(content_targets())))
-        with patch.dict(ROOMS["hq_concourse"]["return_directions"], 동="서"):
-            self.assertTrue(any("되돌아오는 출구" in issue for issue in errors(content_targets())))
-        with patch.dict(ROOMS["hq_concourse"], return_directions={"없는방향": "북"}):
-            self.assertTrue(any("복귀 방향이 유효하지" in issue for issue in errors(content_targets())))
-        for invalid in ([], None, "위"):
-            with self.subTest(reverse=invalid), patch.dict(ROOMS["hq_concourse"]["return_directions"], 동=invalid):
-                self.assertTrue(any("복귀 방향이 유효하지" in issue for issue in errors(content_targets())))
+        with patch.dict(ROOMS["support_1f_c"], exits={"서": "support_1f_w1", "동": "support_1f_e1", "남": "hq_concourse"}):
+            self.assertTrue(any("hq_concourse:남: 되돌아오는 출구" in issue for issue in errors(content_targets())))
 
     def test_blocked_direction_conflicts_and_invalid_messages_are_detected(self):
-        with patch.dict(ROOMS["support_1f_c"]["exits"], 북="staging_room"):
+        with patch.dict(ROOMS["support_1f_c"]["exits"], 남="staging_room"):
             self.assertTrue(any("실제 출구와 폐쇄 출입구가 겹칩니다" in issue for issue in errors(content_targets())))
         for message in (None, "", "   ", 1, {}):
-            with self.subTest(message=message), patch.dict(ROOMS["support_1f_c"]["blocked_exits"], 북=message):
+            with self.subTest(message=message), patch.dict(ROOMS["support_1f_c"]["blocked_exits"], 남=message):
                 self.assertTrue(any("폐쇄 출입구 문구" in issue for issue in errors(content_targets())))
         with patch.dict(ROOMS["support_1f_c"], blocked_exits=[]):
             self.assertTrue(any("blocked_exits는" in issue for issue in errors(content_targets())))
