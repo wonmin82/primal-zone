@@ -33,8 +33,8 @@ class RegionTests(EvenniaCommandTest):
 
     def test_content_integrity_and_stable_first_region(self):
         self.assertEqual(errors(INTERACTABLES), [])
-        self.assertEqual(len(REGIONS), 2)
-        self.assertEqual(len(ROOMS), 15)
+        self.assertEqual(len(REGIONS), 3)
+        self.assertEqual(len(ROOMS), 40)
         self.assertEqual(
             set(REGIONS["outpost"]["rooms"]),
             {

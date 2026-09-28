@@ -36,7 +36,7 @@ def new_profile():
         "kills": 0,
         "quests": progress_defaults(),
         "discoveries": {},
-        "visited": ["dock"],
+        "visited": ["staging_room"],
         "combat_target": None,
         "queued_action": "attack",
         "next_attack_at": 0,

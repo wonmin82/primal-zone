@@ -52,6 +52,10 @@ def _build_world():
                     enemy.location = room
     for zone_id, data in ROOMS.items():
         room = rooms[zone_id]
+        # 명시적으로 폐쇄된 방향의 기존 관리 출구만 제거한다. 일반 stale 객체는 보존한다.
+        for direction in data.get("blocked_exits", {}):
+            for existing in search_tag(f"{zone_id}:{direction}", category=EXIT_CATEGORY):
+                existing.delete()
         for direction, target in data["exits"].items():
             identity = f"{zone_id}:{direction}"
             existing = next(iter(search_tag(identity, category=EXIT_CATEGORY)), None)

@@ -125,6 +125,11 @@ async def main():
                 await asyncio.sleep(610)
                 await player.open()
         print("PASS: 한글 일반 계정 3개 가입", flush=True)
+        for player in players:
+            assert player.state["zone"] == "staging_room"
+            await player.act("남", lambda state: state["zone"] == "hq_concourse")
+            await player.act("서", lambda state: state["zone"] == "dock")
+        print("PASS: 출정 대기실·중앙홀을 거쳐 기존 부두 진입", flush=True)
         await first.expect_text("공격 어린청소룡", "대상 뒤에 행동")
         for text in ("안녕하세요 말", "'어린청소룡 공격"):
             await first.expect_text(text, first.name + ":")
