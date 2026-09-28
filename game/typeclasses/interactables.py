@@ -93,7 +93,7 @@ class Container(ActionObject):
     detectability = "conspicuous"
     personal = False
     actions = ("넣어", "꺼내")
-    presence = "부두 한쪽에 놓여 있다. 물품을 맡기거나 꺼낼 수 있다."
+    presence = "벽을 따라 놓여 있다. 물품을 맡기거나 꺼낼 수 있다."
     description = "탐사자들이 함께 쓰는 보관상자다. 넣은 물건은 누구나 꺼낼 수 있다."
 
     def at_object_creation(self):
@@ -210,12 +210,14 @@ class Instructor(ActionObject):
     description = "전투 기록을 분석하고 신체 훈련과 전술을 다시 설계하는 교관이다."
     actions = ("대화", "배워", "배분", "재분배")
 
-    def available(self, caller):
+    def available(self, caller, observed_at=None):
+        from world.observation import can_perceive, context_for
+
         return (
-            self.location == caller.location
-            and caller.zone == "dock"
-            and ROOMS["dock"]["safe"]
+            self.location is not None and self.location == caller.location
+            and ROOMS.get(caller.zone, {}).get("safe", False)
             and not caller.profile_snapshot().get("combat_target")
+            and can_perceive(self, context_for(caller, observed_at=observed_at))
         )
 
     def act(self, caller, action, args):
@@ -333,18 +335,21 @@ def action_objects(room):
     return ordered(obj for obj in room.contents if isinstance(obj, ActionObject)) if room else []
 
 
-def instructor_for(caller):
+def instructor_for(caller, observed_at=None):
+    from world.targets import room_objects
+
     return next(
-        (obj for obj in action_objects(caller.location) if isinstance(obj, Instructor)), None
+        (obj for obj in room_objects(caller, observed_at=observed_at)
+         if isinstance(obj, Instructor) and obj.available(caller, observed_at=observed_at)), None
     )
 
 
 INTERACTABLES = {
     "emergency_light_cache": {"room": "wreck", "typeclass": "EmergencyLightCache", "name": "비상장비함", "aliases": ["비상함", "장비함"]},
-    "shared_container": {"room": "dock", "typeclass": "Container", "name": "보관상자", "aliases": []},
-    "personal_locker": {"room": "dock", "typeclass": "PersonalLocker", "name": "개인 보관함", "aliases": ["보관함"]},
+    "shared_container": {"room": "storage_room", "typeclass": "Container", "name": "보관상자", "aliases": []},
+    "personal_locker": {"room": "storage_room", "typeclass": "PersonalLocker", "name": "개인 보관함", "aliases": ["보관함"]},
     "commander": {"room": "dock", "typeclass": "Commander", "name": "윤대장", "aliases": ["대장"]},
-    "instructor": {"room": "dock", "typeclass": "Instructor", "name": "탐사대 훈련관", "aliases": ["훈련관", "교관"]},
+    "instructor": {"room": "training_room", "typeclass": "Instructor", "name": "탐사대 훈련관", "aliases": ["훈련관", "교관"]},
     "maintenance_log": {"room": "office", "typeclass": "MaintenanceLog", "name": "정비기록", "aliases": ["기록"]},
     "supply_cache": {"room": "wreck", "typeclass": "SupplyCache", "name": "보급상자", "aliases": ["상자"]},
     "generator": {"room": "generator", "typeclass": "Generator", "name": "발전기", "aliases": []},

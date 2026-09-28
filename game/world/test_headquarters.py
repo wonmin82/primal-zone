@@ -14,7 +14,11 @@ from world.quests import QUESTS
 
 def content_targets():
     """순수 검사에 필요한 기존 hint/quest 대상의 최소 콘텐츠 fixture."""
-    targets = {}
+    targets = {
+        "shared_container": {"room": "storage_room", "actions": ["넣어", "꺼내"]},
+        "personal_locker": {"room": "storage_room", "actions": ["넣어", "꺼내"]},
+        "instructor": {"room": "training_room", "actions": ["대화", "배워", "배분", "재분배"]},
+    }
     for zone, room in ROOMS.items():
         for hint in room.get("hints", []):
             if "target" in hint:
@@ -28,6 +32,16 @@ def content_targets():
 
 
 class HeadquartersRulesTests(TestCase):
+    def test_service_layout_is_checked_without_room_based_authorization(self):
+        targets = content_targets()
+        self.assertEqual(errors(targets), [])
+        for identity in ("shared_container", "personal_locker", "instructor"):
+            for wrong in ("dock", "missing_room", "support_roof"):
+                with self.subTest(identity=identity, wrong=wrong), patch.dict(targets[identity], room=wrong):
+                    self.assertTrue(any(f"{identity}: 본부 서비스" in issue for issue in errors(targets)))
+        del targets["instructor"]
+        self.assertTrue(any("instructor: 본부 서비스" in issue for issue in errors(targets)))
+
     def test_hub_layout_and_prepared_rooms_are_valid(self):
         self.assertEqual(len(HQ_ROOMS), 26)
         self.assertEqual(errors(content_targets()), [])

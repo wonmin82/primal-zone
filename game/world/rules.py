@@ -421,7 +421,7 @@ def point_pools(profile):
 def require_training(profile, safe):
     require_peace(profile)
     if not safe:
-        raise RuleError("안전한 부두의 탐사대 훈련관에게서만 훈련할 수 있습니다.")
+        raise RuleError("안전한 장소의 탐사대 훈련관에게서만 훈련할 수 있습니다.")
 
 
 def allocate_attribute(profile, attribute, amount=1, *, safe=False):

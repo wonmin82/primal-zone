@@ -114,7 +114,7 @@ def _build_world():
             obj.key = data["name"]
             obj.location = rooms[data["room"]]
             obj.aliases.clear()
-            obj.aliases.add(*data["aliases"])
+            obj.aliases.add(data["aliases"])
     return rooms
 
 

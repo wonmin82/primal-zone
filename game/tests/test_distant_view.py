@@ -151,11 +151,13 @@ class DistantViewTests(WorldCommandTest):
         self.assertFalse(any(s["role"] in ("item", "command") for s in output.segments))
 
     def test_npc_containers_and_anonymous_players_do_not_expose_contents(self):
+        self.char1.location = self.rooms["support_1f_w1"]
+        self.char2.location = self.rooms["storage_room"]
         self.char1.profile()  # 아래 spy 이전에 기본 캐릭터 상태만 준비한다.
         self.char1.change(lambda p: p["storage"].update(scrap=17))
         box = search_tag("shared_container", category="primal_interactable")[0]
         box.db.items = {"bandage": 9, "water": 8}
-        floor = create_object(DroppedLoot, key="회수부품", location=self.rooms["dock"])
+        floor = create_object(DroppedLoot, key="회수부품", location=self.rooms["storage_room"])
         floor.db.entries = [{"item": "scrap", "quantity": 7}]
         with (
             patch.object(
@@ -165,8 +167,8 @@ class DistantViewTests(WorldCommandTest):
                 PersonalLocker, "return_appearance", side_effect=AssertionError("contents access")
             ),
         ):
-            output = self.command("남 봐")
-        for name in ("윤대장", "보관상자", "개인 보관함", "탐사자 한 명"):
+            output = self.command("북 봐")
+        for name in ("보관상자", "개인 보관함", "탐사자 한 명"):
             self.assertIn(name, output)
         for secret in (
             self.char2.key,
@@ -181,8 +183,13 @@ class DistantViewTests(WorldCommandTest):
         ):
             self.assertNotIn(secret, output)
         self.assertEqual(box.db.items, {"bandage": 9, "water": 8})
-        self.assertTrue(any(s["role"] == "npc" for s in output.segments))
         self.assertTrue(any(s["role"] == "object" for s in output.segments))
+        self.char1.location = self.rooms["support_2f_e1"]
+        output = self.command("북 봐")
+        self.assertIn("탐사대 훈련관", output)
+        self.assertTrue(any(s["role"] == "npc" for s in output.segments))
+        for secret in ("배워", "배분", "재분배", "강타", "Rank", "대화"):
+            self.assertNotIn(secret, output)
 
     def test_preview_changes_no_profile_or_world_state_and_runs_no_local_hooks(self):
         target = self.rooms["trail"]

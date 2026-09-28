@@ -25,7 +25,7 @@ class ItemInteractionTests(WorldCommandTest):
         super().setUp()
         self.rooms = self.world_rooms()
         for player in (self.char1, self.char2):
-            player.location = self.rooms["dock"]
+            player.location = self.rooms["storage_room"]
             player.push_state = Mock()
         for module in ("enemies", "explorers", "loot"):
             self.enterContext(patch(f"typeclasses.{module}.delay"))
@@ -72,6 +72,7 @@ class ItemInteractionTests(WorldCommandTest):
         self.assertEqual(room_loot(self.char1.location, False), [])
 
     def test_give_single_all_and_invalid_recipients_do_not_change_owners(self):
+        self.char1.location = self.char2.location = self.rooms["dock"]
         self.command(f"{self.char2.key}에게 붕대 줘")
         self.assertEqual(
             (
@@ -135,6 +136,7 @@ class ItemInteractionTests(WorldCommandTest):
         self.assertNotIn("jungle_cell", self.char1.profile()["inventory"])
 
     def test_food_shop_actions_and_failure_immutability(self):
+        self.char1.location = self.rooms["dock"]
         self.char1.change(lambda p: p.update(hp=20, credits=50))
         for identity, action in (("field_ration", "먹어"), ("water", "마셔")):
             name = ITEMS[identity]["name"]

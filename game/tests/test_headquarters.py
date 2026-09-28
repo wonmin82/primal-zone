@@ -219,13 +219,14 @@ class HeadquartersTests(GameCommandTest):
         self.char1.location = self.rooms["support_1f_c"]
         self.char1.execute_cmd("귀환")
         self.assertEqual(self.char1.zone, "dock")
-        for key in ("commander", "instructor", "personal_locker", "shared_container"):
-            self.assertEqual(search_tag(key, category="primal_interactable")[0].location, self.rooms["dock"])
-        self.assertTrue(instructor_for(self.char1).available(self.char1))
+        self.assertEqual(search_tag("commander", category="primal_interactable")[0].location, self.rooms["dock"])
+        for key in ("instructor", "personal_locker", "shared_container"):
+            self.assertNotEqual(search_tag(key, category="primal_interactable")[0].location, self.rooms["dock"])
+        self.assertIsNone(instructor_for(self.char1))
         self.char1.execute_cmd("붕대 구매")
         self.assertEqual(self.char1.profile()["inventory"]["bandage"], 4)
         self.char1.execute_cmd("개인 보관함에 붕대 넣어")
-        self.assertEqual(self.char1.profile()["storage"]["bandage"], 1)
+        self.assertEqual(self.char1.profile()["storage"], {})
         self.char1.change(lambda profile: profile.update(hp=1))
         self.char1.execute_cmd("휴식")
         self.assertEqual(self.char1.profile()["hp"], 60)
@@ -238,4 +239,5 @@ class HeadquartersTests(GameCommandTest):
         enemy.enemy_tick(now=102.5, rng=Random(1))
         self.assertEqual(self.char1.location, self.rooms["dock"])
         for zone in HQ_ROOMS:
-            self.assertEqual(action_objects(self.rooms[zone]), [])
+            expected = [key for key, definition in INTERACTABLES.items() if definition["room"] == zone]
+            self.assertEqual(len(action_objects(self.rooms[zone])), len(expected))

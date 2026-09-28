@@ -31,7 +31,7 @@
 
 Room의 local/distant 표시 경로는 정적 설명 다음에 폐쇄 문구를 넣는다. 지도는 방문한 실제 Room의 방향 목록에 폐쇄 방향을 표시하며 1층 중앙은 `북: 본부 중앙홀`, `남: 폐쇄`다. 방향도·웹 이동 버튼·`pz_state.exits`는 실제 출구만 사용하며 1층 중앙은 서·동·북만 제공한다. 폐쇄 방향을 지도 노드나 동작 버튼으로 만들지 않는다. 기능 없는 시설에는 NPC·보관함·가짜 action hint를 추가하지 않는다.
 
-새 캐릭터는 기존 최초 puppet의 비월드 위치 fallback에서 출정 대기실로 배치되고 새 profile의 `visited`도 대기실에서 시작한다. 재접속 시 유효한 저장 위치와 기존 방문 기록을 보존한다. `home`은 계속 부두이며 귀환·패배 목적지, 기존 서비스 위치·거래·훈련·보관 방식은 변경하지 않는다. bootstrap은 기존 stable tag로 Room/실제 Exit를 재사용·갱신하며 개인 기록을 초기화하지 않는다. 이전 본부 배치의 중앙홀 동쪽·1층 중앙 남쪽 관리 Exit는 같은 목적지를 유지하며 새 남쪽·북쪽 stable tag와 alias로 갱신한다. 이미 새 출구가 있다면 해당 옛 관리 Exit만 제거한다. integrity는 목적지·정반대 방향의 양방향 연결·폐쇄 문구/충돌·본부 고정 배치·시설의 유일 진입·Region membership을 검사한다.
+새 캐릭터는 기존 최초 puppet의 비월드 위치 fallback에서 출정 대기실로 배치되고 새 profile의 `visited`도 대기실에서 시작한다. 재접속 시 유효한 저장 위치와 기존 방문 기록을 보존한다. `home`과 귀환·패배 목적지, 상점·휴식은 계속 부두다. 보관·훈련 객체는 아래 3단계 배치를 따른다. bootstrap은 기존 stable tag로 Room/실제 Exit를 재사용·갱신하며 개인 기록을 초기화하지 않는다. 이전 본부 배치의 중앙홀 동쪽·1층 중앙 남쪽 관리 Exit는 같은 목적지를 유지하며 새 남쪽·북쪽 stable tag와 alias로 갱신한다. 이미 새 출구가 있다면 해당 옛 관리 Exit만 제거한다. integrity는 목적지·정반대 방향의 양방향 연결·폐쇄 문구/충돌·본부 고정 배치·시설의 유일 진입·Region membership을 검사한다.
 
 ## 본부 2단계: 공용 승강기
 
@@ -45,7 +45,15 @@ Room의 local/distant 표시 경로는 정적 설명 다음에 폐쇄 문구를 
 
 Room 본문은 기존 `world.text` semantic 조각으로 호출 방법 또는 현재 층·가능한 명령을 표시한다. `pz_state.elevator`는 서버가 결정한 `inside`, 내부의 `current_stop/current_floor`, `actions[{label, command}]`를 제공하며 이용 불가능한 곳에서는 null이다. 클라이언트는 이 값을 주변 행동에 렌더링하고 같은 텍스트 명령을 보낸다. zone ID 분기나 별도 웹 이동 API는 없다. 지도는 방문한 승강기·상층·옥상을 기존 Room 목록에 표시하며 가짜 방향 연결을 추가하지 않는다. 순수 검사는 cardinal graph와 stop을 포함한 transport reachability를 따로 확인한다.
 
-Integrity는 승강기 Room·headquarters 소속, default·정류 층 ID/label/목적지의 유효성·중복, 정확히 세 중앙 복도와 옥상인 정류 구성, 가짜 방향 출구 금지와 기존 HQ reverse/blocked 검증을 함께 수행한다. 귀환·패배는 계속 dock이며 의료·휴식·보관·훈련·상점과 경제 이전은 후속 단계다.
+Integrity는 승강기 Room·headquarters 소속, default·정류 층 ID/label/목적지의 유효성·중복, 정확히 세 중앙 복도와 옥상인 정류 구성, 가짜 방향 출구 금지와 기존 HQ reverse/blocked 검증을 함께 수행한다. 귀환·패배는 계속 dock이며 의료·휴식·상점과 경제 개편은 후속 단계다.
+
+## 본부 3단계: 보관·훈련 서비스 이전
+
+`INTERACTABLES`의 기존 `shared_container`와 `personal_locker`는 `storage_room`, `instructor`는 `training_room`에 배치한다. 1층 중앙에서 서·북으로 보관실, 승강기로 2층에 내려 동·북으로 훈련실에 도착한다. 시설 문은 기존 북/남 양방향 출구를 그대로 사용하며 승강기 코드는 변경하지 않는다. 부두에는 윤대장·상점·휴식과 기존 귀환·패배 목적지가 남는다.
+
+서비스는 Room 이름이 아니라 실제 world object를 따른다. 보관 명령은 기존 `room_objects`와 Container 대상 선택·가시성·이전 규칙을 사용한다. 훈련 명령도 기존 `resolve_action`으로 Instructor에 위임하며 현재 방의 safe 속성·비전투 상태·Observation/view 정책을 검사한다. `instructor_for`는 같은 관찰 가능한 객체 풀과 `Instructor.available`을 사용하고, 웹의 `training_available`은 그 결과에서 파생된다. 클라이언트가 시설 Room ID로 활성 여부를 판단하지 않는다. 원거리 표시는 존재만 보여 주고 contents·개인 보관·훈련 행동과 성장 상태를 노출하지 않는다.
+
+bootstrap은 stable `primal_interactable` tag로 기존 객체를 찾아 DB ID를 유지한 채 위치·이름·alias 목록을 갱신한다. 다중 alias도 목록으로 전달해 각 이름을 보존한다. 공용 `db.items`와 각 탐사자의 `profile.storage`, 장비·성장·방문 기록에는 쓰지 않으며 profile migration도 없다. 반복 실행은 객체를 중복 생성하지 않는다. integrity는 세 서비스의 본부 배치를 검사하며 실제 사용 권한은 이 정적 배치 검사와 독립적이다.
 
 ## 공통 대상 선택
 
@@ -103,9 +111,9 @@ DEFAULT는 구조적으로 행동을 지원하는 첫 대상을 선택한다. IN
 
 강타 피해 배율은 Rank 1/2/3에서 1.8/2.0/2.2이고 재사용 대기는 7.5초다. 방어는 적 피해를 `2 + Rank`로 정수 나눗셈한 뒤 방어 숙련 보정을 뺀다. 붕대 회복은 `35 + 지혜 투자×2 + (Rank-1)×5 + 응급처치 숙련 Rank//2`이며 실제 부족한 HP까지만 회복한다. 전투 중 회복은 여전히 기본 공격을 대체한다. Skill은 기존 두 타이머와 전투 상태 머신 위에 수치 계층만 더한다.
 
-## 부두 훈련관과 재훈련
+## 지원동 훈련관과 재훈련
 
-부두의 영속 NPC **탐사대 훈련관**은 기존 전투 기록을 분석하고 신체·전술 훈련 계획을 다시 짠다. `힘 1 배분`, `강타 배워`, `특성 재분배`, `기술 재분배`, `전체 재훈련`을 제공한다. 같은 방의 교관, 안전한 부두, combat_target이 없는 상태를 서버에서 검사한다. 웹 버튼도 같은 텍스트 명령만 보낸다.
+지원동 2층 훈련실의 영속 NPC **탐사대 훈련관**은 기존 전투 기록을 분석하고 신체·전술 훈련 계획을 다시 짠다. `힘 1 배분`, `강타 배워`, `특성 재분배`, `기술 재분배`, `전체 재훈련`을 제공한다. 현재 방의 관찰 가능한 실제 교관, 현재 Room 정의의 safe 속성, combat_target이 없는 상태를 서버에서 검사한다. 훈련관이 없거나 보이지 않으면 웹과 명령 모두 이용 불가이며, 다른 안전 Room으로 옮겨도 같은 정책을 따른다. 웹 버튼도 같은 텍스트 명령만 보낸다.
 
 현재 콘텐츠에서는 재훈련 비용을 항상 무료로 정했다. 특성 재분배는 allocated만 0으로, 기술 재분배는 무료 Rank 1로 되돌린다. 무료 Rank는 투자분에 포함되지 않으며 학습에 쓴 크레딧은 반환하지 않는다. 전체 재훈련은 복사본에서 두 풀을 동시에 계산하고 하나의 world_change/DB 트랜잭션으로 저장한다. 저장 실패 시 부분 상태가 남지 않는다.
 
@@ -254,7 +262,7 @@ Room `requires.message`는 이동 실패 안내, optional `requires.observe_mess
 
 `rules.move_item()`은 아이템의 명시적 `transferable` 정책, 보유 수량과 현재 equipment가 예약한 복사본 수를 검사한 뒤 source 차감·destination 증가·빈 스택 제거를 처리한다. 버려·줘·넣어·꺼내는 모두 이 규칙을 쓰며, `world.item_transfers.transfer()`가 기존 `world_change()`의 서버 잠금과 DB transaction 안에서 영속 소유자를 저장한다. 저장 실패 시 기존 DB/Evennia 캐시 rollback과 after_change 정책을 재사용한다. 마지막 공용 아이템의 두 요청도 같은 단일 서버에서 직렬 처리된다. 별도 거래/loot 권한 체계는 없다.
 
-공용 `Container.db.items`는 persistent shared storage다. `PersonalLocker`는 같은 world object를 보더라도 caller의 `profile.storage`만 읽고 쓴다. bootstrap은 정적 이름·위치만 동기화하며 contents를 초기화하지 않는다. 두 객체는 부두에 배치하고 기존 일회 조사 보급상자는 변경하지 않는다. 개인·공용 보관 용량과 nesting은 구현하지 않는다.
+공용 `Container.db.items`는 persistent shared storage다. `PersonalLocker`는 같은 world object를 보더라도 caller의 `profile.storage`만 읽고 쓴다. 두 객체는 지원동 1층 `storage_room`에 배치하며 bootstrap은 기존 DB 객체의 정적 이름·위치·alias만 동기화하고 contents를 초기화하지 않는다. 사용은 현재 Room의 실제 Container resolve를 따르며 Room ID gate를 두지 않는다. 기존 일회 조사 보급상자는 변경하지 않는다. 개인·공용 보관 용량과 nesting은 구현하지 않는다.
 
 밀림 신호전지는 `transferable=False`다. 다른 곳에 옮긴 뒤 수위 표식을 다시 조사하는 복제를 막기 위해 버려·줘·공용/개인 넣어 모두 차단한다. 회수부품과 보스 trophy는 반복 획득하거나 진행 flag로 판정하는 일반 물품이며 이동 가능하다. 직접 버린 물건과 corpse decay는 같은 DroppedLoot 생성 helper를 쓴다. 직접 버린 entry만 예약/배정 없이 protection_until=0으로 생성하고 기존 corpse 권한은 보존한다.
 
