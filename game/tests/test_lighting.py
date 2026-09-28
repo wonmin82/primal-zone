@@ -299,6 +299,44 @@ class LightingTests(EvenniaCommandTest):
             with self.subTest(light=light), patch.dict(ROOMS["office"], facility_lights=[light]):
                 self.assertTrue(any("시설 조명" in issue for issue in errors(INTERACTABLES)))
 
+    def test_facility_definitions_require_dict_and_strict_bool_defaults(self):
+        for default in (False, True):
+            with self.subTest(default=default), patch.dict(FACILITIES, test_power={"default": default}):
+                self.assertEqual(errors(INTERACTABLES), [])
+        for definition in ({"default": "off"}, {"default": 0}, {"default": 1}, {"default": None}, {}):
+            with self.subTest(definition=definition), patch.dict(FACILITIES, test_power=definition):
+                self.assertIn("test_power: 시설 기본 상태는 참/거짓이어야 합니다.", errors(INTERACTABLES))
+        for definition in (None, [], False):
+            with self.subTest(definition=definition), patch.dict(FACILITIES, test_power=definition):
+                self.assertIn("test_power: 시설 상태 정의가 유효하지 않습니다.", errors(INTERACTABLES))
+
+    def test_clear_dock_combines_target_and_guidance_even_if_target_is_hidden(self):
+        self.clear()
+        self.char1.location = self.rooms["dock"]
+        context = context_for(self.char1, observed_at=100)
+        self.assertEqual(room_hint(context), "윤대장 대화 · 상점 · 휴식")
+        commander = next(obj for obj in context.room.contents if obj.tags.has("commander", category="primal_interactable"))
+        commander.locks.add("view:false()")
+        self.assertEqual(room_hint(context), "상점 · 휴식")
+        self.assertNotIn("윤대장", str(multiplayer_state(self.char1, 100)))
+
+    def test_hint_declaration_order_is_preserved_for_interleaved_text_and_targets(self):
+        self.clear()
+        self.char1.location = self.rooms["wreck"]
+        hints = [
+            {"text": "장비 확인"},
+            {"target": "emergency_light_cache", "action": "조사"},
+            {"text": "체력 확인"},
+            {"target": "supply_cache", "action": "조사"},
+        ]
+        with patch.dict(ROOMS["wreck"], hints=hints):
+            self.assertEqual(room_hint(context_for(self.char1, observed_at=100)),
+                             "장비 확인 · 비상장비함 조사 · 체력 확인 · 보급상자 조사")
+            self.state["clock"]["game_epoch"] = 22 * 3600
+            self.state["zones"]["island"]["weather"] = "storm"
+            self.script.db.environment = self.state
+            self.assertEqual(room_hint(context_for(self.char1, observed_at=100)), "비상장비함 조사")
+
     def test_target_hints_follow_the_same_perception_as_surroundings_and_selector(self):
         self.char1.location = self.rooms["wreck"]
         for condition, expected in (("poor", ["비상장비함"]), ("lit", ["비상장비함", "보급상자"]), ("clear", ["비상장비함", "보급상자"])):

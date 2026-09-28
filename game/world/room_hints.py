@@ -12,19 +12,21 @@ def render(context):
 
     room = context.room
     hints = ROOMS.get(room.db.zone_id if room else None, {}).get("hints", [])
-    targets, guidance = [], []
+    rendered = []
+    clear = context.snapshot.effective_visibility == "clear"
     objects = ordered(room.contents) if room else []
     for hint in hints:
         if "text" in hint:
-            guidance.append(hint["text"])
+            if clear:
+                rendered.append(hint["text"])
             continue
         identity, action = hint["target"], hint["action"]
         if any(obj.tags.has(identity, category="primal_interactable")
                and can_perceive(obj, context) and obj.supports_action(action)
                for obj in objects):
-            targets.append(f"{INTERACTABLES[identity]['name']} {action}")
-    if targets:
-        return " · ".join(targets)
-    if context.snapshot.effective_visibility != "clear":
+            rendered.append(f"{INTERACTABLES[identity]['name']} {action}")
+    if rendered:
+        return " · ".join(rendered)
+    if not clear:
         return LIMITED_GUIDANCE
-    return " · ".join(guidance)
+    return ""
