@@ -495,7 +495,7 @@ Set-Location -LiteralPath 'E:\Work\primal-zone'
 
 Quick는 3분 이내의 연결 검증이 목적이며 PR/main CI의 별도 `smoke` job에서 실행한다. 기존 required `test` job은 유지한다. Full은 30/45/120초 production wall-clock 의미를 검증하는 수동/closeout 경로이며 일반 CI에서는 실행하지 않는다. 기존 장시간 lifecycle 검증을 Full로 이동한 것이며 deterministic integration의 시간/rollback 검사를 없애지 않는다.
 
-성공하면 `PASS [quick/full]`과 전체 실행 시간을 출력하고 자체 프로세스·임시 디렉터리를 정리한다. 실패/KeyboardInterrupt에서도 own process를 종료하고 실패 DB·setup/server/portal/client 로그 경로를 출력한다. 실패 요약에 mode·scenario·player·revision·zone·HP/XP/Credits/combat 상태를 남긴다. CI artifact는 `.log`만 수집하며 credential/state가 담길 수 있는 DB는 업로드하지 않는다.
+성공하면 `PASS [quick/full]`과 전체 실행 시간을 출력하고 자체 프로세스·임시 디렉터리를 정리한다. 실패/KeyboardInterrupt에서도 own process를 종료하고 실패 DB·setup/server/portal/client 로그 경로를 출력한다. 실패 요약에 mode·scenario·player·revision·zone·HP/XP/Credits/combat 상태를 남긴다. CI 실패 단계는 `.log`의 마지막 80줄만 출력하며 credential/state가 담길 수 있는 DB는 출력/업로드하지 않는다. 저장소 Actions 허용 목록 때문에 별도 artifact 업로드 action은 추가하지 않는다.
 
 공개 가입과 production signup throttle은 gameplay와 분리된 auth/registration 정책 검사다. Quick에서 fixture login/logout/relogin을 실제 검증하고, 가입·입력 검증은 기존 auth 통합/수동 절차를 따른다. 610초 정책 대기를 수행하는 공개 가입 system 검사는 필요 시 별도로 실행하며 Quick/Full의 선행 조건이 아니다. production signup 제한을 낮추거나 gameplay 실패를 가입 재시도로 숨기지 않는다.
 

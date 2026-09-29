@@ -175,9 +175,11 @@
 
 ### P0 격리형 live smoke 인프라 (2026-09-29)
 
+- [PR #20](https://github.com/wonmin82/primal-zone/pull/20)을 생성했다. 최초 구현 HEAD `981bd81feaae0587055263ed386e3933fc5e09fd`의 CI는 job 시작 전 startup_failure였다. 저장소 Actions 허용 목록이 checkout/setup-uv만 허용하여 선택적 upload-artifact action을 제거하고 기본 shell/Python failure log 출력으로 전환했다. Actions/branch protection을 변경하지 않았으며 gameplay 코드는 동일하다. 최신 HEAD의 test/smoke CI는 수정 push 후 직접 확인한다.
+
 - 시작 main: `e4977132206e9edc285a35773758ef989d4fb6dd`, PR #19 MERGED·main CI success를 직접 확인했다. 최신 origin/main에서 `codex/smoke-p0-isolation` 생성, 기존 unstaged/staged 변경 없음. 현재 HEAD/PR은 실제 Git 및 아래 원격 기록으로 확인한다.
 - P0 여섯 항목을 해결했다: 실행별 SQLite로 플레이 DB 오염 차단, fixture 인증으로 가입 throttle/610초 분리, Quick만 짧은 타이머, 공통 단계/Quick·Full 분리, 매 실행 새 DB/월드·계정·시설 상태로 재실행 격리, CI에 실제 Evennia/WS smoke job 추가. 기존 required `test` job/가입 throttle/production 타이머/테스트 인프라는 유지한다.
-- `settings_smoke` marker·SQLite engine·정확한 DB/작업 경로 guard를 fixture의 Django 초기화/migrate 전에 확인한다. `PRIMAL_DB_*`를 자식 환경에서 제거한다. `work/smoke/<mode>-<run-id>` 아래에 새 코드 복사본/SECRET_KEY/DB를 준비하고 정상 Account/Character API로 일반 계정을 만든다. Credentials는 런타임 메모리/자식 stdin만 사용한다. 성공 시 디렉터리 삭제, 실패 시 DB/로그 보존; CI artifact는 로그만 수집한다.
+- `settings_smoke` marker·SQLite engine·정확한 DB/작업 경로 guard를 fixture의 Django 초기화/migrate 전에 확인한다. `PRIMAL_DB_*`를 자식 환경에서 제거한다. `work/smoke/<mode>-<run-id>` 아래에 새 코드 복사본/SECRET_KEY/DB를 준비하고 정상 Account/Character API로 일반 계정을 만든다. Credentials는 런타임 메모리/자식 stdin만 사용한다. 성공 시 디렉터리 삭제, 실패 시 DB/로그 보존; CI 실패 단계는 로그 tail만 출력한다(DB 제외).
 - OS가 고른 loopback 포트 4개를 예약하고 actual foreground Portal/Server 두 Popen을 추적한다. HTTP+WS readiness polling과 scenario health monitor, finally의 own process/group 정리, marker/경로/종료 확인 뒤 cleanup을 구현했다. 외부 개발 서버의 launcher stop/reload/kill을 사용하지 않는다. 로그인은 실제 연결 안내 이후 인증하여 Portal 세션 등록 race를 피한다.
 - `world/timing.py` production SSOT: combat 2.5·corpse 30·respawn delay 15·loot protection 120·claim/participation/reset 각 15초. Quick: 0.25·1·1·2·2·2·2초. Full은 production 기본값. 실제 delay와 기존 WorldLifecycle 5초 sweep을 재사용하고 직접 미래 reconcile/mock timer를 쓰지 않는다.
 - 실제 공통 Flow: fixture 로그인/staging→본부/윤대장→파티 초대·수락→공동 처치/outsider claim 거절→시체의 순번 배정·파티 권한/outsider 회수 거절→actual corpse decay/ground→동일 spawn respawn→보호 만료/outsider 실제 회수→옥상 귀환/승강기 3층/무기상 Credits 구매→disconnect/relogin 상태 비교. 사냥은 1회, 구매 자금 100C/HP만 fixture로 준비하며 blade/시체는 미리 지급하지 않는다.

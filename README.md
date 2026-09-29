@@ -302,7 +302,7 @@ uv run python scripts/dev.py smoke-full
 
 `smoke`는 단축 타이머를 쓰는 Quick Live Smoke로 PR/main CI에서도 실행한다. `smoke-full`은 production 타이머로 시체 30초·적 재생성 약 45초·전리품 보호 120초를 실제로 확인하는 수동/closeout 검사다. 두 명령 모두 매 실행마다 `work/smoke/<mode>-<run-id>`에 새 SQLite DB와 일반 fixture 계정 3개를 만들고 독립 포트의 Evennia Portal/Server를 시작·종료한다. 플레이 DB와 사용자 PostgreSQL 설정은 사용하지 않는다.
 
-공개 가입 없이 fixture를 실제 인증하여 파티·공동 전투·점유·전리품 배정·시체/바닥 전리품·보호 만료·재생성·옥상/승강기/무기상 구매·재접속을 검증한다. 가입 throttle과 610초 대기는 gameplay의 선행 조건이 아니며 production 가입 제한은 그대로다. 성공 시 실행 디렉터리를 삭제하고, 실패 시 프로세스를 종료한 뒤 DB/로그 경로를 출력한다. CI 실패 artifact에는 로그만 보존한다. 공개 가입 정책은 별도 auth/registration 검사, 화면·IME와 전체 보스 진행은 별도 수동 검증 범위다. 상세 계층·타이밍·실행 기록은 [테스트 안내](docs/playtest.md#격리형-실제-서버-검사)를 따른다.
+공개 가입 없이 fixture를 실제 인증하여 파티·공동 전투·점유·전리품 배정·시체/바닥 전리품·보호 만료·재생성·옥상/승강기/무기상 구매·재접속을 검증한다. 가입 throttle과 610초 대기는 gameplay의 선행 조건이 아니며 production 가입 제한은 그대로다. 성공 시 실행 디렉터리를 삭제하고, 실패 시 프로세스를 종료한 뒤 DB/로그 경로를 출력한다. CI 실패 단계는 로그 tail만 출력한다(DB 제외). 저장소 Actions 허용 목록을 유지하여 artifact 업로드 action은 사용하지 않는다. 공개 가입 정책은 별도 auth/registration 검사, 화면·IME와 전체 보스 진행은 별도 수동 검증 범위다. 상세 계층·타이밍·실행 기록은 [테스트 안내](docs/playtest.md#격리형-실제-서버-검사)를 따른다.
 
 ## 기술과 데이터
 
