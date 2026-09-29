@@ -165,7 +165,7 @@ Live Full에서는 보관상자/개인 보관함에 넣기·꺼내기와 일부 
 
 ## Current Repository State
 
-현재 branch는 `codex/personal-command-shortcuts`, 시작 main은 `a748d284d42935ce42ca151cf9e8c36c6942b731`이다. PR #13~#21 MERGED이며 본부 계획은 closeout 완료다. 개인 줄임말/묶음 기능의 구현·검증·문서화와 별도 PR 생성이 현재 승인된 작업이고 해당 PR을 merge하지 않는다. 로컬/원격 최신 HEAD·CI는 작업 완료 기록과 실제 GitHub를 대조한다.
+현재 branch는 `codex/personal-command-shortcuts`, 시작 main은 `a748d284d42935ce42ca151cf9e8c36c6942b731`이다. PR #13~#21 MERGED이며 본부 계획은 closeout 완료다. 개인 줄임말/묶음 기능의 구현·검증·문서화를 완료하고 [PR #22](https://github.com/wonmin82/primal-zone/pull/22)을 OPEN·비Draft로 생성했다. 구현 커밋은 `ce3dfe8fad5ce2f91d99f927c40cf08d158bd952`다. PR 생성 뒤 이 문서 전용 커밋을 추가하며 실행 코드·테스트는 동일하므로 로컬 검사를 반복하지 않는다. 문서까지 포함한 최종 HEAD의 test/smoke CI는 push 후 확인해 PR Validation에 SHA와 실행 링크를 기록한다. 구현 HEAD의 CI를 최종 결과로 대신하지 않으며 PR을 merge하지 않는다.
 
 ### 7단계 PR 생성 직후 저장소 상태 (과거 기록)
 
@@ -282,7 +282,7 @@ Live Full에서는 보관상자/개인 보관함에 넣기·꺼내기와 일부 
 
 ## Partially Implemented / In Progress
 
-본부 1~7단계와 P0는 병합·closeout 완료다. 현재 개인 줄임말/묶음 기능의 구현·자동/Quick 검증·문서화를 완료했다. 이번 독립 기능 PR의 최신 HEAD CI·검토 상태는 GitHub와 아래 현재 저장소 기록을 대조하며 merge는 이번 승인 범위가 아니다. 과거 본부 PR OPEN 기록을 현재 상태로 해석하지 않는다.
+본부 1~7단계와 P0는 병합·closeout 완료다. 현재 개인 줄임말/묶음 기능의 구현·자동/Quick 검증·문서화를 완료하고 PR #22를 생성했다. 최신 HEAD CI·검토 상태는 GitHub와 Current Repository State를 대조하며 merge는 이번 승인 범위가 아니다. 과거 본부 PR OPEN 기록을 현재 상태로 해석하지 않는다.
 
 ## Validation
 
