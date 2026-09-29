@@ -142,7 +142,7 @@ class LightingRulesTests(TestCase):
         old["storage"] = {"scrap": 7}
         before = deepcopy(old)
         migrated = rules.migrate_profile(old)
-        self.assertEqual(migrated["version"], 6)
+        self.assertEqual(migrated["version"], rules.PROFILE_VERSION)
         self.assertEqual(migrated["light_sources"], {})
         self.assertEqual({key: value for key, value in migrated.items() if key not in ("version", "light_sources")},
                          {key: value for key, value in old.items() if key != "version"})

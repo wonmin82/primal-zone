@@ -187,6 +187,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         self.push_state()
 
     def at_post_unpuppet(self, account=None, session=None, **kwargs):
+        self.ndb.shortcut_delete_all_request = None
         if not self.sessions.count():
             self.reconcile_lights(time(), turn_off=True)
             self.leave_combat()
@@ -204,6 +205,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
                     after_change(lambda: self.msg("광원의 전원이 다 되어 빛이 꺼졌다."))
 
     def at_server_shutdown(self):
+        self.ndb.shortcut_delete_all_request = None
         self.reconcile_lights(time(), turn_off=True)
         super().at_server_shutdown()
 

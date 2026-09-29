@@ -20,6 +20,20 @@ def cmdparser(raw_string, cmdset, caller, match_index=None, session=None, **kwar
             return engine
         text = SHORTCUTS[text]
 
+    # 줄임말 설정만 명시적인 전치형이다. 채팅 내용·기존 후치형 명령은 그대로 둔다.
+    prefix_parts = text.split(None, 1)
+    prefix, remainder = prefix_parts[0], prefix_parts[1] if len(prefix_parts) > 1 else ""
+    settings_commands = [cmd for cmd in game_commands
+                         if cmd.input_style == "prefix" and prefix.lower() in (cmd.key, *cmd.aliases)]
+    help_names = {name for cmd in game_commands if cmd.key == "도움말" for name in (cmd.key, *cmd.aliases)}
+    if settings_commands and remainder not in help_names:
+        engine = [match for match in default_parser(text, cmdset, caller, match_index, session, **kwargs)
+                  if not getattr(match[2], "input_style", None)]
+        if engine:
+            return engine
+        return [(prefix, remainder.strip(), cmd, len(prefix), len(prefix) / len(text), prefix)
+                for cmd in settings_commands if cmd.access(caller, "cmd", session=session)]
+
     # 작은따옴표 이후에는 행동 이름도 모두 대화 내용이다.
     quoted = text.startswith("'")
     parts = text.rsplit(None, 1)
@@ -47,4 +61,15 @@ def cmdparser(raw_string, cmdset, caller, match_index=None, session=None, **kwar
             return matches[match_index - 1 : match_index] if match_index > 0 else []
         return matches
 
+    # 정상 명령/lock 우선. 개인 설정 조회는 read-only이며 입력 전체가 이름일 때만 확장한다.
+    from django.conf import settings
+
+    known = {normalized for name in cmdset.get_all_cmd_keys_and_aliases()
+             for normalized in (name.casefold(), name.casefold().lstrip(settings.CMD_IGNORE_PREFIXES))}
+    snapshot = getattr(caller, "profile_snapshot", None)
+    if not quoted and text.casefold() not in known and callable(snapshot):
+        if text.casefold() in snapshot().get("command_shortcuts", {}):
+            from commands.command_shortcuts import PersonalShortcut
+
+            return [(text, text.casefold(), PersonalShortcut(), len(text), 1.0, text)]
     return []

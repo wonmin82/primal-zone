@@ -13,6 +13,7 @@ from commands.character import (
     Weather,
 )
 from commands.combat import Attack, Flee, Guard, Heal, Heavy
+from commands.command_shortcuts import Sequence, Shortcuts
 from commands.inventory import Buy, Equip, Equipment, Inventory, Shop, Take, Wield
 from commands.items import (
     Drink,
@@ -62,6 +63,8 @@ COMMANDS = [
     Look,
     Weather,
     Help,
+    Sequence,
+    Shortcuts,
     Status,
     Inventory,
     Wield,

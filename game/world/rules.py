@@ -22,7 +22,7 @@ from world.progression import (
 from world.quests import progress_defaults
 
 MAX_LEVEL = 10
-PROFILE_VERSION = 6
+PROFILE_VERSION = 7
 DEFEAT_RECOVERY_HP = 1
 
 
@@ -40,6 +40,7 @@ def new_profile():
         "inventory": {"machete": 1, "vest": 1, "bandage": 3},
         "equipment": {"weapon": "machete", "armor": "vest"},
         "storage": {},
+        "command_shortcuts": {},
         "light_sources": {},
         "kills": 0,
         "quests": progress_defaults(),
@@ -422,6 +423,7 @@ def migrate_profile(profile):
     if version < PROFILE_VERSION:
         result.setdefault("storage", {})
         result.setdefault("light_sources", {})
+        result.setdefault("command_shortcuts", {})
         result["version"] = PROFILE_VERSION
     return result
 
