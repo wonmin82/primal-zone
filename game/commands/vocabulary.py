@@ -1,7 +1,5 @@
 """예약 어휘와 저장된 명령의 v8 변환. DB와 Evennia에 의존하지 않는다."""
 
-from world.content.directions import DIRECTION_SHORTCUTS
-
 FUTURE_RESERVED_COMMAND_NAMES = frozenset({"치료", "heal"})
 NEW_RESERVED_NAMES = frozenset({"소지품", "소", "ㅂㄷ", "ㄴㄷ", "ㄴㅅ", "ㅂㅅ", "상품", "도망", "응급처치", "진료", "내려", "단축어", "firstaid", "가진거"}) | FUTURE_RESERVED_COMMAND_NAMES
 
@@ -13,8 +11,11 @@ LEGACY_COMMANDS = {
     "회복": "응급처치", "응급치료": "응급처치", "heal": "응급처치", "붕대": "응급처치",
     "치료": "진료", "treat": "진료", "내리기": "내려",
 }
-LEGACY_GLOBALS = {"상": "상태", "능": "능력", "기": "기술", "장": "장비",
-                  **{key: value for key, value in DIRECTION_SHORTCUTS.items() if len(key) == 1}}
+# v7 저장 데이터를 해석하는 과거 계약이다. 현재 플레이의 방향 단축어 SSOT와 독립적으로 유지한다.
+V7_GLOBAL_SHORTCUTS = {
+    "ㅂ": "북", "ㄴ": "남", "ㄷ": "동", "ㅅ": "서",
+    "상": "상태", "능": "능력", "기": "기술", "장": "장비",
+}
 
 
 def migrate_shortcuts(shortcuts):
@@ -43,8 +44,8 @@ def migrate_shortcuts(shortcuts):
             return renamed[stripped]
         if stripped.startswith("'"):
             return value
-        if stripped.casefold() in LEGACY_GLOBALS:
-            return LEGACY_GLOBALS[stripped.casefold()]
+        if stripped.casefold() in V7_GLOBAL_SHORTCUTS:
+            return V7_GLOBAL_SHORTCUTS[stripped.casefold()]
         if stripped.casefold() in LEGACY_COMMANDS:
             return LEGACY_COMMANDS[stripped.casefold()]
         parts = stripped.rsplit(None, 1)

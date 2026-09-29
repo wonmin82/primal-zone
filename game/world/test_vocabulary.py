@@ -5,13 +5,23 @@ from unittest import TestCase
 
 from commands.aliases import SHORTCUTS
 from commands.shortcuts import shortcut_name
-from commands.vocabulary import migrate_shortcuts
+from commands.vocabulary import V7_GLOBAL_SHORTCUTS, migrate_shortcuts
 
 from world import rules
 from world.content.directions import DIRECTION_SHORTCUTS, DIRECTIONS
 
 
 class VocabularyTests(TestCase):
+    def test_v7_global_shortcuts_are_fixed_historical_input(self):
+        historical = {
+            "ㅂ": "북", "ㄴ": "남", "ㄷ": "동", "ㅅ": "서",
+            "상": "상태", "능": "능력", "기": "기술", "장": "장비",
+        }
+        self.assertEqual(V7_GLOBAL_SHORTCUTS, historical)
+        old = {"기록": [*historical, "가", "가방"]}
+        self.assertEqual(migrate_shortcuts(old)["기록"], [*historical.values(), "소지품", "소지품"])
+        self.assertEqual(old["기록"], [*historical, "가", "가방"])
+
     def test_global_shortcuts_follow_direction_ssot_and_canonical_inventory(self):
         self.assertEqual(len(DIRECTION_SHORTCUTS), 8)
         self.assertEqual(len(set(data["shortcut"] for data in DIRECTIONS.values())), 8)
