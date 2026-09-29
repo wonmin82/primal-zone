@@ -456,30 +456,50 @@ Set-Location -LiteralPath 'E:\Work\primal-zone'
 
 최종 subTest 전달 검사 추가 전 직렬 전체는 통합 204개·251.349초, 4개 프로세스 전체는 204개·99.704초로 통과했습니다. 관련 역순 병렬 49개도 통과했고 최종 오류 전달 보완은 관련 직렬 검사 2개와 최종 전체 병렬로 확인했습니다. 실행 편차와 기준 차이를 고려하며 최신 직렬 전체를 205개 성공으로 표현하지 않습니다. 이전 표준 실행의 통합 199개·1153.144초는 과거 비교 기록입니다. 이 로컬 검증 시점에는 푸시 전이므로 새 구성의 CI 시간·성공은 미검증이었습니다. 최신 PR HEAD의 원격 CI는 PR Validation에서 별도로 확인합니다. 게임/UI 변경이 없어 브라우저와 smoke는 실행하지 않았습니다.
 
-### 실행 중인 서버 자동 검사
+### 격리형 실제 서버 검사
 
-먼저 게임 서버를 시작한 뒤 실행합니다.
+개발 서버를 실행할 필요가 없다. 저장소 루트에서 실행한다.
 
 ```powershell
-Set-Location -LiteralPath 'E:\Work\primal-zone'
-.\.venv\Scripts\python.exe scripts/smoke.py
+.\.venv\Scripts\python.exe scripts/dev.py smoke
+.\.venv\Scripts\python.exe scripts/dev.py smoke-full
 ```
 
-이 검사는 WebSocket으로 실제 서버에 접속하여 다음 흐름을 확인합니다.
+`smoke`는 Quick Live Smoke이고 `smoke-full`은 Full Gameplay E2E다. 둘 다 매 실행마다 `work/smoke/<mode>-<run-id>`에 코드 복사본·새 SQLite DB·일반 fixture 계정 3개를 준비하고 migrate→bootstrap→fixture→실제 Portal/Server 시작→HTTP/WebSocket readiness→시나리오→종료를 자동 처리한다. 외부 서버의 stop/reload/kill을 호출하지 않는다. OS가 선택한 서로 다른 loopback 포트 4개를 setup 동안 예약하고 시작 때 해제한다. 경합으로 bind가 실패하면 해당 실행만 실패한다.
 
-1. 한국어 이름의 일반 테스트 계정 가입과 초기 상태 수신
-2. 이전 문법 거부, `내용 말`·`'내용` 채팅과 의도하지 않은 교전 방지
-3. 파티 초대·수락, 공동 사냥 1회와 솔로 사냥 5회, 점유 거부·참여 보상·시체와 순번 회수
-4. 사냥 사이 옥상 귀환→승강기 2층→의무실 휴식→승강기 1층→부두→초지, 구매 시 옥상 귀환→승강기 3층→동·북 무기점, 강철마체테 확보·무장 후 남·서→승강기 1층→북·서 부두→북 초지와 관리동 이동
-5. 정비기록 조사 후 접속 종료·재접속과 진행 기록 유지
+`settings_smoke`의 marker, 작업 디렉터리, SQLite engine, 정확한 DB 경로를 설정 로드와 fixture 초기화 전에 확인한다. 사용자 `PRIMAL_DB_*`는 자식 환경에서 제외되며 PostgreSQL에 접속하지 않는다. 일반 `game/server/evennia.db3`는 읽기 전용 SHA256·mtime_ns·size 비교만 한다. fixture는 정상 Account/Character API로 생성하며 공개 가입을 호출하지 않는다. 무작위 비밀번호는 메모리/자식 stdin에서만 전달하고 로그에 출력하지 않는다. production 새 캐릭터 기본값·가입 throttle은 변경하지 않는다.
 
-진행 단계별로 `PASS:`가 출력되고 마지막에 **`SMOKE OK`**가 나오면 통과입니다.
-시체 소멸·바닥 전리품 보호·보호 만료 후 외부 회수와 재생성도 확인합니다. 실제 전투와 45초 재생성·120초 보호 기한을 기다리므로 수 분이 걸립니다. 전체 보스 임무와 실제 OS IME 조합은 이 검사에 포함되지 않습니다.
-실행할 때마다 일반 테스트 계정 3개가 로컬 플레이 DB에 남고, 비밀번호는 출력하거나 파일로 저장하지 않습니다.
-기본 가입 제한(600초당 2개)을 유지하기 위해 세 번째 가입 전에 610초 기다립니다. 앞선 실행의 제한에 걸리면 610초 뒤 한 번 재시도합니다. 따라서 약 13~25분 걸릴 수 있으며, 서버의 가입 제한을 별도로 변경했다면 더 긴 대기가 필요할 수 있습니다.
+실제 서버/WebSocket으로 다음 단계를 확인한다.
 
-이 검사는 브라우저의 화면 배치·버튼·한글 입력 동작, 전체 보스 임무, 두 사람 채팅까지 검증하지 않습니다.
-이 항목들은 위의 수동 테스트로 확인합니다.
+1. fixture 로그인과 출정 대기실, 기본 파티/전투 없음
+2. 중앙홀→부두, 윤대장 임무 수락, A/B 파티 초대·수락
+3. 같은 적에 공동 참여, outsider C의 점유 공격 거절, 양쪽 경험치/Credits 보상
+4. 실제 시체 생성, 회수부품의 순번 배정과 파티 공동 회수 권한, outsider 회수 거절
+5. 그 시체를 회수하지 않고 actual delay callback으로 바닥 전리품 전환, 원래 보호 유지
+6. 같은 spawn의 최대 HP 재생성, 보호 만료 뒤 outsider 실제 회수
+7. 귀환→옥상→공용 승강기 3층→동·북 무기점, 무기상 메뉴와 Credits 구매
+8. disconnect/logout→fixture 재인증, name/zone/hp/xp/credits/inventory/quest 비교
+
+사냥은 1회이며 구매 자금 100C·충분한 HP만 시작 fixture에 지급한다. blade·시체·전리품 결과를 미리 만들지 않는다. mock delay나 미래 시각의 직접 reconcile을 사용하지 않는다. 접속 인증은 WebSocket handshake 다음 실제 서버 연결 안내를 기다려 Portal→Server 등록 race를 피한다. timeout은 인증/상태/전투/lifecycle/readiness/setup/종료별로 구분한다. Full은 monotonic 관찰 시각으로 조기 만료와 Quick 타이머 누출도 검사한다(시간 허용 오차: lifecycle 하한 1.5초·상한 10초, 첫 combat round 하한 0.5초).
+
+| 항목 | Production / Full | Quick |
+| --- | ---: | ---: |
+| combat interval | 2.5초 | 0.25초 |
+| corpse TTL | 30초 | 1초 |
+| respawn delay | 15초 | 1초 |
+| enemy total respawn | 약 45초 | 약 2초 |
+| loot protection | 120초 | 2초 |
+| claim timeout | 15초 | 2초 |
+| participation timeout | 15초 | 2초 |
+| enemy reset | 15초 | 2초 |
+
+Quick는 3분 이내의 연결 검증이 목적이며 PR/main CI의 별도 `smoke` job에서 실행한다. 기존 required `test` job은 유지한다. Full은 30/45/120초 production wall-clock 의미를 검증하는 수동/closeout 경로이며 일반 CI에서는 실행하지 않는다. 기존 장시간 lifecycle 검증을 Full로 이동한 것이며 deterministic integration의 시간/rollback 검사를 없애지 않는다.
+
+성공하면 `PASS [quick/full]`과 전체 실행 시간을 출력하고 자체 프로세스·임시 디렉터리를 정리한다. 실패/KeyboardInterrupt에서도 own process를 종료하고 실패 DB·setup/server/portal/client 로그 경로를 출력한다. 실패 요약에 mode·scenario·player·revision·zone·HP/XP/Credits/combat 상태를 남긴다. CI 실패 단계는 `.log`의 마지막 80줄만 출력하며 credential/state가 담길 수 있는 DB는 출력/업로드하지 않는다. 저장소 Actions 허용 목록 때문에 별도 artifact 업로드 action은 추가하지 않는다.
+
+공개 가입과 production signup throttle은 gameplay와 분리된 auth/registration 정책 검사다. Quick에서 fixture login/logout/relogin을 실제 검증하고, 가입·입력 검증은 기존 auth 통합/수동 절차를 따른다. 610초 정책 대기를 수행하는 공개 가입 system 검사는 필요 시 별도로 실행하며 Quick/Full의 선행 조건이 아니다. production signup 제한을 낮추거나 gameplay 실패를 가입 재시도로 숨기지 않는다.
+
+브라우저 DOM 자동화·실제 서버 restart E2E·OS IME·전체 보스/진행 closeout은 이 smoke에 포함하지 않는다. 아래 단계별 과거 기록의 로컬 DB/610초/5회 사냥 설명은 당시 스크립트에 대한 기록이며 현재 실행 방법은 이 절을 따른다.
 
 ## 7. 막혔을 때 확인할 사항
 
@@ -781,3 +801,26 @@ Compact 최종 자동 검증은 PR #3의 `064e616` 이후 추가 커밋과 동�
 - 데스크톱의 document client/scroll 폭은 1234/1234px, 390px viewport에서는 375/375px였다. catalog와 구매 버튼에 가로 넘침 없이 줄바꿈이 적용됐다. 앱 JavaScript stack 오류는 관찰하지 않았고 Chrome의 비동기 listener 채널 종료 메시지 2건은 별도로 기록했다. 검증 탭·서버는 종료하고 viewport를 원복했으며 플레이 DB는 읽거나 변경하지 않았다.
 - 전체 smoke 미실행 — 일반 가입 rate limit의 610초 대기와 실제 반복 전투 때문에 변경된 무기점 구매/탐사 복귀 경로를 integration·별도 DB 브라우저·syntax 검사로 검증했다. production rate limit은 변경하지 않았다. 실제 OS IME, 이번 변경의 전체 서버 restart/reconnect, 운영 DB 적용과 전체 멀티플레이 수동 검증도 미실행이다. 기존 자동 회귀는 위 전체 suite에 포함되며 7단계 closeout은 별도 요청이다.
 - 구현 HEAD `117bc17beaf1c73417ecd150b2145997f2a551ef`의 [PR #19 Game checks](https://github.com/wonmin82/primal-zone/actions/runs/36518994902)는 success다. 원격 check와 pure 91개(0.045초)·integration 248개(99.501초), total 339개·runner 105.321초를 실제 로그로 확인했다. 이 PR/CI 기록은 문서 전용 후속 커밋에 포함하며 이후 최종 HEAD CI는 별도로 확인해 PR Validation에 반영한다. PR은 OPEN이며 병합하지 않는다.
+
+## P0 live smoke 실제 검증 기록 (2026-09-29)
+
+기준 main `e4977132206e9edc285a35773758ef989d4fb6dd`(PR #19 MERGED·main CI success), 브랜치 `codex/smoke-p0-isolation`에서 확인했다. 본부 7단계 closeout은 수행하지 않았다.
+
+| 실제 명령 | 결과 |
+| --- | --- |
+| `scripts/dev.py check` | 통과 |
+| `scripts/dev.py test` | pure 99개/2.030초, integration 250개/81.877초, total 349개, runner 91.526초, 실패/skip 없음 |
+| `scripts/dev.py smoke` 연속 #1 | 43.486초, auth/party/combat/corpse/lifecycle/protection/respawn/shop/persistence/cleanup 통과 |
+| `scripts/dev.py smoke` 즉시 연속 #2 | 43.960초, 새 DB/계정/포트로 같은 단계 통과 |
+| `scripts/dev.py smoke-full` | 168.024초, production 타이머 실제 실행 통과 |
+| `git diff --check` | 통과 |
+
+Full의 actual first combat round는 2.804초, 시체→ground 29.924초, 같은 적 재생성 44.879초, 전리품 보호 만료 121.373초다. 전리품 보호는 시체 decay 시각부터 다시 세지 않는다. Quick는 같은 actual scheduler를 짧은 settings로 실행했으며 Full에 그 값이 유입되지 않았다. 전체 시간은 새 DB migration/world/fixture/static/server 준비와 인증·시나리오·프로세스 종료·디렉터리 정리를 포함한다. 근거: Git 제외 `work/smoke-final-tests.log`, `work/smoke-final-quick-1.log`, `work/smoke-final-quick-2.log`, `work/smoke-final-full.log`.
+
+세 최종 live 실행 전후 일반 플레이 SQLite `game/server/evennia.db3`의 SHA256·mtime_ns·size가 모두 동일했다(733184 bytes). 각 실행의 성공 디렉터리와 own Portal/Server는 제거됐다. 개발 중 실패 실행은 별도 DB/로그를 보존하고 process를 종료한 뒤 새 환경에서 재실행했다. 자동 harness 검사도 주입된 실패 뒤 owned process 종료·다음 실행의 별도 디렉터리·잘못된 cleanup 경로 거절을 확인했다. 사용자 PostgreSQL에는 접속하지 않았다.
+
+기존 339개 자동 검사를 삭제/완화하지 않았고 timing/settings/guard/CLI/failure cleanup을 위한 pure 8개와 integration 2개를 추가했다. 소스의 공개 register·610초 sleep·5회 사냥을 제거하고 production 30/45/120초 검증은 Full로 이동했다. README/architecture/AGENTS/인계에 현재 구조를 반영했으며 이전 4~6단계의 긴 smoke 미실행 기록은 해당 시점의 사실로 보존한다.
+
+브라우저 DOM 자동화·실제 server restart E2E·OS IME·Windows CI·PostgreSQL CI·coverage·전체 boss/progression 검증과 공개 가입 610초 정책 검사는 이번 P0에서 미실행이다. JS/UI 변경이 없어 node 검사와 브라우저/정적 파일 수집을 추가하지 않았다(격리 서버 setup의 collectstatic은 수행). 일반 PR/main CI는 `test`와 Quick `smoke`만 실행하며 Full은 일반 CI에 포함하지 않는다. 최신 PR HEAD의 원격 결과는 PR Validation과 인계 원격 기록에 별도로 남긴다.
+
+[PR #20](https://github.com/wonmin82/primal-zone/pull/20)의 CI 설정 수정 HEAD `d85d83ece5d300342c7b1a30d1fe98c5dab01220`에서 [test](https://github.com/wonmin82/primal-zone/actions/runs/36526697395/job/109271210799)와 [smoke](https://github.com/wonmin82/primal-zone/actions/runs/36526697395/job/109271210590)가 모두 success다. 실제 Ubuntu 결과는 check 통과, pure 99개/0.728초, integration 250개/95.112초, total 349개, runner 101.100초, Quick 전체 19.001초다. 최초 CI의 job 시작 전 startup_failure는 선택적 upload-artifact가 저장소 허용 목록에 없어서 발생했으며, 보안 설정을 유지하고 shell/Python 로그 tail 출력으로 해결했다. DB는 출력/업로드하지 않는다. 이 문서 기록 이후 최종 HEAD의 두 CI도 별도로 확인해 PR Validation에 남긴다. 실행 코드가 동일하므로 기록 갱신만을 위해 로컬 전체 검사를 반복하지 않았다.

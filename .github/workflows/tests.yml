@@ -18,3 +18,23 @@ jobs:
       - run: uv sync --locked --python 3.13
       - run: uv run python scripts/dev.py check
       - run: uv run python scripts/dev.py test --parallel 2
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          enable-cache: true
+          prune-cache: true
+      - run: uv sync --locked --python 3.13
+      - run: uv run python scripts/dev.py smoke
+      - name: 실패 진단 로그 출력 (DB 제외)
+        if: failure()
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          for path in sorted(Path('work/smoke').glob('**/*.log')):
+              print(f'--- {path} (last 80 lines) ---')
+              print('\n'.join(path.read_text(encoding='utf-8', errors='replace').splitlines()[-80:]))
+          PY

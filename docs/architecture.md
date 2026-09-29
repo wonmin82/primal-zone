@@ -69,7 +69,7 @@ bootstrap은 stable `primal_interactable` tag로 기존 객체를 찾아 DB ID�
 
 서버 interactable allowlist에는 의료 `치료`/`휴식`만 추가한다. 같은 객체의 visible/safe/noncombat availability로 Web action과 target/action Room hint를 결정한다. 클라이언트는 서버 명령을 렌더링할 뿐 infirmary zone 특례가 없다. 부두의 휴식 버튼·hint는 제거했으며 현재는 6단계에서 상점 특례도 제거됐다. 원거리 관찰은 의료 서비스 행동을 노출하지 않는다.
 
-`scripts/smoke.py`의 반복 회복은 귀환→옥상→승강기 2층→의무실 침대→승강기 1층→부두→초지로, 구매는 현재 귀환→옥상→승강기 3층→무기점 후 1층→중앙홀→부두→초지로 이동한다. 이미 full HP이면 휴식을 요청하지 않는다. 가입 rate limit과 610초 대기는 변경하지 않는다.
+의료 동선과 회복 규칙은 통합/수동 검사로 확인한다. 실제 서버 gameplay smoke는 fixture 로그인과 공동 사냥 1회, 귀환→옥상→승강기 3층→무기상 구매·재접속을 확인한다. 공개 가입 rate limit은 그대로 유지하며 gameplay smoke와 분리한다. 시체/재생성/보호의 production 시간 의미는 Full Gameplay E2E가 맡는다.
 
 ## 본부 5단계: 단일 화폐와 회수 자원 정산
 
@@ -95,7 +95,7 @@ Credits는 유일한 구매 currency, scrap은 material/resource다. `profile.in
 
 모든 `ActionObject`가 `web_actions(caller, target, observed_at)` capability를 제공한다. 기본 allowlist는 대화/조사/수리/보기와 available 의료 행동을 보존한다. Container는 보기만, Instructor는 기존 대화와 별도 TRAINING UI를 유지한다. SettlementOfficer와 Shopkeeper만 필요한 동적 action을 override한다. `world.state`는 subclass를 구분하지 않고 capability만 호출한다. Shopkeeper는 available일 때 메뉴와 catalog별 targeted 구매의 완성된 label/command를 서버에서 만든다. client는 기존 렌더링을 사용하며 Room·가격·이름으로 구매를 추론하지 않는다.
 
-Integrity는 세 판매자 배치·catalog ID/행동, catalog 비어 있지 않음·상품 존재·양의 정수 가격·중복 금지·기존 14개 합집합을 검사한다. smoke 구매 helper는 옥상→승강기 3층→동·북 무기점, 구매 후 남·서→승강기 1층→북·서 부두→초지·관리동의 실제 동선을 사용한다. 7단계 전체 closeout은 별도 요청이다.
+Integrity는 세 판매자 배치·catalog ID/행동, catalog 비어 있지 않음·상품 존재·양의 정수 가격·중복 금지·기존 14개 합집합을 검사한다. smoke의 구매는 옥상→승강기 3층→동·북 무기점에서 실제 Credits 차감/장비 증가를 확인하고 해당 Room에서 재로그인 상태를 비교한다. 7단계 전체 closeout은 별도 요청이다.
 
 ## 공통 대상 선택
 
@@ -381,3 +381,22 @@ Room `hints`는 stable INTERACTABLES ID/action 또는 일반 text를 참조한�
 기존 버전에서 발전기 개인 복구를 마친 캐릭터도 공용 전력이 아직 꺼져 있으면 수리 명령으로 가동할 수 있다. 이때 부품·보상·개인 진행을 다시 변경하지 않으며, 이미 가동된 시설에는 중복 보상을 주지 않는다.
 
 웹은 environment와 observation을 분리하며 현재 시야와 손전등 상태를 표시한다. 가방의 켜기/끄기/확인은 서버 명령을 보내고 compatible 전원별 삽입 버튼은 실제 아이템 이름을 포함한다. 렌더링이나 시각 조회는 전원 소모를 저장하지 않는다.
+
+## 테스트 계층과 실제 서버 smoke
+
+| 계층 | 검증 책임 | 제외하는 책임 |
+| --- | --- | --- |
+| Pure | DB 없이 규칙·콘텐츠·타이밍 기본값·guard/CLI/harness 계약 | 실제 네트워크·scheduler |
+| Integration (`dev.py test`) | memory SQLite·빠른 해시·병렬 격리, 주입 시간/delay patch로 lifecycle·rollback·상태 경계 | production wall-clock·브라우저 |
+| Quick Live Smoke (`dev.py smoke`) | 실행별 SQLite·fixture 인증·실제 Evennia/WS/delay callback·공동 사냥/HQ/구매/재접속 연결 | production 지속 시간·공개 가입 정책 |
+| Full Gameplay E2E (`dev.py smoke-full`) | 동일 격리 infrastructure로 production combat 및 30/45/120초 실제 시간 | signup 610초·브라우저·전체 보스 |
+| Manual Browser | 표시·버튼/명령 동등성·반응형·실제 OS IME를 필요한 범위에서 확인 | 자동 통과로 IME를 대체하지 않음 |
+| Auth/Registration policy | 공개 가입·이름/암호·production throttle 정책 | gameplay smoke의 선행 조건으로 사용하지 않음 |
+
+`world/timing.py`가 production 2.5/30/15/120/15/15/15초 기본값을 갖고 `world.multiplayer`는 선택적인 `PRIMAL_*` settings를 읽는다. `settings_test`는 타이머를 줄이지 않는다. `server/conf/smoke_support.py`의 Quick 값은 0.25/1/1/2/2/2/2초이며 Full은 production 기본값을 그대로 쓴다. 기존 적·캐릭터·Corpse의 실제 `delay()` 및 WorldLifecycle의 5초 sweep을 재사용한다. fake Clock나 새 scheduler framework를 만들지 않았다.
+
+`scripts/smoke_harness.py`는 실행마다 새 작업 경로에 게임 코드/새 SECRET_KEY·SQLite를 준비하고 `smoke_setup.py`를 별도 프로세스에서 실행한다. DB 접근 전 marker·정확한 작업/DB 경로·SQLite engine을 검증한다. 사용자 PostgreSQL 환경은 제거한다. 정상 Evennia Account/Character API로 일반 fixture 계정을 만들고 기본 quest/파티/전투/시작 위치와 구매 자금/HP를 준비한다. 비밀번호는 runtime 메모리와 자식 stdin으로만 전달한다. 결과 장비/시체는 scenario의 실제 동작으로 생성한다.
+
+정상 초기 객체·static 준비를 마친 fixture DB에 초기 setup 완료를 기록해 첫 실행의 자동 재시작을 피한다. 실제 Twisted foreground Portal/Server를 각각 시작해 exit를 추적하고 loopback HTTP/WS readiness를 polling한다. scenario 중 health monitor가 server premature exit를 실패로 전파한다. 실패·interrupt·성공 모두 자체 Popen/process group만 종료하며 개발 서버 launcher stop/reload를 호출하지 않는다. 성공 시 자신이 생성한 marker 경로만 삭제하고 실패 시 진단 DB/로그를 남긴다. CI는 기존 `test`와 추가 `smoke` job을 실행하고 Full은 제외한다. 실패 단계는 로그 tail만 출력하며 DB는 출력/업로드하지 않는다.
+
+Quick/Full의 client·단계·predicate 대기를 공유한다. 공개 register/610초 sleep·5회 반복 사냥을 제거하고 auth/party/combat/corpse/lifecycle/protection/respawn/shop/persistence 단계별 결과를 출력한다. 시체 배정/파티 회수 권한을 읽고 그대로 남겨 그 시체의 ground 전환과 outsider 회수를 검증한다. Full은 실제 관찰 시각의 허용 오차를 적용해 지나치게 빠른 production 만료를 탐지한다. 일반 플레이 SQLite의 hash·mtime·size는 실행 전후 비교할 뿐 migrate/fixture/cleanup 대상이 아니다. 프로필 schema나 production 게임 밸런스는 바꾸지 않는다.

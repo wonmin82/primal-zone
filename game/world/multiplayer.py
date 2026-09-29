@@ -3,19 +3,23 @@
 from contextlib import contextmanager
 from threading import RLock, local
 
+from django.conf import settings
 from django.db import transaction
 from evennia.objects.models import ObjectDB
 from evennia.scripts.models import ScriptDB
 
+from world.timing import configured_timings
+
 PARTY_MAX_SIZE = 4
 PARTY_INVITE_TTL_SECONDS = 60
-CLAIM_TIMEOUT_SECONDS = 15
-PARTICIPATION_TIMEOUT_SECONDS = 15
-CORPSE_TTL_SECONDS = 30
-LOOT_PROTECTION_SECONDS = 120
-RESPAWN_DELAY_SECONDS = 15
-COMBAT_INTERVAL = 2.5
-ENEMY_RESET_SECONDS = 15
+_timing = configured_timings(settings)
+CLAIM_TIMEOUT_SECONDS = _timing["CLAIM_TIMEOUT_SECONDS"]
+PARTICIPATION_TIMEOUT_SECONDS = _timing["PARTICIPATION_TIMEOUT_SECONDS"]
+CORPSE_TTL_SECONDS = _timing["CORPSE_TTL_SECONDS"]
+LOOT_PROTECTION_SECONDS = _timing["LOOT_PROTECTION_SECONDS"]
+RESPAWN_DELAY_SECONDS = _timing["RESPAWN_DELAY_SECONDS"]
+COMBAT_INTERVAL = _timing["COMBAT_INTERVAL"]
+ENEMY_RESET_SECONDS = _timing["ENEMY_RESET_SECONDS"]
 
 _lock = RLock()
 _context = local()

@@ -1,59 +1,95 @@
-"""실행 중인 로컬 서버의 공유 사냥 검사. 일반 계정 3개를 남긴다.
+"""격리형 Quick Live Smoke / production-timing Full Gameplay E2E."""
 
-비밀번호는 메모리에서만 생성한다. 플레이 DB를 초기화하지 않는다.
-"""
-
+import argparse
 import asyncio
 import json
-import secrets
+import sys
+import traceback
+from dataclasses import dataclass
+from time import monotonic
 
+from smoke_harness import ROOT, Harness, fingerprint
 from websockets.asyncio.client import connect
+
+sys.path.insert(0, str(ROOT / "game"))
+from server.conf.smoke_support import smoke_timings  # noqa: E402
+
+AUTH_TIMEOUT = 15
+STATE_TIMEOUT = 10
+TIMING_TOLERANCE = 1.5
+
+
+@dataclass(frozen=True)
+class Timeouts:
+    combat: float
+    lifecycle: float
+
+    @classmethod
+    def for_mode(cls, mode):
+        timings = smoke_timings(mode)
+        return cls(combat=timings["COMBAT_INTERVAL"] * 20 + STATE_TIMEOUT,
+                   lifecycle=timings["LOOT_PROTECTION_SECONDS"] + STATE_TIMEOUT)
 
 
 class Client:
-    def __init__(self, name, password):
-        self.name, self.password = name, password
+    def __init__(self, name, password, url):
+        self.name, self.password, self.url = name, password, url
         self.socket = self.reader = self.state = None
         self.revision = 0
         self.changed = asyncio.Condition()
         self.messages = asyncio.Queue()
         self.error = None
+        self.closing = False
+        self.received = []
+        self.connected = asyncio.Event()
 
-    async def open(self, mode="register"):
-        self.state, self.error = None, None
-        self.socket = await connect("ws://127.0.0.1:4002", subprotocols=["v1.evennia.com"])
+    async def open(self):
+        self.state, self.error, self.closing = None, None, False
+        self.connected.clear()
+        self.socket = await connect(self.url, subprotocols=["v1.evennia.com"],
+                                    open_timeout=AUTH_TIMEOUT)
         self.reader = asyncio.create_task(self.receive())
-        await self.send(
-            "pz_auth", [{"mode": mode, "username": self.name, "password": self.password}]
-        )
-        return await self.until(lambda state: state["name"] == self.name)
+        # WebSocket handshake와 Portal→Server session 등록 완료는 서로 다르다.
+        # 실제 연결 안내를 받은 뒤 인증한다. 고정 sleep/인증 재시도는 하지 않는다.
+        async with asyncio.timeout(AUTH_TIMEOUT):
+            await self.connected.wait()
+        if self.error:
+            raise self.error
+        await self.send("pz_auth", [{"mode": "login", "username": self.name,
+                                    "password": self.password}])
+        return await self.until(lambda state: state["name"] == self.name, AUTH_TIMEOUT)
 
     async def receive(self):
         try:
             async for raw in self.socket:
                 kind, args, _ = json.loads(raw)
+                self.received = (self.received + [kind])[-10:]
                 async with self.changed:
                     if kind == "pz_auth" and not args[0]["ok"]:
-                        self.error = AssertionError(args[0]["message"])
+                        self.error = AssertionError("fixture login 실패: " + args[0]["message"])
                     elif kind == "pz_state":
                         self.state = args[0]
                         self.revision += 1
                     elif kind == "pz_log":
                         self.messages.put_nowait(
-                            "".join(part["text"] for part in args[0]["segments"])
-                        )
+                            "".join(part["text"] for part in args[0]["segments"]))
                     elif kind == "text":
                         self.messages.put_nowait(args[0])
+                        self.connected.set()
                     self.changed.notify_all()
         except Exception as error:
+            self.error = error
+        finally:
             async with self.changed:
-                self.error = error
+                if not self.closing and not self.error:
+                    self.error = ConnectionError("WebSocket이 조기에 종료되었습니다.")
+                self.connected.set()
                 self.changed.notify_all()
 
     async def send(self, kind, args):
         await self.socket.send(json.dumps([kind, args, {}], ensure_ascii=False))
 
-    async def until(self, predicate, timeout=30, after=-1):
+    async def until(self, predicate, timeout=STATE_TIMEOUT, after=-1):
         async with asyncio.timeout(timeout), self.changed:
             while not self.state or self.revision <= after or not predicate(self.state):
                 if self.error:
@@ -61,38 +97,27 @@ class Client:
                 await self.changed.wait()
             return self.state
 
-    async def act(self, text, predicate=lambda state: True, timeout=30):
+    async def act(self, text, predicate=lambda state: True, timeout=STATE_TIMEOUT):
         before = self.revision
         await self.send("text", [text])
         return await self.until(predicate, timeout, before)
 
-    async def expect_text(self, command, expected, timeout=20):
+    async def expect_text(self, command, expected):
         while not self.messages.empty():
             self.messages.get_nowait()
         await self.send("text", [command])
-        async with asyncio.timeout(timeout):
+        async with asyncio.timeout(STATE_TIMEOUT):
             while expected not in await self.messages.get():
                 pass
 
-    async def fight(self):
-        await self.until(
-            lambda state: any(
-                e["enemy_id"] == "scavenger" and e["can_attack"] for e in state["enemies"]
-            ),
-            timeout=65,
-        )
-        before_xp = self.state["xp"]
-        await self.act("어린청소룡 사냥", lambda state: state["combat_target"] is not None)
-        while self.state["combat_target"]:
-            turn = self.state["player_round"]
-            if self.state["heavy_ready"]:
-                await self.send("text", ["강타"])
-            await self.until(
-                lambda state: state["combat_target"] is None or state["player_round"] > turn
-            )
-        assert self.state["xp"] > before_xp
+    def summary(self):
+        return {"player": self.name, "revision": self.revision,
+                "received": self.received, "error": str(self.error) if self.error else None,
+                "state": {key: self.state.get(key) for key in
+                          ("zone", "hp", "xp", "credits", "combat_target")} if self.state else None}
 
     async def close(self):
+        self.closing = True
         if self.socket:
             await self.socket.close()
         if self.reader:
@@ -108,132 +133,172 @@ async def route(player, steps):
         await player.act(command, lambda state, zone=zone: state["zone"] == zone)
 
 
-async def return_to_weapon_shop(player):
-    await route(player, (("귀환", "support_roof"), ("승강기", "support_elevator")))
-    await player.act("3층", lambda state: state["elevator"]["current_stop"] == "3f")
-    await route(player, (("내리기", "support_3f_c"), ("동", "support_3f_e1"), ("북", "weapon_shop")))
+class Scenario:
+    def __init__(self, harness, log):
+        self.harness, self.log = harness, log
+        self.phase = "auth"
+        self.players = [Client(name, password, harness.ws_url)
+                        for name, password in harness.credentials]
+        self.timings = smoke_timings(harness.mode)
+        self.timeouts = Timeouts.for_mode(harness.mode)
 
+    def report(self, phase, result):
+        line = f"PASS [{phase}] {result}"
+        print(line, flush=True)
+        self.log.write(line + "\n")
+        self.log.flush()
 
-async def weapon_shop_to_dock(player):
-    await route(player, (("남", "support_3f_e1"), ("서", "support_3f_c"), ("승강기", "support_elevator")))
-    await player.act("1층", lambda state: state["elevator"]["current_stop"] == "1f")
-    await route(player, (("내리기", "support_1f_c"), ("북", "hq_concourse"), ("서", "dock")))
+    def elapsed(self, name, since, expected):
+        duration = monotonic() - since
+        if self.harness.mode == "full":
+            assert expected - TIMING_TOLERANCE <= duration <= expected + STATE_TIMEOUT, (
+                name, duration, expected)
+        self.report("timing", f"{name}: {duration:.3f}s (configured {expected}s)")
 
-
-async def recover_and_resume(player):
-    await route(player, (("귀환", "support_roof"), ("승강기", "support_elevator")))
-    await player.act("2층", lambda state: state["elevator"]["current_stop"] == "2f")
-    await route(player, (("내리기", "support_2f_c"), ("서", "support_2f_w1"), ("북", "infirmary")))
-    if player.state["hp"] < player.state["max_hp"]:
-        await player.act("침대 휴식", lambda state: state["hp"] == state["max_hp"])
-    await route(player, (("남", "support_2f_w1"), ("동", "support_2f_c"), ("승강기", "support_elevator")))
-    await player.act("1층", lambda state: state["elevator"]["current_stop"] == "1f")
-    await route(player, (("내리기", "support_1f_c"), ("북", "hq_concourse"), ("서", "dock"), ("북", "grass")))
-
-
-async def main():
-    suffix = secrets.token_hex(3)
-    players = [
-        Client(prefix + suffix, secrets.token_urlsafe(24))
-        for prefix in ("검증가", "검증나", "검증다")
-    ]
-    first, second, outsider = players
-    try:
-        for index, player in enumerate(players):
-            if index == 2:
-                print("WAIT: 기본 가입 제한(600초당 2개)에 따라 610초 대기", flush=True)
-                await asyncio.sleep(610)
-            try:
+    async def run(self):
+        first, second, outsider = self.players
+        try:
+            for player in self.players:
                 await player.open()
-            except AssertionError as error:
-                if "creating too many accounts" not in str(error):
-                    raise
-                await player.close()
-                print("WAIT: 앞선 가입 검사 제한이 만료되도록 610초 대기", flush=True)
-                await asyncio.sleep(610)
-                await player.open()
-        print("PASS: 한글 일반 계정 3개 가입", flush=True)
-        for player in players:
-            assert player.state["zone"] == "staging_room"
-            await player.act("남", lambda state: state["zone"] == "hq_concourse")
-            await player.act("서", lambda state: state["zone"] == "dock")
-        print("PASS: 출정 대기실·중앙홀을 거쳐 기존 부두 진입", flush=True)
-        await first.expect_text("공격 어린청소룡", "대상 뒤에 행동")
-        for text in ("안녕하세요 말", "'어린청소룡 공격"):
-            await first.expect_text(text, first.name + ":")
-        await first.act("윤대장 대화", lambda state: "정비기록" in state["quest"])
-        await first.act(second.name + " 파티초대", lambda state: state["party"] is not None)
-        await second.until(lambda state: state["invitation"] is not None)
-        await second.act("파티수락", lambda state: state["party"] is not None)
-        for player in players:
-            await player.act("북", lambda state: state["zone"] == "grass")
-        await first.until(lambda state: bool(state["enemies"]), timeout=65)
-        await first.act("어린청소룡 사냥", lambda state: state["combat_target"] is not None)
-        await second.act("어린청소룡 사냥", lambda state: state["combat_target"] is not None)
-        await outsider.expect_text("어린청소룡 사냥", "다른 파티")
-        for player in (first, second):
-            await player.until(lambda state: state["xp"] == 11 and state["combat_target"] is None)
-            assert player.state["credits"] == 24
-        await outsider.expect_text("시체에서 모두 가져", "보호된 전리품")
-        await second.act(
-            "시체에서 모두 가져",
-            lambda state: all(not corpse["loot"] for corpse in state["corpses"]),
-        )
-        await first.until(lambda state: count_item(state, "scrap") == 1)
-        assert count_item(second.state, "scrap") == 0
-        print("PASS: 파티·점유 거부·참여 보상·시체·순번 회수", flush=True)
-        await first.act("파티탈퇴", lambda state: state["party"] is None)
-        await second.until(lambda state: state["party"]["is_leader"])
-        await outsider.act("동", lambda state: state["zone"] == "wreck")
-        for index in range(5):
-            await recover_and_resume(first)
-            if index % 2 == 0:
-                await first.act("동", lambda state: state["zone"] == "wreck")
-            await first.fight()
-            if index:
-                await first.act(
-                    "시체에서 모두 가져",
-                    lambda state: all(not corpse["loot"] for corpse in state["corpses"]),
-                )
-            print(f"PASS: 솔로 공유 적 사냥·재생성 {index + 1}/5", flush=True)
-        await outsider.until(lambda state: bool(state["ground_loot"]), timeout=40)
-        protected = any(
-            entry["protected"]
-            for source in outsider.state["ground_loot"]
-            for entry in source["loot"]
-        )
-        if protected:
+                assert player.state["zone"] == "staging_room"
+                assert player.state["party"] is None and player.state["combat_target"] is None
+            self.report("auth", "fixture login / 출정 대기실")
+            for player in self.players:
+                await route(player, (("남", "hq_concourse"), ("서", "dock")))
+            await first.act("윤대장 대화", lambda state: "정비기록" in state["quest"])
+            self.phase = "party"
+            await first.act(second.name + " 파티초대", lambda state: state["party"] is not None)
+            await second.until(lambda state: state["invitation"] is not None)
+            await second.act("파티수락", lambda state: state["party"] is not None)
+            self.report("party", "invite / accept")
+            for player in self.players:
+                await route(player, (("북", "grass"),))
+            self.phase = "combat"
+            enemy_id = first.state["enemies"][0]["id"]
+            started = monotonic()
+            await first.act("어린청소룡 사냥", lambda state: state["combat_target"] is not None)
+            await second.act("어린청소룡 사냥", lambda state: state["combat_target"] is not None)
+            await outsider.expect_text("어린청소룡 사냥", "다른 파티")
+            await first.until(lambda state: state["player_round"] >= 1, self.timeouts.combat)
+            first_round = monotonic() - started
+            if self.harness.mode == "full":
+                assert first_round >= self.timings["COMBAT_INTERVAL"] - 0.5, first_round
+            self.report("combat", f"claim outsider 거절 / actual first round {first_round:.3f}s")
+            for player in (first, second):
+                await player.until(lambda state: state["xp"] == 11 and state["combat_target"] is None,
+                                   self.timeouts.combat)
+                assert player.state["credits"] == 104
+            self.report("combat", "shared enemy defeated / 양쪽 참여 보상")
+            self.phase = "corpse"
+            await first.until(lambda state: bool(state["corpses"]))
+            death_seen = monotonic()
+            corpse_id = first.state["corpses"][0]["id"]
+            await second.until(lambda state: any(c["id"] == corpse_id for c in state["corpses"]))
+            scrap = next(entry for entry in second.state["corpses"][0]["loot"]
+                         if entry["item"] == "scrap")
+            assert scrap["assigned_name"] == first.name and scrap["can_take"] and scrap["protected"]
+            await outsider.until(lambda state: bool(state["corpses"]))
+            await outsider.expect_text("시체에서 모두 가져", "보호된 전리품")
+            # 권한을 확인하고 남겨 두어 같은 시체의 ground 전환을 검증한다.
+            self.report("corpse", "created / party assignment / outsider blocked")
+            self.phase = "lifecycle"
+            await outsider.until(lambda state: not state["corpses"] and bool(state["ground_loot"]),
+                                 self.timeouts.lifecycle)
+            self.elapsed("corpse → ground", death_seen, self.timings["CORPSE_TTL_SECONDS"])
+            assert any(entry["protected"] for ground in outsider.state["ground_loot"]
+                       for entry in ground["loot"])
             await outsider.expect_text("모두 가져", "보호된 전리품")
-        await outsider.until(
-            lambda state: any(
-                not entry["protected"]
-                for source in state["ground_loot"]
-                for entry in source["loot"]
-            ),
-            timeout=135,
-        )
-        await outsider.act("모두 가져", lambda state: count_item(state, "scrap") > 0)
-        print("PASS: 시체 소멸·바닥 전리품·보호 만료 후 외부 회수", flush=True)
-        await return_to_weapon_shop(first)
-        if not count_item(first.state, "blade"):
-            await first.act("강철마체테 구매", lambda state: count_item(state, "blade") > 0)
-        before_attack = first.state["attack"]
-        await first.act("강철마체테 무장", lambda state: state["attack"] > before_attack)
-        await weapon_shop_to_dock(first)
-        for direction, zone in (("북", "grass"), ("북", "trail"), ("동", "office")):
-            await first.act(direction, lambda state, zone=zone: state["zone"] == zone)
-        await first.act("정비기록 조사", lambda state: "발전기 수리" in state["quest"])
-        saved = first.state.copy()
-        await first.close()
-        await first.open("login")
-        for key in ("name", "zone", "hp", "xp", "credits", "inventory", "quest"):
-            assert first.state[key] == saved[key], key
-        print("PASS: 장비 능력치·탐험·재접속 저장", flush=True)
-        print("SMOKE OK (전체 보스 임무와 OS IME 검사는 별도)", flush=True)
+            self.report("lifecycle", "ground loot / protection 유지")
+            self.phase = "respawn"
+            await outsider.until(lambda state: any(e["id"] == enemy_id and e["hp"] == e["max_hp"]
+                                                  and e["can_attack"] for e in state["enemies"]),
+                                 self.timeouts.lifecycle)
+            self.elapsed("enemy respawn", death_seen,
+                         self.timings["CORPSE_TTL_SECONDS"] + self.timings["RESPAWN_DELAY_SECONDS"])
+            self.report("respawn", "같은 spawn / max HP / attack 가능")
+            self.phase = "protection"
+            await outsider.until(lambda state: bool(state["ground_loot"]) and all(
+                not entry["protected"] for ground in state["ground_loot"] for entry in ground["loot"]),
+                self.timeouts.lifecycle)
+            self.elapsed("loot protection expiry", death_seen, self.timings["LOOT_PROTECTION_SECONDS"])
+            await outsider.act("모두 가져", lambda state: count_item(state, "scrap") == 1
+                               and not state["ground_loot"])
+            self.report("protection", "outsider blocked → allowed / 실제 회수")
+            self.phase = "shop"
+            await route(first, (("귀환", "support_roof"), ("승강기", "support_elevator")))
+            await first.act("3층", lambda state: state["elevator"]["current_stop"] == "3f")
+            await route(first, (("내리기", "support_3f_c"), ("동", "support_3f_e1"),
+                                ("북", "weapon_shop")))
+            assert any(obj["name"] == "무기상" for obj in first.state["interactables"])
+            await first.expect_text("무기상 상점", "60C")
+            before_credits = first.state["credits"]
+            # RNG drop은 남겨 둔 ground에서 outsider만 회수한다. 구매 결과는 미리 지급하지 않는다.
+            assert count_item(first.state, "blade") == 0
+            await first.act("무기상에게 강철마체테 구매", lambda state: count_item(state, "blade") == 1)
+            assert first.state["credits"] == before_credits - 60
+            self.report("shop", "옥상 귀환 / 공용 승강기 / Shopkeeper Credit 구매")
+            self.phase = "persistence"
+            saved = {key: first.state[key] for key in
+                     ("name", "zone", "hp", "xp", "credits", "inventory", "quest")}
+            await first.close()
+            await first.open()
+            assert saved == {key: first.state[key] for key in saved}
+            self.report("persistence", "disconnect / fixture relogin / 상태 보존")
+        except BaseException:
+            details = {"mode": self.harness.mode, "scenario": self.phase,
+                       "players": [player.summary() for player in self.players],
+                       "server_logs": str(self.harness.run_dir)}
+            message = json.dumps(details, ensure_ascii=False)
+            print("FAIL " + message, flush=True)
+            self.log.write("FAIL " + message + "\n")
+            raise
+        finally:
+            await asyncio.gather(*(player.close() for player in self.players))
+
+
+async def live(harness):
+    await harness.ready()
+    with (harness.run_dir / "client.log").open("w", encoding="utf-8") as log:
+        await harness.supervise(Scenario(harness, log).run())
+
+
+def main():
+    parser = argparse.ArgumentParser(description="격리형 실제 Evennia/WebSocket smoke")
+    parser.add_argument("--mode", choices=("quick", "full"), default="quick")
+    args = parser.parse_args()
+    harness = Harness(args.mode)
+    started = monotonic()
+    play_db = ROOT / "game" / "server" / "evennia.db3"
+    before = fingerprint(play_db)
+    print(f"SMOKE {args.mode.upper()} — isolated SQLite / fixture accounts / actual scheduler", flush=True)
+    success = False
+    try:
+        harness.prepare()
+        print(f"환경: {harness.run_dir}, 전용 포트: {harness.ports}", flush=True)
+        harness.start()
+        asyncio.run(live(harness))
+        success = True
+    except BaseException:
+        if harness.run_dir:
+            print(f"실패 진단 DB/로그 보존: {harness.run_dir}", flush=True)
+            (harness.run_dir / "failure.log").write_text(traceback.format_exc(), encoding="utf-8")
+        raise
     finally:
-        for player in players:
-            await player.close()
+        try:
+            harness.stop()
+        except BaseException:
+            print(f"process cleanup 실패 — DB/로그 보존: {harness.run_dir}", flush=True)
+            raise
+        after = fingerprint(play_db)
+        if before != after:
+            raise RuntimeError("일반 플레이 SQLite의 hash/mtime/size가 변경되었습니다.")
+        print("PASS [isolation] play DB SHA256 / mtime_ns / size unchanged: "
+              + json.dumps(after), flush=True)
+        if success:
+            harness.discard()
+            print(f"PASS [{args.mode}] 완료 / process stop / temp cleanup: "
+                  f"{monotonic() - started:.3f}s", flush=True)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

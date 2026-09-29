@@ -83,13 +83,13 @@ uv 환경에서는 각각 `uv run python scripts/dev.py check`, `uv run python s
 - 로컬 검사와 CI 결과를 구분한다. 현재 CI는 push와 pull_request에 자동 실행되므로 로컬 중복 실행을 줄이는 기준과 별개로 최신 커밋의 CI를 확인한다.
 - 수행하지 않은 검사는 미실행 사유를 적고 통과로 표현하지 않는다.
 
-실행 중인 로컬 서버의 가입·사냥·장비·재접속 흐름은 다음 명령으로 확인한다.
+실제 서버·WebSocket·scheduler의 빠른 검증은 다음 명령으로 확인한다. 서버는 명령이 자동으로 시작·종료한다.
 
 ```powershell
-.\.venv\Scripts\python.exe scripts/smoke.py
+.\.venv\Scripts\python.exe scripts/dev.py smoke
 ```
 
-이 검사는 실제 로컬 플레이 DB에 일반 테스트 계정 3개를 남긴다. 필요한 변경에 한해 실행하며, 브라우저 화면 검증이나 전체 보스 임무 검증을 대신하지 않는다.
+Quick smoke는 실행별 격리 SQLite·fixture 계정·단축 타이머를 사용하며 플레이 DB와 개발 서버에 영향을 주지 않는다. production 30/45/120초 타이밍 검증은 `scripts/dev.py smoke-full`로 수동/closeout에서 수행한다. Full도 동일한 DB 격리와 fixture 인증을 사용한다. 공개 가입/throttle은 별도 auth 검증이며 gameplay smoke에서 가입 제한을 변경하거나 기다리지 않는다. 성공 시 임시 디렉터리를 삭제하고 실패 시 로그/DB를 보존하되 프로세스는 종료한다. 필요한 변경에 한해 실행하며 브라우저 화면·OS IME·전체 보스 임무 검증을 대신하지 않는다.
 수동 절차는 [테스트 안내](docs/playtest.md), 정적 파일 수집 방법은 [README](README.md#개발)를 따른다.
 
 작업 결과를 설명할 때는 **무엇이 달라졌는지 → 왜 필요한지 → 어떻게 확인했는지 → 남은 제한 사항** 순서로 작성한다.
