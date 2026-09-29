@@ -18,3 +18,21 @@ jobs:
       - run: uv sync --locked --python 3.13
       - run: uv run python scripts/dev.py check
       - run: uv run python scripts/dev.py test --parallel 2
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          enable-cache: true
+          prune-cache: true
+      - run: uv sync --locked --python 3.13
+      - run: uv run python scripts/dev.py smoke
+      - name: 실패 진단 로그 보존 (DB 제외)
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: smoke-failure-logs
+          path: work/smoke/**/*.log
+          retention-days: 7

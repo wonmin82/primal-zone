@@ -4,7 +4,7 @@
 
 ## Objective
 
-본부 1~5단계는 PR #13~#18로 병합 완료됐다. 6단계 작업 시작 시 깨끗한 main에서 fetch 후 HEAD와 origin/main은 모두 `d7141fbfd12572a19e744b36fd978fd8150c135e`였다. PR #18 MERGED와 해당 main [Game checks](https://github.com/wonmin82/primal-zone/actions/runs/36507707184) success를 직접 확인했다. 순수 88개(0.034초)·통합 239개(74.402초), 총 327개·runner 79.240초 통과이며 열린 PR은 없었다. 최신 main에서 `codex/hq-npc-shops`를 생성했고 6단계 NPC 기반 상점 구현·검증·commit/push와 [PR #19](https://github.com/wonmin82/primal-zone/pull/19) 생성을 완료했다. 구현 HEAD의 CI는 success이며 문서 후속 커밋까지 포함한 최신 HEAD/CI는 실제 GitHub 및 PR Validation을 따른다. PR은 OPEN이며 병합하지 않는다. 아래 단계별 OPEN 및 이전 동선 서술은 당시 기록으로 보존한다.
+본부 1~6단계와 테스트 성능 개선은 PR #13~#19로 병합 완료됐다. 이번 작업 시작 시 작업 트리는 깨끗했고 fetch 후 HEAD/origin/main은 모두 `e4977132206e9edc285a35773758ef989d4fb6dd`였다. [PR #19](https://github.com/wonmin82/primal-zone/pull/19)는 MERGED이며 해당 main [Game checks](https://github.com/wonmin82/primal-zone/actions/runs/36522062461)는 success다(순수 91·통합 248·총 339). 최신 main에서 `codex/smoke-p0-isolation`을 생성했다. 현재 승인된 작업은 7단계 시작 전 P0 smoke 인프라 개선이며 구현·자동 검사·Quick 연속 2회·Full 실제 실행·문서·commit/push/PR/최신 HEAD CI 확인을 포함한다. PR은 병합하지 않고 7단계는 시작하지 않는다. 아래 OPEN 상태와 이전 smoke 동선·시간은 시점별 과거 기록이다.
 
 본부 재설계 1단계와 방향 정정은 [PR #13](https://github.com/wonmin82/primal-zone/pull/13)으로 병합됐다. 병합 커밋은 `f9fcd52feb7c449eb94519d9e36f3504558056f4`다. 중앙홀 남/1층 중앙 북과 남쪽 폐쇄 출입구, 대기실 남/중앙홀 북과 중앙홀 서/부두 동을 유지한다. 상세 설계는 [본부 Room 구조 1단계](architecture.md#본부-room-구조-1단계)를 따른다.
 
@@ -173,6 +173,20 @@
 
 ## Implemented
 
+### P0 격리형 live smoke 인프라 (2026-09-29)
+
+- 시작 main: `e4977132206e9edc285a35773758ef989d4fb6dd`, PR #19 MERGED·main CI success를 직접 확인했다. 최신 origin/main에서 `codex/smoke-p0-isolation` 생성, 기존 unstaged/staged 변경 없음. 현재 HEAD/PR은 실제 Git 및 아래 원격 기록으로 확인한다.
+- P0 여섯 항목을 해결했다: 실행별 SQLite로 플레이 DB 오염 차단, fixture 인증으로 가입 throttle/610초 분리, Quick만 짧은 타이머, 공통 단계/Quick·Full 분리, 매 실행 새 DB/월드·계정·시설 상태로 재실행 격리, CI에 실제 Evennia/WS smoke job 추가. 기존 required `test` job/가입 throttle/production 타이머/테스트 인프라는 유지한다.
+- `settings_smoke` marker·SQLite engine·정확한 DB/작업 경로 guard를 fixture의 Django 초기화/migrate 전에 확인한다. `PRIMAL_DB_*`를 자식 환경에서 제거한다. `work/smoke/<mode>-<run-id>` 아래에 새 코드 복사본/SECRET_KEY/DB를 준비하고 정상 Account/Character API로 일반 계정을 만든다. Credentials는 런타임 메모리/자식 stdin만 사용한다. 성공 시 디렉터리 삭제, 실패 시 DB/로그 보존; CI artifact는 로그만 수집한다.
+- OS가 고른 loopback 포트 4개를 예약하고 actual foreground Portal/Server 두 Popen을 추적한다. HTTP+WS readiness polling과 scenario health monitor, finally의 own process/group 정리, marker/경로/종료 확인 뒤 cleanup을 구현했다. 외부 개발 서버의 launcher stop/reload/kill을 사용하지 않는다. 로그인은 실제 연결 안내 이후 인증하여 Portal 세션 등록 race를 피한다.
+- `world/timing.py` production SSOT: combat 2.5·corpse 30·respawn delay 15·loot protection 120·claim/participation/reset 각 15초. Quick: 0.25·1·1·2·2·2·2초. Full은 production 기본값. 실제 delay와 기존 WorldLifecycle 5초 sweep을 재사용하고 직접 미래 reconcile/mock timer를 쓰지 않는다.
+- 실제 공통 Flow: fixture 로그인/staging→본부/윤대장→파티 초대·수락→공동 처치/outsider claim 거절→시체의 순번 배정·파티 권한/outsider 회수 거절→actual corpse decay/ground→동일 spawn respawn→보호 만료/outsider 실제 회수→옥상 귀환/승강기 3층/무기상 Credits 구매→disconnect/relogin 상태 비교. 사냥은 1회, 구매 자금 100C/HP만 fixture로 준비하며 blade/시체는 미리 지급하지 않는다.
+- `scripts/dev.py check` 통과. 최종 `scripts/dev.py test`: pure 99개/2.030초, integration 250개/81.877초, total 349개, 통합 runner 91.526초, 실패/skip 없음(`work/smoke-final-tests.log`). 기존 91+248 검사는 유지했고 pure 8·integration 2개를 추가했다. 일반 설정에서 guard가 DB 초기화 이전에 거절하는지, Quick/Full settings, CLI, owned process failure cleanup/다음 run, production 기본값을 검증한다.
+- 실제 연속 `scripts/dev.py smoke`: 43.486초·43.960초, 둘 다 성공(`work/smoke-final-quick-1.log`, `work/smoke-final-quick-2.log`). `scripts/dev.py smoke-full`: 168.024초 성공(`work/smoke-final-full.log`), first combat round 2.804초, corpse 29.924초, enemy respawn 44.879초, protection expiry 121.373초. 서버/월드 준비·인증·종료를 포함한 시간이며 signup 대기는 없다.
+- 각 최종 live 실행 전후 일반 플레이 DB의 SHA256/mtime_ns/size 동일(733184 bytes). PostgreSQL에 접속하지 않았다. 성공한 실행 디렉터리/서버는 정리됐다. 개발 중 API 인자/로그인 ordering/기존 smoke의 낡은 보호 오류 기대를 수정했고 실패 run의 DB/로그를 보존했다. 이후 성공했으며 guard/실패 cleanup 자동 검사도 통과했다.
+- 문서/지침을 새로운 CLI·DB 안전·Quick/Full 역할에 맞춰 갱신했다. JS/UI 변경 없음으로 node/브라우저 검증 미실행. 공개 가입 장시간 throttle, 실제 server restart E2E, browser DOM 자동화, OS IME, Windows/PG CI, coverage, 전체 boss/progression closeout은 이번 P0 비범위다. P0 PR 검토·병합 후 별도 7단계 요청을 기다린다.
+
+
 ### 기존 명령·전리품·보관
 
 - `때려`, `버려/줘`, `먹어/마셔`, `벗어/해제`, `넣어/꺼내`, `봐`와 방향 `북 봐/n 보기`가 등록되어 있다.
@@ -208,7 +222,7 @@
 
 ## Partially Implemented / In Progress
 
-본부 1~5단계와 테스트 성능 개선은 PR #13~#18로 병합 완료다. 6단계 NPC 상점은 구현·자동/브라우저 검증·commit/push 완료이며 PR #19 검토·병합을 남긴다. 구현 HEAD CI는 success이고 문서 후속 커밋의 최종 HEAD/CI는 실제 GitHub 및 PR Validation을 따른다. 7단계 통합 closeout은 현재 PR 검토·병합 후 별도 요청으로 진행하는 후속 범위다.
+본부 1~6단계는 병합 완료다. P0 smoke 인프라 구현과 로컬 검증을 완료했다. Quick 연속 2회와 production Full 1회, 전체 순수/통합 검사를 통과했다. commit/push/PR 생성과 최신 HEAD의 test·smoke CI 확인을 마무리하며 원격 상태는 아래 P0 기록·실제 PR을 따른다. 7단계는 시작하지 않는다.
 
 ## Validation
 
@@ -250,7 +264,7 @@
 
 ## Recommended Next Step
 
-6단계 NPC 상점 PR 검토·병합 후 최신 main에서 별도 요청으로 7단계 통합 cleanup/전체 회귀검증을 진행한다. legacy dock/서비스 zone gate·dead compatibility 검토, 전체 본부 E2E·멀티플레이·bootstrap/restart/reconnect·전체 smoke 검토·최종 Web/문서 closeout이 예정 범위다. 이번 PR 병합 전에 시작하지 않는다.
+P0 smoke 인프라 PR을 검토·병합한 후 최신 main에서 별도 요청으로 7단계 통합 cleanup/전체 회귀검증을 진행한다. legacy dock/서비스 zone gate·dead compatibility 검토, 전체 본부 E2E·멀티플레이·bootstrap/restart/reconnect·Full Gameplay E2E·최종 Web/문서 closeout이 예정 범위다. 현재 PR 병합 전에 시작하지 않는다.
 
 ## Important Files
 

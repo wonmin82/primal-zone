@@ -57,7 +57,8 @@ def setup():
 def main():
     parser = argparse.ArgumentParser(description="Primal Zone local development")
     parser.add_argument(
-        "command", choices=["setup", "start", "stop", "reload", "test", "check", "admin-password"]
+        "command", choices=["setup", "start", "stop", "reload", "test", "check", "admin-password",
+                            "smoke", "smoke-full"]
     )
     parser.add_argument("test_labels", nargs="*", help="선택한 Evennia 테스트 경로")
     parser.add_argument("--parallel", type=int, help="통합 테스트 프로세스 수 (기본 최대 4)")
@@ -83,6 +84,9 @@ def main():
         )
     elif command == "check":
         run("-m", "ruff", "check", "game", "scripts", cwd=ROOT)
+    elif command in ("smoke", "smoke-full"):
+        run(str(ROOT / "scripts" / "smoke.py"), "--mode",
+            "full" if command == "smoke-full" else "quick", cwd=ROOT)
     elif command == "admin-password":
         run("-m", "evennia", "changepassword", "admin")
     else:
