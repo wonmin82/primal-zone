@@ -754,3 +754,5 @@ Compact 최종 자동 검증은 PR #3의 `064e616` 이후 추가 커밋과 동�
 - 정산소 남·동·동·북·서→부두에서 보급소 버튼이 남고 Credit-only SHOP 14개 기존 가격·교환 가격/usage 제거를 확인했다. `강철마체테 구매`로 60C 차감·잔액 10C·장비 +1이 표시됐다. 데스크톱 문서 폭 1234/1234px와 390px 화면의 375/375px로 overflow가 없으며 긴 정산 버튼과 자원 행의 줄바꿈을 확인했다. 캡처는 `work/settlement-desktop.png`, `work/settlement-390.png`, `work/settlement-390-resource.png`, `work/settlement-result.png`, `work/settlement-purchase.png`다.
 - 앱 코드 console 오류는 발견하지 않았고 Chrome 비동기 listener의 채널 종료 메시지 2건은 관찰했다. viewport를 원복하고 검증 서버·임시 탭을 종료했다. 플레이 DB는 읽거나 변경하지 않았다. 실제 OS IME, 서버 restart/reconnect와 운영 DB 적용은 미실행이다.
 - 전체 smoke 미실행 — 현재 스크립트에 direct gear exchange/정산 전제가 없어 변경하지 않았다. 일반 가입 rate limit의 610초 대기와 반복 실제 전투 대신 이번 정산 Flow는 관련 자동 및 별도 DB 웹 검증으로 확인했다. production rate limit은 유지했다.
+
+- 구현 HEAD `7196e58470717417319523fd9b56387731ebb83b`의 [PR #18 Game checks](https://github.com/wonmin82/primal-zone/actions/runs/36505944424)는 success다. 원격 check 통과, pure 88개(0.023초)·integration 239개(58.178초), total 327개·runner 61.265초를 실제 로그로 확인했다. PR은 OPEN이며 병합하지 않는다. 이 PR/CI 기록은 문서 전용 후속 커밋이며 이후 최종 HEAD의 CI는 따로 확인해 PR Validation에 기록한다.

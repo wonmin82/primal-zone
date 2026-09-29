@@ -24,7 +24,8 @@
 - 최종 `scripts/dev.py check` 통과, 전체 `scripts/dev.py test` pure 88개(0.068초)·integration 239개(86.866초), total 327개·실패/skip 없음, 통합 runner 95.978초다. 근거 `work/settlement-final-full.log`. 정산 전용 역순·병렬 8개(10.815초, runner 19.337초) 통과이며 이 검사는 최종 상세 보기 semantic 조정 전, 규칙은 같다. 이후 최종 관련 20개(15.119초, runner 23.778초)와 전체에서 상세 보기까지 검증했다. JS node 문법 및 diff 검사 통과다. 이후 변경은 문서뿐이므로 로컬 게임 검사 재실행은 하지 않는다.
 - game과 별도 SQLite 검증 서버에서 최종 정적 파일을 수집했다. 일반 계정으로 1층 중앙 서·서·북→정산소, actual NPC와 환율 버튼·별도 resource 표시, 직접 1개 정산(7→6/+10C), 서버 targeted 모두 버튼(6→0/+60C), 모두 버튼 제거를 확인했다. 기존 출구로 부두 이동→보급소 보기→Credit-only 가격·직접 강철마체테 구매(60C/잔액 10C/장비 +1)도 확인했다. 데스크톱 문서 폭 1234/1234px와 390px의 375/375px로 overflow 없고 자원 행·긴 버튼 줄바꿈을 캡처했다. 앱 코드 console 오류는 발견하지 않았으나 Chrome 비동기 listener 메시지 2건은 별도 기록했다. 검증 탭·서버는 종료하고 viewport를 원복했다. 상세는 [5단계 검증](playtest.md#본부-5단계-단일-화폐회수-자원-정산-확인)을 따른다.
 - 전체 smoke 미실행 — 최신 `scripts/smoke.py`에는 장비 직접 교환/정산 전제가 없고 기존 Credit 구매·4단계 의료 흐름을 유지한다. 일반 가입 rate limit의 610초 대기와 실제 반복 전투를 포함한 전체 smoke 대신 관련 자동·별도 DB 웹 검증을 수행했다. 실제 OS IME·이번 기능의 서버 restart/reconnect·운영 DB/배포는 미실행이다. 기존 플레이 DB는 읽거나 변경하지 않았다.
-- 구현·로컬/브라우저 검증 완료, commit/push·PR 생성 및 최신 HEAD CI는 다음 원격 확인 기록으로 갱신한다. PR은 merge하지 않는다. 6단계는 이 PR 검토·병합 후 최신 main에서 별도 요청으로 진행한다.
+- 구현·로컬/브라우저 검증·commit/push 완료. 원격 기록 작성 시 로컬/원격/PR 구현 HEAD는 `7196e58470717417319523fd9b56387731ebb83b`로 같고 작업 트리는 깨끗했다. [PR #18](https://github.com/wonmin82/primal-zone/pull/18)은 OPEN·비Draft·MERGEABLE이며 이 SHA의 [Game checks](https://github.com/wonmin82/primal-zone/actions/runs/36505944424) success를 headSha와 대조했다. 실제 CI는 check 통과, pure 88개(0.023초)·integration 239개(58.178초), total 327개·runner 61.265초다. 근거 `work/settlement-first-ci.log`. 재fetch 후 origin/main도 시작 SHA와 같고 이미 포함돼 rebase 재작성은 하지 않았다.
+- 이 기록은 PR 생성 후 문서 전용 후속 커밋에 포함한다. 위 SHA/CI는 기능 구현의 확인 기준이며 후속 커밋까지 포함한 최종 HEAD는 실제 Git/PR에서 확인한다. 코드·테스트는 동일하므로 로컬 전체 검사는 반복하지 않고 문서 diff·링크·기록을 검사한다. 최종 문서 HEAD의 CI는 푸시 후 별도로 확인해 PR Validation과 완료 보고에 기록하며 구현 CI를 최종 HEAD 결과로 대신하지 않는다. PR은 merge하지 않는다. 6단계는 이 PR 검토·병합 후 최신 main에서 별도 요청으로 진행한다.
 
 ### 본부 4단계 구현과 검증 (2026-09-29, 과거 기록)
 
@@ -191,7 +192,7 @@
 
 ## Partially Implemented / In Progress
 
-본부 1~4단계와 테스트 성능 개선은 PR #13~#17로 병합 완료다. 5단계 단일 화폐·회수 자원 정산은 구현·로컬/브라우저 검증 완료이며 PR 생성·최신 HEAD CI 확인을 진행한다. NPC 상점과 통합 closeout은 후속 범위다.
+본부 1~4단계와 테스트 성능 개선은 PR #13~#17로 병합 완료다. 5단계 단일 화폐·회수 자원 정산은 구현·로컬/브라우저 검증·commit/push 완료이며 PR #18 검토·병합을 남긴다. 구현 HEAD의 CI는 success이며 최종 문서 커밋 HEAD/CI는 실제 GitHub와 PR Validation을 따른다. NPC 상점과 통합 closeout은 후속 범위다.
 
 ## Validation
 
