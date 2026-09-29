@@ -205,7 +205,7 @@ class GameplayIntegrationTests(WorldCommandTest):
         self.assertTrue(self.char1.profile()["quests"]["radio_tower"]["generator_fixed"])
         self.char1.execute_cmd("귀환")
         self.assertEqual(self.char1.location, self.rooms["support_roof"])
-        for raw in ("승강기", "3층", "내리기", "서", "북"):
+        for raw in ("승강기", "3층", "서", "북"):
             self.char1.execute_cmd(raw)
         self.assertEqual(self.char1.location, self.rooms["armor_shop"])
         self.char1.execute_cmd("강화조끼 구매")

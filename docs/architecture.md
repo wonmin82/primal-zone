@@ -43,7 +43,7 @@ Web은 기존 `pz_state.exits`만 렌더링한다. 오른쪽 DOM은 SURROUNDINGS
 
 Telnet `exit_diagram()`은 30 display cells × 5줄의 canvas를 사용한다. `[현재]`는 0 기준 12열, 북/남 label과 fullwidth `｜`는 14열에서 시작한다. 없는 방향의 label/connector는 공백이며 대각선에는 `／`·`＼`, 가로축에는 ASCII `-`를 사용한다. 방향 semantic token을 배치한 뒤 terminal 색 변환을 적용한다. `world.text.display_width()`는 기존 east_asian_width W/F=2 정책을 `row()`와 공유하며 ANSI escape 길이를 계산하지 않는다. 실제 terminal/font의 fullwidth glyph 지원은 별도 클라이언트 조건이다.
 
-새 캐릭터는 기존 최초 puppet의 비월드 위치 fallback에서 출정 대기실로 배치되고 새 profile의 `visited`도 대기실에서 시작한다. 재접속 시 유효한 저장 위치와 기존 방문 기록을 보존한다. Evennia fallback `home=dock`은 유지한다. 일반 귀환은 `support_roof`, 전투 패배는 `infirmary`로 명시적으로 이동한다. 상점은 지원동의 실제 Shopkeeper, 의료·휴식은 의무실의 실제 객체를 따른다. 보관·훈련 객체는 아래 3단계 배치를 따른다. bootstrap은 기존 stable tag로 Room/실제 Exit를 재사용·갱신하며 개인 기록을 초기화하지 않는다. 이전 본부 배치의 중앙홀 동쪽·1층 중앙 남쪽 관리 Exit는 같은 목적지를 유지하며 새 남쪽·북쪽 stable tag와 alias로 갱신한다. 이미 새 출구가 있다면 해당 옛 관리 Exit만 제거한다. integrity는 목적지·정반대 방향의 양방향 연결·폐쇄 문구/충돌·본부 고정 배치·시설의 유일 진입·Region membership을 검사한다.
+새 캐릭터는 기존 최초 puppet의 비월드 위치 fallback에서 출정 대기실로 배치되고 새 profile의 `visited`도 대기실에서 시작한다. 새 로그인/재로그인은 출정 대기실에 배치하고 방문을 포함한 진행 기록은 보존한다. 살아 있는 세션의 server reload는 기존 위치를 유지한다. Evennia fallback `home=dock`은 유지한다. 일반 귀환은 `support_roof`, 전투 패배는 `infirmary`로 명시적으로 이동한다. 상점은 지원동의 실제 Shopkeeper, 의료·휴식은 의무실의 실제 객체를 따른다. 보관·훈련 객체는 아래 3단계 배치를 따른다. bootstrap은 기존 stable tag로 Room/실제 Exit를 재사용·갱신하며 개인 기록을 초기화하지 않는다. 이전 본부 배치의 중앙홀 동쪽·1층 중앙 남쪽 관리 Exit는 같은 목적지를 유지하며 새 남쪽·북쪽 stable tag와 alias로 갱신한다. 이미 새 출구가 있다면 해당 옛 관리 Exit만 제거한다. integrity는 목적지·정반대 방향의 양방향 연결·폐쇄 문구/충돌·본부 고정 배치·시설의 유일 진입·Region membership을 검사한다.
 
 ## 본부 2단계: 공용 승강기
 
@@ -51,7 +51,7 @@ Telnet `exit_diagram()`은 30 display cells × 5줄의 canvas를 사용한다. `
 
 공용 현재 층은 승강기 Room의 persistent `db.current_stop`에 저장하며 개인 profile에는 넣지 않는다. 초기값은 `ELEVATOR_DEFAULT_STOP`이고 bootstrap은 새 Room 또는 유효하지 않은 값만 정규화한다. 정상 층은 월드 재구성·reload/restart 뒤에도 보존한다. 기존 Room·Exit stable ID와 본부 출구 migration은 유지한다.
 
-`ZoneRoom.at_cmdset_get()`은 각 중앙 복도/옥상에 호출용 CmdSet, 승강기 내부에 층 선택/하차용 CmdSet을 제공한다. `승강기`는 호출과 탑승을 한 번에 수행한다. `1층`·`2층`·`3층`·`옥상`은 공용 층만 바꾸고 모든 승객의 location은 승강기 Room이다. `내리기`는 해당 플레이어만 현재 정류 층 Room으로 이동한다. 외부 호출은 기존 승객을 승강기에 둔 채 공용 층을 호출자의 층으로 바꾼다. 같은 층 재선택은 안내만 하며 층 attribute를 다시 저장하지 않는다. 밖에서는 내부 명령이 CmdSet에 없으므로 일반 unknown-command 처리를 따른다. 전역 명령 registry와 도움말에는 내부 층 명령을 추가하지 않는다.
+`ZoneRoom.at_cmdset_get()`은 각 중앙 복도/옥상에 호출용 CmdSet, 승강기 내부에 층 선택/하차용 CmdSet을 제공한다. `승강기`는 호출과 탑승을 한 번에 수행한다. `1층`·`2층`·`3층`·`옥상`은 공용 층을 바꾸고 선택자만 자동 하차한다. 다른 승객은 승강기 Room에 남아 `내려`로 현재 층에 내린다. 외부 호출은 기존 승객을 승강기에 둔 채 공용 층을 호출자의 층으로 바꾼다. 같은 층 재선택도 선택자를 하차시키며 층 attribute는 다시 저장하지 않는다. 밖에서는 내부 명령이 CmdSet에 없으므로 일반 unknown-command 처리를 따른다. 전역 명령 registry에는 내부 층 명령을 추가하지 않는다. 이동 분류 도움말은 정류장 SSOT에서 해당 조작을 안내한다.
 
 `world.elevator`는 기존 `world_change()`의 단일 서버 잠금·DB transaction으로 동작을 직렬화한다. 탑승·하차는 실제 `move_to()`로 관찰·presence·visited 훅을 재사용하고 실패하면 공용 층 변경도 rollback한다. 승객 이동 알림은 `after_change()`로 성공 뒤 전달하고 기존 GameCommand의 접속자 state push로 함께 갱신한다. 실제 대기 시간·비동기 작업·문 상태 머신은 없다.
 
@@ -69,19 +69,19 @@ bootstrap은 stable `primal_interactable` tag로 기존 객체를 찾아 DB ID�
 
 ## 본부 4단계: 의료와 복귀·패배
 
-신규 시작은 `staging_room`, 재접속은 저장된 유효 위치, Evennia fallback `home`은 `dock`이다. `Return`은 비전투 중 `support_roof`로 실제 이동하고, 패배는 home과 무관하게 `infirmary`를 조회한다. 옥상과 의무실 이후 이동은 기존 공용 승강기·사방 출구를 사용한다.
+신규 시작은 `staging_room`, 재접속은 출정 대기실, Evennia fallback `home`은 `dock`이다. `Return`은 비전투 중 `support_roof`로 실제 이동하고, 패배는 home과 무관하게 `infirmary`를 조회한다. 옥상과 의무실 이후 이동은 기존 공용 승강기·사방 출구를 사용한다.
 
 `Doctor(ActionObject)`의 stable ID는 `doctor`(의무관/의사), `Bed(ActionObject)`는 `infirmary_bed`(침대/병상)이며 `INTERACTABLES`에서 의무실에 배치한다. bootstrap은 기존 stable tag 기반으로 하나씩 생성·재사용하며 Room·Exit·개인 기록과 기존 서비스 객체를 보존한다. Room 정적 설명은 환경만 담고 객체 presence가 실제 존재를 표현한다. integrity는 의료 배치와 행동 정의를 검사한다.
 
-`치료`/`의무관 치료`/`의무관에게 치료`와 `휴식`/`침대 휴식`/`침대에서 휴식`은 현재 `room_objects`의 보이는 Doctor/Bed를 공통 selector로 선택한다. bare 입력은 0개면 대상 없음, 1개면 자동 선택, 2개 이상이면 명시적 지정 요구다. 숨은 대상은 개수·오류·selector·hint·Web에 포함하지 않는다. 발견 이후 `perform_action`이 같은 Room·관찰·비전투를 검사하고 각 pure rule이 현재 Room의 safe를 검사한다. 실제 객체를 다른 안전 Room으로 옮겨도 서비스는 객체를 따른다. 전투 중 보이는 대상은 대상 없음 대신 기존 RuleError로 거절한다.
+`진료`/`의무관 진료`/`의무관에게 진료`와 `휴식`/`침대 휴식`/`침대에서 휴식`은 현재 `room_objects`의 보이는 Doctor/Bed를 공통 selector로 선택한다. bare 입력은 0개면 대상 없음, 1개면 자동 선택, 2개 이상이면 명시적 지정 요구다. 숨은 대상은 개수·오류·selector·hint·Web에 포함하지 않는다. 발견 이후 `perform_action`이 같은 Room·관찰·비전투를 검사하고 각 pure rule이 현재 Room의 safe를 검사한다. 실제 객체를 다른 안전 Room으로 옮겨도 서비스는 객체를 따른다. 전투 중 보이는 대상은 대상 없음 대신 기존 RuleError로 거절한다.
 
-`rules.treat`와 `rules.rest`는 별도 public rule이며 현재는 각각 무료·즉시 full HP다. 내부 유효성 검사만 공유하고 서로 호출하지 않는다. 최대 HP이면 쓰기 없이 거절한다. 붕대 `rules.heal`과 독립이며 아이템·크레딧·medicine 숙련·heal Rank를 변경하지 않는다. 침대 점유·예약·시간 지연은 없다.
+`rules.treat`와 `rules.rest`는 별도 public rule이며 현재는 각각 무료·즉시 full HP다. 내부 유효성 검사만 공유하고 서로 호출하지 않는다. 최대 HP이면 쓰기 없이 거절한다. 붕대 `rules.first_aid`과 독립이며 아이템·크레딧·medicine 숙련·firstaid Rank를 변경하지 않는다. 침대 점유·예약·시간 지연은 없다.
 
 `enemy_attack`은 피해·defeated 판정만 반환한다. `apply_defeat`가 `lost=min(credits,10)`을 차감하고 `DEFEAT_RECOVERY_HP=1`로 최소 생존 상태를 설정한다. 일반 의료 rule/객체는 호출하지 않는다. Enemy lifecycle은 하나의 `world_change` 안에서 피해·패널티·저장·`leave_combat`·의무실 이동을 처리한다. 패배자만 combatants/threat/contribution과 queued action·guard·타이머를 정리하고 다른 참가자는 유지한다. 이동 False/실패는 예외로 rollback하며 DB profile·FK와 Evennia attribute/location/contents 캐시를 복구한다. 타이머 취소와 구조 안내는 `after_change`로 commit 뒤 실행한다. 기존 `save_profile`의 deferred push가 새 의무실 상태를 패배자에게 보내므로 적 Room의 broadcast에만 의존하지 않는다. visited는 실제 이동 hook으로 의무실 방문을 추가하며 나머지 진행 기록은 보존한다. 출력 문구로 lifecycle을 판정하지 않는다.
 
-서버 interactable allowlist에는 의료 `치료`/`휴식`만 추가한다. 같은 객체의 visible/safe/noncombat availability로 Web action과 target/action Room hint를 결정한다. 클라이언트는 서버 명령을 렌더링할 뿐 infirmary zone 특례가 없다. 부두의 휴식 버튼·hint는 제거했으며 현재는 6단계에서 상점 특례도 제거됐다. 원거리 관찰은 의료 서비스 행동을 노출하지 않는다.
+서버 interactable allowlist에는 의료 `진료`/`휴식`만 추가한다. 같은 객체의 visible/safe/noncombat availability로 Web action과 target/action Room hint를 결정한다. 클라이언트는 서버 명령을 렌더링할 뿐 infirmary zone 특례가 없다. 부두의 휴식 버튼·hint는 제거했으며 현재는 6단계에서 상점 특례도 제거됐다. 원거리 관찰은 의료 서비스 행동을 노출하지 않는다.
 
-의료 동선과 회복 규칙은 통합/수동 검사와 Full의 실제 패배→의무실→Bed 회복 및 Doctor 치료로 확인한다. Quick smoke는 fixture 로그인과 공동 사냥 1회, 귀환→옥상→승강기 3층→무기상 구매·재접속을 확인한다. 공개 가입 rate limit은 그대로 유지하며 gameplay smoke와 분리한다. 시체/재생성/보호의 production 시간 의미는 Full Gameplay E2E가 맡는다.
+의료 동선과 회복 규칙은 통합/수동 검사와 Full의 실제 패배→의무실→Bed 회복 및 Doctor 진료로 확인한다. Quick smoke는 fixture 로그인과 공동 사냥 1회, 귀환→옥상→승강기 3층→무기상 구매·재접속을 확인한다. 공개 가입 rate limit은 그대로 유지하며 gameplay smoke와 분리한다. 시체/재생성/보호의 production 시간 의미는 Full Gameplay E2E가 맡는다.
 
 ## 본부 5단계: 단일 화폐와 회수 자원 정산
 
@@ -91,23 +91,23 @@ Credits는 유일한 구매 currency, scrap은 material/resource다. `profile.in
 
 `환율`과 `교환`은 보이는 current-room SettlementOfficer에 위임한다. discovery는 기존 `room_objects`/names/parse_selector/resolve를 사용하며 bare는 0명 거절, 1명 자동 선택, 여러 명 대상 지정 요구다. targeted 입력은 `정산관에게 회수부품 10개 교환`처럼 공통 `에게` relation과 이름/번호를 사용한다. hidden/view lock은 개수·selector·hint·Web에서 제외한다. 이용은 실제 같은 Room·can_perceive·현재 Room safe·비전투 조건이며 특정 Room ID가 권한을 부여하지 않는다. 전투 중 보이는 NPC는 기존 전투 오류를 반환한다.
 
-`world/settlement.py`는 정산 resource와 1/N개/모두 수량만 해석한다. 일반 가방/보관/전리품 parser의 수량 범위를 확장하지 않는다. `rules.settle_salvage(profile, quantity)`는 비전투·양의 정수·가방 보유량을 전부 검증한 뒤 consume과 Credits 증가를 수행하고 획득액을 반환한다. 객체가 `caller.change()` 경계 안의 최신 profile에서 모두 수량을 구하므로 실패 시 부분 저장이 없다. 0개 inventory entry는 consume이 제거한다. 저장한 부품·임무용 부품·성장 등은 정산 대상 가방 수량 이외에 변경하지 않는다.
+`world/settlement.py`는 정산 resource와 1/N개/모두 수량만 해석한다. 일반 소지품/보관/전리품 parser의 수량 범위를 확장하지 않는다. `rules.settle_salvage(profile, quantity)`는 비전투·양의 정수·소지품 보유량을 전부 검증한 뒤 consume과 Credits 증가를 수행하고 획득액을 반환한다. 객체가 `caller.change()` 경계 안의 최신 profile에서 모두 수량을 구하므로 실패 시 부분 저장이 없다. 0개 inventory entry는 consume이 제거한다. 저장한 부품·임무용 부품·성장 등은 정산 대상 소지품 수량 이외에 변경하지 않는다.
 
-서버는 실제 visible/available NPC에서 환율 명령과 보유 scrap이 있을 때 대상 지정 모두 정산 명령을 만든다. 기존 interactable actions를 재사용하고 전체 ActionObject action을 개방하지 않는다. Room hint도 실제 target/action의 availability를 따른다. `pz_state.resources.scrap={name,count}`는 같은 profile snapshot의 가방에서 파생하고 Credits wallet과 구분한다. 별도 balance를 저장하지 않으며 client는 payload와 완성된 command를 렌더링한다. zone ID·NPC 이름·환율·수량으로 action을 추론하지 않는다.
+서버는 실제 visible/available NPC에서 환율 명령과 보유 scrap이 있을 때 대상 지정 모두 정산 명령을 만든다. 기존 interactable actions를 재사용하고 전체 ActionObject action을 개방하지 않는다. Room hint도 실제 target/action의 availability를 따른다. `pz_state.resources.scrap={name,count}`는 같은 profile snapshot의 소지품에서 파생하고 Credits wallet과 구분한다. 별도 balance를 저장하지 않으며 client는 payload와 완성된 command를 렌더링한다. zone ID·NPC 이름·환율·수량으로 action을 추론하지 않는다.
 
 ## 본부 6단계: NPC 기반 상점
 
 `Shopkeeper(ActionObject)`는 실제 persistent NPC다. `supply_shopkeeper`(보급관/보급상인)는 `supply_shop`, `weapon_shopkeeper`(무기상/무기 상인)는 `weapon_shop`, `armor_shopkeeper`(방어구상/방어구 상인)는 `armor_shop`에 배치한다. `db.shop_id`의 supply/weapon/armor가 catalog identity이며 Room ID나 NPC 이름에서 추론하지 않는다. bootstrap은 stable tag로 같은 객체를 재사용하고 정의의 위치·alias·shop_id를 정규화한다. 재고 상태·profile migration은 없다.
 
-`world/content/shops.py`의 `SHOP_CATALOGS`가 유일한 판매/가격 SSOT다. 보급품 5종·무기 5종·방어구 4종의 기존 14개 가격을 모두 보존한다. `rules.buy(profile, shop_id, item_id)`는 비전투·유효 catalog·해당 상품·Credits 충분 여부를 전부 검증한 뒤 Credits와 가방을 함께 변경한다. scrap 정산·임무 소비·전리품·기술 가격·패배 패널티는 변경하지 않는다. 무한 재고로 매번 1개만 판매한다.
+`world/content/shops.py`의 `SHOP_CATALOGS`가 유일한 판매/가격 SSOT다. 보급품 5종·무기 5종·방어구 4종의 기존 14개 가격을 모두 보존한다. `rules.buy(profile, shop_id, item_id)`는 비전투·유효 catalog·해당 상품·Credits 충분 여부를 전부 검증한 뒤 Credits와 소지품을 함께 변경한다. scrap 정산·임무 소비·전리품·기술 가격·패배 패널티는 변경하지 않는다. 무한 재고로 매번 1개만 판매한다.
 
-`상점`(`메뉴`/`shop`)과 `구매`는 현재 `room_objects`의 실제 보이는 Shopkeeper를 찾는다. 메뉴의 bare 후보는 모든 판매자, 구매의 bare 후보는 그 물건을 파는 판매자만이다. 0명 거절·1명 선택·여럿 대상 지정 요구이며 targeted 구매는 `무기상에게 강철마체테 구매`처럼 기존 parse_relation/names/selector/resolve를 사용한다. 번호는 기존 공통 정렬의 임시 번호다. 발견 후 같은 Room·safe·비전투를 검사하며 숨은 판매자는 selector·개수·오류·hint·Web에서 제외한다. 서비스는 실제 NPC를 따라 다른 safe Room에서도 동작한다.
+`상품`(별칭 없음)과 `구매`는 현재 `room_objects`의 실제 보이는 Shopkeeper를 찾는다. 메뉴의 bare 후보는 모든 판매자, 구매의 bare 후보는 그 물건을 파는 판매자만이다. 0명 거절·1명 선택·여럿 대상 지정 요구이며 targeted 구매는 `무기상에게 강철마체테 구매`처럼 기존 parse_relation/names/selector/resolve를 사용한다. 번호는 기존 공통 정렬의 임시 번호다. 발견 후 같은 Room·safe·비전투를 검사하며 숨은 판매자는 selector·개수·오류·hint·Web에서 제외한다. 서비스는 실제 NPC를 따라 다른 safe Room에서도 동작한다.
 
-메뉴는 실제 NPC 제목과 그 catalog의 Credit 가격만 표시하고 상세 보기는 메뉴/targeted 구매 사용법을 안내한다. 각 시설 hint는 actual stable NPC와 상점 action을 참조하며 availability를 확인한다. 부두의 static 상점 hint·Shop/Buy gate·Web 상점 버튼을 제거했다. 다른 사용처가 없는 `GameCommand.at_dock()`과 global SHOP도 제거했다.
+메뉴는 실제 NPC 제목과 그 catalog의 Credit 가격만 표시하고 상세 보기는 메뉴/targeted 구매 사용법을 안내한다. 각 시설 hint는 actual stable NPC와 상품 action을 참조하며 availability를 확인한다. 부두의 static 상점 hint·Shop/Buy gate·Web 상점 버튼을 제거했다. 다른 사용처가 없는 `GameCommand.at_dock()`과 global SHOP도 제거했다.
 
 모든 `ActionObject`가 `web_actions(caller, target, observed_at)` capability를 제공한다. 기본 allowlist는 대화/조사/수리/보기와 available 의료 행동을 보존한다. Container는 보기만, Instructor는 기존 대화와 별도 TRAINING UI를 유지한다. SettlementOfficer와 Shopkeeper만 필요한 동적 action을 override한다. `world.state`는 subclass를 구분하지 않고 capability만 호출한다. Shopkeeper는 available일 때 메뉴와 catalog별 targeted 구매의 완성된 label/command를 서버에서 만든다. client는 기존 렌더링을 사용하며 Room·가격·이름으로 구매를 추론하지 않는다.
 
-Integrity는 세 판매자 배치·catalog ID/행동, catalog 비어 있지 않음·상품 존재·양의 정수 가격·중복 금지·기존 14개 합집합을 검사한다. smoke의 구매는 옥상→승강기 3층→동·북 무기점에서 실제 Credits 차감/장비 증가를 확인하고 해당 Room에서 재로그인 상태를 비교한다. 7단계 closeout의 Full은 본부 전체 서비스와 두 임무/보스 최종 보고 및 실제 Portal+Server 재시작을 연결 검증한다.
+Integrity는 세 판매자 배치·catalog ID/행동, catalog 비어 있지 않음·상품 존재·양의 정수 가격·중복 금지·기존 14개 합집합을 검사한다. smoke의 구매는 옥상→승강기 3층→동·북 무기점에서 실제 Credits 차감/장비 증가를 확인하고 재로그인 시 대기실 위치와 구매한 장비·Credits의 보존을 비교한다. 7단계 closeout의 Full은 본부 전체 서비스와 두 임무/보스 최종 보고 및 실제 Portal+Server 재시작을 연결 검증한다.
 
 ## 공통 대상 선택
 
@@ -115,7 +115,7 @@ Integrity는 세 판매자 배치·catalog ID/행동, catalog 비어 있지 않�
 
 `ordered()`의 객체 ID 오름차순을 Room 서술, SURROUNDINGS, 보기, 공격, 콘텐츠 행동, 시체 회수에서 공유한다. 번호는 방 안의 보이는 후보에 붙이는 1부터 시작하는 transient presentation index이며 DB에 저장하거나 객체 ID 자체를 노출하지 않는다. 같은 이름끼리 번호를 붙이되 `시체`는 방 전체 Corpse pool을 사용한다. 시체가 만료되면 남은 시체 번호도 다시 계산된다.
 
-DEFAULT는 구조적으로 행동을 지원하는 첫 대상을 선택한다. INDEX는 표시 순서의 정확한 개체를 선택한다. 실제 점유·임무·한 번 보상·전리품 권한은 행동/규칙 계층이 판단하며 resolver가 가능한 다음 대상으로 자동 이동하지 않는다. 보기와 가져만 ALL을 지원한다. 공격·대화·조사·수리·무장·착용·구매·학습·파티 인물 조작은 단일 대상이다. 정산의 교환은 NPC 하나를 선택하고 회수부품에는 정산 전용 1/N개/모두 수량을 적용한다. 전투가 시작된 뒤 공격·강타·방어·회복·도주는 기존 combat_target을 사용한다. 특성의 `힘 2 배분`처럼 수량을 받는 명령은 해당 명령의 인자 문법을 유지한다. 파티 초대/관리의 기존 원격 캐릭터 범위도 유지한다.
+DEFAULT는 구조적으로 행동을 지원하는 첫 대상을 선택한다. INDEX는 표시 순서의 정확한 개체를 선택한다. 실제 점유·임무·한 번 보상·전리품 권한은 행동/규칙 계층이 판단하며 resolver가 가능한 다음 대상으로 자동 이동하지 않는다. 보기와 가져만 ALL을 지원한다. 공격·대화·조사·수리·무장·착용·구매·학습·파티 인물 조작은 단일 대상이다. 정산의 교환은 NPC 하나를 선택하고 회수부품에는 정산 전용 1/N개/모두 수량을 적용한다. 전투가 시작된 뒤 공격·강타·방어·응급처치·도망는 기존 combat_target을 사용한다. 특성의 `힘 2 배분`처럼 수량을 받는 명령은 해당 명령의 인자 문법을 유지한다. 파티 초대/관리의 기존 원격 캐릭터 범위도 유지한다.
 
 `world/target_presentation.py`는 개체 수를 자연어로 묘사하고 필요한 경우에만 `'갈퀴사냥룡 1'`, `'시체 2'` 같은 지정 방법을 문장으로 안내한다. Room 본문과 세계 서술은 객체 표가 아니다. SURROUNDINGS·버튼·상태/조작 control에서는 빠른 인식과 조작을 위해 `시체 1 · 갈퀴사냥룡의 시체` 같은 compact label·번호·상태를 사용할 수 있다. `world/state.py`가 label/command를 생성하고 웹은 그대로 텍스트 명령을 전송하므로 클라이언트에 선택 parser를 복제하지 않는다.
 
@@ -146,7 +146,7 @@ DEFAULT는 구조적으로 행동을 지원하는 첫 대상을 선택한다. IN
 
 ## 숙련의 실제 결과와 한계
 
-`proficiencies`는 무기(weapon), 방어(defense), 응급처치(medicine)별 `{xp: 0}`이다. 20 XP마다 1 Rank, 최대 10 Rank/200 XP다. 실제 Enemy HP를 감소시킨 개인 공격 한 번, guard로 실제 피해를 줄인 적 공격 한 번, 붕대로 실제 HP를 높인 회복 한 번에 해당 숙련 XP 1을 준다. 피해량에 비례하지 않는다.
+`proficiencies`는 무기(weapon), 방어(defense), 의료(medicine)별 `{xp: 0}`이다. 20 XP마다 1 Rank, 최대 10 Rank/200 XP다. 실제 Enemy HP를 감소시킨 개인 공격 한 번, guard로 실제 피해를 줄인 적 공격 한 번, 붕대로 실제 HP를 높인 회복 한 번에 해당 숙련 XP 1을 준다. 피해량에 비례하지 않는다.
 
 순수 규칙의 공격 계산만으로 무기 XP를 주지 않고 Enemy의 실제 HP 감소와 개인 profile 저장을 같은 world_change 트랜잭션에서 처리한다. 적 차례와 회복도 기존 영속 next_attack_at 검사를 통과한 행동에만 적용한다. 실패·가득 찬 HP·예약/명령 반복·중복 callback은 성장시키지 않으며 타 파티원의 숙련도 공유하지 않는다. 파티의 처치 XP 분배는 그대로 별도 시스템이다.
 
@@ -154,7 +154,7 @@ DEFAULT는 구조적으로 행동을 지원하는 첫 대상을 선택한다. IN
 
 ## 기술 학습과 두 포인트 경제
 
-`skills`는 heavy/guard/heal의 Rank다. 새 캐릭터와 기존 캐릭터 모두 강타·방어·응급치료 무료 Rank 1을 갖는다. 기본 공격은 학습하지 않는다. 정의에는 id/name/description/max_rank/requirements/point_cost/credit_cost/cooldown/action_type/related_proficiency를 명시한다. 현재 기술은 최대 Rank 3이다.
+`skills`는 heavy/guard/firstaid의 Rank다. 새 캐릭터와 기존 캐릭터 모두 강타·방어·응급처치 무료 Rank 1을 갖는다. 기본 공격은 학습하지 않는다. 정의에는 id/name/description/max_rank/requirements/point_cost/credit_cost/cooldown/action_type/related_proficiency를 명시한다. 현재 기술은 최대 Rank 3이다.
 
 | 다음 Rank | 요구 레벨 | 기술점수 | 크레딧 |
 | --- | --- | --- | --- |
@@ -163,7 +163,7 @@ DEFAULT는 구조적으로 행동을 지원하는 첫 대상을 선택한다. IN
 
 기술점수 총량은 `레벨 + 1`이다. 사용량은 무료 Rank를 제외한 각 Rank별 point_cost의 합계로 계산한다. 두 자원 모두 **총 획득 = 현재 투자 + 미사용** 관계를 유지한다. 포인트·레벨·크레딧·최대 Rank를 전부 검사한 뒤 한 번만 저장한다.
 
-강타 피해 배율은 Rank 1/2/3에서 1.8/2.0/2.2이고 재사용 대기는 7.5초다. 방어는 적 피해를 `2 + Rank`로 정수 나눗셈한 뒤 방어 숙련 보정을 뺀다. 붕대 회복은 `35 + 지혜 투자×2 + (Rank-1)×5 + 응급처치 숙련 Rank//2`이며 실제 부족한 HP까지만 회복한다. 전투 중 회복은 여전히 기본 공격을 대체한다. Skill은 기존 두 타이머와 전투 상태 머신 위에 수치 계층만 더한다.
+강타 피해 배율은 Rank 1/2/3에서 1.8/2.0/2.2이고 재사용 대기는 7.5초다. 방어는 적 피해를 `2 + Rank`로 정수 나눗셈한 뒤 방어 숙련 보정을 뺀다. 붕대 회복은 `35 + 지혜 투자×2 + (Rank-1)×5 + 의료 숙련 Rank//2`이며 실제 부족한 HP까지만 회복한다. 전투 중 회복은 여전히 기본 공격을 대체한다. Skill은 기존 두 타이머와 전투 상태 머신 위에 수치 계층만 더한다.
 
 ## 지원동 훈련관과 재훈련
 
@@ -181,9 +181,21 @@ parser는 마지막 token으로 행동만 찾는다. Command는 인자 문법·�
 
 명령은 base, character, combat, inventory, party, social, world_actions, skills로 나누고 registry.COMMANDS에서 명시적으로 등록한다. gameplay는 기존 import 호환 경로만 남긴다. 각 명령의 category/usage/summary와 실제 aliases로 `도움말`을 생성한다. command discovery나 콘텐츠별 parser 분기는 없다.
 
-공용 단축어는 입력 전체가 정확히 `ㅂ/ㄴ/ㄷ/ㅅ/상/능/기/장/가`일 때만 각각 `북/남/동/서/상태/능력/기술/장비/가방`으로 바꾼다. 기존 엔진 명령이 그 이름을 차지하면 엔진 명령을 우선한다. 인증·관리 명령은 기본 parser를 유지하고 작은따옴표 채팅, `내용 말`의 내용, 대상 이름 일부는 치환하지 않는다. prefix 게임 문법은 계속 거부한다.
+공용 단축어는 입력 전체가 정확히 `ㅂ/ㅂㄷ/ㄷ/ㄴㄷ/ㄴ/ㄴㅅ/ㅅ/ㅂㅅ/상/능/기/장/소`일 때만 각각 `북/북동/동/남동/남/남서/서/북서/상태/능력/기술/장비/소지품`으로 바꾼다. 기존 엔진 명령이 그 이름을 차지하면 엔진 명령을 우선한다. 인증·관리 명령은 기본 parser를 유지하고 작은따옴표 채팅, `내용 말`의 내용, 대상 이름 일부는 치환하지 않는다. prefix 게임 문법은 계속 거부한다.
 
-`상태`는 전투 수치와 특성 요약, `능력`은 특성과 숙련, `기술`은 Rank·학습 조건, `경험치`는 개인/숙련 XP, `장비`는 착용품, `가방`은 전체 소지품이다. pz_state는 계산된 포인트와 성장 목록, 서버가 판단한 훈련 가능 여부를 전달한다. 웹은 profile을 직접 수정하지 않는다.
+`상태`는 전투 수치와 특성 요약, `능력`은 특성과 숙련, `기술`은 Rank·학습 조건, `경험치`는 개인/숙련 XP, `장비`는 착용품, `소지품`은 전체 소지품이다. pz_state는 계산된 포인트와 성장 목록, 서버가 판단한 훈련 가능 여부를 전달한다. 웹은 profile을 직접 수정하지 않는다.
+
+## 명령 vocabulary·글로벌 단축어·도움말
+
+방향 정의의 `shortcut`에서 8방향 초성 mapping을 파생한다. `commands/aliases.py`는 정보 단축어와 합성한 `SHORTCUTS`를 제공하며 `단축어` 조회도 같은 mapping에서 semantic command/direction token을 만든다. 개인 설정은 `줄임말`이며 `치료/heal`은 future-reserved SSOT에 있고 active 명령은 없다. 응급처치의 skill ID/action_type/queued action/전투 결과는 `firstaid`, medicine 저장 ID의 표시명은 의료다. 붕대와 음식의 numeric `heal` 필드는 일반 회복량으로 유지한다.
+
+`commands/help_pages.py`의 명시적 여섯 분류 순서·query·대표 명령과 각 command의 help-only `category`가 root/분류/detail을 구성한다. 입력할 수 없는 '8방향 이동'은 text role이다. query는 casefold → 글로벌 단축어 → 실제 command key/alias → 방향/영문 alias → category/topic 순서로 판정한다. 파티 detail이 category보다 우선하며 parser 상세는 `입력 도움말`로 분리했다. 승강기 내부 명령은 registry에 넣지 않고 이동 분류에서 현재 stop SSOT로 안내한다.
+
+v8 migration은 `skills.heal → firstaid` Rank와 `queued_action`을 보존한다. pure `commands/vocabulary.py`는 저장 정의의 실제 명령 위치만 canonical로 변환하고 새 글로벌/command/미래 예약 이름과 충돌한 개인 key를 `_개인[번호]`로 보존한다. exact 중첩 참조만 갱신하며 채팅·대상 문자열은 유지한다. 상세 계약은 [command-shortcuts.md](command-shortcuts.md)에 있다.
+
+새 authentication 이후 `Account.puppet_object()`가 호출하는 `Explorer.at_pre_puppet()`은 `staging_room`을 배치한 뒤 기본 hook을 수행한다. Evennia 6.1의 `ServerSession.at_sync()`는 live-session reload의 `puid`를 기존 Object에 직접 연결하고 puppet hook을 호출하지 않아 위치를 보존한다. 실제 두 lifecycle 경로를 integration에서 검증한다. `home=dock`, 일반 귀환/패배 위치, profile 진행은 별개 계약으로 유지한다.
+
+승강기 선택/수동 하차는 단일 `world_change()` 안의 `_disembark()`를 공유한다. 층과 이동 실패는 rollback하며 승강기 이동의 도착 화면은 `after_change()` 이후 전송한다. Web 버튼·NPC action·hint는 새 서버 canonical 명령을 보내며 client가 진료/상품/서비스 권한을 위치로 추론하지 않는다. asset 공통 query는 `command-vocabulary`다.
 
 ## 개인 줄임말과 묶음 명령
 
@@ -191,7 +203,7 @@ parser는 마지막 token으로 행동만 찾는다. Command는 인자 문법·�
 
 실행 전 전체 flat 목록을 확정한 뒤 각 `execute_cmd()` Deferred 완료를 기다린다. Evennia 6.1은 일반 `func`의 Deferred 반환을 기다리지 않으므로 dispatch는 `at_post_cmd`에서 수행한다. 시작 시점 merged cmdset에서 식별되는 generator/coroutine 명령은 사전 거절한다. 앞 명령이 새 CmdSet을 활성화한 뒤 등장하는 progressive command는 예측하지 않으며 현재 gameplay에는 해당 command가 없다. game command failure는 이후 실행을 막지 않는다. 전체 묶음은 transaction이 아니다. 실행 중 새로 등록된 정의는 같은 묶음에서 재확장하지 않는다.
 
-`profile.command_shortcuts`는 캐릭터별 영구 설정이며 profile v7 migration은 기존 게임 상태를 유지한 채 빈 기본값만 보완한다. 전체 삭제 요청과 확인은 각각 별개의 top-level 직접 입력만 허용하며 `primal_sequence_leaf` 간접 실행은 pending을 건드리기 전에 거절한다. 캐릭터 ndb의 60초 요청과 목록 fingerprint를 검증한 경우에만 한 번 저장한다. 확인 단독 입력·만료·목록 변경·로그아웃/종료 후에는 삭제하지 않는다. 콤마 segment·동적 CmdSet preflight의 한계와 향후 후보는 [개인 줄임말과 묶음 명령](command-shortcuts.md)을 따른다.
+`profile.command_shortcuts`는 캐릭터별 영구 설정이며 profile v8은 기존 게임 상태를 유지하며 응급처치 ID·저장된 명령 위치·새 예약 이름 충돌을 변환한다. 전체 삭제 요청과 확인은 각각 별개의 top-level 직접 입력만 허용하며 `primal_sequence_leaf` 간접 실행은 pending을 건드리기 전에 거절한다. 캐릭터 ndb의 60초 요청과 목록 fingerprint를 검증한 경우에만 한 번 저장한다. 확인 단독 입력·만료·목록 변경·로그아웃/종료 후에는 삭제하지 않는다. 콤마 segment·동적 CmdSet preflight의 한계와 향후 후보는 [개인 줄임말과 묶음 명령](command-shortcuts.md)을 따른다.
 
 ## Party의 단일 상태
 
@@ -211,17 +223,17 @@ Enemy가 HP/max HP, alive/respawning 상태, respawn_at, claim, claim_last_activ
 
 위협도는 실제 깎은 HP만큼 증가한다. 적은 같은 방·접속 중·해당 적을 공격 중인 탐사자 중 위협도가 가장 높은 사람을 선택하고 동률은 캐릭터 ID 순서로 해결한다. 강타는 7.5초 재사용 대기시간, 회복은 다음 개인 공격을 대체하며, 방어는 개인 공격을 유지하고 다음 공격 간격 동안 받는 피해를 줄인다.
 
-보스의 예고/돌진은 공유 enemy_round를 따른다. 능선 보스는 2·5차례에 예고하고 3·6차례에 돌진하며 밀림 보스는 3·7차례에 예고하고 4·8차례에 돌진한다. 주기는 Enemy 정의의 `special_period`를 사용한다. 도주·패배·접속 종료·장소 이탈 시 전투 소속과 위협도·기여도를 정리한다. 일반 이동은 전투 중 거부하며, 강제 이동도 이동 후 정리한다. 패배 시 장비·경험치·소지품·진행은 보존하고 최대 10크레딧을 잃으며 의무실에서 체력 1로 의식을 되찾는다. 일반 치료·휴식은 이후 플레이어가 직접 사용한다.
+보스의 예고/돌진은 공유 enemy_round를 따른다. 능선 보스는 2·5차례에 예고하고 3·6차례에 돌진하며 밀림 보스는 3·7차례에 예고하고 4·8차례에 돌진한다. 주기는 Enemy 정의의 `special_period`를 사용한다. 도망·패배·접속 종료·장소 이탈 시 전투 소속과 위협도·기여도를 정리한다. 일반 이동은 전투 중 거부하며, 강제 이동도 이동 후 정리한다. 패배 시 장비·경험치·소지품·진행은 보존하고 최대 10크레딧을 잃으며 의무실에서 체력 1로 의식을 되찾는다. 일반 치료·휴식은 이후 플레이어가 직접 사용한다.
 
 ## 점유와 보상 자격
 
-일반 적의 combat_mode는 claimed다. 첫 교전 탐사자 또는 파티가 점유한다. 같은 파티는 합류할 수 있고 외부 그룹은 서버에서 거절된다. 실제 전투 행동이 점유 활동 시각을 갱신한다. 명령 반복만으로 기한을 늘리지 않는다. 그룹 전원 도주·이탈·접속 종료 시 즉시 점유를 해제하며, 활동이 15초간 없으면 남은 참여를 종료하고 해제한다.
+일반 적의 combat_mode는 claimed다. 첫 교전 탐사자 또는 파티가 점유한다. 같은 파티는 합류할 수 있고 외부 그룹은 서버에서 거절된다. 실제 전투 행동이 점유 활동 시각을 갱신한다. 명령 반복만으로 기한을 늘리지 않는다. 그룹 전원 도망·이탈·접속 종료 시 즉시 점유를 해제하며, 활동이 15초간 없으면 남은 참여를 종료하고 해제한다.
 
-살아 있는 적은 참가자가 없고 마지막 활동부터 15초가 지나면 최대 HP로 회복하고 위협도·기여도·차례를 초기화한다. 도주 직후 재공격하면 아직 남은 HP로 싸울 수 있다. 기존처럼 도주가 즉시 적 HP를 초기화하지 않는다. 공용 보스도 전원이 이탈한 뒤 같은 유휴 회복 정책을 따른다.
+살아 있는 적은 참가자가 없고 마지막 활동부터 15초가 지나면 최대 HP로 회복하고 위협도·기여도·차례를 초기화한다. 도망 직후 재공격하면 아직 남은 HP로 싸울 수 있다. 기존처럼 도망가 즉시 적 HP를 초기화하지 않는다. 공용 보스도 전원이 이탈한 뒤 같은 유휴 회복 정책을 따른다.
 
 우두머리는 public으로 여러 솔로/파티가 참여할 수 있다. contribution에는 캐릭터별 damage, last_action_at, group identity를 기록한다. 자기 회복·방어만으로 최초 보상 자격이 생기지는 않는다. 지원/치유 기여 가중치는 아직 구현하지 않았다.
 
-처치 시 실제 피해 기여가 있고, 같은 방에서 접속한 채 교전 중이며, 최근 15초 내 행동한 탐사자만 적격이다. 파티에 있다는 이유로 원격·AFK·미참여 멤버에게 지급하지 않는다. 도주 후 재참여하면 이전 기여는 이어받지 않는다.
+처치 시 실제 피해 기여가 있고, 같은 방에서 접속한 채 교전 중이며, 최근 15초 내 행동한 탐사자만 적격이다. 파티에 있다는 이유로 원격·AFK·미참여 멤버에게 지급하지 않는다. 도망 후 재참여하면 이전 기여는 이어받지 않는다.
 
 경험치·크레딧은 적격 그룹의 피해 합계 비중으로 나누고, 파티 안에서는 적격 멤버끼리 균등 분배한다. 일반 적은 점유 그룹만 존재하므로 그 그룹이 전체 풀을 받는다. 각 단계에서 최대 나머지법으로 정수 총량을 보존하며, 같은 나머지는 그룹 키/캐릭터 ID 오름차순으로 결정한다. 보스 처치 플래그도 적격 탐사자 각각에게만 적용한다. 막타와 회수 명령자는 보상 자격을 독점하지 않는다.
 
@@ -229,13 +241,13 @@ Enemy가 HP/max HP, alive/respawning 상태, respawn_at, claim, claim_last_activ
 
 사망 전이는 HP 감소, alive→respawning, 경험치·크레딧·임무 보상, 드롭 추첨 한 번과 Corpse 한 개 생성을 같은 트랜잭션으로 처리한다. state와 HP 조건을 다시 검사하여 중복 호출을 무시한다. DB 실패 시 Evennia의 Attribute/identity/방 내용 캐시도 복구하고 화면 전송·예약 작업은 성공 후 처리한다.
 
-Corpse는 실제 방 객체이며 source spawn/enemy, created_at, decay_at과 loot entries를 저장한다. 회수부품 1개와 기존 확률 장비 드롭은 처치 시 한 번 결정된다. 경험치·크레딧은 즉시 지급하지만 아이템은 가방에 자동 지급하지 않는다.
+Corpse는 실제 방 객체이며 source spawn/enemy, created_at, decay_at과 loot entries를 저장한다. 회수부품 1개와 기존 확률 장비 드롭은 처치 시 한 번 결정된다. 경험치·크레딧은 즉시 지급하지만 아이템은 소지품에 자동 지급하지 않는다.
 
 공용 보스도 시체는 하나다. 각 아이템은 정렬된 보상 그룹의 누적 피해 비중 구간에, 전체 드롭 개수로 나눈 등간격 중점을 대응시켜 그룹을 결정한다. 예를 들어 50:50 두 그룹에 두 아이템이면 각각 하나씩 배정된다. 아이템 수가 적으면 기여 비중이 낮은 그룹은 아이템을 못 받을 수 있다. 경험치·크레딧 비례 배분과는 별개이며 첫 회수자가 전체 드롭을 갖지 않는다.
 
 선정된 파티의 실제 참여자를 가입 순서로 정렬하고 Party.round_robin_cursor를 적용한다. 아이템 한 개마다 순번을 증가시킨다. 현재 지원 모드는 round_robin뿐이며 `순번 파티분배`로 설정한다. free_for_all·need_greed·leader 방식과 관련 UI는 구현하지 않았다.
 
-각 entry는 item, quantity, reserved_party, reserved_player, assigned_player, protection_until을 저장한다. 보호 중에는 배정된 탐사자 또는 원래 파티원이 회수를 요청할 수 있으나 실제 가방은 assigned_player에게 지급된다. 배정자는 탈퇴·접속 종료해도 바뀌지 않는다. 보호 종료 뒤에는 회수 명령자가 받는다. 특정 아이템은 한 개, `<아이템> 모두`는 선택한 출처의 같은 종류 전체 수량을 처리한다. 여러 시체 전체의 회수는 `모든 시체에서 모두 가져`로 명시한다.
+각 entry는 item, quantity, reserved_party, reserved_player, assigned_player, protection_until을 저장한다. 보호 중에는 배정된 탐사자 또는 원래 파티원이 회수를 요청할 수 있으나 실제 소지품은 assigned_player에게 지급된다. 배정자는 탈퇴·접속 종료해도 바뀌지 않는다. 보호 종료 뒤에는 회수 명령자가 받는다. 특정 아이템은 한 개, `<아이템> 모두`는 선택한 출처의 같은 종류 전체 수량을 처리한다. 여러 시체 전체의 회수는 `모든 시체에서 모두 가져`로 명시한다.
 
 시체는 처치 후 30초에 남은 entries를 DroppedLoot 방 객체로 옮기고 삭제된다. 원래 권한과 처치 후 120초인 protection_until은 그대로 유지된다. 적은 처치 후 45초(시체 30초 + 대기 15초)에 같은 spawn으로 재생성한다. 바닥 아이템은 재생성 시 삭제하지 않으며 현재 별도 영구 소멸 기한은 없다. 장기간 운영 시 누적량 관리 정책이 필요하다.
 
@@ -247,7 +259,7 @@ Corpse는 실제 방 객체이며 source spawn/enemy, created_at, decay_at과 lo
 
 ## 기존 데이터와 운영 범위
 
-profile의 최신 버전은 7이다. v1/v2의 개인 encounter 제거·전투 입력 필드·성장 기본값 변환을 거친 뒤, v1~v3의 첫 임무 boolean을 `quests.radio_tower`의 진행 필드로 옮긴다. `cache_claimed`는 `discoveries.supply_cache`로 옮긴다. v1~v4에는 개인 보관 `storage={}`의 기본값을 추가한다. XP, HP, credits, inventory, equipment(명시적 None 포함), kills, 완료 여부와 visited 및 개인 전투 상태를 유지한다. 이미 받은 보상은 재지급하지 않는다. v1~v5에는 개인 광원 `light_sources={}`, v1~v6에는 개인 줄임말 `command_shortcuts={}`를 보완하고 반복 로드·저장은 초기화하지 않는다.
+profile의 최신 버전은 8이다. v1/v2의 개인 encounter 제거·전투 입력 필드·성장 기본값 변환을 거친 뒤, v1~v3의 첫 임무 boolean을 `quests.radio_tower`의 진행 필드로 옮긴다. `cache_claimed`는 `discoveries.supply_cache`로 옮긴다. v1~v4에는 개인 보관 `storage={}`의 기본값을 추가한다. XP, HP, credits, inventory, equipment(명시적 None 포함), kills, 완료 여부와 visited 및 개인 전투 상태를 유지한다. 이미 받은 보상은 재지급하지 않는다. v1~v5에는 개인 광원 `light_sources={}`, v1~v6에는 개인 줄임말 `command_shortcuts={}`를 보완하고 반복 로드·저장은 초기화하지 않는다.
 
 변환은 기존 프로필의 복사본에서 첫 임무·보급 boolean을 새 구조로 옮기고 오래된 key를 제거한다. 기존 플레이어는 현재 레벨에 해당하는 포인트를 즉시 사용할 수 있고, 무료 기본 기술 Rank 1과 미투자 특성은 기존 전투 성능을 유지한다. Party·Enemy·Corpse·DroppedLoot는 profile 밖에 있으므로 migration이 수정하지 않는다. 기존 DB의 로드 시 점진적으로 변환하며 DB 삭제·교체는 필요 없다. 위의 서버 재시작/재접속 전투 정리 정책과 migration 자체의 보존 정책은 별개다.
 
@@ -261,7 +273,7 @@ profile의 최신 버전은 7이다. v1/v2의 개인 encounter 제거·전투 �
 
 ## 텍스트와 의미별 색상
 
-세계 사건과 조회 화면은 같은 데이터를 서로 다른 형식으로 표현한다. Room·공격·처치·전리품·NPC 대화는 한국어 서술이고, 상태·능력·경험치·기술·장비·가방·상점·임무·파티·도움말은 `[제목]`과 짧은 행으로 구성한 compact 정보창이다. Room과 대상 보기는 기존 구분선과 설명·행동 안내를 유지한다. Room은 실제로 보이는 대상만 묘사하며 명령 목록을 넣지 않는다. 가능한 행동은 대상 보기와 command registry 기반 도움말에서 확인한다.
+세계 사건과 조회 화면은 같은 데이터를 서로 다른 형식으로 표현한다. Room·공격·처치·전리품·NPC 대화는 한국어 서술이고, 상태·능력·경험치·기술·장비·소지품·상점·임무·파티·도움말은 `[제목]`과 짧은 행으로 구성한 compact 정보창이다. Room과 대상 보기는 기존 구분선과 설명·행동 안내를 유지한다. Room은 실제로 보이는 대상만 묘사하며 명령 목록을 넣지 않는다. 가능한 행동은 대상 보기와 command registry 기반 도움말에서 확인한다.
 
 `world/text.py`의 `Text`는 색 없는 문자열과 `{text, role}` 조각을 함께 가진다. `token`, `text`, `join`, `sheet`, `compact`, `row`가 조합과 한글 표시 폭을 담당한다. 조사는 색 코드를 붙이기 전 원래 이름의 받침으로 선택한다. `world/presentation.py`는 기존 rules·성장 정의·ITEMS·SHOP_CATALOGS에서 조회값을 읽는다. Enemy/Corpse/DroppedLoot/ActionObject/Explorer의 실제 타입과 콘텐츠 정의가 대상 역할과 행동을 결정한다. 이름별 색상 목록이나 완성된 문자열 검색은 사용하지 않는다.
 
@@ -304,7 +316,7 @@ Room `requires.message`는 이동 실패 안내, optional `requires.observe_mess
 
 ### Compact 정보 조회
 
-`compact(title, *lines, summary=...)`는 기존 Text 조각을 보존하면서 제목과 요약을 한 줄에 놓고 첫 내용까지 빈 줄을 추가하지 않는다. 기존 `sheet`는 Room·대상 보기 등에 남긴다. 상태는 전투 수치·특성·장비 요약, 능력은 기본값과 투자값, 장비는 슬롯별 보정으로 역할을 나눈다. 가방은 비어 있지 않은 분류마다 한 행을 만들고, 기술은 SKILLS의 설명과 다음 조건을 그대로 한 항목에 표시한다. R은 Rank, C는 크레딧이며 비용 화면에 단위 안내를 둔다. 임무는 완료 수/전체 단계와 ASCII `+`(완료), `>`(현재), `-`(대기)로 구분한다.
+`compact(title, *lines, summary=...)`는 기존 Text 조각을 보존하면서 제목과 요약을 한 줄에 놓고 첫 내용까지 빈 줄을 추가하지 않는다. 기존 `sheet`는 Room·대상 보기 등에 남긴다. 상태는 전투 수치·특성·장비 요약, 능력은 기본값과 투자값, 장비는 슬롯별 보정으로 역할을 나눈다. 소지품은 비어 있지 않은 분류마다 한 행을 만들고, 기술은 SKILLS의 설명과 다음 조건을 그대로 한 항목에 표시한다. R은 Rank, C는 크레딧이며 비용 화면에 단위 안내를 둔다. 임무는 완료 수/전체 단계와 ASCII `+`(완료), `>`(현재), `-`(대기)로 구분한다.
 
 기본 도움말은 registry 순서와 category를 사용한 명령 지도다. `명령이름 도움말`은 같은 metadata의 summary/usage/aliases를 표시하며 등록 별칭과 공용 단축어로도 조회할 수 있다. 상세 조회에서 단축어를 해석하는 것은 도움말 대상 검색이며 이동이나 게임 입력 parser는 바꾸지 않는다. `능력 도움말`은 ATTRIBUTES의 설명을 추가로 표시하고 기존 웹 성장 패널 tooltip도 유지한다.
 
@@ -320,7 +332,7 @@ Room `requires.message`는 이동 실패 안내, optional `requires.observe_mess
 
 ## 아이템 이전·소비·보관
 
-가방과 보관 공간은 `item_id → quantity` 스택이다. `world.targets.stack_selector()`는 기존 DEFAULT/ALL을 재사용하고 inventory INDEX와 숫자 수량을 거절한다. `parse_relation()`이 `에게`/`에`/`에서`의 경계를 추출한 뒤 기존 selector와 room ordering으로 플레이어/상자 하나를 선택한다. 여러 플레이어·상자 동시 이전은 지원하지 않는다.
+소지품과 보관 공간은 `item_id → quantity` 스택이다. `world.targets.stack_selector()`는 기존 DEFAULT/ALL을 재사용하고 inventory INDEX와 숫자 수량을 거절한다. `parse_relation()`이 `에게`/`에`/`에서`의 경계를 추출한 뒤 기존 selector와 room ordering으로 플레이어/상자 하나를 선택한다. 여러 플레이어·상자 동시 이전은 지원하지 않는다.
 
 `rules.move_item()`은 아이템의 명시적 `transferable` 정책, 보유 수량과 현재 equipment가 예약한 복사본 수를 검사한 뒤 source 차감·destination 증가·빈 스택 제거를 처리한다. 버려·줘·넣어·꺼내는 모두 이 규칙을 쓰며, `world.item_transfers.transfer()`가 기존 `world_change()`의 서버 잠금과 DB transaction 안에서 영속 소유자를 저장한다. 저장 실패 시 기존 DB/Evennia 캐시 rollback과 after_change 정책을 재사용한다. 마지막 공용 아이템의 두 요청도 같은 단일 서버에서 직렬 처리된다. 별도 거래/loot 권한 체계는 없다.
 
@@ -330,7 +342,7 @@ Room `requires.message`는 이동 실패 안내, optional `requires.observe_mess
 
 equipment 슬롯은 `None`을 정상 값으로 허용한다. 해제/벗어는 소지 수량을 바꾸지 않으며 stats·상태·장비·전투 문장·웹 state에서 빈 슬롯을 처리한다. 맨손 공격은 기존 base attack과 성장 보정만 사용한다. migration은 명시적 None을 초기 장비로 되돌리지 않는다.
 
-야전식량/정제수의 `consume_action`과 `heal`이 소비 행동과 고정 효과의 출처다. 비전투 중 하나만 사용하고 최대 HP에서는 소비하지 않는다. 붕대 회복과 치료 숙련/성장 보정을 재사용하거나 변경하지 않는다. 모든 이전과 장비 해제도 비전투 중만 허용하며 줘의 받는 탐사자도 비전투 상태여야 한다. 웹은 서버의 remove_action/consume_action을 기존 텍스트 명령 버튼으로 전송한다.
+야전식량/정제수의 `consume_action`과 `heal`이 소비 행동과 고정 효과의 출처다. 비전투 중 하나만 사용하고 최대 HP에서는 소비하지 않는다. 붕대 회복과 의료 숙련/성장 보정을 재사용하거나 변경하지 않는다. 모든 이전과 장비 해제도 비전투 중만 허용하며 줘의 받는 탐사자도 비전투 상태여야 한다. 웹은 서버의 remove_action/consume_action을 기존 텍스트 명령 버튼으로 전송한다.
 
 ## Region·임무·Gate 확장
 
@@ -340,7 +352,7 @@ equipment 슬롯은 `None`을 정상 값으로 허용한다. 해제/벗어는 �
 
 `world/quests.py`의 임무별 단계는 `flag/대상/의미 역할/설명`과 안내문으로 구성된다. 선행 임무 조건 `requires`와 시작 전 표시 여부 `visible_from_start`도 임무 정의가 소유하며, 안내 선택과 임무 화면은 이 정의를 순서대로 읽는다. profile은 `quests[quest_id][flag]`와 개인 일회 발견용 `discoveries[id]`를 저장한다. 조회 화면은 완료 임무를 한 줄로 압축하고 진행 임무의 완료·현재·대기 단계를 보여준다. 웹 `pz_state`는 현재 안내 외에 Region ID/이름을 전달한다. 실제 임무 행동은 `ActionObject` subclass와 순수 `rules` 함수가 처리하므로 임무 DSL이나 새 parser는 없다.
 
-`build_world()`는 Room 이름·설명, Exit 방향·별칭·목적지, 상호작용 객체 이름·별칭·위치, Enemy 이름·ID·최대 HP와 유휴 spawn 위치처럼 정적 정의가 소유하는 값을 동기화한다. 현재 HP는 유지하되 최대 HP가 낮아졌다면 새 최대치로 제한한다. Enemy의 교전 중 위치, state, respawn_at, claim, combatants, contribution, threat, round·timer·last_activity와 시체·바닥 전리품, 파티, 플레이어 profile·가방·임무는 런타임이 소유하므로 초기화하지 않는다. 삭제된 관리 Exit/Interactable/spawn은 `stale_definitions()`로 보고하지만 자동 삭제하지 않는다. 실제 운영 DB에서 제거가 필요하면 상태와 참조를 확인한 뒤 별도 작업으로 정리한다. Region 3 추가 시 지역 정의, 필요하다면 작은 행동 subclass, 임무 정의 및 순수 규칙 함수를 더하고 무결성 검사를 통과시킨다.
+`build_world()`는 Room 이름·설명, Exit 방향·별칭·목적지, 상호작용 객체 이름·별칭·위치, Enemy 이름·ID·최대 HP와 유휴 spawn 위치처럼 정적 정의가 소유하는 값을 동기화한다. 현재 HP는 유지하되 최대 HP가 낮아졌다면 새 최대치로 제한한다. Enemy의 교전 중 위치, state, respawn_at, claim, combatants, contribution, threat, round·timer·last_activity와 시체·바닥 전리품, 파티, 플레이어 profile·소지품·임무는 런타임이 소유하므로 초기화하지 않는다. 삭제된 관리 Exit/Interactable/spawn은 `stale_definitions()`로 보고하지만 자동 삭제하지 않는다. 실제 운영 DB에서 제거가 필요하면 상태와 참조를 확인한 뒤 별도 작업으로 정리한다. Region 3 추가 시 지역 정의, 필요하다면 작은 행동 subclass, 임무 정의 및 순수 규칙 함수를 더하고 무결성 검사를 통과시킨다.
 
 밀림 신호전지는 두 번째 지역 임무 전용 열쇠다. 수위 표식은 문이 닫혀 있고 전지가 없을 때만 한 개를 지급하며, 신호 장치 가동은 조건을 모두 확인한 뒤 전지 한 개를 소비하고 gate_open을 기록한다. 철갑등짐승은 신호전지 대신 일반 회수부품을 확률적으로 남긴다. 이미 문을 연 개발 데이터의 잔여 전지는 bootstrap이나 profile 변환에서 임의로 삭제하지 않는다.
 
@@ -400,7 +412,7 @@ Room `hints`는 stable INTERACTABLES ID/action 또는 일반 text를 참조한�
 
 기존 버전에서 발전기 개인 복구를 마친 캐릭터도 공용 전력이 아직 꺼져 있으면 수리 명령으로 가동할 수 있다. 이때 부품·보상·개인 진행을 다시 변경하지 않으며, 이미 가동된 시설에는 중복 보상을 주지 않는다.
 
-웹은 environment와 observation을 분리하며 현재 시야와 손전등 상태를 표시한다. 가방의 켜기/끄기/확인은 서버 명령을 보내고 compatible 전원별 삽입 버튼은 실제 아이템 이름을 포함한다. 렌더링이나 시각 조회는 전원 소모를 저장하지 않는다.
+웹은 environment와 observation을 분리하며 현재 시야와 손전등 상태를 표시한다. 소지품의 켜기/끄기/확인은 서버 명령을 보내고 compatible 전원별 삽입 버튼은 실제 아이템 이름을 포함한다. 렌더링이나 시각 조회는 전원 소모를 저장하지 않는다.
 
 ## 테스트 계층과 실제 서버 smoke
 
@@ -416,7 +428,7 @@ Room `hints`는 stable INTERACTABLES ID/action 또는 일반 text를 참조한�
 
 `world/timing.py`가 production 2.5/30/15/120/15/15/15초 기본값을 갖고 `world.multiplayer`는 선택적인 `PRIMAL_*` settings를 읽는다. `settings_test`는 타이머를 줄이지 않는다. `server/conf/smoke_support.py`의 Quick 값은 0.25/1/1/2/2/2/2초이며 Full은 production 기본값을 그대로 쓴다. 기존 적·캐릭터·Corpse의 실제 `delay()` 및 WorldLifecycle의 5초 sweep을 재사용한다. fake Clock나 새 scheduler framework를 만들지 않았다.
 
-`scripts/smoke_harness.py`는 실행마다 새 작업 경로에 게임 코드/새 SECRET_KEY·SQLite를 준비하고 `smoke_setup.py`를 별도 프로세스에서 실행한다. DB 접근 전 marker·정확한 작업/DB 경로·SQLite engine을 검증한다. 사용자 PostgreSQL 환경은 제거한다. 정상 Evennia Account/Character API로 일반 fixture 계정을 만들고 기본 quest/파티/전투/시작 위치와 구매 자금/HP를 준비한다. 비밀번호는 runtime 메모리와 자식 stdin으로만 전달한다. 결과 장비/시체는 scenario의 실제 동작으로 생성한다.
+`scripts/smoke_harness.py`는 실행마다 새 작업 경로에 게임 코드/새 SECRET_KEY·SQLite를 준비하고 `smoke_setup.py`를 별도 프로세스에서 실행한다. DB 접근 전 marker·정확한 작업/DB 경로·SQLite engine을 검증한다. 사용자 PostgreSQL 환경은 제거한다. Smoke 전용 SQLite는 Portal+Server 재시작 중 읽기→쓰기 승격 경합을 막도록 IMMEDIATE transaction과 30초 busy timeout을 사용한다. 일반 플레이 DB 설정은 바꾸지 않는다. 정상 Evennia Account/Character API로 일반 fixture 계정을 만들고 기본 quest/파티/전투/시작 위치와 구매 자금/HP를 준비한다. 비밀번호는 runtime 메모리와 자식 stdin으로만 전달한다. 결과 장비/시체는 scenario의 실제 동작으로 생성한다.
 
 정상 초기 객체·static 준비를 마친 fixture DB에 초기 setup 완료를 기록해 첫 실행의 자동 재시작을 피한다. 실제 Twisted foreground Portal/Server를 각각 시작해 exit를 추적하고 loopback HTTP/WS readiness를 polling한다. scenario 중 health monitor가 server premature exit를 실패로 전파한다. 실패·interrupt·성공 모두 자체 Popen/process group만 종료하며 개발 서버 launcher stop/reload를 호출하지 않는다. 성공 시 자신이 생성한 marker 경로만 삭제하고 실패 시 진단 DB/로그를 남긴다. CI는 기존 `test`와 추가 `smoke` job을 실행하고 Full은 제외한다. 실패 단계는 로그 tail만 출력하며 DB는 출력/업로드하지 않는다.
 
@@ -425,7 +437,7 @@ Quick/Full의 client·단계·predicate 대기를 공유한다. 공개 register/
 
 ## 본부 7단계: 통합 closeout
 
-훈련·Doctor·Bed·정산관·Shopkeeper에서 같은 Room/safe/비전투/지각의 동일한 조건만 작은 `_service_available` helper로 통일했다. Shopkeeper는 유효한 shop_id도 요구한다. Container는 기존 실제 대상 resolve와 transfer 정책을 유지하며 전투 조건이 다른 일반 조사 객체와 억지로 공통화하지 않는다. `ActionObject.web_actions()` capability와 subclass override는 이미 서버 명령을 소유하므로 유지한다. Room hint의 치료/휴식/환율/상점 availability 분기는 현재 선언과 일반 action의 서로 다른 의미를 정확히 구분하고 있어 유지한다. 새로운 service/action framework는 없다.
+훈련·Doctor·Bed·정산관·Shopkeeper에서 같은 Room/safe/비전투/지각의 동일한 조건만 작은 `_service_available` helper로 통일했다. Shopkeeper는 유효한 shop_id도 요구한다. Container는 기존 실제 대상 resolve와 transfer 정책을 유지하며 전투 조건이 다른 일반 조사 객체와 억지로 공통화하지 않는다. `ActionObject.web_actions()` capability와 subclass override는 이미 서버 명령을 소유하므로 유지한다. Room hint의 진료/휴식/환율/상품 availability 분기는 현재 선언과 일반 action의 서로 다른 의미를 정확히 구분하고 있어 유지한다. 새로운 service/action framework는 없다.
 
 runtime at_dock/global SHOP/EXCHANGE/교환 구매 flag 및 client service zone gate는 없다. 지도에서 현재 Room을 표시하는 zone 비교와 content graph·정적 배치·integrity·테스트 경로는 정상 사용이다. 옛 중앙홀/1층 중앙 관리 Exit migration은 기존 DB 호환을 위해 유지한다. 가격·정산율·보상·타이머·profile schema는 변경하지 않는다. 귀환 후 윤대장에게 보고하는 안내는 부두로 직접 귀환한다고 읽히지 않도록 정리했다.
 

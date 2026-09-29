@@ -147,7 +147,7 @@ def item_selector(value, collection, action):
 
 
 def stack_selector(value, collection, action, *, allow_all=True):
-    """가방/보관 아이템은 개체 번호가 아닌 스택이다."""
+    """소지품/보관 아이템은 개체 번호가 아닌 스택이다."""
     from world.content import find_id
 
     known = [name for key, data in collection.items() for name in (key, data["name"], *data.get("aliases", []))]
@@ -155,7 +155,7 @@ def stack_selector(value, collection, action, *, allow_all=True):
     if not allow_all:
         require_single(selector, action)
     if selector.mode == Mode.INDEX:
-        raise RuleError("가방과 보관 아이템은 번호 없이 하나, 또는 '모두'로 지정하세요.")
+        raise RuleError("소지품과 보관 아이템은 번호 없이 하나, 또는 '모두'로 지정하세요.")
     identity = find_id(collection, selector.name)
     if not identity:
         raise RuleError("아이템 이름을 확인하세요.")

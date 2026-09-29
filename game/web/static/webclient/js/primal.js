@@ -219,7 +219,7 @@
         if (item.remove_action) row.append(button(item.remove_action, item.name + " " + item.remove_action));
       } else if (item.equip_action) row.append(button(item.equip_action, item.name + " " + item.equip_action));
       else if (item.consume_action) row.append(button(item.consume_action, item.name + " " + item.consume_action));
-      else if (item.id === "bandage") row.append(button("사용", "회복"));
+      else if (item.id === "bandage") row.append(button("사용", "응급처치"));
       if (item.light_source) {
         const active = observation?.light_source?.id === item.id && observation.light_source.active;
         row.append(button(active ? "끄기" : "켜기", item.name + (active ? " 꺼" : " 켜")), button("확인", item.name + " 확인"));
@@ -240,7 +240,7 @@
     byId("inventory").replaceChildren(...rows);
     const encounter = state.combat_target;
     byId("encounter").hidden = !encounter;
-    if (encounter) byId("encounter").replaceChildren(semantic("hostile", encounter.name), " · 공유 체력 " + encounter.hp + "/" + encounter.max_hp + " · 적 " + encounter.round + "차례" + (encounter.telegraph ? " · 다음 돌진! 방어를 준비하세요." : " · 강타 / 방어 / 회복"));
+    if (encounter) byId("encounter").replaceChildren(semantic("hostile", encounter.name), " · 공유 체력 " + encounter.hp + "/" + encounter.max_hp + " · 적 " + encounter.round + "차례" + (encounter.telegraph ? " · 다음 돌진! 방어를 준비하세요." : " · 강타 / 방어 / 응급처치"));
   }
   function connect() {
     if (socket && [WebSocket.OPEN, WebSocket.CONNECTING].includes(socket.readyState)) return;

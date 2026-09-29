@@ -148,7 +148,7 @@ def inventory(profile):
         for title, entries in groups.items()
         if entries
     ]
-    return ft.compact("가방", *lines, summary="" if lines else "비어 있다.")
+    return ft.compact("소지품", *lines, summary="" if lines else "비어 있다.")
 
 
 def shop(shop_id, seller):
@@ -198,7 +198,7 @@ def quest(profile):
 def outgoing_attack(profile, enemy_name, outcome, damage):
     if outcome["action"] == "error":
         return ft.text(ft.token("error", "! "), outcome["message"], kind="error")
-    if outcome["action"] == "heal":
+    if outcome["action"] == "firstaid":
         return healing(outcome["amount"])
     verb = "강하게 내리쳐" if outcome["action"] == "heavy" else "공격해"
     weapon = profile["equipment"]["weapon"]
@@ -243,7 +243,7 @@ def item_appearance(identity, *, light_status=None):
         if data.get("light_source")
         else [EQUIPMENT_ACTIONS[data["slot"]]]
         if data["slot"] in EQUIPMENT_ACTIONS
-        else ["회복"]
+        else ["응급처치"]
         if identity == "bandage"
         else [data["consume_action"]]
         if data.get("consume_action")

@@ -41,7 +41,7 @@ class ShopTests(WorldCommandTest):
     def test_all_menus_only_show_the_sellers_catalog_and_real_npc_title(self):
         for shop_id, seller in self.sellers.items():
             self.char1.location = seller.location
-            for raw in ("상점", "메뉴", seller.key + " 상점", seller.key + " 메뉴"):
+            for raw in ("상품", seller.key + " 상품"):
                 output = self.command(raw)
                 self.assertIn("[" + seller.key + "]", output)
                 for item in {item for catalog in SHOP_CATALOGS.values() for item in catalog}:
@@ -61,7 +61,7 @@ class ShopTests(WorldCommandTest):
                 before["credits"] -= SHOP_CATALOGS[shop_id][item]
                 before["inventory"][item] = before["inventory"].get(item, 0) + 1
                 self.assertEqual(self.char1.profile(), before)
-            self.assertIn(ITEMS[item]["name"], self.command("상점"))
+            self.assertIn(ITEMS[item]["name"], self.command("상품"))
 
     def test_wrong_vendor_quantities_insufficient_credits_and_dock_are_atomic(self):
         for shop_id, item in (("supply", "blade"), ("weapon", "bandage"), ("armor", "spear")):
@@ -77,7 +77,7 @@ class ShopTests(WorldCommandTest):
             self.assertNotIn("1개를 받아", self.command(raw))
             self.assertEqual(self.char1.profile(), before)
         self.char1.location = self.rooms["dock"]
-        for raw in ("상점", "붕대 구매", "강철마체테 구매", "강화조끼 구매"):
+        for raw in ("상품", "붕대 구매", "강철마체테 구매", "강화조끼 구매"):
             self.assertIn("상인", self.command(raw))
             self.assertEqual(self.char1.profile(), before)
         self.assertEqual([obj["name"] for obj in multiplayer_state(self.char1)["interactables"]], ["윤대장"])
@@ -87,7 +87,7 @@ class ShopTests(WorldCommandTest):
         seller = self.sellers["supply"]
         weapon = self.sellers["weapon"]
         weapon.location = seller.location
-        self.assertIn("여러 명", self.command("상점"))
+        self.assertIn("여러 명", self.command("상품"))
         self.assertIn("1개를 받아", self.command("붕대 구매"))
         extra = create_object(Shopkeeper, key=seller.key, location=seller.location)
         extra.db.shop_id = "supply"
@@ -102,14 +102,14 @@ class ShopTests(WorldCommandTest):
         self.assertIn("보급관 2에게 붕대 구매", commands)
         weapon.location = self.rooms["weapon_shop"]
         extra.locks.add("view:false()")
-        self.assertNotIn("여러 명", self.command("상점"))
+        self.assertNotIn("여러 명", self.command("상품"))
         self.assertIn("1개를 받아", self.command("붕대 구매"))
 
     def test_hidden_seller_is_excluded_from_commands_hints_web_and_detail(self):
         seller = self.sellers["supply"]
         seller.locks.add("view:false()")
         before = deepcopy(self.char1.profile())
-        for raw in ("상점", "메뉴", "붕대 구매", "보급관 상점", "보급관 메뉴", "보급상인에게 붕대 구매", "보급관 보기"):
+        for raw in ("상품", "붕대 구매", "보급관 상품", "보급상인에게 붕대 구매", "보급관 보기"):
             self.assertNotIn("1개를 받아", self.command(raw))
             self.assertEqual(self.char1.profile(), before)
         self.assertEqual(multiplayer_state(self.char1)["interactables"], [])
@@ -127,14 +127,14 @@ class ShopTests(WorldCommandTest):
         self.assertIn("1개를 받아", self.command("강철마체테 구매"))
         self.char1.change(lambda p: p.update(combat_target=999))
         before = deepcopy(self.char1.profile())
-        for raw in ("상점", "강철마체테 구매", "무기상에게 강철마체테 구매"):
+        for raw in ("상품", "강철마체테 구매", "무기상에게 강철마체테 구매"):
             self.assertIn("전투 중", self.command(raw))
             self.assertEqual(self.char1.profile(), before)
         self.assertEqual(multiplayer_state(self.char1)["interactables"][0]["actions"], [])
         self.char1.change(lambda p: p.update(combat_target=None))
         self.char1.location = seller.location = self.rooms["grass"]
         before = deepcopy(self.char1.profile())
-        for raw in ("상점", "강철마체테 구매"):
+        for raw in ("상품", "강철마체테 구매"):
             self.assertIn("안전한 곳", self.command(raw))
             self.assertEqual(self.char1.profile(), before)
         self.assertEqual(next(obj for obj in multiplayer_state(self.char1)["interactables"] if obj["name"] == seller.key)["actions"], [])
@@ -143,13 +143,13 @@ class ShopTests(WorldCommandTest):
         for shop_id, seller in self.sellers.items():
             self.char1.location = seller.location
             actions = multiplayer_state(self.char1)["interactables"][0]["actions"]
-            self.assertEqual(actions[0]["command"], seller.key + " 상점")
+            self.assertEqual(actions[0]["command"], seller.key + " 상품")
             self.assertEqual([a["command"] for a in actions[1:]],
                              [seller.key + "에게 " + ITEMS[item]["name"] + " 구매" for item in SHOP_CATALOGS[shop_id]])
-            self.assertEqual(render(context_for(self.char1)), seller.key + " 상점")
+            self.assertEqual(render(context_for(self.char1)), seller.key + " 상품")
             self.assertIn("1개를 받아", self.command(actions[1]["command"]))
         for zone, expected in (("storage_room", {"보기"}), ("training_room", {"대화"}),
-                               ("infirmary", {"치료", "휴식"}), ("salvage_office", {"환율"}),
+                               ("infirmary", {"진료", "휴식"}), ("salvage_office", {"환율"}),
                                ("dock", {"대화"}), ("office", {"조사"}), ("generator", {"수리"})):
             self.char1.location = self.rooms[zone]
             self.assertEqual({a["label"] for obj in multiplayer_state(self.char1)["interactables"] for a in obj["actions"]}, expected)
@@ -159,12 +159,12 @@ class ShopTests(WorldCommandTest):
 
     def test_roof_elevator_weapon_purchase_and_smoke_return_route(self):
         self.char1.location = self.rooms["support_roof"]
-        for raw in ("승강기", "3층", "내리기", "동", "북"):
+        for raw in ("승강기", "3층", "동", "북"):
             self.command(raw)
         self.assertEqual(self.char1.zone, "weapon_shop")
         self.command("강철마체테 구매")
         self.assertEqual(self.char1.profile()["inventory"]["blade"], 1)
-        for raw in ("남", "서", "승강기", "1층", "내리기", "북", "서", "북", "북", "동"):
+        for raw in ("남", "서", "승강기", "1층", "북", "서", "북", "북", "동"):
             self.command(raw)
         self.assertEqual(self.char1.zone, "office")
         self.assertEqual(self.char1.home, self.rooms["dock"])

@@ -4,6 +4,22 @@
 
 ## Objective
 
+PR #23은 MERGED이며 시작 main은 `d30fa74f25166cf79565b205a028ae10a02deffc`다. 깨끗한 작업 트리·원격 wonmin82/primal-zone·fetch 후 최신 main을 확인하고 `codex/command-vocabulary-help`를 생성했다. 현재 작업은 본부 후속 독립 기능 **명령 vocabulary / 글로벌 단축어 / 도움말 / 승강기 자동 하차 / 로그인 정책 개편**이다. 새 PR을 생성하며 merge하지 않는다. 아래 PR #23 OPEN 설명과 과거 검증 수치는 당시 기록으로 보존한다.
+
+### 현재 구현
+
+소지품(가방/가진거/i/인벤토리)·상품(별칭 없음)·도망(flee)·응급처치(붕대/firstaid)·진료(treat)·내려로 어휘를 정리한다. 방향 SSOT에 8방향 초성을 추가하고 정보 단축어는 상/능/기/장/소다. 가는 글로벌에서 제거하고 개인 이름으로 허용한다. 단축어는 고정 조회, 줄임말은 캐릭터 설정이다. 도움말은 여섯 분류 root/category/detail/input이며 실제 command detail이 category보다 우선한다. 치료/heal은 미래 예약 이름이다.
+
+profile v8은 heal Rank/queued action을 firstaid로 변환하고 저장된 명령 위치만 canonical로 migration한다. 새 예약 이름 충돌 데이터는 _개인[번호]로 보존하고 exact nested 참조도 갱신한다. 진행 데이터와 read-only snapshot·전체 삭제 직접 요청/확인 safety는 유지한다. 승강기 층 선택자는 자동 하차하고 다른 승객은 남으며 내려는 같은 helper를 사용한다. 새 puppet은 출정 대기실, live-session reload at_sync는 기존 위치다. Web canonical 버튼과 공통 asset version을 갱신한다. Full smoke에서 Portal+Server 재시작 시 격리 SQLite의 read→write 경합이 재현되어 smoke 전용 DB만 IMMEDIATE transaction/30초 busy timeout으로 직렬화하고 회귀 검사를 추가했다. 일반 플레이 DB 설정과 production timer는 변경하지 않았다.
+
+### 검증 및 인계
+
+최종 `scripts/dev.py check` 성공, 전체 `scripts/dev.py test`는 pure 120(1.767초)·integration 292(102.089초)·total 412·runner 110.948초 성공이다. 관련 50개는 `--parallel 2 --reverse`에서 22.607초·runner 31.509초 통과했다. 최종 Quick live smoke는 48.391초 성공, Full은 294.325초 성공하며 실제 첫 공격 2.928초·시체 만료 29.868초·적 재생성 44.762초·전리품 보호 만료 121.177초와 Portal+Server 재시작을 검증했다. 첫 Full 시도에서는 재시작 중 SQLite 잠금이 재현됐고 smoke 전용 DB 설정을 수정한 뒤 최종 Full을 성공시켰다. 일반 플레이 SQLite는 두 smoke의 SHA256·mtime_ns·size가 시작 전 값과 동일했다.
+
+격리 브라우저의 desktop 1249px·중간 1100px·mobile 390px에서 소지품/응급처치/도망·진료·상품 버튼, 3×3 방향도·SURROUNDINGS 순서, 승강기 3층 자동 하차, Credits 구매, 재로그인 대기실 시작·진행 보존을 확인했다. 앱 console error/warning과 가로 overflow는 없었다. 실제 체력 가득 상태에서 진료/붕대 버튼의 명령 연결과 정상 거절을 확인했으며 OS IME 입력 자체는 미검증이다. `node --check`와 격리 환경 collectstatic도 성공했다. commit/PR/최신 HEAD CI는 push 후 기록한다. 상세 어휘/migration/예약·묶음 한계는 [command-shortcuts.md](command-shortcuts.md), 구조는 [architecture.md](architecture.md), 최신 수동 절차는 [playtest.md](playtest.md) 앞부분을 따른다.
+
+## 이전 PR #23 Objective (과거 기록)
+
 현재 작업은 열린 [PR #23](https://github.com/wonmin82/primal-zone/pull/23)의 **지도 방향 통합 정렬 / 옥상 콘텐츠 불변조건 / stable Room ID 독립성** 리뷰 반영이다. `codex/eight-direction-navigation`에서 계속 작업한다. 시작 fetch 후 로컬 HEAD·원격 branch·PR HEAD는 모두 `ec3fd38bde0b73102442cd70e3d45ad27c27814a`, origin/main은 `6b2adcc306cdf8108232c036de1b447c93f95621`로 동일했고 작업 트리는 깨끗했다. 아래 최초 구현·검증 수치는 당시 기록으로 보존한다. 새 PR을 만들거나 merge하지 않는다.
 
 ### PR #23 후속 리뷰 반영 (2026-09-30)

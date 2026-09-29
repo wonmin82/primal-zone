@@ -11,7 +11,7 @@ from world import rules
 class CommandShortcutRulesTests(TestCase):
     def test_sequence_and_definition_keep_commas_in_chat(self):
         self.assertEqual(sc.parse_sequence("상태, 장비"), ["상태", "장비"])
-        self.assertEqual(sc.parse_shortcut_definition("상태, 장비, 가방 해"), ["상태", "장비", "가방"])
+        self.assertEqual(sc.parse_shortcut_definition("상태, 장비, 소지품 해"), ["상태", "장비", "소지품"])
         for definition in ("장비", "안녕, 반가워 말", "'안녕, 반가워 해"):
             self.assertEqual(sc.parse_shortcut_definition(definition), [definition])
 
@@ -29,11 +29,11 @@ class CommandShortcutRulesTests(TestCase):
                 sc.shortcut_name(name)
 
     def test_nested_and_inline_sequences_expand_exact_names_only(self):
-        shortcuts = {"점검": ["상태", "장비", "가방"], "출발": ["점검", "북"]}
+        shortcuts = {"점검": ["상태", "장비", "소지품"], "출발": ["점검", "북"]}
         sc.validate_shortcut_graph(shortcuts)
-        self.assertEqual(sc.expand_shortcuts(["출발"], shortcuts), ["상태", "장비", "가방", "북"])
+        self.assertEqual(sc.expand_shortcuts(["출발"], shortcuts), ["상태", "장비", "소지품", "북"])
         self.assertEqual(sc.expand_shortcuts(["점검", "북", "북"], shortcuts),
-                         ["상태", "장비", "가방", "북", "북"])
+                         ["상태", "장비", "소지품", "북", "북"])
         self.assertEqual(sc.expand_shortcuts(["점검 말", "오늘 점검했어 말"], shortcuts),
                          ["점검 말", "오늘 점검했어 말"])
         self.assertEqual(sc.expand_shortcuts(["상태, 장비 해"], shortcuts), ["상태", "장비"])
@@ -70,7 +70,7 @@ class CommandShortcutRulesTests(TestCase):
         self.assertEqual(request["fingerprint"], sc.shortcut_fingerprint(dict(reversed(list(shortcuts.items())))))
         sc.validate_delete_all(request, shortcuts, 159.99)
         for pending, current, now in ((None, shortcuts, 100), (request, shortcuts, 160),
-                                      (request, shortcuts, 99), (request, {"c": ["가방"]}, 100)):
+                                      (request, shortcuts, 99), (request, {"c": ["소지품"]}, 100)):
             with self.subTest(now=now), self.assertRaises(rules.RuleError):
                 sc.validate_delete_all(pending, current, now)
         self.assertIsNone(sc.delete_all_request({}, 100))
@@ -83,13 +83,13 @@ class CommandShortcutRulesTests(TestCase):
         old.pop("command_shortcuts")
         before = deepcopy(old)
         migrated = rules.migrate_profile(old)
-        self.assertEqual(migrated, {**old, "version": 7, "command_shortcuts": {}})
+        self.assertEqual(migrated, {**old, "version": rules.PROFILE_VERSION, "command_shortcuts": {}})
         self.assertEqual(rules.migrate_profile(migrated), migrated)
         self.assertEqual(old, before)
         for version in range(1, 7):
             profile = {**before, "version": version}
             result = rules.migrate_profile(profile)
             self.assertEqual(result["command_shortcuts"], {})
-            self.assertEqual(result["version"], 7)
+            self.assertEqual(result["version"], rules.PROFILE_VERSION)
             for key in ("xp", "hp", "credits", "inventory", "equipment", "storage", "visited"):
                 self.assertEqual(result[key], profile[key])

@@ -15,7 +15,7 @@ def resolve_shopkeeper(caller, name="", item=None, objects=None):
     objects = shopkeepers(caller) if objects is None else objects
     if name.strip():
         known = [n for obj in objects for n in names(obj)]
-        return resolve(objects, parse_selector(name, known), caller, "상점")[0]
+        return resolve(objects, parse_selector(name, known), caller, "상품")[0]
     candidates = [obj for obj in objects if item is None or item in SHOP_CATALOGS.get(obj.db.shop_id, {})]
     if not candidates:
         raise rules.RuleError("이곳에서 해당 물건을 파는 상인을 찾지 못했습니다." if item else "이곳에서 상점 상인을 찾지 못했습니다.")

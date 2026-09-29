@@ -272,11 +272,11 @@ class RuleTests(TestCase):
     def test_heal_is_capped_and_consumes_one_bandage(self):
         profile = rules.new_profile()
         profile["hp"] -= 4
-        self.assertEqual(rules.heal(profile), 4)
+        self.assertEqual(rules.first_aid(profile), 4)
         self.assertEqual(profile["hp"], 60)
         self.assertEqual(profile["inventory"]["bandage"], 2)
         with self.assertRaises(rules.RuleError):
-            rules.heal(profile)
+            rules.first_aid(profile)
         self.assertEqual(profile["inventory"]["bandage"], 2)
 
     def test_action_spam_and_heavy_cooldown(self):
@@ -301,7 +301,7 @@ class RuleTests(TestCase):
     def test_combat_heal_replaces_attack(self):
         profile = rules.new_profile()
         profile.update(hp=30, combat_target=1)
-        rules.queue_action(profile, "heal", now=100)
+        rules.queue_action(profile, "firstaid", now=100)
         damage, _ = rules.player_attack(profile, "scavenger", 100, 2.5, Random(1))
         self.assertEqual(damage, 0)
         self.assertEqual(profile["inventory"]["bandage"], 2)
@@ -377,7 +377,7 @@ class RuleTests(TestCase):
                 if turn % 3 == 0:
                     rules.queue_action(profile, "guard", now)
                 elif profile["hp"] < 45 and profile["inventory"].get("bandage"):
-                    rules.queue_action(profile, "heal", now)
+                    rules.queue_action(profile, "firstaid", now)
                 elif now >= profile["heavy_ready_at"]:
                     rules.queue_action(profile, "heavy", now)
                 damage, _ = rules.player_attack(profile, "alpha", now, 2.5, rng)
@@ -405,7 +405,7 @@ class RuleTests(TestCase):
                 if rules.boss_telegraph("jungle_apex", turn - 1):
                     rules.queue_action(profile, "guard", now)
                 elif profile["hp"] < 55 and profile["inventory"].get("bandage"):
-                    rules.queue_action(profile, "heal", now)
+                    rules.queue_action(profile, "firstaid", now)
                 elif now >= profile["heavy_ready_at"]:
                     rules.queue_action(profile, "heavy", now)
                 damage, _ = rules.player_attack(profile, "jungle_apex", now, 2.5, rng)
@@ -559,7 +559,7 @@ class GrowthRuleTests(TestCase):
         rules.learn_skill(profile, "guard", safe=True)
         before = deepcopy(profile)
         with self.assertRaises(rules.RuleError):
-            rules.learn_skill(profile, "heal", safe=True)
+            rules.learn_skill(profile, "firstaid", safe=True)
         self.assertEqual(profile, before)
 
     def test_retraining_preserves_history_and_separate_pools(self):
@@ -624,10 +624,10 @@ class GrowthRuleTests(TestCase):
         self.assertEqual(rules.proficiency_rank(profile, "weapon"), 2)
         before = deepcopy(profile)
         with self.assertRaises(rules.RuleError):
-            rules.heal(profile)
+            rules.first_aid(profile)
         self.assertEqual(profile, before)
         profile["hp"] = 30
-        rules.heal(profile)
+        rules.first_aid(profile)
         self.assertEqual(profile["proficiencies"]["medicine"]["xp"], 1)
         profile["combat_target"] = 1
         rules.queue_action(profile, "guard", now=100)
@@ -646,10 +646,10 @@ class GrowthRuleTests(TestCase):
         self.assertEqual(rules.stats(profile)["attack"], base["attack"] + 1)
         self.assertEqual(rules.stats(profile)["defense"], base["defense"] + 1)
         profile["hp"] = 1
-        self.assertEqual(rules.heal(profile), 39)
-        rules.learn_skill(profile, "heal", safe=True)
+        self.assertEqual(rules.first_aid(profile), 39)
+        rules.learn_skill(profile, "firstaid", safe=True)
         profile["hp"] = 1
-        self.assertEqual(rules.heal(profile), 44)
+        self.assertEqual(rules.first_aid(profile), 44)
         normal = deepcopy(profile)
         improved = deepcopy(profile)
         rules.learn_skill(improved, "heavy", safe=True)

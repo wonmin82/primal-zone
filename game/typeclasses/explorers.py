@@ -179,6 +179,14 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
     def quest_text(profile):
         return current_hint(profile)
 
+    def at_pre_puppet(self, account, session=None, **kwargs):
+        # 새 authentication/puppet만 이 hook을 통과한다. Evennia 6.1 at_sync의
+        # live-session reload 복원은 puppet hook 없이 기존 Object를 연결한다.
+        from world.bootstrap import get_room
+
+        self.location = get_room("staging_room")
+        super().at_pre_puppet(account, session=session, **kwargs)
+
     def at_post_puppet(self, **kwargs):
         from world.bootstrap import get_room
 
@@ -220,12 +228,24 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
     def announce_move_from(self, destination, msg=None, mapping=None, move_type="move", **kwargs):
         if msg is not None:
             return super().announce_move_from(destination, msg, mapping, move_type, **kwargs)
-        self._announce_presence(self.location, " 이곳을 떠났다.")
+        if move_type == "elevator":
+            from world.multiplayer import after_change
+
+            origin = self.location
+            after_change(lambda: self._announce_presence(origin, " 이곳을 떠났다."))
+        else:
+            self._announce_presence(self.location, " 이곳을 떠났다.")
 
     def announce_move_to(self, source_location, msg=None, mapping=None, move_type="move", **kwargs):
         if msg is not None:
             return super().announce_move_to(source_location, msg, mapping, move_type, **kwargs)
-        self._announce_presence(self.location, " 이곳에 도착했다.")
+        if move_type == "elevator":
+            from world.multiplayer import after_change
+
+            destination = self.location
+            after_change(lambda: self._announce_presence(destination, " 이곳에 도착했다."))
+        else:
+            self._announce_presence(self.location, " 이곳에 도착했다.")
 
     def _announce_presence(self, room, sentence):
         from world.observation import can_perceive, context_for
@@ -239,7 +259,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
     def at_pre_move(self, destination, move_type="move", **kwargs):
         profile = self.profile()
         if profile.get("combat_target"):
-            self.msg("전투 중에는 이동할 수 없습니다. '도주'로 교전을 끝내세요.")
+            self.msg("전투 중에는 이동할 수 없습니다. '도망'으로 교전을 끝내세요.")
             return False
         requirement = entry_block(profile, destination.db.zone_id)
         if requirement:
@@ -254,7 +274,13 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             if self.zone not in profile["visited"]:
                 profile["visited"].append(self.zone)
             self.save_profile(profile)
-        super().at_post_move(source_location, move_type=move_type, **kwargs)
+        if move_type == "elevator":
+            from world.multiplayer import after_change
+
+            # 자동 하차도 같은 transaction이다. rollback 전에 도착 화면을 보내지 않는다.
+            after_change(lambda: super(Explorer, self).at_post_move(source_location, move_type=move_type, **kwargs))
+        else:
+            super().at_post_move(source_location, move_type=move_type, **kwargs)
 
     def combat_target(self):
         from world.multiplayer import object_by_id

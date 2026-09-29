@@ -24,7 +24,7 @@ def controls(zone, current=None):
             "actions": [
                 {"label": stop["label"], "command": stop["label"]}
                 for stop in ELEVATOR_STOPS.values()
-            ] + [{"label": "내리기", "command": "내리기"}],
+            ] + [{"label": "내려", "command": "내려"}],
         }
     if stop_for_room(zone):
         return {"inside": False, "actions": [{"label": "승강기", "command": "승강기"}]}
@@ -112,9 +112,20 @@ def select_stop(player, stop):
                 "에 있다. 문이 열려 있다.",
             )))
 
+        _disembark(player, stop)
+
+
+def _disembark(player, stop):
+    from world.bootstrap import get_room
+
+    destination = get_room(ELEVATOR_STOPS[stop]["room"])
+    if destination is None:
+        raise rules.RuleError("이 층에 내릴 수 없습니다.")
+    if not player.move_to(destination, move_type="elevator"):
+        raise rules.RuleError("승강기에서 내리지 못했습니다.")
+
 
 def disembark(player):
-    from world.bootstrap import get_room
     from world.multiplayer import world_change
 
     with world_change():
@@ -122,8 +133,4 @@ def disembark(player):
             raise rules.RuleError("승강기 안에서 내릴 수 있습니다.")
         rules.require_peace(player.profile())
         stop = normalized_stop(player.location.db.current_stop)
-        destination = get_room(ELEVATOR_STOPS[stop]["room"])
-        if destination is None:
-            raise rules.RuleError("이 층에 내릴 수 없습니다.")
-        if not player.move_to(destination, move_type="elevator"):
-            raise rules.RuleError("승강기에서 내리지 못했습니다.")
+        _disembark(player, stop)

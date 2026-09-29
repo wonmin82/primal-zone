@@ -8,7 +8,7 @@ from commands.base import GameCommand
 
 
 class Say(GameCommand):
-    category = "교류"
+    category = "파티·교류"
     usage = "내용 말 · '내용"
     summary = "같은 방의 탐사자에게 말합니다."
     input_style = "chat"

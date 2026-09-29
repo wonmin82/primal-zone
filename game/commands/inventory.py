@@ -11,18 +11,18 @@ from commands.shops import resolve_shopkeeper, shopkeepers
 
 
 class Inventory(GameCommand):
-    category = "보급"
-    usage = "가방"
+    category = "아이템·보급"
+    usage = "소지품"
     summary = "전체 소지품을 확인합니다."
-    key = "가방"
-    aliases = ["i", "인벤토리"]
+    key = "소지품"
+    aliases = ["가방", "가진거", "i", "인벤토리"]
 
     def run(self):
         self.caller.msg(view.inventory(self.caller.profile()))
 
 
 class Equip(GameCommand):
-    category = "보급"
+    category = "아이템·보급"
     usage = "강화 조끼 착용"
     summary = "소유한 방어구를 착용합니다."
     input_style = "target"
@@ -50,19 +50,19 @@ class Wield(Equip):
 
 
 class Shop(GameCommand):
-    category = "보급"
-    usage = "상점 · 무기상 상점 · 무기상 메뉴"
+    category = "아이템·보급"
+    usage = "상품 · 무기상 상품"
     summary = "주변 상인의 크레딧 판매 목록을 확인합니다."
     input_style = "target"
-    key = "상점"
-    aliases = ["shop", "메뉴"]
+    key = "상품"
+    aliases = []
 
     def run(self):
         resolve_shopkeeper(self.caller, self.args).perform_action(self.caller, self.key)
 
 
 class Buy(GameCommand):
-    category = "보급"
+    category = "아이템·보급"
     usage = "붕대 구매 · 보급관에게 붕대 구매"
     summary = "주변 판매자에게 크레딧으로 물건 1개를 구매합니다."
     input_style = "target"
@@ -83,7 +83,7 @@ class Buy(GameCommand):
 
 
 class Take(GameCommand):
-    category = "전리품"
+    category = "아이템·보급"
     usage = "시체에서 모두 가져 · 시체 2에서 모두 가져 · 모든 시체에서 회수부품 모두 가져 · 회수부품 2 가져 · 회수부품 모두 가져 · 모두 가져"
     summary = "권한에 따라 배정된 전리품을 분배합니다."
     key = "가져"
@@ -100,7 +100,7 @@ class Take(GameCommand):
 
 class Equipment(GameCommand):
     key = "장비"
-    category = "성장"
+    category = "아이템·보급"
     summary = "현재 착용한 무기와 방어구만 확인합니다."
 
     def run(self):

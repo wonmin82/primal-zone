@@ -96,6 +96,8 @@ class SmokeContractsTests(TestCase):
                 self.assertIs(marker, True)
                 self.assertEqual(databases["default"]["NAME"], str(run / "evennia-smoke.sqlite3"))
                 self.assertEqual(databases["default"]["ENGINE"], "django.db.backends.sqlite3")
+                self.assertEqual(databases["default"]["OPTIONS"]["timeout"], 30)
+                self.assertEqual(databases["default"]["OPTIONS"]["transaction_mode"], "IMMEDIATE")
                 self.assertEqual(timing, smoke_timings(mode))
                 self.assertIs(registration, False)
 

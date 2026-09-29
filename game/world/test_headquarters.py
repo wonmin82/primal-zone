@@ -23,7 +23,7 @@ def content_targets():
         "salvage_officer": {"room": "salvage_office", "actions": ["환율", "교환"]},
     }
     for shop_id, room in (("supply", "supply_shop"), ("weapon", "weapon_shop"), ("armor", "armor_shop")):
-        targets[shop_id + "_shopkeeper"] = {"room": room, "typeclass": "Shopkeeper", "shop_id": shop_id, "actions": ["대화", "상점", "구매"]}
+        targets[shop_id + "_shopkeeper"] = {"room": room, "typeclass": "Shopkeeper", "shop_id": shop_id, "actions": ["대화", "상품", "구매"]}
     for zone, room in ROOMS.items():
         for hint in room.get("hints", []):
             if "target" in hint:
@@ -60,17 +60,18 @@ class HeadquartersRulesTests(TestCase):
         })
         self.assertEqual(ROOMS["support_1f_c"]["blocked_exits"], {"남": "남쪽 출입문은 현재 폐쇄되어 있다."})
         self.assertEqual(ROOMS["dock"]["exits"], {"북": "grass", "동": "hq_concourse"})
+        self.assertEqual(ROOMS["supply_shop"]["name"], "보급품 상점")
         self.assertEqual(ROOMS["support_roof"]["exits"], ROOF_SIDES)
         for zone, room in HQ_ROOMS.items():
             self.assertTrue(room["safe"])
             self.assertEqual(room["enemies"], [])
             if zone == "infirmary":
-                self.assertEqual(room["hints"], [{"target": "doctor", "action": "치료"},
+                self.assertEqual(room["hints"], [{"target": "doctor", "action": "진료"},
                                                   {"target": "infirmary_bed", "action": "휴식"}])
             elif zone == "salvage_office":
                 self.assertEqual(room["hints"], [{"target": "salvage_officer", "action": "환율"}])
             elif zone in ("supply_shop", "weapon_shop", "armor_shop"):
-                self.assertEqual(room["hints"], [{"target": zone.replace("_shop", "_shopkeeper"), "action": "상점"}])
+                self.assertEqual(room["hints"], [{"target": zone.replace("_shop", "_shopkeeper"), "action": "상품"}])
             else:
                 self.assertFalse(room.get("hints"))
 

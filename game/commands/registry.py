@@ -4,6 +4,7 @@ from commands.base import UnknownCommand
 from commands.character import (
     Abilities,
     Experience,
+    GlobalShortcuts,
     Help,
     Look,
     Map,
@@ -12,7 +13,7 @@ from commands.character import (
     Status,
     Weather,
 )
-from commands.combat import Attack, Flee, Guard, Heal, Heavy
+from commands.combat import Attack, FirstAid, Flee, Guard, Heavy
 from commands.command_shortcuts import Sequence, Shortcuts
 from commands.inventory import Buy, Equip, Equipment, Inventory, Shop, Take, Wield
 from commands.items import (
@@ -63,6 +64,7 @@ COMMANDS = [
     Look,
     Weather,
     Help,
+    GlobalShortcuts,
     Sequence,
     Shortcuts,
     Status,
@@ -83,7 +85,7 @@ COMMANDS = [
     Attack,
     Heavy,
     Guard,
-    Heal,
+    FirstAid,
     Flee,
     Return,
     Rest,

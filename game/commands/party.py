@@ -8,7 +8,7 @@ from commands.base import GameCommand
 
 
 class PartyCommand(GameCommand):
-    category = "파티"
+    category = "파티·교류"
     usage = "파티"
     summary = "파티장·멤버·초대를 확인합니다."
     key = "파티"
@@ -58,7 +58,7 @@ class PartyCommand(GameCommand):
 
 
 class PartyInvite(GameCommand):
-    category = "파티"
+    category = "파티·교류"
     usage = "플레이어 파티초대"
     summary = "최대 4명의 파티에 초대합니다."
     key = "파티초대"
@@ -79,7 +79,7 @@ class PartyInvite(GameCommand):
 
 
 class PartyAccept(GameCommand):
-    category = "파티"
+    category = "파티·교류"
     usage = "파티수락"
     summary = "유효한 초대를 수락합니다."
     key = "파티수락"
@@ -98,7 +98,7 @@ class PartyAccept(GameCommand):
 
 
 class PartyReject(PartyAccept):
-    category = "파티"
+    category = "파티·교류"
     usage = "파티거절"
     summary = "초대를 거절합니다."
     key = "파티거절"
@@ -106,7 +106,7 @@ class PartyReject(PartyAccept):
 
 
 class PartyLeave(GameCommand):
-    category = "파티"
+    category = "파티·교류"
     usage = "파티탈퇴"
     summary = "파티에서 나갑니다."
     key = "파티탈퇴"
@@ -125,7 +125,7 @@ class PartyLeave(GameCommand):
 
 
 class PartyKick(GameCommand):
-    category = "파티"
+    category = "파티·교류"
     usage = "플레이어 파티제외"
     summary = "파티장이 멤버를 제외합니다."
     key = "파티제외"
@@ -159,7 +159,7 @@ class PartyKick(GameCommand):
 
 
 class PartyTransfer(PartyKick):
-    category = "파티"
+    category = "파티·교류"
     usage = "플레이어 파티장위임"
     summary = "파티장이 권한을 위임합니다."
     key = "파티장위임"
@@ -167,7 +167,7 @@ class PartyTransfer(PartyKick):
 
 
 class PartyLootMode(GameCommand):
-    category = "파티"
+    category = "파티·교류"
     usage = "순번 파티분배"
     summary = "참여자 순번 분배를 설정합니다."
     key = "파티분배"

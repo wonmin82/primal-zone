@@ -40,8 +40,8 @@ class ActionObject(DistantPresenceMixin, DefaultObject):
         return [
             {"label": action, "command": target + " " + action}
             for action in (("보기",) if isinstance(self, Container) else self.actions)
-            if action in ("대화", "조사", "수리", "보기", "치료", "휴식")
-            and (action not in ("치료", "휴식") or self.available(caller, observed_at=observed_at))
+            if action in ("대화", "조사", "수리", "보기", "진료", "휴식")
+            and (action not in ("진료", "휴식") or self.available(caller, observed_at=observed_at))
         ]
 
     def perform_action(self, caller, action, args=None):
@@ -264,7 +264,7 @@ class Doctor(ActionObject):
     detectability = "conspicuous"
     presence = "탐사자의 상태를 살피며 진료를 준비하고 있다."
     description = "탐사자의 부상을 살피고 치료하는 의무관이다."
-    actions = ("치료",)
+    actions = ("진료",)
     available = _service_available
 
     def return_appearance(self, looker, **kwargs):
@@ -273,7 +273,7 @@ class Doctor(ActionObject):
 
     def act(self, caller, action, args):
         caller.change(lambda profile: rules.treat(profile, safe=ROOMS.get(caller.zone, {}).get("safe", False)))
-        caller.msg("의무관의 치료로 체력을 모두 회복했습니다.")
+        caller.msg("의무관의 진료를 받고 체력을 모두 회복했습니다.")
 
 
 class Bed(ActionObject):
@@ -344,7 +344,7 @@ class Shopkeeper(ActionObject):
     detectability = "conspicuous"
     presence = "판매대에서 탐사 장비와 보급품을 정리하고 있다."
     description = "탐사자를 위한 물품을 크레딧으로 판매하는 상인이다."
-    actions = ("대화", "상점", "구매")
+    actions = ("대화", "상품", "구매")
 
     def available(self, caller, observed_at=None):
         return _service_available(self, caller, observed_at) and self.db.shop_id in SHOP_CATALOGS
@@ -353,7 +353,7 @@ class Shopkeeper(ActionObject):
         if not self.available(caller, observed_at):
             return []
         return [
-            {"label": "상점", "command": target + " 상점"},
+            {"label": "상품", "command": target + " 상품"},
             *[{"label": f"{ITEMS[item]['name']} · {price}C 구매",
                "command": f"{target}에게 {ITEMS[item]['name']} 구매"}
               for item, price in SHOP_CATALOGS[self.db.shop_id].items()],
@@ -365,8 +365,8 @@ class Shopkeeper(ActionObject):
         usage = ""
         if self.available(looker):
             target = labels(room_objects(looker))[self.id]
-            usage = ft.join([ft.usage(command, set(self.actions) | {"메뉴"}) for command in (
-                f"{target} 상점", f"{target} 메뉴", f"{target}에게 물건이름 구매",
+            usage = ft.join([ft.usage(command, set(self.actions)) for command in (
+                f"{target} 상품", f"{target}에게 물건이름 구매",
             )], " · ")
         return ft.sheet(ft.token("npc", self.key), self.description, "", usage)
 
@@ -377,11 +377,11 @@ class Shopkeeper(ActionObject):
             raise rules.RuleError("안전한 곳에서만 상점을 이용할 수 있습니다.")
         if self.db.shop_id not in SHOP_CATALOGS:
             raise rules.RuleError("상점 판매 목록을 확인할 수 없습니다.")
-        if action == "상점":
+        if action == "상품":
             caller.msg(view.shop(self.db.shop_id, self.key))
         elif action == "구매":
             caller.change(lambda profile: rules.buy(profile, self.db.shop_id, args))
-            caller.msg(ft.text(ft.item(args), " 1개를 받아 가방에 넣었다."))
+            caller.msg(ft.text(ft.item(args), " 1개를 받아 소지품에 넣었다."))
         else:
             caller.msg(ft.text(ft.token("npc", self.key), "\n\n필요한 물품은 판매 목록을 살펴보세요. 크레딧으로 하나씩 구매할 수 있습니다."))
 

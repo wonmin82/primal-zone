@@ -46,7 +46,7 @@ def normalize(profile, now, *, turn_off=False):
 
 def require_device(profile, identity):
     if not ITEMS[identity].get("light_source") or profile["inventory"].get(identity, 0) < 1:
-        raise RuleError("가방에 사용할 광원이 없습니다.")
+        raise RuleError("소지품에 사용할 광원이 없습니다.")
 
 
 def insert_power(profile, identity, power, now):

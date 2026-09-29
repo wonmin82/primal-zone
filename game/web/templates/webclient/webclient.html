@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#101b17">
   <title>원시구역 — 탐사 기록</title>
-  <link rel="stylesheet" href="{% static 'webclient/css/primal.css' %}?v=eight-directions">
-  <script defer src="{% static 'webclient/js/primal.js' %}?v=eight-directions"></script>
+  <link rel="stylesheet" href="{% static 'webclient/css/primal.css' %}?v=command-vocabulary">
+  <script defer src="{% static 'webclient/js/primal.js' %}?v=command-vocabulary"></script>
 </head>
 <body data-ws-url="{{ websocket_url|default:'' }}" data-ws-port="{{ websocket_port }}">
   <header class="masthead">
@@ -40,7 +40,7 @@
           <button data-command="능력">특성과 숙련 <span>↗</span></button>
           <button data-command="기술">기술 확인 <span>↗</span></button>
           <button data-command="장비">착용 장비 <span>↗</span></button>
-          <button data-command="가방">소지품 확인 <span>↗</span></button>
+          <button data-command="소지품">소지품 확인 <span>↗</span></button>
           <button data-command="도움말">명령어 안내 <span>↗</span></button>
           <button data-command="접속자">접속 중인 탐사자 <span>↗</span></button>
         </div>
@@ -55,7 +55,7 @@
       <button id="latest" hidden>새 기록으로 이동 ↓</button>
       <div class="encounter-strip" id="encounter" hidden></div>
       <div class="command-area">
-        <div class="quick-actions"><button data-command="강타">강타</button><button data-command="방어">방어</button><button data-command="회복">붕대 사용</button><button data-command="도주" class="subtle">도주</button><button data-command="귀환" class="subtle">귀환</button></div>
+        <div class="quick-actions"><button data-command="강타">강타</button><button data-command="방어">방어</button><button data-command="응급처치">응급처치</button><button data-command="도망" class="subtle">도망</button><button data-command="귀환" class="subtle">귀환</button></div>
         <form id="command-form"><label for="command" class="prompt-mark">›</label><input id="command" autocomplete="off" maxlength="500" placeholder="명령어를 입력하세요. 예: 어린청소룡 공격" aria-label="게임 명령어" disabled><button type="submit" id="send-command" disabled>실행 ↵</button></form>
         <p class="input-note">대상 + 행동 · 채팅: 내용 말 / '내용 · Enter 실행 · ↑ 이전 명령</p>
       </div>

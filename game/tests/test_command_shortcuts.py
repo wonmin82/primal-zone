@@ -38,7 +38,7 @@ class CommandShortcutsTests(WorldCommandTest):
     def saved(self, player=None):
         return (player or self.char1).profile_snapshot()["command_shortcuts"]
 
-    def register(self, name="점검", definition="상태, 장비, 가방 해", player=None):
+    def register(self, name="점검", definition="상태, 장비, 소지품 해", player=None):
         output = self.run_raw(f"줄임말 추가 {name} {definition}", player)
         self.assertIn("추가했습니다", output)
 
@@ -50,7 +50,7 @@ class CommandShortcutsTests(WorldCommandTest):
         self.assertEqual(profile["inventory"]["blade"], 1)
         self.assertEqual(profile["equipment"]["weapon"], "blade")
         self.assertEqual(profile["credits"], 40)
-        self.run_raw("귀환, 승강기, 3층, 내리기, 동, 북 해")
+        self.run_raw("귀환, 승강기, 3층, 동, 북 해")
         self.assertEqual(self.char1.zone, "weapon_shop")
 
     def test_dispatch_waits_for_engine_pre_and_post_hooks_without_sleep(self):
@@ -74,7 +74,7 @@ class CommandShortcutsTests(WorldCommandTest):
 
     def test_gameplay_failure_and_unknown_command_continue(self):
         self.char1.change(lambda p: p["inventory"].pop("bandage"))
-        output = self.run_raw("붕대 치료, 없는명령, 상태 해")
+        output = self.run_raw("응급처치, 없는명령, 상태 해")
         self.assertIn("대상 뒤에 행동", output)
         self.assertIn("체력", output)
 
@@ -104,17 +104,17 @@ class CommandShortcutsTests(WorldCommandTest):
 
     def test_registration_list_nested_sequence_and_exact_matching(self):
         self.register()
-        self.assertEqual(self.saved()["점검"], ["상태", "장비", "가방"])
+        self.assertEqual(self.saved()["점검"], ["상태", "장비", "소지품"])
         self.register("출발", "점검, 귀환 해")
         output = self.run_raw("점검")
         self.assertIn("체력", output)
         self.assertIn("장비", output)
-        self.assertIn("가방", output)
+        self.assertIn("소지품", output)
         self.run_raw("출발")
         self.assertEqual(self.char1.zone, "support_roof")
-        self.run_raw("점검, 승강기, 2층, 내리기 해")
+        self.run_raw("점검, 승강기, 2층 해")
         self.assertEqual(self.char1.zone, "support_2f_c")
-        self.assertIn("점검 = 상태, 장비, 가방 해", self.run_raw("줄임말"))
+        self.assertIn("점검 = 상태, 장비, 소지품 해", self.run_raw("줄임말"))
         self.char2.location = self.char1.location
         with patch.object(self.char2, "msg") as other:
             self.run_raw("점검 말")
@@ -139,7 +139,7 @@ class CommandShortcutsTests(WorldCommandTest):
         for name in ("상태", "공격", "해", "줄임말", "ㅂ", "look", "quit", "connect", "n", "2층", "emit",
                      "북동", "남동", "남서", "북서", "ne", "se", "sw", "nw"):
             before = self.saved()
-            self.run_raw(f"줄임말 추가 {name} 가방")
+            self.run_raw(f"줄임말 추가 {name} 소지품")
             self.assertEqual(self.saved(), before, name)
         before = self.saved()
         for raw in ("줄임말 추가 b a", "줄임말 추가 a a", "줄임말 추가 a 상태,, 장비 해"):
@@ -163,7 +163,7 @@ class CommandShortcutsTests(WorldCommandTest):
         self.assertEqual(self.char1.zone, "dock")
 
     def test_flat_execution_cannot_expand_a_definition_created_mid_sequence(self):
-        output = self.run_raw("가방, 줄임말 추가 새것 상태, 새것 해")
+        output = self.run_raw("소지품, 줄임말 추가 새것 상태, 새것 해")
         self.assertEqual(self.saved(), {"새것": ["상태"]})
         self.assertNotIn("체력", output)
         self.assertIn("다시 확장하지", output)
@@ -203,9 +203,9 @@ class CommandShortcutsTests(WorldCommandTest):
         self.assertIn("2개", self.run_raw("줄임말 모두 삭제 확인"))
         self.assertEqual(self.saved(), {})
         self.assertIsNone(self.char1.ndb.shortcut_delete_all_request)
-        self.register("c", "가방")
+        self.register("c", "소지품")
         self.run_raw("줄임말 모두 삭제 확인")
-        self.assertEqual(self.saved(), {"c": ["가방"]})
+        self.assertEqual(self.saved(), {"c": ["소지품"]})
 
     def test_sequence_cannot_request_and_confirm_all_deletion(self):
         self.register("a", "상태")
@@ -279,7 +279,7 @@ class CommandShortcutsTests(WorldCommandTest):
 
     def test_confirmation_mutation_invalidation_for_add_replace_and_delete(self):
         self.register("a", "상태")
-        for mutation in ("줄임말 추가 b 장비", "줄임말 추가 a 가방", "줄임말 삭제 b"):
+        for mutation in ("줄임말 추가 b 장비", "줄임말 추가 a 소지품", "줄임말 삭제 b"):
             self.run_raw("줄임말 모두 삭제")
             self.run_raw(mutation)
             self.assertIsNone(self.char1.ndb.shortcut_delete_all_request)
@@ -297,7 +297,7 @@ class CommandShortcutsTests(WorldCommandTest):
             self.assertIn("만료", self.run_raw("줄임말 모두 삭제 확인"))
         self.assertEqual(self.saved(), {"a": ["상태"]})
         self.run_raw("줄임말 모두 삭제")
-        self.char1.change(lambda p: p["command_shortcuts"].update(b=["가방"]))
+        self.char1.change(lambda p: p["command_shortcuts"].update(b=["소지품"]))
         self.assertIn("변경", self.run_raw("줄임말 모두 삭제 확인"))
         with patch("commands.command_shortcuts.monotonic", return_value=200):
             self.run_raw("줄임말 모두 삭제")
@@ -328,7 +328,7 @@ class CommandShortcutsTests(WorldCommandTest):
             self.run_raw("줄임말 삭제 a")
 
     def test_system_shortcuts_help_engine_and_unknown_regressions(self):
-        for raw in ("상", "능", "기", "장", "가"):
+        for raw in ("상", "능", "기", "장", "소"):
             self.assertNotIn("대상 뒤에 행동", self.run_raw(raw))
         self.run_raw("ㅂ")
         self.assertEqual(self.char1.zone, "grass")

@@ -257,9 +257,9 @@ def errors(interactables):
             issues.append(f"{identity}: 상점 catalog가 없습니다.")
     for identity, shop_id in (("supply_shopkeeper", "supply"), ("weapon_shopkeeper", "weapon"), ("armor_shopkeeper", "armor")):
         data = interactables.get(identity, {})
-        if data.get("shop_id") != shop_id or tuple(data.get("actions", ())) != ("대화", "상점", "구매"):
+        if data.get("shop_id") != shop_id or tuple(data.get("actions", ())) != ("대화", "상품", "구매"):
             issues.append(f"{identity}: 상점 catalog/행동 정의가 올바르지 않습니다.")
-    for identity, action in (("doctor", "치료"), ("infirmary_bed", "휴식")):
+    for identity, action in (("doctor", "진료"), ("infirmary_bed", "휴식")):
         if tuple(interactables.get(identity, {}).get("actions", ())) != (action,):
             issues.append(f"{identity}: 의료 행동 정의가 올바르지 않습니다.")
     if tuple(interactables.get("salvage_officer", {}).get("actions", ())) != ("환율", "교환"):

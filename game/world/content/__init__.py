@@ -5,6 +5,7 @@ from .deep_jungle import ROOMS as JUNGLE_ROOMS
 from .directions import (
     DIRECTION_ALIASES,
     DIRECTION_ORDER,
+    DIRECTION_SHORTCUTS,
     DIRECTIONS,
     OPPOSITE_DIRECTIONS,
     ordered_directions,
@@ -62,6 +63,7 @@ __all__ = [
     "OPPOSITES",
     "DIRECTIONS",
     "DIRECTION_ORDER",
+    "DIRECTION_SHORTCUTS",
     "DIRECTION_ALIASES",
     "OPPOSITE_DIRECTIONS",
     "ordered_directions",
