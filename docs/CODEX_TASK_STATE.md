@@ -8,13 +8,25 @@
 
 테스트 성능 개선은 [PR #14](https://github.com/wonmin82/primal-zone/pull/14)로 병합됐으며 병합 커밋은 `ada6487f254beb3a662340ce81fa75771092cce1`다. 2026-09-28 승강기 작업 시작 시 fetch 후 실제 최신 origin/main도 같은 SHA였고 main 작업 트리는 깨끗했다. 당시 PR #13·#14의 MERGED와 main CI 성공을 직접 확인했다. 아래 테스트 성능 개선 기록은 해당 시점의 결과다.
 
-본부 2단계 공용 승강기는 [PR #15](https://github.com/wonmin82/primal-zone/pull/15)로 병합됐다. 이번 작업 시작 시 unstaged/staged diff가 없는 main에서 fetch했고 로컬 HEAD와 최신 origin/main은 모두 `7cf42145551ea364b5f1a1b69fa68c3e5567bee8`이었다. PR #15의 MERGED 및 해당 main [Game checks](https://github.com/wonmin82/primal-zone/actions/runs/36434012910) success를 직접 확인했다. 로그는 순수 77개·통합 213개, 총 290개 통과이며 통합 52.911초·runner 56.367초다. 아래 PR #15 OPEN 서술은 PR 생성 시점의 과거 기록이다.
+본부 2단계 공용 승강기는 [PR #15](https://github.com/wonmin82/primal-zone/pull/15)로 병합됐다. 3단계 작업 시작 시 unstaged/staged diff가 없는 main에서 fetch했고 로컬 HEAD와 최신 origin/main은 모두 `7cf42145551ea364b5f1a1b69fa68c3e5567bee8`이었다. PR #15의 MERGED 및 해당 main [Game checks](https://github.com/wonmin82/primal-zone/actions/runs/36434012910) success를 직접 확인했다. 로그는 순수 77개·통합 213개, 총 290개 통과이며 통합 52.911초·runner 56.367초다. 아래 PR #15 OPEN 서술은 PR 생성 시점의 과거 기록이다.
 
-본부 3단계는 [PR #16](https://github.com/wonmin82/primal-zone/pull/16)으로 병합됐다. 이번 작업 시작 시 깨끗한 main에서 fetch 후 HEAD와 origin/main은 모두 `a10623ba92df9bcd412994fd3eb0a69a2f44e18b`이었다. PR #13/#14/#15/#16 MERGED이며 PR #16 및 해당 main [Game checks](https://github.com/wonmin82/primal-zone/actions/runs/36491116507) success를 실제 확인했다. 해당 병합 CI는 순수 78개(0.027초)·통합 219개(51.605초), 총 297개·runner 55.717초 통과다. 현재 승인된 작업은 새 `codex/hq-medical-lifecycle` 브랜치의 4단계 의료 시스템 및 복귀·패배 흐름이다. 아래 PR #16 OPEN/부두 귀환·휴식 서술은 3단계 당시 기록이며 현재 상태보다 우선하지 않는다.
+본부 3단계는 [PR #16](https://github.com/wonmin82/primal-zone/pull/16)으로 병합됐다. 4단계 작업 시작 시 깨끗한 main에서 fetch 후 HEAD와 origin/main은 모두 `a10623ba92df9bcd412994fd3eb0a69a2f44e18b`이었다. PR #13/#14/#15/#16 MERGED이며 PR #16 및 해당 main [Game checks](https://github.com/wonmin82/primal-zone/actions/runs/36491116507) success를 실제 확인했다. 해당 병합 CI는 순수 78개(0.027초)·통합 219개(51.605초), 총 297개·runner 55.717초 통과다. 4단계는 아래 PR #17로 병합 완료됐으며 이번 승인 범위는 5단계 단일 화폐 및 회수 자원 정산이다. 아래 PR #16 OPEN/부두 귀환·휴식 서술은 3단계 당시 기록이며 현재 상태보다 우선하지 않는다.
 
-기존 광원 기능은 PR #11로 완료됐고 인계 문서는 PR #12로 병합됐다. 아래 광원·본부 1~3단계·테스트 성능 개선의 설계·검증은 시점별 과거 기록이며 보존한다. 4단계 의료·복귀·패배는 구현·로컬/브라우저 검증·commit/push 완료이며 [PR #17](https://github.com/wonmin82/primal-zone/pull/17)은 OPEN이다. 구현 HEAD의 CI는 success이고 이 원격 기록을 문서 후속 커밋에 포함한다. 단일 화폐/정산, NPC 상점, 통합 closeout은 후속 범위다.
+기존 광원 기능은 PR #11로 완료됐고 인계 문서는 PR #12로 병합됐다. 아래 광원·본부 1~3단계·테스트 성능 개선의 설계·검증은 시점별 과거 기록이며 보존한다. 본부 1~4단계는 PR #13/#14/#15/#16/#17 MERGED다. 2026-09-29 이번 작업 시작 시 status·unstaged/staged diff는 없었고 fetch 후 HEAD와 origin/main은 모두 `d1f3e54bcd7172bd11aec1a10624d4084b03e8c5`였다. PR #17 MERGED와 해당 main [Game checks](https://github.com/wonmin82/primal-zone/actions/runs/36502424759) success를 직접 확인했다. 병합 CI는 pure 82개(0.024초)·integration 231개(57.207초), total 313개·runner 60.563초다. 최신 origin/main에서 `codex/hq-resource-settlement`를 생성했다. 현재 작업은 5단계 단일 화폐 및 회수 자원 정산이며 아래 PR #17 OPEN 서술은 과거 생성 시점 기록이다.
 
-### 본부 4단계 구현과 검증 (2026-09-29)
+### 본부 5단계 구현과 검증 (2026-09-29)
+
+- 시작 main은 `d1f3e54bcd7172bd11aec1a10624d4084b03e8c5`, 작업 branch는 `codex/hq-resource-settlement`다. 최종 fetch에서도 origin/main은 같고 이미 포함하므로 rebase 재작성은 필요 없다. Stage 1~4와 테스트 인프라는 그대로다.
+- 실제 `SettlementOfficer`의 stable ID는 `salvage_officer`, 표시명 자원 정산관, alias 정산관이며 `salvage_office`에 배치한다. 기존 bootstrap이 stable tag로 같은 DB 객체·alias를 재사용하고 두 번 실행 후 객체 수·모든 기존 서비스 ID/위치·공용 contents·개인 inventory/storage/profile이 보존됨을 자동 테스트로 확인했다. 정산관 mutable inventory나 profile migration·자동 환전은 없다.
+- `world/content/economy.py`의 `SALVAGE_CREDIT_RATE=10`이 1 scrap = 10 Credits의 SSOT다. 장비 직접 교환 EXCHANGE 정의/export·exchange flag를 제거하고 `rules.buy(profile,item_id)`는 Credits만 사용한다. SHOP 14개 가격과 부두 Shop/Buy·at_dock은 유지하며 scrap은 inventory material/transferable이다. 발전기 3개 소비와 전리품·보관/전달·기술 비용·의료·귀환/패배·home·승강기는 유지한다.
+- 명령은 `환율`/`정산관 환율`/`자원 정산관 환율`, `회수부품 교환`(1개)/`회수 부품 교환`/`회수부품 N개 교환`/`회수부품 모두 교환`, `정산관에게 회수부품 ... 교환`이다. NPC 이름/번호와 alias는 기존 names·parse_selector·resolve·parse_relation을 사용한다. 수량 parser는 정산에 한정하며 일반 이전 문법을 확장하지 않는다. bare는 보이는 NPC 1명만 자동 선택하고 다중 대상은 지정을 요구한다. hidden/view lock은 대상 수·명령·Web·hint에서 제외한다. actual current-room NPC + safe + noncombat으로 이용하며 다른 safe Room에서도 객체를 따른다.
+- `rules.settle_salvage`는 peace/양의 정수/보유량을 검증하고 consume과 Credits 증가를 수행한다. `caller.change()` 안에서 모두 수량을 결정하며 실패는 전체 profile 불변, 0개 entry는 제거한다. 환율 조회는 profile을 저장하지 않는다. `pz_state.resources.scrap={name,count}`는 inventory snapshot에서 파생하며 wallet과 구분한다. 서버가 실제 available NPC로 환율/targeted 모두 명령을 만들고 client는 그대로 렌더링한다. zone 특례·NPC/환율/수량 추론은 없다.
+- 최종 `scripts/dev.py check` 통과, 전체 `scripts/dev.py test` pure 88개(0.068초)·integration 239개(86.866초), total 327개·실패/skip 없음, 통합 runner 95.978초다. 근거 `work/settlement-final-full.log`. 정산 전용 역순·병렬 8개(10.815초, runner 19.337초) 통과이며 이 검사는 최종 상세 보기 semantic 조정 전, 규칙은 같다. 이후 최종 관련 20개(15.119초, runner 23.778초)와 전체에서 상세 보기까지 검증했다. JS node 문법 및 diff 검사 통과다. 이후 변경은 문서뿐이므로 로컬 게임 검사 재실행은 하지 않는다.
+- game과 별도 SQLite 검증 서버에서 최종 정적 파일을 수집했다. 일반 계정으로 1층 중앙 서·서·북→정산소, actual NPC와 환율 버튼·별도 resource 표시, 직접 1개 정산(7→6/+10C), 서버 targeted 모두 버튼(6→0/+60C), 모두 버튼 제거를 확인했다. 기존 출구로 부두 이동→보급소 보기→Credit-only 가격·직접 강철마체테 구매(60C/잔액 10C/장비 +1)도 확인했다. 데스크톱 문서 폭 1234/1234px와 390px의 375/375px로 overflow 없고 자원 행·긴 버튼 줄바꿈을 캡처했다. 앱 코드 console 오류는 발견하지 않았으나 Chrome 비동기 listener 메시지 2건은 별도 기록했다. 검증 탭·서버는 종료하고 viewport를 원복했다. 상세는 [5단계 검증](playtest.md#본부-5단계-단일-화폐회수-자원-정산-확인)을 따른다.
+- 전체 smoke 미실행 — 최신 `scripts/smoke.py`에는 장비 직접 교환/정산 전제가 없고 기존 Credit 구매·4단계 의료 흐름을 유지한다. 일반 가입 rate limit의 610초 대기와 실제 반복 전투를 포함한 전체 smoke 대신 관련 자동·별도 DB 웹 검증을 수행했다. 실제 OS IME·이번 기능의 서버 restart/reconnect·운영 DB/배포는 미실행이다. 기존 플레이 DB는 읽거나 변경하지 않았다.
+- 구현·로컬/브라우저 검증 완료, commit/push·PR 생성 및 최신 HEAD CI는 다음 원격 확인 기록으로 갱신한다. PR은 merge하지 않는다. 6단계는 이 PR 검토·병합 후 최신 main에서 별도 요청으로 진행한다.
+
+### 본부 4단계 구현과 검증 (2026-09-29, 과거 기록)
 
 - 시작 main은 `a10623ba92df9bcd412994fd3eb0a69a2f44e18b`, 브랜치는 `codex/hq-medical-lifecycle`이다. 신규 시작 `staging_room`, 저장 위치 재접속, fallback `home=dock`은 유지하고 일반 귀환만 `support_roof`, 전투 패배만 `infirmary`로 실제 이동한다. 공용 승강기 production 코드는 변경하지 않았다.
 - 실제 `Doctor`의 stable ID는 `doctor`(의무관/의사), `Bed`는 `infirmary_bed`(침대/병상)이며 의무실에 배치한다. 기존 tag bootstrap으로 객체를 하나씩 생성·재사용하고 반복 실행 시 DB ID·alias·전체 객체 수·기존 플레이 기록을 보존한다. integrity는 의료 위치와 행동 정의를 검사한다.
@@ -179,7 +191,7 @@
 
 ## Partially Implemented / In Progress
 
-본부 1~3단계와 테스트 성능 개선은 PR #13/#14/#15/#16으로 병합 완료다. 4단계 의료·귀환·패배는 구현·로컬/브라우저 검증 완료이며 PR #17 검토·병합을 남긴다. 구현 HEAD의 CI는 성공이고 문서 후속 커밋의 최신 CI는 실제 GitHub와 PR Validation을 따른다. 경제·상점 및 통합 closeout은 이번 범위가 아니다.
+본부 1~4단계와 테스트 성능 개선은 PR #13~#17로 병합 완료다. 5단계 단일 화폐·회수 자원 정산은 구현·로컬/브라우저 검증 완료이며 PR 생성·최신 HEAD CI 확인을 진행한다. NPC 상점과 통합 closeout은 후속 범위다.
 
 ## Validation
 
@@ -217,11 +229,11 @@
 3. 발전기 시나리오를 선택한다면 먼저 이미 켜진 시설/개인 미완료/기존 완료 캐릭터의 현재 흐름과 비용·보상 의미를 재현·설계한다. 합의 없이 비용·flag·gate를 수정하지 않는다.
 4. push 중복을 선택한다면 실제 callback 횟수와 UI 영향부터 측정한다. 단순 중복 가능성만으로 저장/알림 경계를 다시 설계하지 않는다.
 
-의도적 비범위: multi-room LOS/raycast·lux·광원 전파·부분 전원 회수·충전·연료·전력망 topology·night vision·망원경·은신·Enemy hearing·날씨 전투 modifier/환경 damage·온도/습도. 배고픔/갈증·아이템 무게/용량·container nesting·거래창/우편·숫자 수량/다중 지급도 구현 요청으로 남기지 않는다.
+의도적 비범위: multi-room LOS/raycast·lux·광원 전파·부분 전원 회수·충전·연료·전력망 topology·night vision·망원경·은신·Enemy hearing·날씨 전투 modifier/환경 damage·온도/습도. 배고픔/갈증·아이템 무게/용량·container nesting·거래창/우편·일반 이전 명령의 숫자 수량/다중 지급도 구현 요청으로 남기지 않는다. 정산 전용 N개 수량은 이번 5단계 범위다.
 
 ## Recommended Next Step
 
-4단계 의료 PR 검토·병합 후 최신 main에서 별도 요청으로 5단계 단일 화폐 및 회수 자원 정산을 진행한다. Credits만 화폐로 사용하고 회수부품은 resource로 유지하며 자원 정산소 NPC와 회수부품→Credits 정산을 구현할 예정이다. 현재 PR이 병합되기 전에는 시작하지 않는다.
+5단계 PR 검토·병합 후 최신 main에서 별도 요청으로 6단계 NPC 기반 상점 시스템을 진행한다. 보급관·무기상·방어구상과 actual Shopkeeper/room-local catalog/Credits-only 상점·메뉴·구매가 예정 범위다. 현재 PR이 병합되기 전에는 시작하지 않는다.
 
 ## Important Files
 
@@ -229,6 +241,7 @@
 | --- | --- |
 | `AGENTS.md`, `README.md`, `pyproject.toml`, `uv.lock` | 프로젝트 지침/사용법/실제 의존성 |
 | `scripts/dev.py`, `game/server/conf/settings_test.py`, `game/server/conf/test_runner.py`, `game/tests/base.py`, `game/tests/test_fixtures.py` | 테스트 전용 설정, 프로세스 병렬 실행·오류 전달, 실제 월드 fixture 재사용과 DB/runtime 격리 |
+| `game/world/content/economy.py`, `game/world/settlement.py`, `game/commands/settlement.py`, `game/world/test_settlement.py`, `game/tests/test_settlement.py` | 정산율 SSOT, 정산 전용 수량 parser, 실제 정산관 명령과 단위/통합 검증 |
 | `docs/architecture.md`, `docs/playtest.md`, `docs/text-examples.md` | 설계 SSOT, 수동 절차·시점별 결과, 실제 표현 예시 |
 | `game/world/content/starter.py`, `game/world/content/deep_jungle.py` | Room desc/hints/requires, Enemy local/distant metadata |
 | `game/world/content/headquarters.py`, `game/world/test_headquarters.py`, `game/tests/test_headquarters.py` | 본부 Room/폐쇄 방향 정의, 순수 integrity·동선 검사와 실제 이동·접속·bootstrap·기존 서비스 회귀 |

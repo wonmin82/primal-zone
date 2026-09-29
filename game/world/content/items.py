@@ -64,17 +64,6 @@ SHOP = {
     "armor": 65,
     "heavy_suit": 190,
 }
-EXCHANGE = {
-    "spear": 3,
-    "blade": 6,
-    "jungle_blade": 9,
-    "carbine": 12,
-    "heavy_carbine": 24,
-    "leather_suit": 3,
-    "tactical_vest": 8,
-    "armor": 6,
-    "heavy_suit": 18,
-}
 
 
 def find_id(catalog, name):

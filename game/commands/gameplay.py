@@ -14,7 +14,6 @@ from commands.combat import Heal as Heal
 from commands.combat import Heavy as Heavy
 from commands.inventory import Buy as Buy
 from commands.inventory import Equip as Equip
-from commands.inventory import Exchange as Exchange
 from commands.inventory import Inventory as Inventory
 from commands.inventory import Shop as Shop
 from commands.inventory import Take as Take
@@ -28,6 +27,7 @@ from commands.party import PartyLootMode as PartyLootMode
 from commands.party import PartyReject as PartyReject
 from commands.party import PartyTransfer as PartyTransfer
 from commands.registry import COMMANDS as COMMANDS
+from commands.settlement import Exchange as Exchange
 from commands.social import Say as Say
 from commands.world_actions import Investigate as Investigate
 from commands.world_actions import Repair as Repair

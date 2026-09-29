@@ -4,7 +4,15 @@ from unittest import TestCase
 from unittest.mock import patch
 
 from world import rules
-from world.content import ENEMIES, EQUIPMENT_ACTIONS, EXCHANGE, ITEMS, ROOMS, SHOP, find_id
+from world.content import (
+    ENEMIES,
+    EQUIPMENT_ACTIONS,
+    ITEMS,
+    ROOMS,
+    SALVAGE_CREDIT_RATE,
+    SHOP,
+    find_id,
+)
 from world.navigation import entry_block
 from world.quests import QUESTS, current_hint
 
@@ -165,10 +173,11 @@ class RuleTests(TestCase):
             rules.buy(profile, "carbine")
         self.assertEqual(profile, before)
 
-    def test_exchange_is_a_guaranteed_gear_path(self):
+    def test_salvage_settlement_funds_a_credit_gear_purchase(self):
         profile = rules.new_profile()
         rules.add_item(profile, "scrap", 6)
-        rules.buy(profile, "blade", exchange=True)
+        self.assertEqual(rules.settle_salvage(profile, 6), 6 * SALVAGE_CREDIT_RATE)
+        rules.buy(profile, "blade")
         self.assertEqual(profile["inventory"]["blade"], 1)
         self.assertNotIn("scrap", profile["inventory"])
 
@@ -182,10 +191,10 @@ class RuleTests(TestCase):
                 self.assertTrue(
                     all(isinstance(data[k], int) and data[k] >= 0 for k in ("attack", "defense"))
                 )
-                sources = set(SHOP) | set(EXCHANGE) | {e["drop"] for e in ENEMIES.values()}
+                sources = set(SHOP) | {e["drop"] for e in ENEMIES.values()}
                 sources |= set(rules.new_profile()["inventory"])
                 self.assertIn(identity, sources)
-        for catalog in (SHOP, EXCHANGE):
+        for catalog in (SHOP,):
             for identity, price in catalog.items():
                 self.assertIn(identity, ITEMS)
                 self.assertGreater(price, 0)
@@ -241,29 +250,22 @@ class RuleTests(TestCase):
                 rules.equip(profile, identity, ITEMS[identity]["slot"])
             self.assertEqual(profile, before)
 
-    def test_every_purchase_and_exchange_exact_cost_and_lossless_failure(self):
-        for exchange, prices in ((False, SHOP), (True, EXCHANGE)):
-            for identity, price in prices.items():
-                with self.subTest(item=identity, exchange=exchange):
-                    profile = rules.new_profile()
-                    profile["credits"] = price - 1
-                    profile["inventory"]["scrap"] = price - 1
-                    before = deepcopy(profile)
-                    with self.assertRaises(rules.RuleError):
-                        rules.buy(profile, identity, exchange=exchange)
-                    self.assertEqual(profile, before)
-                    if exchange:
-                        profile["inventory"]["scrap"] = price
-                    else:
-                        profile["credits"] = price
-                    expected = deepcopy(profile)
-                    if exchange:
-                        del expected["inventory"]["scrap"]
-                    else:
-                        expected["credits"] = 0
-                    expected["inventory"][identity] = expected["inventory"].get(identity, 0) + 1
-                    rules.buy(profile, identity, exchange=exchange)
-                    self.assertEqual(profile, expected)
+    def test_every_credit_purchase_exact_cost_and_lossless_failure(self):
+        for identity, price in SHOP.items():
+            with self.subTest(item=identity):
+                profile = rules.new_profile()
+                profile["credits"] = price - 1
+                profile["inventory"]["scrap"] = price
+                before = deepcopy(profile)
+                with self.assertRaises(rules.RuleError):
+                    rules.buy(profile, identity)
+                self.assertEqual(profile, before)
+                profile["credits"] = price
+                expected = deepcopy(profile)
+                expected["credits"] = 0
+                expected["inventory"][identity] = expected["inventory"].get(identity, 0) + 1
+                rules.buy(profile, identity)
+                self.assertEqual(profile, expected)
 
     def test_heal_is_capped_and_consumes_one_bandage(self):
         profile = rules.new_profile()

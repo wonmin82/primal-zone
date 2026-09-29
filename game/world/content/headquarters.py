@@ -107,6 +107,7 @@ ROOMS = {
     },
     "salvage_office": {
         "name": "자원 정산소",
+        "hints": [{"target": "salvage_officer", "action": "환율"}],
         "desc": "넓은 작업대와 비어 있는 금속 선반이 놓인 업무 공간이다. 남쪽 문은 1층 복도로 이어진다.",
         "exits": {"남": "support_1f_w2"},
     },

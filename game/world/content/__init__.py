@@ -2,8 +2,9 @@
 
 from .deep_jungle import ENEMIES as JUNGLE_ENEMIES
 from .deep_jungle import ROOMS as JUNGLE_ROOMS
+from .economy import SALVAGE_CREDIT_RATE
 from .headquarters import ROOMS as HEADQUARTERS_ROOMS
-from .items import EQUIPMENT_ACTIONS, EXCHANGE, ITEMS, OPPOSITES, SHOP, UNEQUIP_ACTIONS, find_id
+from .items import EQUIPMENT_ACTIONS, ITEMS, OPPOSITES, SHOP, UNEQUIP_ACTIONS, find_id
 from .starter import ENEMIES as STARTER_ENEMIES
 from .starter import ROOMS as STARTER_ROOMS
 
@@ -46,7 +47,7 @@ def spawn_id_for(zone, enemy_id):
 __all__ = [
     "ITEMS",
     "SHOP",
-    "EXCHANGE",
+    "SALVAGE_CREDIT_RATE",
     "OPPOSITES",
     "EQUIPMENT_ACTIONS",
     "UNEQUIP_ACTIONS",

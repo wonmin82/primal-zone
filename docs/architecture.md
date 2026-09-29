@@ -45,7 +45,7 @@ Room의 local/distant 표시 경로는 정적 설명 다음에 폐쇄 문구를 
 
 Room 본문은 기존 `world.text` semantic 조각으로 호출 방법 또는 현재 층·가능한 명령을 표시한다. `pz_state.elevator`는 서버가 결정한 `inside`, 내부의 `current_stop/current_floor`, `actions[{label, command}]`를 제공하며 이용 불가능한 곳에서는 null이다. 클라이언트는 이 값을 주변 행동에 렌더링하고 같은 텍스트 명령을 보낸다. zone ID 분기나 별도 웹 이동 API는 없다. 지도는 방문한 승강기·상층·옥상을 기존 Room 목록에 표시하며 가짜 방향 연결을 추가하지 않는다. 순수 검사는 cardinal graph와 stop을 포함한 transport reachability를 따로 확인한다.
 
-Integrity는 승강기 Room·headquarters 소속, default·정류 층 ID/label/목적지의 유효성·중복, 정확히 세 중앙 복도와 옥상인 정류 구성, 가짜 방향 출구 금지와 기존 HQ reverse/blocked 검증을 함께 수행한다. 귀환은 옥상에 도착한 뒤 이 승강기로 이동한다. 의료·패배 흐름은 아래 4단계를 따르며 상점·경제 개편은 후속 단계다.
+Integrity는 승강기 Room·headquarters 소속, default·정류 층 ID/label/목적지의 유효성·중복, 정확히 세 중앙 복도와 옥상인 정류 구성, 가짜 방향 출구 금지와 기존 HQ reverse/blocked 검증을 함께 수행한다. 귀환은 옥상에 도착한 뒤 이 승강기로 이동한다. 의료·패배 흐름은 아래 4단계를 따르며 회수 자원 정산은 아래 5단계를 따르며 NPC 상점은 후속 단계다.
 
 ## 본부 3단계: 보관·훈련 서비스 이전
 
@@ -71,13 +71,25 @@ bootstrap은 stable `primal_interactable` tag로 기존 객체를 찾아 DB ID�
 
 `scripts/smoke.py`의 반복 회복은 귀환→옥상→승강기 2층→의무실 침대→승강기 1층→부두→초지로, 구매는 귀환→옥상→승강기 1층→부두로 바꾼다. 이미 full HP이면 휴식을 요청하지 않는다. 가입 rate limit과 610초 대기는 변경하지 않는다.
 
+## 본부 5단계: 단일 화폐와 회수 자원 정산
+
+Credits는 유일한 구매 currency, scrap은 material/resource다. `profile.inventory["scrap"]`와 개인 storage의 기존 저장 형식을 유지하며 migration·자동 환전은 없다. 적 전리품·이전·보관 정책과 발전기의 부품 3개 소비를 보존한다. `world/content/economy.py`의 `SALVAGE_CREDIT_RATE=10`은 정산율 SSOT다. 기존 장비용 EXCHANGE 정의/export와 구매 flag를 제거하고 `rules.buy(profile, item_id)`는 SHOP의 크레딧 가격만 사용한다. SHOP은 가격을 유지한 중간 단계의 Credit catalog이며 부두 `상점`/`구매`의 `at_dock()`은 그대로다. 6단계에서 실제 Shopkeeper와 room-local catalog로 전환할 예정이다.
+
+실제 persistent `SettlementOfficer`의 stable ID는 `salvage_officer`, 표시명은 자원 정산관, alias는 정산관이며 `salvage_office`에 배치한다. 기존 bootstrap의 stable tag 재사용으로 객체 ID·alias·정상 배치를 유지하고 다른 객체·개인 profile·shared inventory를 초기화하지 않는다. integrity는 위치·환율/교환 action 정의·양의 정수 정산율과 기존 본부 구조를 검사한다.
+
+`환율`과 `교환`은 보이는 current-room SettlementOfficer에 위임한다. discovery는 기존 `room_objects`/names/parse_selector/resolve를 사용하며 bare는 0명 거절, 1명 자동 선택, 여러 명 대상 지정 요구다. targeted 입력은 `정산관에게 회수부품 10개 교환`처럼 공통 `에게` relation과 이름/번호를 사용한다. hidden/view lock은 개수·selector·hint·Web에서 제외한다. 이용은 실제 같은 Room·can_perceive·현재 Room safe·비전투 조건이며 특정 Room ID가 권한을 부여하지 않는다. 전투 중 보이는 NPC는 기존 전투 오류를 반환한다.
+
+`world/settlement.py`는 정산 resource와 1/N개/모두 수량만 해석한다. 일반 가방/보관/전리품 parser의 수량 범위를 확장하지 않는다. `rules.settle_salvage(profile, quantity)`는 비전투·양의 정수·가방 보유량을 전부 검증한 뒤 consume과 Credits 증가를 수행하고 획득액을 반환한다. 객체가 `caller.change()` 경계 안의 최신 profile에서 모두 수량을 구하므로 실패 시 부분 저장이 없다. 0개 inventory entry는 consume이 제거한다. 저장한 부품·임무용 부품·성장 등은 정산 대상 가방 수량 이외에 변경하지 않는다.
+
+서버는 실제 visible/available NPC에서 환율 명령과 보유 scrap이 있을 때 대상 지정 모두 정산 명령을 만든다. 기존 interactable actions를 재사용하고 전체 ActionObject action을 개방하지 않는다. Room hint도 실제 target/action의 availability를 따른다. `pz_state.resources.scrap={name,count}`는 같은 profile snapshot의 가방에서 파생하고 Credits wallet과 구분한다. 별도 balance를 저장하지 않으며 client는 payload와 완성된 command를 렌더링한다. zone ID·NPC 이름·환율·수량으로 action을 추론하지 않는다.
+
 ## 공통 대상 선택
 
 `world/targets.py`의 `TargetSelector`는 DEFAULT / INDEX / ALL을 표현한다. 일반 대상은 `<대상>`, `<대상> <번호>`, `<대상> 모두`로, 전리품 출처는 `시체에서`, `시체 2에서`, `모든 시체에서`로 해석한다. 출처 ALL도 내부에서는 같은 ALL이며, 한국어 조사에 맞춰 표시 문법만 다르다. 번호와 모두는 함께 사용할 수 없다. 실제 이름/alias 전체가 일치하면 숫자로 끝나는 이름을 우선하고, 이후 접미 선택자를 해석한다. 이전 prefix `전체` 문법은 지원하지 않는다.
 
 `ordered()`의 객체 ID 오름차순을 Room 서술, SURROUNDINGS, 보기, 공격, 콘텐츠 행동, 시체 회수에서 공유한다. 번호는 방 안의 보이는 후보에 붙이는 1부터 시작하는 transient presentation index이며 DB에 저장하거나 객체 ID 자체를 노출하지 않는다. 같은 이름끼리 번호를 붙이되 `시체`는 방 전체 Corpse pool을 사용한다. 시체가 만료되면 남은 시체 번호도 다시 계산된다.
 
-DEFAULT는 구조적으로 행동을 지원하는 첫 대상을 선택한다. INDEX는 표시 순서의 정확한 개체를 선택한다. 실제 점유·임무·한 번 보상·전리품 권한은 행동/규칙 계층이 판단하며 resolver가 가능한 다음 대상으로 자동 이동하지 않는다. 보기와 가져만 ALL을 지원한다. 공격·대화·조사·수리·무장·착용·구매·교환·학습·파티 인물 조작은 단일 대상이다. 전투가 시작된 뒤 공격·강타·방어·회복·도주는 기존 combat_target을 사용한다. 특성의 `힘 2 배분`처럼 수량을 받는 명령은 해당 명령의 인자 문법을 유지한다. 파티 초대/관리의 기존 원격 캐릭터 범위도 유지한다.
+DEFAULT는 구조적으로 행동을 지원하는 첫 대상을 선택한다. INDEX는 표시 순서의 정확한 개체를 선택한다. 실제 점유·임무·한 번 보상·전리품 권한은 행동/규칙 계층이 판단하며 resolver가 가능한 다음 대상으로 자동 이동하지 않는다. 보기와 가져만 ALL을 지원한다. 공격·대화·조사·수리·무장·착용·구매·학습·파티 인물 조작은 단일 대상이다. 정산의 교환은 NPC 하나를 선택하고 회수부품에는 정산 전용 1/N개/모두 수량을 적용한다. 전투가 시작된 뒤 공격·강타·방어·회복·도주는 기존 combat_target을 사용한다. 특성의 `힘 2 배분`처럼 수량을 받는 명령은 해당 명령의 인자 문법을 유지한다. 파티 초대/관리의 기존 원격 캐릭터 범위도 유지한다.
 
 `world/target_presentation.py`는 개체 수를 자연어로 묘사하고 필요한 경우에만 `'갈퀴사냥룡 1'`, `'시체 2'` 같은 지정 방법을 문장으로 안내한다. Room 본문과 세계 서술은 객체 표가 아니다. SURROUNDINGS·버튼·상태/조작 control에서는 빠른 인식과 조작을 위해 `시체 1 · 갈퀴사냥룡의 시체` 같은 compact label·번호·상태를 사용할 수 있다. `world/state.py`가 label/command를 생성하고 웹은 그대로 텍스트 명령을 전송하므로 클라이언트에 선택 parser를 복제하지 않는다.
 
@@ -93,7 +105,7 @@ DEFAULT는 구조적으로 행동을 지원하는 첫 대상을 선택한다. IN
 | Attribute | 현재 선택한 신체·정신 빌드 | 특성 포인트 배분, 재분배 |
 | Proficiency | 실제로 해 온 행동의 장기 경험 | 유효한 개인 행동, 재훈련으로 반환하지 않음 |
 | Skill | 선택해서 사용하는 전투 능력의 강도 | 교관 학습과 Rank 투자, 기술 재분배 |
-| Equipment | 교체 가능한 외부 전투 보정 | 기존 드롭·구매·교환·착용 |
+| Equipment | 교체 가능한 외부 전투 보정 | 기존 드롭·크레딧 구매·착용 |
 
 `attributes`는 각 ID별 `{base: 10, allocated: 0}`이다. 기본 10은 기존 전투 수치의 기준점이며 추가 보너스를 주지 않는다. 현재 값은 base + allocated다. 특성 포인트 총량은 `레벨 × 2 + 2`이며 Lv.1에서 4점, Lv.10에서 22점이다. 미사용 포인트는 총량에서 투자량 합계를 뺀 값으로 계산하므로 별도 가변 카운터의 중복 지급이 없다.
 
@@ -217,7 +229,7 @@ profile의 최신 버전은 5다. v1/v2의 개인 encounter 제거·전투 입�
 
 세계 사건과 조회 화면은 같은 데이터를 서로 다른 형식으로 표현한다. Room·공격·처치·전리품·NPC 대화는 한국어 서술이고, 상태·능력·경험치·기술·장비·가방·상점·임무·파티·도움말은 `[제목]`과 짧은 행으로 구성한 compact 정보창이다. Room과 대상 보기는 기존 구분선과 설명·행동 안내를 유지한다. Room은 실제로 보이는 대상만 묘사하며 명령 목록을 넣지 않는다. 가능한 행동은 대상 보기와 command registry 기반 도움말에서 확인한다.
 
-`world/text.py`의 `Text`는 색 없는 문자열과 `{text, role}` 조각을 함께 가진다. `token`, `text`, `join`, `sheet`, `compact`, `row`가 조합과 한글 표시 폭을 담당한다. 조사는 색 코드를 붙이기 전 원래 이름의 받침으로 선택한다. `world/presentation.py`는 기존 rules·성장 정의·ITEMS·SHOP·EXCHANGE에서 조회값을 읽는다. Enemy/Corpse/DroppedLoot/ActionObject/Explorer의 실제 타입과 콘텐츠 정의가 대상 역할과 행동을 결정한다. 이름별 색상 목록이나 완성된 문자열 검색은 사용하지 않는다.
+`world/text.py`의 `Text`는 색 없는 문자열과 `{text, role}` 조각을 함께 가진다. `token`, `text`, `join`, `sheet`, `compact`, `row`가 조합과 한글 표시 폭을 담당한다. 조사는 색 코드를 붙이기 전 원래 이름의 받침으로 선택한다. `world/presentation.py`는 기존 rules·성장 정의·ITEMS·SHOP에서 조회값을 읽는다. Enemy/Corpse/DroppedLoot/ActionObject/Explorer의 실제 타입과 콘텐츠 정의가 대상 역할과 행동을 결정한다. 이름별 색상 목록이나 완성된 문자열 검색은 사용하지 않는다.
 
 `rules.player_attack()`은 피해량과 구조화된 행동 결과를 반환한다. Enemy가 실제 HP 감소량을 확정한 뒤 문장을 만든다. 사망·보상·전리품 권한 판정에 출력 문장을 사용하지 않는다. 전투 공식, 타이머, 포인트 경제, 가격, 보상·배정, profile 버전과 저장 구조는 변경하지 않는다.
 
@@ -270,7 +282,7 @@ Room `requires.message`는 이동 실패 안내, optional `requires.observe_mess
 
 대상 보기와 `pz_state.inventory[].equip_action`도 이 슬롯 대응을 사용한다. 웹은 전달된 행동을 기존 텍스트 명령 버튼으로 전송하며 장비 이름 목록을 따로 관리하지 않는다. `stats()`와 장비 화면은 양쪽 슬롯의 공격·방어를 모두 합산하므로 사냥창의 방어와 경량전술조끼의 공격도 적용된다.
 
-장비 수치·구매·교환 경로는 [README 장비 표](../README.md#장비와-획득-경로)를 따른다. 두 번째 지역도 기존 장비를 활용하며 새 무기·방어구를 추가하지 않는다. 기존 장비 ID와 획득 경로를 유지한다.
+장비 수치·크레딧 구매·드롭 경로는 [README 장비 표](../README.md#장비와-획득-경로)를 따른다. 두 번째 지역도 기존 장비를 활용하며 새 무기·방어구를 추가하지 않는다. 기존 장비 ID와 획득 경로를 유지한다.
 
 ## 아이템 이전·소비·보관
 

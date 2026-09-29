@@ -5,7 +5,6 @@ from numbers import Real
 
 from world.content import (
     ENEMIES,
-    EXCHANGE,
     ITEMS,
     REGION_ENEMIES,
     REGIONS,
@@ -13,6 +12,7 @@ from world.content import (
     SHOP,
     spawn_id_for,
 )
+from world.content.economy import SALVAGE_CREDIT_RATE
 from world.content.elevator import ELEVATOR_DEFAULT_STOP, ELEVATOR_ROOM, ELEVATOR_STOPS
 from world.content.environment import EXPOSURES, LIGHT_PROFILES, WEATHER_ZONES, WEATHERS
 from world.content.facilities import FACILITIES
@@ -110,10 +110,13 @@ def elevator_errors():
 
 def errors(interactables):
     issues = headquarters_errors() + elevator_errors()
+    if type(SALVAGE_CREDIT_RATE) is not int or SALVAGE_CREDIT_RATE <= 0:
+        issues.append("회수부품 정산율은 양의 정수여야 합니다.")
     for identity, room in (
         ("shared_container", "storage_room"), ("personal_locker", "storage_room"),
         ("instructor", "training_room"),
         ("doctor", "infirmary"), ("infirmary_bed", "infirmary"),
+        ("salvage_officer", "salvage_office"),
     ):
         if interactables.get(identity, {}).get("room") != room:
             issues.append(f"{identity}: 본부 서비스는 {room}에 배치해야 합니다.")
@@ -202,7 +205,7 @@ def errors(interactables):
             issues.append(f"{enemy}: 전리품 정의가 없습니다.")
         if data.get("boss_quest") and data["boss_quest"] not in QUESTS:
             issues.append(f"{enemy}: 임무 정의가 없습니다.")
-    for key in SHOP.keys() | EXCHANGE.keys():
+    for key in SHOP:
         if key not in ITEMS:
             issues.append(f"{key}: 상점 아이템 정의가 없습니다.")
     for key, data in ITEMS.items():
@@ -218,6 +221,8 @@ def errors(interactables):
     for identity, action in (("doctor", "치료"), ("infirmary_bed", "휴식")):
         if tuple(interactables.get(identity, {}).get("actions", ())) != (action,):
             issues.append(f"{identity}: 의료 행동 정의가 올바르지 않습니다.")
+    if tuple(interactables.get("salvage_officer", {}).get("actions", ())) != ("환율", "교환"):
+        issues.append("salvage_officer: 정산 행동 정의가 올바르지 않습니다.")
     for quest_id, data in QUESTS.items():
         requirement = data.get("requires")
         if requirement and (

@@ -138,6 +138,7 @@
       attack: state.attack, defense: state.defense, "room-name": state.room,
       "zone-tag": state.safe ? "안전 지대" : "탐사 구역", quest: state.quest, "room-hint": state.hint};
     Object.entries(fields).forEach(([key, value]) => { byId(key).textContent = value; });
+    byId("resources").textContent = "자원 · " + Object.values(state.resources || {}).map((resource) => resource.name + " ×" + resource.count).join(" · ");
     const environment = state.environment;
     byId("environment-status").textContent = environment
       ? environment.time + " · " + environment.weather.name + " · " + environment.period.name + " · " + environment.light.name

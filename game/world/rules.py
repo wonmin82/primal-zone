@@ -3,7 +3,14 @@
 from copy import deepcopy
 from random import Random
 
-from world.content import ENEMIES, EQUIPMENT_ACTIONS, EXCHANGE, ITEMS, SHOP, UNEQUIP_ACTIONS
+from world.content import (
+    ENEMIES,
+    EQUIPMENT_ACTIONS,
+    ITEMS,
+    SALVAGE_CREDIT_RATE,
+    SHOP,
+    UNEQUIP_ACTIONS,
+)
 from world.progression import (
     ATTRIBUTES,
     PROFICIENCIES,
@@ -116,19 +123,28 @@ def equip(profile, item_id, expected_slot=None):
     profile["equipment"][slot] = item_id
 
 
-def buy(profile, item_id, exchange=False):
+def buy(profile, item_id):
     require_peace(profile)
-    prices = EXCHANGE if exchange else SHOP
-    if item_id not in prices:
+    if item_id not in SHOP:
         raise RuleError("취급하지 않는 물건입니다.")
-    price = prices[item_id]
-    if exchange:
-        consume(profile, "scrap", price)
-    elif profile["credits"] < price:
+    price = SHOP[item_id]
+    if profile["credits"] < price:
         raise RuleError("크레딧이 부족합니다.")
-    else:
-        profile["credits"] -= price
+    profile["credits"] -= price
     add_item(profile, item_id)
+
+
+def settle_salvage(profile, quantity):
+    """가방의 회수부품만 정산한다. 모든 검증 후 자원과 크레딧을 함께 변경한다."""
+    require_peace(profile)
+    if type(quantity) is not int or quantity <= 0:
+        raise RuleError("정산 수량은 1개 이상의 정수로 지정하세요.")
+    if profile["inventory"].get("scrap", 0) < quantity:
+        raise RuleError("회수부품이 부족합니다.")
+    earned = quantity * SALVAGE_CREDIT_RATE
+    consume(profile, "scrap", quantity)
+    profile["credits"] += earned
+    return earned
 
 
 def move_item(source, destination, item_id, *, all_items=False, equipment=None):

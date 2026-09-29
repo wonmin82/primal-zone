@@ -51,7 +51,7 @@ class Wield(Equip):
 class Shop(GameCommand):
     category = "보급"
     usage = "상점"
-    summary = "부두의 판매·교환 가격을 확인합니다."
+    summary = "부두의 크레딧 판매 가격을 확인합니다."
     key = "상점"
     aliases = ["shop"]
 
@@ -67,24 +67,14 @@ class Buy(GameCommand):
     input_style = "target"
     key = "구매"
     aliases = ["buy"]
-    exchange = False
 
     def run(self):
         self.at_dock()
         item = item_selector(self.args, ITEMS, self.key)
         if not item:
             raise rules.RuleError("물건 이름을 확인하세요. 예: 붕대 구매")
-        self.caller.change(lambda profile: rules.buy(profile, item, exchange=self.exchange))
+        self.caller.change(lambda profile: rules.buy(profile, item))
         self.caller.msg(ft.text(ft.item(item), " 1개를 받아 가방에 넣었다."))
-
-
-class Exchange(Buy):
-    category = "보급"
-    usage = "강화 조끼 교환"
-    summary = "회수부품으로 장비를 교환합니다."
-    key = "교환"
-    aliases = ["exchange"]
-    exchange = True
 
 
 class Take(GameCommand):
