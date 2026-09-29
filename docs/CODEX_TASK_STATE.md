@@ -4,6 +4,22 @@
 
 ## Objective
 
+본부 재설계 1~7단계와 P0 smoke 인프라는 PR #13~#21으로 병합·closeout 완료됐다. 현재 작업은 본부 8단계가 아닌 **개인 줄임말 / 묶음 명령** 독립 기능이다. 시작 시 main 작업 트리는 깨끗했고 status·unstaged/staged diff 확인 및 fetch 후 HEAD/origin/main은 모두 `a748d284d42935ce42ca151cf9e8c36c6942b731`이었다. PR #21 MERGED와 병합 후 [Game checks run 36547264547](https://github.com/wonmin82/primal-zone/actions/runs/36547264547)의 test/smoke success를 실제 확인했다. 해당 과거 main CI는 pure 101·integration 252·total 353, runner 100.197초·Quick 18.965초다. 최신 main에서 `codex/personal-command-shortcuts`를 생성했다. 아래 단계별 OPEN·부두 서비스 설명은 당시 기록이며 현재 상태보다 우선하지 않는다.
+
+### 개인 줄임말 / 묶음 명령 (2026-09-29)
+
+`해` 인자의 콤마만 sequence separator로 사용하며 일반 콤마 채팅은 유지한다. `줄임말 추가 이름 정의`는 = 없는 prefix 문법이고 목록·교체·개별 삭제·중첩·exact-match를 지원한다. profile v7의 `command_shortcuts`는 캐릭터별 명령 list이며 v1~v6 migration은 기존 게임 데이터를 보존한다. 실제 명령·lock·시스템 shortcut이 개인 설정보다 우선한다. parser 조회는 `profile_snapshot()`으로 저장 부작용이 없다.
+
+순수 helper는 `commands/shortcuts.py`, 서버 관리/dispatch는 `commands/command_shortcuts.py`, parser fallback은 `server/conf/cmdparser.py`다. 실행 전에 전체 재귀 flatten과 순환/깊이 5/명령 10/문자 합계 1000 검사를 완료하고 각 `execute_cmd()` 완료를 기다린다. 개별 gameplay 실패는 다음 실행을 막지 않는다. 설치된 Evennia 6.1의 progressive engine `func` 완료 계약 때문에 해당 명령의 묶음 자동화는 사전 거절하며 단독 실행은 유지한다.
+
+전체 삭제 요청은 캐릭터 `ndb.shortcut_delete_all_request`의 monotonic timestamp + 목록 SHA256 fingerprint다. 요청만으로 삭제하지 않고, 확인 단독 입력도 삭제하지 않는다. 60초 내 동일 목록인 경우만 한 번 삭제하며 등록·교체·개별 삭제·로그아웃·종료에서 무효화한다. 0개 요청·캐릭터 간 권한 공유·확인 재사용을 차단한다. 현재 설계/안전 계약/한계/향후 후보는 [command-shortcuts.md](command-shortcuts.md), 짧은 사용법은 README에 있다.
+
+최종 로컬 `scripts/dev.py check` 통과, `scripts/dev.py test` pure 109 / 1.653초·integration 269 / 86.780초·total 378·통합 runner 95.745초다. `world.test_command_shortcuts tests.test_command_shortcuts tests.test_integration tests.test_text --parallel 2 --reverse`는 58개 / 18.355초·runner 26.681초 통과했다. 실제 Quick smoke는 46.471초 성공했고 owned process/temp를 정리했다. play DB의 size 733184·mtime_ns 1790080153765082800·SHA256 `b1318296f505b9b7522fcbdedff7642a06cf055e9de72802198c70e6b8a7f700`은 동일했다. 근거는 Git 제외 `work/shortcuts-full-tests-final.log`, `work/shortcuts-related-reverse.log`, `work/shortcuts-quick.log`다. 개발 중 도움말 prefix 충돌을 수정하고 고정 v6 광원 migration 기대를 최신 버전으로 갱신했으며 기존 데이터 보존 검사는 유지했다.
+
+이번 실행 코드·테스트 검증 이후 변경은 문서뿐이다. Full/restart/브라우저/OS IME는 서버 명령 변경과 직접 관련된 자동/integration·Quick 범위로 검증해 반복하지 않았다. JS·asset 변경이 없어 node/collectstatic은 미실행이다. 운영 DB에 테스트로 접속하지 않았다. 최종 원격 HEAD와 test/smoke CI는 PR Validation에서 실제 SHA를 대조한다.
+
+### 7단계 PR 생성 시점의 Objective (과거 기록)
+
 본부 1~6단계와 P0 smoke 인프라는 PR #13~#20으로 병합 완료됐다. 7단계 시작 시 작업 트리는 깨끗하고 fetch 후 HEAD/origin/main은 `63dca1bf9366d60af06a1728f0aaefb2bfdb6526`였다. PR #20은 MERGED이며 병합 후 [Game checks #106](https://github.com/wonmin82/primal-zone/actions/runs/36528666351)은 test/smoke 모두 success다(순수 99·통합 250·총 349, runner 100.141초, Quick 19.336초). 열린 PR은 없었다. 최신 main에서 `codex/hq-final-closeout`을 생성했다. 7단계 통합 cleanup·전체 회귀검증·closeout으로 실제 restart/Full progression/최종 Web 확인을 완료하고 PR #21을 생성했다. 아래 OPEN 및 부두 서비스 설명은 시점별 과거 기록이다. 본부 재설계 1~7단계 구현 및 로컬 최종 검증을 완료했다. 구현 HEAD의 test/smoke CI도 성공했다. 문서 후속 커밋의 최종 HEAD CI는 PR Validation에서 별도 확인하며 PR은 병합하지 않는다.
 
 ### 본부 7단계 closeout (2026-09-29)
@@ -149,6 +165,10 @@ Live Full에서는 보관상자/개인 보관함에 넣기·꺼내기와 일부 
 
 ## Current Repository State
 
+현재 branch는 `codex/personal-command-shortcuts`, 시작 main은 `a748d284d42935ce42ca151cf9e8c36c6942b731`이다. PR #13~#21 MERGED이며 본부 계획은 closeout 완료다. 개인 줄임말/묶음 기능의 구현·검증·문서화와 별도 PR 생성이 현재 승인된 작업이고 해당 PR을 merge하지 않는다. 로컬/원격 최신 HEAD·CI는 작업 완료 기록과 실제 GitHub를 대조한다.
+
+### 7단계 PR 생성 직후 저장소 상태 (과거 기록)
+
 현재 기준은 Objective와 7단계 closeout 기록이다. branch는 `codex/hq-final-closeout`, 시작/fetch main은 `63dca1bf9366d60af06a1728f0aaefb2bfdb6526`이며 PR #13~#20 MERGED다. [PR #21](https://github.com/wonmin82/primal-zone/pull/21)은 OPEN·비Draft·MERGEABLE이며 병합하지 않았다. 구현 커밋은 `736f10df437f3d809d779838a50c61d30a6b00fa`다.
 
 구현 HEAD와 직접 대조한 [Game checks run 36545108714](https://github.com/wonmin82/primal-zone/actions/runs/36545108714)의 test/smoke는 모두 success다. CI는 pure 101개 / 0.766초, integration 252개 / 101.456초, total 353개, 통합 runner 107.901초이며 Quick은 20.265초다. 위 로컬 결과와 별도의 원격 실행이다. branch protection의 required context는 실제 API 확인 시 `test`만이며 smoke job은 자동 실행된다.
@@ -262,7 +282,7 @@ Live Full에서는 보관상자/개인 보관함에 넣기·꺼내기와 일부 
 
 ## Partially Implemented / In Progress
 
-본부 1~6단계와 P0는 병합 완료이며 7단계 구현·전체 자동 검사·Quick 연속 실행·production Full·실제 Portal/Server restart·브라우저 확인을 완료했다. 본부 재설계 계획의 미구현 기능이나 closeout blocker는 발견하지 않았다. 남은 절차는 현재 closeout PR의 검토·병합이며 사용자의 별도 병합 요청 전에는 merge하지 않는다. 현재 구현 상태와 과거 PR OPEN 기록을 구분한다.
+본부 1~7단계와 P0는 병합·closeout 완료다. 현재 개인 줄임말/묶음 기능의 구현·자동/Quick 검증·문서화를 완료했다. 이번 독립 기능 PR의 최신 HEAD CI·검토 상태는 GitHub와 아래 현재 저장소 기록을 대조하며 merge는 이번 승인 범위가 아니다. 과거 본부 PR OPEN 기록을 현재 상태로 해석하지 않는다.
 
 ## Validation
 
@@ -304,7 +324,7 @@ Live Full에서는 보관상자/개인 보관함에 넣기·꺼내기와 일부 
 
 ## Recommended Next Step
 
-본부 재설계 1~7단계의 구현·검증과 문서 closeout은 완료됐다. closeout PR을 검토하고 별도 요청으로 병합한다. 새로운 기능 작업은 새로운 요구사항을 확정한 뒤 최신 main의 독립 브랜치에서 시작한다. 기존 의도적 비범위/최적화 후보는 자동 구현 요청이나 본부 closeout blocker가 아니다.
+본부 재설계 1~7단계는 closeout·병합 완료다. 이번 개인 줄임말/묶음 PR을 검토하며 병합은 별도 요청에서 진행한다. 이후 새로운 기능 작업은 별도 요구사항을 확정한 뒤 최신 main의 독립 브랜치에서 시작한다. [command-shortcuts.md](command-shortcuts.md)의 향후 후보와 기존 최적화 후보는 자동 구현 요청이나 확정 roadmap이 아니다.
 
 ## Important Files
 
@@ -323,7 +343,9 @@ Live Full에서는 보관상자/개인 보관함에 넣기·꺼내기와 일부 
 | `game/world/facility_state.py`, `game/world/facilities.py` | pure 시설 version/정규화, shared transaction·조명 lookup·가동 event |
 | `game/world/room_hints.py` | 선언 순서 target/text 조합과 현재 perception |
 | `game/world/targets.py`, `game/world/target_presentation.py`, `game/world/distant_presentation.py`, `game/world/navigation.py` | selector/parser/정렬, local 번호·loot 표시, distant contract, pure entry 판정 |
-| `game/world/rules.py`, `game/world/item_transfers.py`, `game/world/multiplayer.py`, `game/world/state.py` | profile v6/pure 규칙, 이전 transaction, 공유 atomic/callback, 웹 대상/전리품 state |
+| `game/world/rules.py`, `game/world/item_transfers.py`, `game/world/multiplayer.py`, `game/world/state.py` | profile v7/pure 규칙, 이전 transaction, 공유 atomic/callback, 웹 대상/전리품 state |
+| `docs/command-shortcuts.md`, `game/commands/shortcuts.py`, `game/commands/command_shortcuts.py`, `game/server/conf/cmdparser.py` | 줄임말/묶음 설계·안전 계약, 순수 확장/한도, 설정·확인·순차 dispatch, read-only exact fallback |
+| `game/world/test_command_shortcuts.py`, `game/tests/test_command_shortcuts.py` | 문법/그래프/확인/migration pure 검사와 실제 DB/dispatcher/precedence/confirmation 격리 회귀 |
 | `game/world/lifecycle.py`, `game/world/bootstrap.py`, `game/typeclasses/scripts.py` | tick/restart 소유권, idempotent 월드 구성, persistent WorldLifecycle |
 | `game/typeclasses/zone_rooms.py`, `game/typeclasses/exits.py`, `game/typeclasses/enemies.py`, `game/typeclasses/interactables.py`, `game/typeclasses/loot.py`, `game/typeclasses/explorers.py` | 실제 객체와 Room/Exit appearance·action·지각·저장/웹/전투 훅 |
 | `game/commands/character.py`, `game/commands/items.py`, `game/commands/inventory.py`, `game/commands/combat.py`, `game/commands/registry.py` | Look/Weather, 이전/광원/소비/해제, 구매/회수, 기존 공격, help 등록 |

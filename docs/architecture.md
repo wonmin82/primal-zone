@@ -173,6 +173,14 @@ parser는 마지막 token으로 행동만 찾는다. Command는 인자 문법·�
 
 `상태`는 전투 수치와 특성 요약, `능력`은 특성과 숙련, `기술`은 Rank·학습 조건, `경험치`는 개인/숙련 XP, `장비`는 착용품, `가방`은 전체 소지품이다. pz_state는 계산된 포인트와 성장 목록, 서버가 판단한 훈련 가능 여부를 전달한다. 웹은 profile을 직접 수정하지 않는다.
 
+## 개인 줄임말과 묶음 명령
+
+`해`의 인자에서만 콤마를 구분자로 사용하며 일반 채팅은 바꾸지 않는다. 순수 `commands/shortcuts.py`가 정의 parsing·재귀 flatten·cycle/depth/count/size 검증·전체 삭제 fingerprint/TTL을 담당하고, `commands/command_shortcuts.py`가 관리와 기존 dispatcher의 순차 호출을 연결한다. parser는 실제 명령·lock·시스템 shortcut을 먼저 처리한 뒤 입력 전체가 개인 이름일 때만 `profile_snapshot()`으로 조회한다. 설정 등록은 `줄임말 추가 이름 정의`의 명시적인 전치형이다.
+
+실행 전 전체 flat 목록을 확정한 뒤 각 `execute_cmd()` Deferred 완료를 기다린다. Evennia 6.1은 일반 `func`의 Deferred 반환을 기다리지 않으므로 dispatch는 `at_post_cmd`에서 수행한다. 추가 입력을 받는 progressive engine 명령은 사전 거절하며 game command failure는 이후 실행을 막지 않는다. 전체 묶음은 transaction이 아니다. 실행 중 새로 등록된 정의는 같은 묶음에서 재확장하지 않는다.
+
+`profile.command_shortcuts`는 캐릭터별 영구 설정이며 profile v7 migration은 기존 게임 상태를 유지한 채 빈 기본값만 보완한다. 전체 삭제는 캐릭터 ndb의 60초 요청과 목록 fingerprint를 검증한 경우에만 한 번 저장한다. 확인 단독 입력·만료·목록 변경·로그아웃/종료 후에는 삭제하지 않는다. 한도·예약 이름·현재 한계와 향후 후보는 [개인 줄임말과 묶음 명령](command-shortcuts.md)을 따른다.
+
 ## Party의 단일 상태
 
 Party는 위치가 없는 영속 Evennia 객체다. DB identity 하나가 파티의 고유 ID이며 leader, members, invitations, loot_mode, round_robin_cursor, created_at을 소유한다. members의 순서가 가입 순서다. Character에는 party_id 참조만 저장하며 전체 상태를 복제하지 않는다.
@@ -227,7 +235,7 @@ Corpse는 실제 방 객체이며 source spawn/enemy, created_at, decay_at과 lo
 
 ## 기존 데이터와 운영 범위
 
-profile의 최신 버전은 6이다. v1/v2의 개인 encounter 제거·전투 입력 필드·성장 기본값 변환을 거친 뒤, v1~v3의 첫 임무 boolean을 `quests.radio_tower`의 진행 필드로 옮긴다. `cache_claimed`는 `discoveries.supply_cache`로 옮긴다. v1~v4에는 개인 보관 `storage={}`의 기본값을 추가한다. XP, HP, credits, inventory, equipment(명시적 None 포함), kills, 완료 여부와 visited 및 개인 전투 상태를 유지한다. 이미 받은 보상은 재지급하지 않는다. v1~v5에는 개인 광원 `light_sources={}`를 보완하고 v6 반복 로드·저장은 초기화하지 않는다.
+profile의 최신 버전은 7이다. v1/v2의 개인 encounter 제거·전투 입력 필드·성장 기본값 변환을 거친 뒤, v1~v3의 첫 임무 boolean을 `quests.radio_tower`의 진행 필드로 옮긴다. `cache_claimed`는 `discoveries.supply_cache`로 옮긴다. v1~v4에는 개인 보관 `storage={}`의 기본값을 추가한다. XP, HP, credits, inventory, equipment(명시적 None 포함), kills, 완료 여부와 visited 및 개인 전투 상태를 유지한다. 이미 받은 보상은 재지급하지 않는다. v1~v5에는 개인 광원 `light_sources={}`, v1~v6에는 개인 줄임말 `command_shortcuts={}`를 보완하고 반복 로드·저장은 초기화하지 않는다.
 
 변환은 기존 프로필의 복사본에서 첫 임무·보급 boolean을 새 구조로 옮기고 오래된 key를 제거한다. 기존 플레이어는 현재 레벨에 해당하는 포인트를 즉시 사용할 수 있고, 무료 기본 기술 Rank 1과 미투자 특성은 기존 전투 성능을 유지한다. Party·Enemy·Corpse·DroppedLoot는 profile 밖에 있으므로 migration이 수정하지 않는다. 기존 DB의 로드 시 점진적으로 변환하며 DB 삭제·교체는 필요 없다. 위의 서버 재시작/재접속 전투 정리 정책과 migration 자체의 보존 정책은 별개다.
 
@@ -353,7 +361,7 @@ Room description은 지형·건축·분위기·지속되는 흔적, Environment�
 
 재시작 시 지난 deadline을 따라 최종 유효 구간까지 복구하고 과거 이벤트는 재생하지 않는다. 매우 긴 중단은 한 reconcile당 256회로 제한하고 이후 현재 시각에서 새 지속 구간을 시작한다. 이 제한을 넘는 중단은 세부 기상 이력을 재현하지 않는다. 변경은 기존 world_change transaction 안에서 저장하며 성공 후 callback으로 발행한다. 저장/외부 transaction 실패 시 상태와 알림을 되돌린다. 최종 weather 또는 period가 실제 달라진 zone의 **현재 session이 있는** 탐사자 중 해당 Room의 환경 표현이 달라진 사람에게만 1–2문장을 보낸다. 같은 날씨의 기간 갱신이나 매 sweep는 로그를 추가하지 않는다. 웹은 기존 sweep의 push_state(observed_at=now) 한 경로로 갱신한다.
 
-환경 데이터는 캐릭터에 저장하지 않는다. profile v6는 개인 광원 상태만 추가하며 타이머·점유·참여 보상·Corpse/DroppedLoot·파티 정책을 유지한다. LOS·날씨 API·조도 전파 엔진·환경 피해는 이 범위에 없다.
+환경 데이터는 캐릭터에 저장하지 않는다. v6에서 추가한 개인 광원 상태는 최신 profile에서도 보존하며 타이머·점유·참여 보상·Corpse/DroppedLoot·파티 정책을 유지한다. LOS·날씨 API·조도 전파 엔진·환경 피해는 이 범위에 없다.
 
 
 ## 관찰, 광원과 공용 시설
@@ -366,7 +374,7 @@ EnvironmentSnapshot은 viewer-independent 공용 환경이다. Room은 장소, O
 
 Light Source는 strength/range/power_type을, Power Source는 type/capacity_seconds를 선언한다. 호환성은 타입 일치로 판단하고 parser는 특정 battery ID를 분기하지 않는다. canonical 전원 삽입은 `<광원>에 <전원 소스> 넣어`이며 기존 parse_relation/stack_selector와 Store를 재사용한다. 예를 들어 `탐사용손전등에 고용량건전지 넣어`는 새 compatible 아이템 정의만 추가하면 같은 경로를 사용한다. 용량은 전원 정의가 소유하며 손전등 상수로 고정하지 않는다.
 
-profile v6의 `light_sources[item_id]`에는 on, power_source, charge_seconds, started_at을 저장한다. v1~v5 migration은 기존 inventory/equipment/storage/quest/growth/combat을 보존하고 빈 light_sources만 보완한다. 켠 동안의 잔량은 `charge_seconds - (now - started_at)`으로 투영한다. tick마다 차감·저장하지 않고 소진 때 한 번 off/0/전원 없음으로 확정한다. 꺼짐·마지막 session 종료·정상 서버 종료에는 잔량을 확정하며 오프라인 동안 사용하지 않는다. 강제 종료로 마지막 종료 hook이 실행되지 않으면 재시작에서 off로 정규화하며 종료 전 정확한 잔량은 보장하지 않는다.
+v6부터 사용하는 `light_sources[item_id]`에는 on, power_source, charge_seconds, started_at을 저장한다. v1~v5 migration은 기존 inventory/equipment/storage/quest/growth/combat을 보존하고 빈 light_sources만 보완한다. 켠 동안의 잔량은 `charge_seconds - (now - started_at)`으로 투영한다. tick마다 차감·저장하지 않고 소진 때 한 번 off/0/전원 없음으로 확정한다. 꺼짐·마지막 session 종료·정상 서버 종료에는 잔량을 확정하며 오프라인 동안 사용하지 않는다. 강제 종료로 마지막 종료 hook이 실행되지 않으면 재시작에서 off로 정규화하며 종료 전 정확한 잔량은 보장하지 않는다.
 
 전원 삽입은 inventory 차감과 장치 상태 설정을 world_change transaction에 함께 저장한다. 잔량이 남은 전원은 교체를 거절하고 부분 충전 아이템 회수는 제공하지 않는다. stack 모델에서 마지막 광원을 이전하면 내부 전원은 폐기하고 안내한다. 여분 복사본만 이전할 때는 개인 active 상태를 보존한다. 전원/광원 일반 아이템의 이동 및 기존 장착·임무 아이템 보호는 공통 transfer 규칙을 유지한다.
 
