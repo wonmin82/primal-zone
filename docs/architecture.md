@@ -227,7 +227,7 @@ Corpse는 실제 방 객체이며 source spawn/enemy, created_at, decay_at과 lo
 
 ## 기존 데이터와 운영 범위
 
-profile의 최신 버전은 5다. v1/v2의 개인 encounter 제거·전투 입력 필드·성장 기본값 변환을 거친 뒤, v1~v3의 첫 임무 boolean을 `quests.radio_tower`의 진행 필드로 옮긴다. `cache_claimed`는 `discoveries.supply_cache`로 옮긴다. v1~v4에는 개인 보관 `storage={}`의 기본값을 추가한다. XP, HP, credits, inventory, equipment(명시적 None 포함), kills, 완료 여부와 visited 및 개인 전투 상태를 유지한다. 이미 받은 보상은 재지급하지 않으며 v5 반복 로드·저장은 초기화하지 않는다.
+profile의 최신 버전은 6이다. v1/v2의 개인 encounter 제거·전투 입력 필드·성장 기본값 변환을 거친 뒤, v1~v3의 첫 임무 boolean을 `quests.radio_tower`의 진행 필드로 옮긴다. `cache_claimed`는 `discoveries.supply_cache`로 옮긴다. v1~v4에는 개인 보관 `storage={}`의 기본값을 추가한다. XP, HP, credits, inventory, equipment(명시적 None 포함), kills, 완료 여부와 visited 및 개인 전투 상태를 유지한다. 이미 받은 보상은 재지급하지 않는다. v1~v5에는 개인 광원 `light_sources={}`를 보완하고 v6 반복 로드·저장은 초기화하지 않는다.
 
 변환은 기존 프로필의 복사본에서 첫 임무·보급 boolean을 새 구조로 옮기고 오래된 key를 제거한다. 기존 플레이어는 현재 레벨에 해당하는 포인트를 즉시 사용할 수 있고, 무료 기본 기술 Rank 1과 미투자 특성은 기존 전투 성능을 유지한다. Party·Enemy·Corpse·DroppedLoot는 profile 밖에 있으므로 migration이 수정하지 않는다. 기존 DB의 로드 시 점진적으로 변환하며 DB 삭제·교체는 필요 없다. 위의 서버 재시작/재접속 전투 정리 정책과 migration 자체의 보존 정책은 별개다.
 
@@ -389,7 +389,8 @@ Room `hints`는 stable INTERACTABLES ID/action 또는 일반 text를 참조한�
 | Pure | DB 없이 규칙·콘텐츠·타이밍 기본값·guard/CLI/harness 계약 | 실제 네트워크·scheduler |
 | Integration (`dev.py test`) | memory SQLite·빠른 해시·병렬 격리, 주입 시간/delay patch로 lifecycle·rollback·상태 경계 | production wall-clock·브라우저 |
 | Quick Live Smoke (`dev.py smoke`) | 실행별 SQLite·fixture 인증·실제 Evennia/WS/delay callback·공동 사냥/HQ/구매/재접속 연결 | production 지속 시간·공개 가입 정책 |
-| Full Gameplay E2E (`dev.py smoke-full`) | 동일 격리 infrastructure로 production combat 및 30/45/120초 실제 시간 | signup 610초·브라우저·전체 보스 |
+| Full Gameplay E2E (`dev.py smoke-full`) | production combat·30/45/120초, 본부 전체 서비스·패배·두 임무/보스 최종 보고 | signup 610초·브라우저·모든 branching |
+| Restart E2E (Full 내부) | 같은 SQLite의 실제 Portal+Server 종료/시작·재인증, profile/party/shared state 보존과 전투 정리·lifecycle callback | 강제 OS crash·PostgreSQL |
 | Manual Browser | 표시·버튼/명령 동등성·반응형·실제 OS IME를 필요한 범위에서 확인 | 자동 통과로 IME를 대체하지 않음 |
 | Auth/Registration policy | 공개 가입·이름/암호·production throttle 정책 | gameplay smoke의 선행 조건으로 사용하지 않음 |
 
@@ -400,3 +401,14 @@ Room `hints`는 stable INTERACTABLES ID/action 또는 일반 text를 참조한�
 정상 초기 객체·static 준비를 마친 fixture DB에 초기 setup 완료를 기록해 첫 실행의 자동 재시작을 피한다. 실제 Twisted foreground Portal/Server를 각각 시작해 exit를 추적하고 loopback HTTP/WS readiness를 polling한다. scenario 중 health monitor가 server premature exit를 실패로 전파한다. 실패·interrupt·성공 모두 자체 Popen/process group만 종료하며 개발 서버 launcher stop/reload를 호출하지 않는다. 성공 시 자신이 생성한 marker 경로만 삭제하고 실패 시 진단 DB/로그를 남긴다. CI는 기존 `test`와 추가 `smoke` job을 실행하고 Full은 제외한다. 실패 단계는 로그 tail만 출력하며 DB는 출력/업로드하지 않는다.
 
 Quick/Full의 client·단계·predicate 대기를 공유한다. 공개 register/610초 sleep·5회 반복 사냥을 제거하고 auth/party/combat/corpse/lifecycle/protection/respawn/shop/persistence 단계별 결과를 출력한다. 시체 배정/파티 회수 권한을 읽고 그대로 남겨 그 시체의 ground 전환과 outsider 회수를 검증한다. Full은 실제 관찰 시각의 허용 오차를 적용해 지나치게 빠른 production 만료를 탐지한다. 일반 플레이 SQLite의 hash·mtime·size는 실행 전후 비교할 뿐 migrate/fixture/cleanup 대상이 아니다. 프로필 schema나 production 게임 밸런스는 바꾸지 않는다.
+
+
+## 본부 7단계: 통합 closeout
+
+훈련·Doctor·Bed·정산관·Shopkeeper에서 같은 Room/safe/비전투/지각의 동일한 조건만 작은 `_service_available` helper로 통일했다. Shopkeeper는 유효한 shop_id도 요구한다. Container는 기존 실제 대상 resolve와 transfer 정책을 유지하며 전투 조건이 다른 일반 조사 객체와 억지로 공통화하지 않는다. `ActionObject.web_actions()` capability와 subclass override는 이미 서버 명령을 소유하므로 유지한다. Room hint의 치료/휴식/환율/상점 availability 분기는 현재 선언과 일반 action의 서로 다른 의미를 정확히 구분하고 있어 유지한다. 새로운 service/action framework는 없다.
+
+runtime at_dock/global SHOP/EXCHANGE/교환 구매 flag 및 client service zone gate는 없다. 지도에서 현재 Room을 표시하는 zone 비교와 content graph·정적 배치·integrity·테스트 경로는 정상 사용이다. 옛 중앙홀/1층 중앙 관리 Exit migration은 기존 DB 호환을 위해 유지한다. 가격·정산율·보상·타이머·profile schema는 변경하지 않는다. 귀환 후 윤대장에게 보고하는 안내는 부두로 직접 귀환한다고 읽히지 않도록 정리했다.
+
+Full만 `scripts/smoke_closeout.py`를 이어 실행한다. 공용/개인 보관, 정산·훈련·Doctor/Bed, 세 상점과 장착, 일반 귀환·실제 적 패배, 발전기 부품 소비·첫 보고, 밀림 표식/신호전지/gate·두 보스를 actual parser/DB/scheduler/WS로 검증한다. Snapshot은 marker/path/SQLite guard 이후 격리 DB에서 읽기만 하며 비밀번호를 조회하지 않는다. Quick은 기존 공동 사냥 1회와 빠른 연결 검증 범위를 유지한다.
+
+Restart는 harness가 소유한 foreground Portal과 Server를 모두 종료하고 같은 DB·설정·포트로 다시 시작한다. 새 migrate/fixture/reset은 하지 않는다. restart 동안만 기존 health monitor를 유예하고 readiness 실패/종료 오류는 그대로 실패한다. 재인증 후 캐릭터 DB ID·위치·home=dock·성장/임무/방문·보관, party membership, 승강기 3층·공용 상자·시설·환경 clock을 비교한다. live combat/claim은 정리되고 남은 시체 deadline과 respawn은 실제 callback/sweep으로 완료되며 전리품 entry는 ground에 보존된다. 광원은 기존 마지막 session/restart의 off 정책을 따르므로 지속 점등을 기대하지 않는다.

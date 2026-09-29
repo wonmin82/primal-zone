@@ -156,3 +156,34 @@ class SmokeContractsTests(TestCase):
             harness.check_alive()
         with self.assertRaisesRegex(RuntimeError, "소유권"):
             harness.discard()
+
+
+class SmokeRestartTests(TestCase):
+    def test_restart_reuses_directory_database_and_ports_without_fixture_reset(self):
+        harness = smoke_harness.Harness("full")
+        harness.run_dir = Path("same-isolated-db")
+        harness.env = {"PRIMAL_SMOKE_MODE": "full"}
+        harness.ports = {"ws": 12345}
+        events = []
+
+        async def ready():
+            self.assertTrue(harness.restarting)
+            events.append("ready")
+
+        with patch.object(harness, "stop", side_effect=lambda: events.append("stop")), patch.object(
+            harness, "start", side_effect=lambda: events.append("start")
+        ), patch.object(harness, "ready", side_effect=ready), patch.object(harness, "prepare") as prepare:
+            asyncio.run(harness.restart())
+        self.assertEqual(events, ["stop", "start", "ready"])
+        self.assertEqual(harness.run_dir, Path("same-isolated-db"))
+        self.assertEqual(harness.ports, {"ws": 12345})
+        self.assertEqual(harness.env, {"PRIMAL_SMOKE_MODE": "full"})
+        self.assertFalse(harness.restarting)
+        prepare.assert_not_called()
+
+    def test_restart_failure_restores_premature_exit_monitoring(self):
+        harness = smoke_harness.Harness("full")
+        with patch.object(harness, "stop"), patch.object(harness, "start", side_effect=RuntimeError("start failed")):
+            with self.assertRaisesRegex(RuntimeError, "start failed"):
+                asyncio.run(harness.restart())
+        self.assertFalse(harness.restarting)
