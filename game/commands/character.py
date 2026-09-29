@@ -6,14 +6,14 @@ from evennia.commands.default.general import CmdLook
 from world import presentation as view
 from world import rules
 from world import text as ft
-from world.content import ITEMS, REGIONS, ROOMS
+from world.content import ITEMS, REGIONS, ROOMS, ordered_directions
 
 from commands.base import GameCommand
 
 
 class Look(CmdLook):
     category = "탐사"
-    usage = "보기 · 대상 보기 · 대상 봐 · 대상 2 보기 · 대상 모두 보기 · 시체 모두 보기 · 북 보기 · 북 봐"
+    usage = "보기 · 대상 보기 · 대상 봐 · 대상 2 보기 · 대상 모두 보기 · 시체 모두 보기 · 북 보기 · 북동 보기 · 북 봐"
     summary = "주변과 대상을 살펴봅니다. 방향을 보면 이동 없이 인접 장소의 존재만 관찰합니다."
     input_style = "target"
     key = "보기"
@@ -280,11 +280,12 @@ class Map(GameCommand):
                         ft.text(
                             ft.token("direction", direction),
                             ": ",
-                            ROOMS[target]["name"] if target in visited else "미탐사",
+                            ROOMS[room["exits"][direction]]["name"]
+                            if room["exits"][direction] in visited else "미탐사",
                         )
-                        for direction, target in room["exits"].items()
+                        for direction in ordered_directions(room["exits"])
                     ] + [ft.text(ft.token("direction", direction), ": 폐쇄")
-                         for direction in room.get("blocked_exits", {})],
+                         for direction in ordered_directions(room.get("blocked_exits", {}))],
                     ", ",
                 )
                 lines.append(ft.text(room["name"], mark, " / ", exits))

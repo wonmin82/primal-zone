@@ -58,19 +58,18 @@
     center.className = "direction-center";
     center.textContent = "[현재]";
     grid.append(center);
-    const positions = new Map([["북", "north"], ["남", "south"], ["동", "east"], ["서", "west"]]);
+    const positions = new Map([
+      ["북", "north"], ["북동", "northeast"], ["동", "east"], ["남동", "southeast"],
+      ["남", "south"], ["남서", "southwest"], ["서", "west"], ["북서", "northwest"],
+    ]);
     const other = document.createElement("div");
     other.className = "other-exits";
     for (const direction of exits) {
       const el = button(direction, direction), position = positions.get(direction);
       el.replaceChildren(semantic("direction", direction));
       if (position) {
-        grid.classList.add("has-" + position);
         el.className = "direction-" + position;
-        const line = document.createElement("span");
-        line.className = "direction-line line-" + position;
-        line.setAttribute("aria-hidden", "true");
-        grid.append(el, line);
+        grid.append(el);
       } else other.append(el);
     }
     const children = [grid];

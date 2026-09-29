@@ -13,6 +13,7 @@ from world.content import (
     SHOP_CATALOGS,
     find_id,
 )
+from world.content.headquarters import ROOF_ROOMS
 from world.navigation import entry_block
 from world.quests import QUESTS, current_hint
 
@@ -345,7 +346,7 @@ class RuleTests(TestCase):
             rules.claim_quest(profile)
         self.assertEqual(profile, before)
 
-    def test_cardinal_graph_keeps_upper_floors_and_elevator_separate(self):
+    def test_direction_graph_keeps_upper_floors_roof_and_elevator_separate(self):
         visited, pending = set(), ["dock"]
         while pending:
             key = pending.pop()
@@ -356,8 +357,9 @@ class RuleTests(TestCase):
                 self.assertIn(target, ROOMS)
                 pending.append(target)
         prepared = {zone for zone in ROOMS if zone.startswith(("support_2f_", "support_3f_"))}
-        prepared.update({"infirmary", "training_room", "armor_shop", "weapon_shop", "support_roof", "support_elevator"})
-        self.assertEqual(len(prepared), 16)
+        prepared.update({"infirmary", "training_room", "armor_shop", "weapon_shop", "support_elevator"})
+        prepared.update(ROOF_ROOMS)
+        self.assertEqual(len(prepared), 24)
         self.assertEqual(visited, set(ROOMS) - prepared)
 
     def test_prepared_solo_player_can_beat_boss_across_rng_seeds(self):

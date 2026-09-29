@@ -11,8 +11,9 @@ from server.conf.cmdparser import cmdparser
 from server.conf.primal_inputfuncs import pz_auth
 from typeclasses.enemies import room_enemies
 from typeclasses.explorers import Explorer
+from world import text as ft
 from world.bootstrap import build_world
-from world.content import ROOMS
+from world.content import ROOMS, ordered_directions
 
 from tests.base import GameCommandTest, WorldCommandTest
 
@@ -64,29 +65,27 @@ class GameplayIntegrationTests(WorldCommandTest):
                     with patch.object(self.char1.sessions, "count", return_value=1):
                         Explorer.push_state(self.char1)
                 state = message.call_args.kwargs["pz_state"][0][0]
-                self.assertEqual(state["exits"], list(definition["exits"]))
+                self.assertEqual(state["exits"], ordered_directions(definition["exits"]))
                 self.assertIn(
                     exit_diagram(definition["exits"]),
                     self.rooms[zone].return_appearance(self.char1),
                 )
 
-    def test_direction_text_omits_missing_branches_and_supports_other_exits(self):
+    def test_direction_text_keeps_canvas_and_supports_other_exits(self):
         from typeclasses.zone_rooms import exit_diagram
 
-        self.assertEqual(exit_diagram(["북"]), "  북\n   │\n[현재]")
-        self.assertEqual(exit_diagram(["남"]), "[현재]\n   │\n  남")
-        self.assertEqual(exit_diagram(["동"]), "[현재] ─ 동")
-        self.assertEqual(exit_diagram(["서"]), "서 ─ [현재]")
-        self.assertEqual(exit_diagram(["서", "동"]), "서 ─ [현재] ─ 동")
-        self.assertEqual(exit_diagram([]), "[현재]")
-        for count in range(1, 5):
-            exits = ["북", "남", "동", "서"][:count]
+        for exits in ([], ["북"], ["남"], ["동"], ["서"], ["서", "동"], ["북", "남", "동", "서"]):
             diagram = exit_diagram(exits)
+            lines = diagram.split("\n")
+            self.assertEqual([ft.display_width(line) for line in lines], [30] * 5)
+            self.assertEqual(ft.display_width(lines[2].split("[현재]")[0]), 12)
             for direction in ("북", "남", "동", "서"):
                 self.assertEqual(direction in diagram, direction in exits)
-            self.assertEqual(diagram.count("│"), len(set(exits) & {"북", "남"}))
-            self.assertEqual(diagram.count("─"), len(set(exits) & {"동", "서"}))
-        self.assertEqual(exit_diagram(["위", "북동"]), "[현재]\n기타 출구: 위 · 북동")
+            self.assertEqual(diagram.count("｜"), len(set(exits) & {"북", "남"}))
+            self.assertEqual(diagram.count("-"), 7 * len(set(exits) & {"동", "서"}))
+        diagram = exit_diagram(["위", "북동"])
+        self.assertEqual(diagram.split("\n")[-1], "기타 출구: 위")
+        self.assertIn("북동", diagram.split("\n")[0])
 
     def test_movement_immediately_emits_new_exits_and_appearance(self):
         with patch.object(self.char1, "push_state", wraps=lambda: Explorer.push_state(self.char1)):
@@ -100,8 +99,11 @@ class GameplayIntegrationTests(WorldCommandTest):
             if "pz_state" in call.kwargs
         ]
         self.assertEqual(states[-1]["exits"], ["서"])
-        self.assertTrue(any(state["exits"] == list(ROOMS["grass"]["exits"]) for state in states))
-        self.assertTrue(any("서 ─ [현재]" in str(call) for call in message.call_args_list))
+        self.assertTrue(any(state["exits"] == ["북", "동", "남"] for state in states))
+        from typeclasses.zone_rooms import exit_diagram
+
+        looks = [call.kwargs["text"][0] for call in message.call_args_list if "text" in call.kwargs]
+        self.assertIn(exit_diagram(["서"]), looks[-1])
 
     def test_draft_profile_does_not_autosave(self):
         draft = self.char1.profile()

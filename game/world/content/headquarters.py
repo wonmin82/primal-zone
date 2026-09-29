@@ -1,6 +1,10 @@
 """본부의 stable Room 구조. 서비스 존재는 실제 객체로 표현한다."""
 
+from .directions import DIRECTION_ALIASES, OPPOSITE_DIRECTIONS
 from .elevator import ELEVATOR_ROOM, ELEVATOR_STOPS
+
+ROOF_SIDES = {direction: f"support_roof_{alias}" for direction, alias in DIRECTION_ALIASES.items()}
+ROOF_ROOMS = {"support_roof", *ROOF_SIDES.values()}
 
 ROOMS = {
     "staging_room": {
@@ -148,7 +152,7 @@ ROOMS = {
     "support_roof": {
         "name": "지원동 옥상",
         "desc": "콘크리트 난간이 지원동의 옥상을 둘러싸고 있다. 낡은 바닥 너머로 본부의 지붕과 섬의 숲이 보인다.",
-        "exits": {},
+        "exits": dict(ROOF_SIDES),
     },
     ELEVATOR_ROOM: {
         "name": "지원동 승강기",
@@ -158,6 +162,22 @@ ROOMS = {
     },
 }
 
+for direction, name, desc in (
+    ("북", "북쪽 전망 구역", "난간 너머로 본부 진입로가 내려다보인다. 바닥의 마모된 선을 따라 옥상 중앙으로 돌아갈 수 있다."),
+    ("북동", "북동쪽 설비 구역", "낡은 설비 덮개가 콘크리트 받침 위에 놓여 있다. 배관 사이로 옥상 중앙이 보인다."),
+    ("동", "동쪽 난간", "높은 난간 너머로 숲의 가장자리가 펼쳐진다. 탁 트인 바닥이 옥상 중앙으로 이어진다."),
+    ("남동", "남동쪽 급수 설비", "두꺼운 급수관이 물탱크 아래로 이어진다. 설비 옆의 넓은 공간을 통해 중앙으로 돌아갈 수 있다."),
+    ("남", "남쪽 전망 구역", "섬의 남쪽 수평선이 본부 지붕 너머로 보인다. 옥상 중앙까지 평평한 바닥이 이어진다."),
+    ("남서", "남서쪽 환기 구역", "금속 환기구가 낮은 받침 위에 줄지어 있다. 그 사이로 중앙에 이르는 빈 공간이 남아 있다."),
+    ("서", "서쪽 난간", "난간 아래로 부두의 윤곽이 보인다. 낡은 바닥을 따라 옥상 중앙으로 돌아갈 수 있다."),
+    ("북서", "북서쪽 통신 설비", "짧은 안테나와 밀폐된 통신함이 놓여 있다. 케이블 덮개 옆으로 중앙에 이르는 공간이 열려 있다."),
+):
+    ROOMS[ROOF_SIDES[direction]] = {
+        "name": name, "desc": desc,
+        "exits": {OPPOSITE_DIRECTIONS[direction]: "support_roof"},
+    }
+
 for room in ROOMS.values():
     room.update(safe=True, enemies=[], exposure="indoor", light_profile="artificial")
-ROOMS["support_roof"].update(exposure="outdoor", light_profile="natural")
+for zone in ROOF_ROOMS:
+    ROOMS[zone].update(exposure="outdoor", light_profile="natural")

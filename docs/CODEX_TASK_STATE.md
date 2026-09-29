@@ -4,6 +4,24 @@
 
 ## Objective
 
+본부 재설계 1~7단계/P0 smoke와 개인 줄임말·묶음 명령은 완료된 선행 작업이다. 현재 독립 작업은 **8방향 이동 / 고정 Web·Telnet 방향 인터페이스**다. `E:\Work\primal-zone`의 원격이 `wonmin82/primal-zone`임을 확인했고 status·unstaged/staged diff는 깨끗했다. fetch 후 시작 HEAD/origin/main은 `6b2adcc306cdf8108232c036de1b447c93f95621`, PR #22는 MERGED, 열린 PR은 없었다. 해당 main [Game checks run 36575655451](https://github.com/wonmin82/primal-zone/actions/runs/36575655451) success를 확인하고 최신 main에서 `codex/eight-direction-navigation`을 생성했다. 과거 단계의 OPEN/부두 서비스 설명과 검증 수치는 시점 기록으로 보존하며 현재 상태보다 우선하지 않는다.
+
+### 8방향 이동 / 고정 compass (2026-09-29)
+
+방향 SSOT는 `world/content/directions.py`의 canonical 8개·시계방향 순서·alias·opposite·3×3 좌표다. alias/reverse는 파생하며 기존 `world.content.OPPOSITES`는 동일 mapping의 호환 export만 남긴다. `items.py`의 alias 정의와 integrity의 별도 reverse dict는 제거했다. 실제 Exit/bootstrap, blocked alias, 지도/Web 출구 순서, 줄임말 예약 이름이 같은 정의를 따른다. 대각선 command·새 시스템 단축어·profile migration은 추가하지 않는다.
+
+본부는 34개 Room이다. `support_roof`에서 `support_roof_n/ne/e/se/s/sw/w/nw`로 이동하고 각 주변 Room은 opposite Exit 하나로 중앙에 돌아온다. 9개 옥상 Room 모두 safe·적 없음·outdoor/natural이며 주변에 NPC/action/hint/quest/reward를 넣지 않는다. 기존 1~3층 graph·서비스·승강기 정류장과 승강기 방향 Exit 금지는 유지한다. 두 번 bootstrap의 Exit stable/DB ID·alias·object 수·player profile/location 보존과 stale 없음, 실제 Korean/English 왕복·대각선 보기·묶음 왕복을 자동 검증한다.
+
+Web DOM은 SURROUNDINGS → PARTY → OBJECTIVE → TRAINING → EQUIPMENT & SUPPLIES, panel 내부는 고정 3×3 compass → hint/context다. 빈 방향은 버튼만 없고 행/열은 유지한다. old connector/has-direction CSS·JS는 제거하고 특수 Exit fallback과 기존 action 선정 정책을 유지한다. CSS/JS cache query는 둘 다 `eight-directions`다. Telnet은 visible 30 cells × 5줄, `[현재]` 시작 12열과 fullwidth 중앙/대각선 축을 사용하며 semantic token을 보존한다. 기존 `row()`의 표시 폭 정책을 작은 `display_width()` helper와 공유한다.
+
+격리 smoke DB·일반 Player 계정으로 desktop 1424px·701px grid·390px mobile을 확인했다. 옥상 8↔1, 승강기 0개, 상점의 여러 action에서도 grid 높이/중앙의 panel 내 위치가 같다. 대각선 clipping·horizontal overflow·앱 console error/warning이 없었고 승강기 층 선택/하차·무기 구매 버튼도 정상이다. 격리 game setup에서 collectstatic을 실행하고 새 query가 실제 로드됨을 확인했다. viewport/탭/owned process/temp를 정리하고 play SQLite SHA256·mtime_ns·size 불변을 확인했다. screenshot/log는 Git 제외 work에만 둔다. 실제 OS IME·Telnet font 렌더링은 미실행이며 Full은 production timer를 바꾸지 않아 반복하지 않는다.
+
+최종 `.\.venv\Scripts\python.exe scripts/dev.py check`와 `node --check game/web/static/webclient/js/primal.js`, `git diff --check`는 통과했다. 최종 `scripts/dev.py test`는 pure 115 / 1.975초, integration 282 / 139.278초, total 397, 통합 runner 151.385초 성공이다. `scripts/dev.py smoke`는 68.232초 성공했고 process/temp 정리와 play DB SHA256·mtime_ns·size 불변을 실제 확인했다. 방향/본부/줄임말/semantic text/Web 관련 `--parallel 2 --reverse` 69개는 56.115초·runner 66.036초 통과했다. 개발 중 기존 dict 순서·가변 방향도·asset cache key·전체 Room 수 기대를 새 계약에 맞췄고 마지막 이동 보기의 Evennia `msg(text=(appearance, ...))` 전달 검사는 단독 1개 / 4.996초·runner 17.423초 재검증 및 위 전체 검사에서 통과했다. 최종 추가 `tests.test_integration tests.test_environment tests.test_regions tests.test_directions --parallel 2 --reverse`는 59개 / 50.133초·runner 62.257초 통과했다. assertion을 삭제하거나 무관하게 완화하지 않았다. 근거는 Git 제외 `work/eight-directions-related.log`, `work/eight-directions-full.log`, `work/eight-directions-movement.log`, `work/eight-directions-regression.log`, `work/eight-directions-quick.log`와 browser screenshot/log다.
+
+전체 성공 이후 실행 코드·테스트는 변경하지 않고 문서에 결과만 반영한다. 최종 fetch에서 main 포함 여부를 확인한 뒤 기능 단위 한 커밋으로 push하고 새 PR을 생성한다. 최종 PR HEAD와 test/smoke workflow headSha 대조 결과는 PR 검증 항목에 기록한다. PR은 병합하지 않는다.
+
+### 개인 줄임말 PR 생성 시점의 Objective (과거 기록)
+
 본부 재설계 1~7단계와 P0 smoke 인프라는 PR #13~#21으로 병합·closeout 완료됐다. 현재 작업은 본부 8단계가 아닌 **개인 줄임말 / 묶음 명령** 독립 기능이다. 시작 시 main 작업 트리는 깨끗했고 status·unstaged/staged diff 확인 및 fetch 후 HEAD/origin/main은 모두 `a748d284d42935ce42ca151cf9e8c36c6942b731`이었다. PR #21 MERGED와 병합 후 [Game checks run 36547264547](https://github.com/wonmin82/primal-zone/actions/runs/36547264547)의 test/smoke success를 실제 확인했다. 해당 과거 main CI는 pure 101·integration 252·total 353, runner 100.197초·Quick 18.965초다. 최신 main에서 `codex/personal-command-shortcuts`를 생성했다. 아래 단계별 OPEN·부두 서비스 설명은 당시 기록이며 현재 상태보다 우선하지 않는다.
 
 ### PR #22 리뷰 반영 (2026-09-29)
@@ -336,7 +354,7 @@ Live Full에서는 보관상자/개인 보관함에 넣기·꺼내기와 일부 
 
 ## Recommended Next Step
 
-본부 재설계 1~7단계는 closeout·병합 완료다. 이번 개인 줄임말/묶음 PR을 검토하며 병합은 별도 요청에서 진행한다. 이후 새로운 기능 작업은 별도 요구사항을 확정한 뒤 최신 main의 독립 브랜치에서 시작한다. [command-shortcuts.md](command-shortcuts.md)의 향후 후보와 기존 최적화 후보는 자동 구현 요청이나 확정 roadmap이 아니다.
+본부 재설계 1~7단계와 PR #22 개인 줄임말/묶음은 병합 완료다. 이번 8방향 이동/고정 방향 인터페이스 PR을 검토하고 병합은 별도 요청에서 진행한다. 이후 새로운 기능 작업은 별도 요구사항을 확정한 뒤 최신 main의 독립 브랜치에서 시작한다. [command-shortcuts.md](command-shortcuts.md)의 향후 후보와 기존 최적화 후보는 자동 구현 요청이나 확정 roadmap이 아니다.
 
 ## Important Files
 
@@ -347,6 +365,7 @@ Live Full에서는 보관상자/개인 보관함에 넣기·꺼내기와 일부 
 | `game/world/content/economy.py`, `game/world/settlement.py`, `game/commands/settlement.py`, `game/world/test_settlement.py`, `game/tests/test_settlement.py` | 정산율 SSOT, 정산 전용 수량 parser, 실제 정산관 명령과 단위/통합 검증 |
 | `docs/architecture.md`, `docs/playtest.md`, `docs/text-examples.md` | 설계 SSOT, 수동 절차·시점별 결과, 실제 표현 예시 |
 | `game/world/content/starter.py`, `game/world/content/deep_jungle.py` | Room desc/hints/requires, Enemy local/distant metadata |
+| `game/world/content/directions.py`, `game/world/test_directions.py`, `game/tests/test_directions.py` | 8방향 SSOT·blocked alias·display width와 실제 Exit/보기/묶음/Web/Telnet 고정 canvas 검증 |
 | `game/world/content/headquarters.py`, `game/world/test_headquarters.py`, `game/tests/test_headquarters.py` | 본부 Room/폐쇄 방향 정의, 순수 integrity·동선 검사와 실제 이동·접속·bootstrap·기존 서비스 회귀 |
 | `game/world/content/elevator.py`, `game/world/elevator.py`, `game/commands/elevator.py`, `game/world/test_elevator.py`, `game/tests/test_elevator.py` | 정류 층 SSOT, 공용 승강기 상태·표시·실제 이동, location CmdSet, 순수/통합/웹/멀티플레이·격리 검증 |
 | `game/world/content/items.py`, `game/world/content/environment.py`, `game/world/content/facilities.py`, `game/world/content/integrity.py` | item/가격/전원, 환경 상수, 시설 정의, 참조·형식 integrity |

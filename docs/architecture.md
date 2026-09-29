@@ -23,13 +23,23 @@
 
 ## 본부 Room 구조 1단계
 
-`world/content/headquarters.py`는 1단계의 출정 대기실·본부 중앙홀, 지원동 1~3층의 복도 각 5칸, 시설 7곳과 옥상 등 Room 25개에 2단계 공용 승강기 Room을 더해 26개를 정의한다. 기존 `dock`과 탐사 구역 15곳은 유지한다. Region `headquarters`는 방문한 실제 Room을 기존 지도에 묶어 표시한다.
+`world/content/headquarters.py`는 출정 대기실·본부 중앙홀, 지원동 1~3층의 복도 각 5칸, 시설 7곳과 옥상 중앙·공용 승강기의 기존 26개에 옥상 주변 8개를 더해 Room 34개를 정의한다. 기존 `dock`과 탐사 구역 15곳은 유지한다. Region `headquarters`는 방문한 실제 Room을 기존 지도에 묶어 표시한다.
 
-출정 대기실의 유일한 출구는 `남 → hq_concourse`다. 중앙홀은 `북 → staging_room`, `서 → dock`, `남 → support_1f_c`이며 부두의 `북 → grass`는 그대로다. 1층 중앙은 `북 → hq_concourse`, `서 → support_1f_w1`, `동 → support_1f_e1`이며 남쪽 출입구는 폐쇄되어 있다. 모든 출구는 기존 사방 반대 방향으로 복귀하며 별도 복귀 방향 예외는 없다. 각 층의 복도는 동서로 연결되고 시설은 북쪽으로 진입·남쪽으로 복귀한다. 층별 방향 그래프는 분리되어 있으며 2단계 승강기 명령으로 각 중앙 복도와 옥상을 오간다.
+출정 대기실의 유일한 출구는 `남 → hq_concourse`다. 중앙홀은 `북 → staging_room`, `서 → dock`, `남 → support_1f_c`이며 부두의 `북 → grass`는 그대로다. 1층 중앙은 `북 → hq_concourse`, `서 → support_1f_w1`, `동 → support_1f_e1`이며 남쪽 출입구는 폐쇄되어 있다. 모든 정식 방향 출구는 반대 방향으로 복귀하며 별도 복귀 방향 예외는 없다. 각 층의 복도는 동서로 연결되고 시설은 북쪽으로 진입·남쪽으로 복귀한다. 층별 방향 그래프는 분리되어 있으며 2단계 승강기 명령으로 각 중앙 복도와 옥상을 오간다.
 
 `blocked_exits`는 방향과 폐쇄 안내 문구만 저장하며 목적지·Exit 객체를 만들지 않는다. `world.navigation.blocked_exit_message()`가 기존 방향 alias로 조회하고, 미등록 명령 fallback에서 이동 입력을 처리한다. 보기 역시 목적지 조회 전에 같은 안내를 반환한다. 기존 관리 Exit가 폐쇄 방향에 남아 있으면 Exit 훅에서 이동·정찰을 차단하고 bootstrap이 해당 stable tag의 관리 Exit만 제거한다. 일반 stale 객체 감사 정책은 유지한다.
 
-Room의 local/distant 표시 경로는 정적 설명 다음에 폐쇄 문구를 넣는다. 지도는 방문한 실제 Room의 방향 목록에 폐쇄 방향을 표시하며 1층 중앙은 `북: 본부 중앙홀`, `남: 폐쇄`다. 방향도·웹 이동 버튼·`pz_state.exits`는 실제 출구만 사용하며 1층 중앙은 서·동·북만 제공한다. 폐쇄 방향을 지도 노드나 동작 버튼으로 만들지 않는다. 기능 없는 시설에는 NPC·보관함·가짜 action hint를 추가하지 않는다.
+Room의 local/distant 표시 경로는 정적 설명 다음에 폐쇄 문구를 넣는다. 지도는 방문한 실제 Room의 방향 목록에 폐쇄 방향을 표시하며 1층 중앙은 `북: 본부 중앙홀`, `남: 폐쇄`다. 방향도·웹 이동 버튼·`pz_state.exits`는 실제 출구만 사용하며 1층 중앙은 북·동·서만 제공한다. 폐쇄 방향을 지도 노드나 동작 버튼으로 만들지 않는다. 기능 없는 시설에는 NPC·보관함·가짜 action hint를 추가하지 않는다.
+
+## 8방향과 고정 compass
+
+`world/content/directions.py`의 `DIRECTIONS`가 canonical 한국어 방향, 영문 alias, opposite, 3×3 좌표를 소유한다. `DIRECTION_ORDER`는 북부터 시계방향인 북·북동·동·남동·남·남서·서·북서다. alias/reverse mapping은 같은 정의에서 파생하며 `items.py`는 방향을 소유하지 않는다. 기존 `world.content.OPPOSITES` import는 `DIRECTION_ALIASES`와 동일한 객체를 export하는 호환 경로만 유지한다. bootstrap의 실제 Evennia Exit alias, blocked 방향 조회, integrity, 지도·Web 출구 순서와 개인 줄임말 예약 이름이 이 정의를 사용한다. 별도 대각선 command는 없다. 방향 보기의 selector·gate·원거리 지각 정책과 묶음 dispatch는 기존 경로다.
+
+옥상 중앙 `support_roof`는 `support_roof_n/ne/e/se/s/sw/w/nw`로 나가는 여덟 Exit를 갖는다. 각 주변 Room의 유일한 Exit는 정확한 opposite로 중앙에 돌아오며 서로 연결하지 않는다. 옥상 9개 Room은 headquarters·safe·적 없음·outdoor/natural이고 주변 Room에는 서비스·hint·진행 조건·보상이 없다. 승강기의 옥상 정류장은 여전히 중앙 하나이며 `support_elevator.exits={}`와 일반 Exit의 승강기 직접 연결 금지는 유지한다. integrity와 반복 bootstrap/실제 이동 검사가 이를 검증한다.
+
+Web은 기존 `pz_state.exits`만 렌더링한다. 오른쪽 DOM은 SURROUNDINGS → PARTY → OBJECTIVE → TRAINING → EQUIPMENT & SUPPLIES이며 SURROUNDINGS 안에서는 compass → hint/context 순이다. 고정 3×3 grid의 중앙은 row 2/column 2이며 출구가 없는 방향은 버튼만 생략한다. 출구 개수와 주변 행동 수가 grid geometry와 panel 내 위치를 바꾸지 않는다. connector/has-direction 가변 행은 제거했고 기타 특수 출구 fallback은 유지한다. 기존 1150px grid·700px flex breakpoint를 따르며 서비스/action 선정 정책과 서버가 소유하는 텍스트 명령은 바꾸지 않는다.
+
+Telnet `exit_diagram()`은 30 display cells × 5줄의 canvas를 사용한다. `[현재]`는 0 기준 12열, 북/남 label과 fullwidth `｜`는 14열에서 시작한다. 없는 방향의 label/connector는 공백이며 대각선에는 `／`·`＼`, 가로축에는 ASCII `-`를 사용한다. 방향 semantic token을 배치한 뒤 terminal 색 변환을 적용한다. `world.text.display_width()`는 기존 east_asian_width W/F=2 정책을 `row()`와 공유하며 ANSI escape 길이를 계산하지 않는다. 실제 terminal/font의 fullwidth glyph 지원은 별도 클라이언트 조건이다.
 
 새 캐릭터는 기존 최초 puppet의 비월드 위치 fallback에서 출정 대기실로 배치되고 새 profile의 `visited`도 대기실에서 시작한다. 재접속 시 유효한 저장 위치와 기존 방문 기록을 보존한다. Evennia fallback `home=dock`은 유지한다. 일반 귀환은 `support_roof`, 전투 패배는 `infirmary`로 명시적으로 이동한다. 상점은 지원동의 실제 Shopkeeper, 의료·휴식은 의무실의 실제 객체를 따른다. 보관·훈련 객체는 아래 3단계 배치를 따른다. bootstrap은 기존 stable tag로 Room/실제 Exit를 재사용·갱신하며 개인 기록을 초기화하지 않는다. 이전 본부 배치의 중앙홀 동쪽·1층 중앙 남쪽 관리 Exit는 같은 목적지를 유지하며 새 남쪽·북쪽 stable tag와 alias로 갱신한다. 이미 새 출구가 있다면 해당 옛 관리 Exit만 제거한다. integrity는 목적지·정반대 방향의 양방향 연결·폐쇄 문구/충돌·본부 고정 배치·시설의 유일 진입·Region membership을 검사한다.
 

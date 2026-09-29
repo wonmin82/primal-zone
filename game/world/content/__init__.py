@@ -2,12 +2,22 @@
 
 from .deep_jungle import ENEMIES as JUNGLE_ENEMIES
 from .deep_jungle import ROOMS as JUNGLE_ROOMS
+from .directions import (
+    DIRECTION_ALIASES,
+    DIRECTION_ORDER,
+    DIRECTIONS,
+    OPPOSITE_DIRECTIONS,
+    ordered_directions,
+)
 from .economy import SALVAGE_CREDIT_RATE
 from .headquarters import ROOMS as HEADQUARTERS_ROOMS
-from .items import EQUIPMENT_ACTIONS, ITEMS, OPPOSITES, UNEQUIP_ACTIONS, find_id
+from .items import EQUIPMENT_ACTIONS, ITEMS, UNEQUIP_ACTIONS, find_id
 from .shops import SHOP_CATALOGS
 from .starter import ENEMIES as STARTER_ENEMIES
 from .starter import ROOMS as STARTER_ROOMS
+
+# 기존 import surface만 유지한다. OPPOSITES의 의미는 방향 alias다.
+OPPOSITES = DIRECTION_ALIASES
 
 REGION_ENEMIES = {"outpost": STARTER_ENEMIES, "deep_jungle": JUNGLE_ENEMIES}
 ENEMIES = {
@@ -50,6 +60,11 @@ __all__ = [
     "SHOP_CATALOGS",
     "SALVAGE_CREDIT_RATE",
     "OPPOSITES",
+    "DIRECTIONS",
+    "DIRECTION_ORDER",
+    "DIRECTION_ALIASES",
+    "OPPOSITE_DIRECTIONS",
+    "ordered_directions",
     "EQUIPMENT_ACTIONS",
     "UNEQUIP_ACTIONS",
     "find_id",

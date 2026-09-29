@@ -2,30 +2,35 @@ from time import time
 
 from evennia.objects.objects import DefaultRoom
 from world import text as ft
-from world.content import ROOMS
+from world.content import DIRECTIONS, ROOMS
 
 from typeclasses.enemies import room_enemies
 from typeclasses.loot import room_loot
 
 
 def exit_diagram(exits):
-    """한글 2칸, 선/공백 1칸인 고정폭 텍스트로 실제 출구만 표시한다."""
-    directions = set(exits)
-    left = ft.text(ft.token("direction", "서"), " ─ ") if "서" in directions else ""
-    offset = " " * (5 if left else 0)
+    """30 display cells × 5줄 canvas. 색은 배치 후 terminal 변환에서 적용한다."""
+    rows = [[] for _ in range(5)]
+    rows[2].append((12, "[현재]"))
+    for direction, data in DIRECTIONS.items():
+        if direction not in exits:
+            continue
+        row, column = data["row"], data["column"]
+        center = 3 + column * 12
+        rows[row * 2].append((center - ft.display_width(direction) // 2, ft.token("direction", direction)))
+        if row == 1:
+            rows[2].append((5 if column == 0 else 19, "-------"))
+        else:
+            glyph = "｜" if column == 1 else "＼" if row == column else "／"
+            rows[1 if row == 0 else 3].append((14 + (column - 1) * 6, glyph))
     lines = []
-    if "북" in directions:
-        lines.extend([ft.text(offset, "  ", ft.token("direction", "북")), offset + "   │"])
-    lines.append(
-        ft.text(
-            left,
-            "[현재]",
-            ft.text(" ─ ", ft.token("direction", "동")) if "동" in directions else "",
-        )
-    )
-    if "남" in directions:
-        lines.extend([offset + "   │", ft.text(offset, "  ", ft.token("direction", "남"))])
-    other = [direction for direction in exits if direction not in {"북", "남", "동", "서"}]
+    for pieces in rows:
+        parts, cursor = [], 0
+        for start, piece in sorted(pieces):
+            parts.extend([" " * (start - cursor), piece])
+            cursor = start + ft.display_width(piece)
+        lines.append(ft.text(*parts, " " * (30 - cursor)))
+    other = [direction for direction in exits if direction not in DIRECTIONS]
     if other:
         lines.append(
             ft.text("기타 출구: ", ft.join([ft.token("direction", d) for d in other], " · "))

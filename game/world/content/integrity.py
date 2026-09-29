@@ -12,13 +12,13 @@ from world.content import (
     SHOP_CATALOGS,
     spawn_id_for,
 )
+from world.content.directions import OPPOSITE_DIRECTIONS
 from world.content.economy import SALVAGE_CREDIT_RATE
 from world.content.elevator import ELEVATOR_DEFAULT_STOP, ELEVATOR_ROOM, ELEVATOR_STOPS
 from world.content.environment import EXPOSURES, LIGHT_PROFILES, WEATHER_ZONES, WEATHERS
 from world.content.facilities import FACILITIES
+from world.content.headquarters import ROOF_ROOMS, ROOF_SIDES
 from world.quests import QUESTS
-
-OPPOSITE = {"북": "남", "남": "북", "동": "서", "서": "동"}
 
 
 def positive_number(value):
@@ -31,8 +31,10 @@ def headquarters_errors():
         "staging_room": {"남": "hq_concourse"},
         "hq_concourse": {"북": "staging_room", "서": "dock", "남": "support_1f_c"},
         "dock": {"북": "grass", "동": "hq_concourse"},
-        "support_roof": {},
+        "support_roof": dict(ROOF_SIDES),
     }
+    for direction, zone in ROOF_SIDES.items():
+        expected[zone] = {OPPOSITE_DIRECTIONS[direction]: "support_roof"}
     positions = ("w2", "w1", "c", "e1", "e2")
     corridors = []
     for floor in (1, 2, 3):
@@ -58,6 +60,12 @@ def headquarters_errors():
         expected[facility] = {"남": corridor}
         expected[corridor]["북"] = facility
     issues = []
+    for zone in ROOF_ROOMS:
+        room = ROOMS.get(zone, {})
+        if zone not in REGIONS["headquarters"]["rooms"] or room.get("safe") is not True or room.get("enemies") != []:
+            issues.append(f"{zone}: 옥상은 headquarters의 안전한 비전투 Room이어야 합니다.")
+        if room.get("exposure") != "outdoor" or room.get("light_profile") != "natural":
+            issues.append(f"{zone}: 옥상 환경은 outdoor/natural이어야 합니다.")
     for zone, exits in expected.items():
         if ROOMS.get(zone, {}).get("exits") != exits:
             issues.append(f"{zone}: 본부 1단계 출구 배치가 올바르지 않습니다.")
@@ -195,7 +203,7 @@ def errors(interactables):
             issues.append(f"{zone}: blocked_exits는 방향과 문구의 dict여야 합니다.")
             blocked = {}
         for direction, message in blocked.items():
-            if direction not in OPPOSITE:
+            if direction not in OPPOSITE_DIRECTIONS:
                 issues.append(f"{zone}: 폐쇄 출입구 방향이 유효하지 않습니다.")
             if direction in room["exits"]:
                 issues.append(f"{zone}:{direction}: 실제 출구와 폐쇄 출입구가 겹칩니다.")
@@ -204,7 +212,7 @@ def errors(interactables):
         for direction, target in room["exits"].items():
             if target not in ROOMS:
                 issues.append(f"{zone}:{direction}: 대상 Room이 없습니다.")
-            elif direction in OPPOSITE and ROOMS[target]["exits"].get(OPPOSITE[direction]) != zone:
+            elif direction in OPPOSITE_DIRECTIONS and ROOMS[target]["exits"].get(OPPOSITE_DIRECTIONS[direction]) != zone:
                 issues.append(f"{zone}:{direction}: 되돌아오는 출구가 없습니다.")
         for enemy in room["enemies"]:
             if enemy not in ENEMIES:

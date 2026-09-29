@@ -3,7 +3,7 @@
 from evennia import create_object, search_tag
 from evennia.typeclasses.tags import Tag
 
-from world.content import ENEMIES, OPPOSITES, ROOMS, spawn_id_for
+from world.content import DIRECTION_ALIASES, ENEMIES, ROOMS, spawn_id_for
 from world.content.elevator import ELEVATOR_ROOM
 from world.elevator import normalized_stop
 from world.multiplayer import world_change
@@ -87,7 +87,7 @@ def _build_world():
                 existing = create_object(
                     "typeclasses.exits.Exit",
                     key=direction,
-                    aliases=[OPPOSITES[direction]] if direction in OPPOSITES else [],
+                    aliases=[DIRECTION_ALIASES[direction]] if direction in DIRECTION_ALIASES else [],
                     location=room,
                     destination=rooms[target],
                 )
@@ -96,8 +96,8 @@ def _build_world():
             existing.location = room
             existing.destination = rooms[target]
             existing.aliases.clear()
-            if direction in OPPOSITES:
-                existing.aliases.add(OPPOSITES[direction])
+            if direction in DIRECTION_ALIASES:
+                existing.aliases.add(DIRECTION_ALIASES[direction])
     from typeclasses.interactables import INTERACTABLES
 
     for identity, data in INTERACTABLES.items():

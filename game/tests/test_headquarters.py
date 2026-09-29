@@ -206,7 +206,7 @@ class HeadquartersTests(GameCommandTest):
         with patch.object(self.char1, "msg") as output:
             Explorer.push_state(self.char1)
         state = output.call_args.kwargs["pz_state"][0][0]
-        self.assertEqual(state["exits"], ["서", "동", "북"])
+        self.assertEqual(state["exits"], ["북", "동", "서"])
         self.assertEqual(state["region"], "headquarters")
         self.assertEqual(state["interactables"], [])
         self.assertEqual(state["hint"], "")

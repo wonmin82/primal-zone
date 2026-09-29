@@ -23,7 +23,7 @@ from commands.shortcuts import (
 def reserved_names(cmdset):
     """잠긴 실제 명령도 예약한다. 다른 층/장소의 정적 이동 명령도 등록을 막는다."""
     from django.conf import settings
-    from world.content import OPPOSITES, ROOMS
+    from world.content import DIRECTION_ALIASES, ROOMS
 
     from commands.aliases import SHORTCUTS
     from commands.default_cmdsets import UnloggedinCmdSet
@@ -35,8 +35,8 @@ def reserved_names(cmdset):
         names.update(commands.get_all_cmd_keys_and_aliases())
     for cls in COMMANDS:
         names.update((cls.key, *cls.aliases))
-    names.update(OPPOSITES)
-    names.update(OPPOSITES.values())
+    names.update(DIRECTION_ALIASES)
+    names.update(DIRECTION_ALIASES.values())
     for room in ROOMS.values():
         names.update(room["exits"])
         names.update(room.get("blocked_exits", {}))
