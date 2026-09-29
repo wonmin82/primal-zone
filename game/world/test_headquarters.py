@@ -18,12 +18,14 @@ def content_targets():
         "shared_container": {"room": "storage_room", "actions": ["넣어", "꺼내"]},
         "personal_locker": {"room": "storage_room", "actions": ["넣어", "꺼내"]},
         "instructor": {"room": "training_room", "actions": ["대화", "배워", "배분", "재분배"]},
+        "salvage_officer": {"room": "salvage_office", "actions": ["환율", "교환"]},
     }
     for zone, room in ROOMS.items():
         for hint in room.get("hints", []):
             if "target" in hint:
                 target = targets.setdefault(hint["target"], {"room": zone, "actions": []})
-                target["actions"].append(hint["action"])
+                if hint["action"] not in target["actions"]:
+                    target["actions"].append(hint["action"])
     for quest in QUESTS.values():
         for _, target, role, _ in quest["steps"]:
             if role != "hostile":
@@ -35,7 +37,7 @@ class HeadquartersRulesTests(TestCase):
     def test_service_layout_is_checked_without_room_based_authorization(self):
         targets = content_targets()
         self.assertEqual(errors(targets), [])
-        for identity in ("shared_container", "personal_locker", "instructor", "doctor", "infirmary_bed"):
+        for identity in ("shared_container", "personal_locker", "instructor", "doctor", "infirmary_bed", "salvage_officer"):
             for wrong in ("dock", "missing_room", "support_roof"):
                 with self.subTest(identity=identity, wrong=wrong), patch.dict(targets[identity], room=wrong):
                     self.assertTrue(any(f"{identity}: 본부 서비스" in issue for issue in errors(targets)))
@@ -61,6 +63,8 @@ class HeadquartersRulesTests(TestCase):
             if zone == "infirmary":
                 self.assertEqual(room["hints"], [{"target": "doctor", "action": "치료"},
                                                   {"target": "infirmary_bed", "action": "휴식"}])
+            elif zone == "salvage_office":
+                self.assertEqual(room["hints"], [{"target": "salvage_officer", "action": "환율"}])
             else:
                 self.assertFalse(room.get("hints"))
 

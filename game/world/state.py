@@ -75,7 +75,7 @@ def loot_controls(player, now, objects=None):
 
 def multiplayer_state(player, now=None):
     now = time() if now is None else now
-    from typeclasses.interactables import ActionObject, Container
+    from typeclasses.interactables import ActionObject, Container, SettlementOfficer
 
     from world.elevator import snapshot as elevator_snapshot
     from world.lifecycle import reconcile_room
@@ -139,7 +139,7 @@ def multiplayer_state(player, now=None):
                 "name": obj.key,
                 "label": controls[obj.id],
                 "role": obj.semantic_role,
-                "actions": [
+                "actions": obj.web_actions(player, controls[obj.id], now) if isinstance(obj, SettlementOfficer) else [
                     {"label": action, "command": controls[obj.id] + " " + action}
                     for action in (("보기",) if isinstance(obj, Container) else obj.actions)
                     if action in ("대화", "조사", "수리", "보기", "치료", "휴식")

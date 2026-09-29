@@ -7,13 +7,13 @@ from evennia.objects.objects import DefaultCharacter
 from evennia.utils.ansi import parse_ansi, strip_raw_ansi
 from typeclasses.enemies import room_enemies
 from typeclasses.explorers import Explorer
-from typeclasses.interactables import Container, action_objects
+from typeclasses.interactables import Container, SettlementOfficer, action_objects
 from typeclasses.loot import room_loot, take_loot
 from typeclasses.parties import invite, respond
 from world import presentation as view
 from world import rules
 from world import text as ft
-from world.content import EXCHANGE, ITEMS, ROOMS, SHOP
+from world.content import ITEMS, ROOMS, SHOP
 from world.progression import ATTRIBUTES, SKILLS
 
 from tests.base import WorldCommandTest
@@ -66,6 +66,8 @@ class SemanticTextTests(WorldCommandTest):
                     # 빈 보관함은 보관 방법만 안내하며 실제 내용이 있을 때 회수를 안내한다.
                     self.assertIn("넣어", tokens(output, "command"))
                     self.assertTrue(set(tokens(output, "command")) <= set(obj.actions))
+                elif isinstance(obj, SettlementOfficer):
+                    self.assertEqual(tokens(output, "command"), ["환율", "교환", "교환", "교환", "교환"])
                 else:
                     self.assertEqual(tokens(output, "command"), list(obj.actions))
                 self.assertIn(obj.key, tokens(output, obj.semantic_role))
@@ -113,8 +115,8 @@ class SemanticTextTests(WorldCommandTest):
         for key, price in SHOP.items():
             self.assertIn(ITEMS[key]["name"], tokens(shop, "item"))
             self.assertIn(f"{price}C", tokens(shop, "reward"))
-            if key in EXCHANGE:
-                self.assertIn(f"{EXCHANGE[key]}개", shop)
+        self.assertNotIn("교환", shop)
+        self.assertNotIn(ITEMS["scrap"]["name"], shop)
 
     def test_help_uses_registry_not_a_separate_command_list(self):
         from commands.registry import COMMANDS
@@ -215,7 +217,7 @@ class SemanticTextTests(WorldCommandTest):
         self.assertIn(f"공격 +{attack} · 방어 +{defense}", equip.splitlines()[-1])
         profile["inventory"] = {}
         self.assertEqual(str(view.inventory(profile)), "[가방] 비어 있다.")
-        self.assertEqual(tokens(view.shop(), "command"), ["구매", "교환"])
+        self.assertEqual(tokens(view.shop(), "command"), ["구매"])
         profile["quests"]["radio_tower"].update(started=True, record_read=True)
         quest = view.quest(profile)
         self.assertIn("2/5", quest.splitlines()[1])

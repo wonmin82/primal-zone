@@ -3,7 +3,7 @@
 from evennia.objects.objects import DefaultObject
 from world import rules
 from world import text as ft
-from world.content import ENEMIES, ROOMS
+from world.content import ENEMIES, ITEMS, ROOMS, SALVAGE_CREDIT_RATE
 from world.distant_presentation import DistantPresence, DistantPresenceMixin
 from world.progression import ATTRIBUTES, SKILLS
 
@@ -288,6 +288,61 @@ class Bed(ActionObject):
         caller.msg("침대에서 휴식하며 체력을 모두 회복했습니다.")
 
 
+class SettlementOfficer(ActionObject):
+    semantic_role = "npc"
+    detectability = "conspicuous"
+    presence = "탐사에서 회수한 물자를 확인하며 정산을 준비하고 있다."
+    description = "회수부품을 크레딧으로 정산하는 담당자다."
+    actions = ("환율", "교환")
+
+    def available(self, caller, observed_at=None):
+        from world.observation import can_perceive, context_for
+
+        return (
+            self.location is not None and self.location == caller.location
+            and ROOMS.get(caller.zone, {}).get("safe", False)
+            and not caller.profile_snapshot().get("combat_target")
+            and can_perceive(self, context_for(caller, observed_at=observed_at))
+        )
+
+    def web_actions(self, caller, target, observed_at=None):
+        if not self.available(caller, observed_at):
+            return []
+        actions = [{"label": "환율", "command": target + " 환율"}]
+        if caller.profile_snapshot()["inventory"].get("scrap", 0) > 0:
+            resource = ITEMS["scrap"]["name"]
+            actions.append({"label": resource + " 모두 교환", "command": target + "에게 " + resource + " 모두 교환"})
+        return actions
+
+    def return_appearance(self, looker, **kwargs):
+        from world.targets import labels, room_objects
+
+        usage = ""
+        if self.available(looker):
+            target = labels(room_objects(looker))[self.id]
+            usage = ft.join([ft.usage(command, set(self.actions)) for command in (
+                f"{target} 환율", "회수부품 교환", "회수부품 10개 교환", "회수부품 모두 교환",
+                f"{target}에게 회수부품 10개 교환",
+            )], " · ")
+        return ft.sheet(ft.token(self.semantic_role, self.key), self.description, "", usage)
+
+    def act(self, caller, action, args):
+        if not ROOMS.get(caller.zone, {}).get("safe", False):
+            raise rules.RuleError("안전한 곳에서만 자원을 정산할 수 있습니다.")
+        if action == "환율":
+            caller.msg(ft.text(ft.item("scrap"), f" 1개 → {SALVAGE_CREDIT_RATE}크레딧"))
+            return
+
+        def settle(profile):
+            quantity = profile["inventory"].get("scrap", 0) if args is None else args
+            if args is None and not quantity:
+                raise rules.RuleError("정산할 회수부품이 없습니다.")
+            return quantity, rules.settle_salvage(profile, quantity)
+
+        quantity, earned = caller.change(settle)
+        caller.msg(ft.text(ft.item("scrap"), f" {quantity}개를 정산했다. {earned}크레딧을 받았다."))
+
+
 class Pathfinder(ActionObject):
     detectability = "conspicuous"
     distant_visible = True
@@ -389,6 +444,7 @@ def instructor_for(caller, observed_at=None):
 
 
 INTERACTABLES = {
+    "salvage_officer": {"room": "salvage_office", "typeclass": "SettlementOfficer", "name": "자원 정산관", "aliases": ["정산관"]},
     "doctor": {"room": "infirmary", "typeclass": "Doctor", "name": "의무관", "aliases": ["의사"]},
     "infirmary_bed": {"room": "infirmary", "typeclass": "Bed", "name": "침대", "aliases": ["병상"]},
     "emergency_light_cache": {"room": "wreck", "typeclass": "EmergencyLightCache", "name": "비상장비함", "aliases": ["비상함", "장비함"]},

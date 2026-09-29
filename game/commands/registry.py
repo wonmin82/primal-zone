@@ -13,7 +13,7 @@ from commands.character import (
     Weather,
 )
 from commands.combat import Attack, Flee, Guard, Heal, Heavy
-from commands.inventory import Buy, Equip, Equipment, Exchange, Inventory, Shop, Take, Wield
+from commands.inventory import Buy, Equip, Equipment, Inventory, Shop, Take, Wield
 from commands.items import (
     Drink,
     Drop,
@@ -37,6 +37,7 @@ from commands.party import (
     PartyReject,
     PartyTransfer,
 )
+from commands.settlement import Exchange, Rate
 from commands.skills import Allocate, Learn, Retrain
 from commands.social import Say
 from commands.world_actions import Investigate, Repair, Rest, Return, Talk, Treat
@@ -87,6 +88,7 @@ COMMANDS = [
     Shop,
     Buy,
     Exchange,
+    Rate,
     Quest,
     Talk,
     Investigate,

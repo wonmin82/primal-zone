@@ -2,7 +2,7 @@
 
 from world import rules
 from world import text as ft
-from world.content import EQUIPMENT_ACTIONS, EXCHANGE, ITEMS, SHOP
+from world.content import EQUIPMENT_ACTIONS, ITEMS, SHOP
 from world.progression import (
     ATTRIBUTES,
     PROFICIENCIES,
@@ -155,15 +155,11 @@ def shop():
     lines = []
     for key, price in SHOP.items():
         parts = [ft.item(key), ft.token("reward", f"{price}C")]
-        if key in EXCHANGE:
-            parts.append(ft.text("교환 ", ft.item("scrap"), f" {EXCHANGE[key]}개"))
         lines.append(ft.join(parts, " · "))
     lines.append(
         ft.text(
             "물건이름 ",
             ft.token("command", "구매"),
-            " · 물건이름 ",
-            ft.token("command", "교환"),
             " · C=크레딧 (1개씩)",
         )
     )

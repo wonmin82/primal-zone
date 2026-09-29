@@ -146,6 +146,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             "xp_floor": rules.xp_threshold(values["level"]),
             "xp_next": rules.xp_threshold(values["level"] + 1),
             "credits": profile["credits"],
+            "resources": {"scrap": {"name": ITEMS["scrap"]["name"], "count": profile["inventory"].get("scrap", 0)}},
             "room": room.get("name", "탐사 준비"),
             "zone": zone,
             "environment": display(environment) if environment else None,
