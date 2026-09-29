@@ -4,7 +4,7 @@
 
 ## Objective
 
-본부 1~6단계와 P0 smoke 인프라는 PR #13~#20으로 병합 완료됐다. 7단계 시작 시 작업 트리는 깨끗하고 fetch 후 HEAD/origin/main은 `63dca1bf9366d60af06a1728f0aaefb2bfdb6526`였다. PR #20은 MERGED이며 병합 후 [Game checks #106](https://github.com/wonmin82/primal-zone/actions/runs/36528666351)은 test/smoke 모두 success다(순수 99·통합 250·총 349, runner 100.141초, Quick 19.336초). 열린 PR은 없었다. 최신 main에서 `codex/hq-final-closeout`을 생성했다. 현재 승인된 작업은 7단계 통합 cleanup·전체 회귀검증·closeout이며 실제 restart/Full progression/최종 Web 확인과 PR 생성까지 수행하고 병합하지 않는다. 아래 OPEN 및 부두 서비스 설명은 시점별 과거 기록이다. 본부 재설계 1~7단계 구현 및 로컬 최종 검증을 완료했다. 이번 closeout PR은 생성·최신 HEAD CI 확인까지 진행하며 병합하지 않는다.
+본부 1~6단계와 P0 smoke 인프라는 PR #13~#20으로 병합 완료됐다. 7단계 시작 시 작업 트리는 깨끗하고 fetch 후 HEAD/origin/main은 `63dca1bf9366d60af06a1728f0aaefb2bfdb6526`였다. PR #20은 MERGED이며 병합 후 [Game checks #106](https://github.com/wonmin82/primal-zone/actions/runs/36528666351)은 test/smoke 모두 success다(순수 99·통합 250·총 349, runner 100.141초, Quick 19.336초). 열린 PR은 없었다. 최신 main에서 `codex/hq-final-closeout`을 생성했다. 7단계 통합 cleanup·전체 회귀검증·closeout으로 실제 restart/Full progression/최종 Web 확인을 완료하고 PR #21을 생성했다. 아래 OPEN 및 부두 서비스 설명은 시점별 과거 기록이다. 본부 재설계 1~7단계 구현 및 로컬 최종 검증을 완료했다. 구현 HEAD의 test/smoke CI도 성공했다. 문서 후속 커밋의 최종 HEAD CI는 PR Validation에서 별도 확인하며 PR은 병합하지 않는다.
 
 ### 본부 7단계 closeout (2026-09-29)
 
@@ -149,7 +149,11 @@ Live Full에서는 보관상자/개인 보관함에 넣기·꺼내기와 일부 
 
 ## Current Repository State
 
-현재 기준은 Objective와 7단계 closeout 기록이다. branch는 `codex/hq-final-closeout`, 시작/fetch main은 `63dca1bf9366d60af06a1728f0aaefb2bfdb6526`이며 PR #13~#20 MERGED다. 구현·검증 후 PR 최신 HEAD는 Git/GitHub와 PR Validation에서 확인한다.
+현재 기준은 Objective와 7단계 closeout 기록이다. branch는 `codex/hq-final-closeout`, 시작/fetch main은 `63dca1bf9366d60af06a1728f0aaefb2bfdb6526`이며 PR #13~#20 MERGED다. [PR #21](https://github.com/wonmin82/primal-zone/pull/21)은 OPEN·비Draft·MERGEABLE이며 병합하지 않았다. 구현 커밋은 `736f10df437f3d809d779838a50c61d30a6b00fa`다.
+
+구현 HEAD와 직접 대조한 [Game checks run 36545108714](https://github.com/wonmin82/primal-zone/actions/runs/36545108714)의 test/smoke는 모두 success다. CI는 pure 101개 / 0.766초, integration 252개 / 101.456초, total 353개, 통합 runner 107.901초이며 Quick은 20.265초다. 위 로컬 결과와 별도의 원격 실행이다. branch protection의 required context는 실제 API 확인 시 `test`만이며 smoke job은 자동 실행된다.
+
+이 원격 기록은 문서 전용 후속 커밋에 포함한다. 실행 코드·테스트가 동일하므로 로컬 전체 검사는 반복하지 않고 문서 diff·링크·기록을 검사한다. 문서 후속 커밋까지 포함한 최종 HEAD의 test/smoke CI는 push 후 따로 확인하고 PR Validation과 완료 보고에 SHA·실행 링크·결과를 기록한다. 구현 HEAD의 성공을 최종 HEAD 결과로 대신하지 않는다.
 
 ### 최초 인계 시점 저장소 기록
 
