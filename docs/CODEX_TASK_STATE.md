@@ -175,7 +175,8 @@
 
 ### P0 격리형 live smoke 인프라 (2026-09-29)
 
-- [PR #20](https://github.com/wonmin82/primal-zone/pull/20)을 생성했다. 최초 구현 HEAD `981bd81feaae0587055263ed386e3933fc5e09fd`의 CI는 job 시작 전 startup_failure였다. 저장소 Actions 허용 목록이 checkout/setup-uv만 허용하여 선택적 upload-artifact action을 제거하고 기본 shell/Python failure log 출력으로 전환했다. Actions/branch protection을 변경하지 않았으며 gameplay 코드는 동일하다. 최신 HEAD의 test/smoke CI는 수정 push 후 직접 확인한다.
+- [PR #20](https://github.com/wonmin82/primal-zone/pull/20)을 생성했다. 최초 구현 HEAD `981bd81feaae0587055263ed386e3933fc5e09fd`의 CI는 job 시작 전 startup_failure였다. 저장소 Actions 허용 목록이 checkout/setup-uv만 허용하여 선택적 upload-artifact action을 제거하고 기본 shell/Python failure log 출력으로 전환했다. Actions/branch protection을 변경하지 않았으며 gameplay 코드는 동일하다.
+- CI 설정 수정 HEAD `d85d83ece5d300342c7b1a30d1fe98c5dab01220`의 [test](https://github.com/wonmin82/primal-zone/actions/runs/36526697395/job/109271210799)와 [smoke](https://github.com/wonmin82/primal-zone/actions/runs/36526697395/job/109271210590)가 모두 success이며 headSha를 대조했다. Ubuntu에서 check·pure 99개(0.728초)·integration 250개(95.112초), total 349개·runner 101.100초, actual Quick 19.001초를 확인했다. 로그는 `work/smoke-implementation-ci.log`다. 이 기록은 문서 전용 후속 커밋에 포함하며 최종 문서 HEAD의 두 CI는 push 후 별도로 확인하여 PR Validation과 완료 보고에 기록한다. 이전 HEAD의 CI를 최종 HEAD 결과로 대신하지 않는다.
 
 - 시작 main: `e4977132206e9edc285a35773758ef989d4fb6dd`, PR #19 MERGED·main CI success를 직접 확인했다. 최신 origin/main에서 `codex/smoke-p0-isolation` 생성, 기존 unstaged/staged 변경 없음. 현재 HEAD/PR은 실제 Git 및 아래 원격 기록으로 확인한다.
 - P0 여섯 항목을 해결했다: 실행별 SQLite로 플레이 DB 오염 차단, fixture 인증으로 가입 throttle/610초 분리, Quick만 짧은 타이머, 공통 단계/Quick·Full 분리, 매 실행 새 DB/월드·계정·시설 상태로 재실행 격리, CI에 실제 Evennia/WS smoke job 추가. 기존 required `test` job/가입 throttle/production 타이머/테스트 인프라는 유지한다.
@@ -224,7 +225,7 @@
 
 ## Partially Implemented / In Progress
 
-본부 1~6단계는 병합 완료다. P0 smoke 인프라 구현과 로컬 검증을 완료했다. Quick 연속 2회와 production Full 1회, 전체 순수/통합 검사를 통과했다. commit/push/PR 생성과 최신 HEAD의 test·smoke CI 확인을 마무리하며 원격 상태는 아래 P0 기록·실제 PR을 따른다. 7단계는 시작하지 않는다.
+본부 1~6단계는 병합 완료다. P0 smoke 인프라 구현·로컬 검증·commit/push·PR #20 생성을 완료했다. Quick 연속 2회와 production Full 1회, 전체 순수/통합 검사와 구현 HEAD의 원격 test·smoke CI를 통과했다. PR은 검토를 기다리는 OPEN 상태이며 병합하지 않는다. 문서 후속 커밋을 포함한 최신 HEAD/CI는 실제 PR Validation을 따른다. 남은 기능 구현은 없고 7단계는 PR 검토·병합 후 별도 요청까지 시작하지 않는다.
 
 ## Validation
 
@@ -296,7 +297,8 @@ P0 smoke 인프라 PR을 검토·병합한 후 최신 main에서 별도 요청�
 | `game/world/test_lighting.py`, `game/world/test_environment.py`, `game/world/test_rules.py` | pure 규칙·migration·환경/광원 테스트 |
 | `game/tests/test_lighting.py`, `game/tests/test_environment.py`, `game/tests/test_distant_view.py`, `game/tests/test_item_interactions.py` | 통합 광원/시설/hint, 환경 저장, 정찰 privacy, stack 이전 |
 | `game/tests/test_targets.py`, `game/tests/test_loot.py`, `game/tests/test_combat.py`, `game/tests/test_lifecycle.py`, `game/tests/test_web_state.py` | selector/권한/전투/lifecycle/웹 회귀 |
-| `scripts/dev.py`, `scripts/smoke.py`, `.github/workflows/tests.yml` | 실제 개발 검사/서버 흐름/CI. smoke는 플레이 DB에 계정을 남김 |
+| `scripts/dev.py`, `scripts/smoke.py`, `scripts/smoke_harness.py`, `scripts/smoke_setup.py`, `.github/workflows/tests.yml` | pure/integration과 실행별 격리 Quick/Full live smoke, fixture·서버 자동 관리, test/Quick CI |
+| `game/world/timing.py`, `game/server/conf/settings_smoke.py`, `game/server/conf/smoke_support.py`, `game/world/test_smoke.py`, `game/tests/test_smoke_infrastructure.py` | production/Quick 타이머 SSOT, smoke marker·DB/경로 guard, settings/CLI/실패 cleanup 자동 검증 |
 
 ## Do Not Regress
 
