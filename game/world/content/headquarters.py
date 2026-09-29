@@ -1,9 +1,18 @@
 """본부의 stable Room 구조. 서비스 존재는 실제 객체로 표현한다."""
 
-from .directions import DIRECTION_ALIASES, OPPOSITE_DIRECTIONS
+from .directions import OPPOSITE_DIRECTIONS
 from .elevator import ELEVATOR_ROOM, ELEVATOR_STOPS
 
-ROOF_SIDES = {direction: f"support_roof_{alias}" for direction, alias in DIRECTION_ALIASES.items()}
+ROOF_SIDES = {
+    "북": "support_roof_n",
+    "북동": "support_roof_ne",
+    "동": "support_roof_e",
+    "남동": "support_roof_se",
+    "남": "support_roof_s",
+    "남서": "support_roof_sw",
+    "서": "support_roof_w",
+    "북서": "support_roof_nw",
+}
 ROOF_ROOMS = {"support_roof", *ROOF_SIDES.values()}
 
 ROOMS = {

@@ -1,8 +1,20 @@
 # Current Task State
 
-확인일: 2026-09-29. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
+확인일: 2026-09-30. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
 
 ## Objective
+
+현재 작업은 열린 [PR #23](https://github.com/wonmin82/primal-zone/pull/23)의 **지도 방향 통합 정렬 / 옥상 콘텐츠 불변조건 / stable Room ID 독립성** 리뷰 반영이다. `codex/eight-direction-navigation`에서 계속 작업한다. 시작 fetch 후 로컬 HEAD·원격 branch·PR HEAD는 모두 `ec3fd38bde0b73102442cd70e3d45ad27c27814a`, origin/main은 `6b2adcc306cdf8108232c036de1b447c93f95621`로 동일했고 작업 트리는 깨끗했다. 아래 최초 구현·검증 수치는 당시 기록으로 보존한다. 새 PR을 만들거나 merge하지 않는다.
+
+### PR #23 후속 리뷰 반영 (2026-09-30)
+
+지도는 실제 출구와 blocked 출구를 합쳐 한 번 정렬하며 canonical 전체 순서와 특수 출구의 입력 순서, 방문/미탐사/폐쇄/현재/semantic 표시를 보존한다. `ROOF_SIDES`는 기존 여덟 stable ID를 명시적으로 고정하여 command alias 정책과 분리했다. Room/Exit ID rename·profile 변경·migration은 없다. `headquarters_errors()`는 옥상 9개 Room의 비어 있지 않은 `hints`·`requires`·`quest`·`items`·`rewards`를 차단하고, 전체 `errors(interactables)`는 해당 Room의 모든 NPC/interactable/service 배치를 차단한다. Room schema에서 별도 progression 필드는 확인되지 않았으며 환경·시설 조명 등 관계없는 필드는 새로 금지하지 않았다. 일반 서비스 Room과 Web/CSS/JS·context action 정책은 바꾸지 않는다.
+
+기존 stable mapping의 canonical key/정확한 ID 집합 검사를 보강하고, 회귀 테스트 5개를 추가했다. 지도 혼합 순서/semantic/방문 상태·특수 출구 fallback 2개, 정상 `INTERACTABLES`와 옥상 전체 배치 금지 1개, 모든 옥상 Room의 다섯 금지 필드 검출과 빈 값 허용 2개다. `world.test_directions world.test_headquarters` 단독 순수 검사는 16개 / 0.074초 통과했다. 관련 `scripts/dev.py test world.test_directions world.test_headquarters tests.test_directions tests.test_headquarters tests.test_integration tests.test_regions --parallel 2 --reverse`는 69개 / 64.682초·runner 77.096초 통과했다.
+
+최종 `.\.venv\Scripts\python.exe scripts/dev.py check` 통과, `scripts/dev.py test`는 pure 117 / 1.819초·integration 285 / 108.329초·total 402·통합 runner 117.999초 성공이다. `scripts/dev.py smoke`는 49.269초 성공했고 기존 파티/점유/전리품/lifecycle·옥상/승강기/구매/재접속을 유지했다. owned process/temp를 정리했고 play SQLite의 SHA256·mtime_ns·size는 최초 기록과 동일했다. 근거는 Git 제외 `work/direction-review-related.log`, `work/direction-review-full.log`, `work/direction-review-quick.log`다. `git diff --check` 통과. 실행 코드·테스트 검증 이후 문서에 결과만 반영했다. Full은 production timer를 변경하지 않아 미실행이며 JS/node/collectstatic/browser/OS IME는 Web 코드 변경이 없어 반복하지 않았다. 후속 commit을 기존 PR #23에 push하고 최종 HEAD 및 두 CI job의 실제 결과를 PR Validation에서 대조한다.
+
+### 최초 구현 시작 기준 (2026-09-29, 과거 기록)
 
 본부 재설계 1~7단계/P0 smoke와 개인 줄임말·묶음 명령은 완료된 선행 작업이다. 현재 독립 작업은 **8방향 이동 / 고정 Web·Telnet 방향 인터페이스**다. `E:\Work\primal-zone`의 원격이 `wonmin82/primal-zone`임을 확인했고 status·unstaged/staged diff는 깨끗했다. fetch 후 시작 HEAD/origin/main은 `6b2adcc306cdf8108232c036de1b447c93f95621`, PR #22는 MERGED, 열린 PR은 없었다. 해당 main [Game checks run 36575655451](https://github.com/wonmin82/primal-zone/actions/runs/36575655451) success를 확인하고 최신 main에서 `codex/eight-direction-navigation`을 생성했다. 과거 단계의 OPEN/부두 서비스 설명과 검증 수치는 시점 기록으로 보존하며 현재 상태보다 우선하지 않는다.
 

@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from world import rules
 from world.content import REGIONS, ROOMS
-from world.content.directions import OPPOSITE_DIRECTIONS
+from world.content.directions import DIRECTION_ORDER, OPPOSITE_DIRECTIONS
 from world.content.headquarters import ROOF_ROOMS, ROOF_SIDES
 from world.content.headquarters import ROOMS as HQ_ROOMS
 from world.content.integrity import errors, headquarters_errors
@@ -97,6 +97,7 @@ class HeadquartersRulesTests(TestCase):
                          dict(zip(("북", "북동", "동", "남동", "남", "남서", "서", "북서"),
                                   ("support_roof_" + suffix for suffix in suffixes))))
         self.assertEqual(set(ROOF_SIDES.values()), expected)
+        self.assertEqual(set(ROOF_SIDES), set(DIRECTION_ORDER))
         self.assertEqual(ROOF_ROOMS, expected | {"support_roof"})
         for direction, zone in ROOF_SIDES.items():
             self.assertEqual(ROOMS[zone]["exits"], {OPPOSITE_DIRECTIONS[direction]: "support_roof"})
@@ -116,6 +117,27 @@ class HeadquartersRulesTests(TestCase):
                 self.assertTrue(headquarters_errors())
         with patch.dict(REGIONS["headquarters"], rooms=tuple(zone for zone in HQ_ROOMS if zone != "support_roof_ne")):
             self.assertTrue(headquarters_errors())
+
+    def test_roof_content_fields_are_rejected_by_integrity(self):
+        targets = content_targets()
+        fields = {
+            "hints": [{"text": "진행 안내"}],
+            "requires": {"quest": "radio_tower", "flag": QUESTS["radio_tower"]["steps"][0][0]},
+            "quest": "radio_tower",
+            "items": {"scrap": 1},
+            "rewards": {"credits": 10},
+        }
+        for zone in ROOF_ROOMS:
+            for field, value in fields.items():
+                with self.subTest(zone=zone, field=field), patch.dict(ROOMS[zone], {field: value}):
+                    issues = errors(targets)
+                    self.assertTrue(any(zone in issue and field in issue and "옥상 검증 Room" in issue
+                                        for issue in issues))
+
+    def test_roof_empty_content_fields_remain_valid(self):
+        for zone in ROOF_ROOMS:
+            with self.subTest(zone=zone), patch.dict(ROOMS[zone], hints=[], requires={}, quest=None, items={}, rewards={}):
+                self.assertEqual(errors(content_targets()), [])
 
     def test_blocked_direction_projection_is_read_only_and_reuses_aliases(self):
         before = deepcopy(ROOMS)

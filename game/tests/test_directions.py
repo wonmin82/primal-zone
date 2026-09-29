@@ -6,13 +6,14 @@ from unittest.mock import Mock, patch
 from evennia import search_tag
 from evennia.objects.models import ObjectDB
 from typeclasses.explorers import Explorer
-from typeclasses.interactables import action_objects
+from typeclasses.interactables import INTERACTABLES, action_objects
 from typeclasses.zone_rooms import exit_diagram
 from world import text as ft
 from world.bootstrap import EXIT_CATEGORY, build_world, stale_definitions
-from world.content import ROOMS
+from world.content import REGIONS, ROOMS
 from world.content.directions import DIRECTION_ALIASES, DIRECTION_ORDER, OPPOSITE_DIRECTIONS
-from world.content.headquarters import ROOF_SIDES
+from world.content.headquarters import ROOF_ROOMS, ROOF_SIDES
+from world.content.integrity import errors
 
 from tests.base import WorldCommandTest
 
@@ -95,6 +96,41 @@ class DirectionIntegrationTests(WorldCommandTest):
                 objects = search_tag(identity, category=EXIT_CATEGORY)
                 self.assertEqual([obj.id for obj in objects], [db_id])
                 self.assertEqual(objects[0].aliases.all(), [DIRECTION_ALIASES[objects[0].key]])
+
+    def test_map_merges_actual_and_blocked_directions_in_one_order(self):
+        self.char1.location = self.rooms["support_1f_e2"]
+        self.char1.change(lambda p: p.update(visited=["support_1f_e2", "support_1f_e1", "support_1f_w1"]))
+        output = self.raw("지도")[-1]
+        lines = output.splitlines()
+        east = next(line for line in lines if "지원동 1층 동쪽 끝 복도 ← 현재" in line)
+        west = next(line for line in lines if "지원동 1층 서쪽 복도 /" in line)
+        for line, expected in ((east, ["북", "남", "서"]), (west, ["북", "동", "남", "서"])):
+            positions = [line.index(direction + ":") for direction in expected]
+            self.assertEqual(positions, sorted(positions))
+        self.assertIn("서: 지원동 1층 동쪽 복도", east)
+        self.assertIn("북: 폐쇄, 남: 폐쇄", east)
+        self.assertIn("북: 미탐사", west)
+        self.assertIn("남: 폐쇄", west)
+        self.assertIn("[" + REGIONS["headquarters"]["name"] + "]", output)
+        self.assertEqual([part["text"] for part in output.segments if part["role"] == "direction"],
+                         ["북", "동", "남", "서", "북", "동", "남", "서", "북", "남", "서"])
+
+    def test_map_preserves_special_exit_fallback_order_after_merged_directions(self):
+        self.char1.change(lambda p: p.update(visited=["support_roof"]))
+        with patch.dict(ROOMS["support_roof"], exits={"계단": "dock", "서": "dock", "문": "dock"},
+                        blocked_exits={"남": "폐쇄", "북": "폐쇄"}):
+            output = self.raw("지도")[-1]
+        self.assertEqual([part["text"] for part in output.segments if part["role"] == "direction"],
+                         ["북", "남", "서", "계단", "문"])
+
+    def test_static_integrity_rejects_any_roof_interactable_definition(self):
+        self.assertEqual(errors(INTERACTABLES), [])
+        for zone in ROOF_ROOMS:
+            with self.subTest(zone=zone), patch.dict(INTERACTABLES, roof_fixture={"room": zone, "actions": ["대화"]}):
+                issues = errors(INTERACTABLES)
+                self.assertTrue(any("roof_fixture" in issue and zone in issue and "interactable/NPC" in issue
+                                    for issue in issues))
+        self.assertEqual(errors(INTERACTABLES), [])
 
     def test_text_canvas_and_axis_remain_fixed_for_exit_combinations(self):
         for directions in ([], ["북"], ["남"], ["동", "서"], ["북동"], ["남서"],

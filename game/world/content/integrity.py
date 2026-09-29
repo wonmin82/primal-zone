@@ -66,6 +66,9 @@ def headquarters_errors():
             issues.append(f"{zone}: 옥상은 headquarters의 안전한 비전투 Room이어야 합니다.")
         if room.get("exposure") != "outdoor" or room.get("light_profile") != "natural":
             issues.append(f"{zone}: 옥상 환경은 outdoor/natural이어야 합니다.")
+        for field in ("hints", "requires", "quest", "items", "rewards"):
+            if room.get(field):
+                issues.append(f"{zone}: 옥상 검증 Room에는 {field}를 둘 수 없습니다.")
     for zone, exits in expected.items():
         if ROOMS.get(zone, {}).get("exits") != exits:
             issues.append(f"{zone}: 본부 1단계 출구 배치가 올바르지 않습니다.")
@@ -246,6 +249,8 @@ def errors(interactables):
         if light and (not positive_number(light.get("strength")) or type(light.get("range")) is not int or light["range"] < 0 or not isinstance(light.get("power_type"), str) or not light["power_type"].strip()):
             issues.append(f"{key}: 광원 정의가 유효하지 않습니다.")
     for identity, data in interactables.items():
+        if data.get("room") in ROOF_ROOMS:
+            issues.append(f"{identity}: 옥상 검증 Room {data['room']}에는 interactable/NPC를 배치할 수 없습니다.")
         if data["room"] not in ROOMS:
             issues.append(f"{identity}: 대상 Room이 없습니다.")
         if data.get("typeclass") == "Shopkeeper" and data.get("shop_id") not in SHOP_CATALOGS:

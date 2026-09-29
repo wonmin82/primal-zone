@@ -35,7 +35,9 @@ Room의 local/distant 표시 경로는 정적 설명 다음에 폐쇄 문구를 
 
 `world/content/directions.py`의 `DIRECTIONS`가 canonical 한국어 방향, 영문 alias, opposite, 3×3 좌표를 소유한다. `DIRECTION_ORDER`는 북부터 시계방향인 북·북동·동·남동·남·남서·서·북서다. alias/reverse mapping은 같은 정의에서 파생하며 `items.py`는 방향을 소유하지 않는다. 기존 `world.content.OPPOSITES` import는 `DIRECTION_ALIASES`와 동일한 객체를 export하는 호환 경로만 유지한다. bootstrap의 실제 Evennia Exit alias, blocked 방향 조회, integrity, 지도·Web 출구 순서와 개인 줄임말 예약 이름이 이 정의를 사용한다. 별도 대각선 command는 없다. 방향 보기의 selector·gate·원거리 지각 정책과 묶음 dispatch는 기존 경로다.
 
-옥상 중앙 `support_roof`는 `support_roof_n/ne/e/se/s/sw/w/nw`로 나가는 여덟 Exit를 갖는다. 각 주변 Room의 유일한 Exit는 정확한 opposite로 중앙에 돌아오며 서로 연결하지 않는다. 옥상 9개 Room은 headquarters·safe·적 없음·outdoor/natural이고 주변 Room에는 서비스·hint·진행 조건·보상이 없다. 승강기의 옥상 정류장은 여전히 중앙 하나이며 `support_elevator.exits={}`와 일반 Exit의 승강기 직접 연결 금지는 유지한다. integrity와 반복 bootstrap/실제 이동 검사가 이를 검증한다.
+옥상 중앙 `support_roof`는 `support_roof_n/ne/e/se/s/sw/w/nw`로 나가는 여덟 Exit를 갖는다. `ROOF_SIDES`의 stable Room ID는 사용자 입력용 방향 alias에서 파생하지 않고 명시적으로 고정한다. 각 주변 Room의 유일한 Exit는 정확한 opposite로 중앙에 돌아오며 서로 연결하지 않는다. 옥상 9개 Room은 headquarters·safe·적 없음·outdoor/natural인 navigation/UI 회귀 기준 공간이다. `headquarters_errors()`는 비어 있지 않은 `hints`·`requires`·`quest`·`items`·`rewards`를 금지하고, 전체 `errors(interactables)`는 중앙과 주변 모두의 NPC/interactable/service 배치를 금지한다. 환경·시설 조명 등 다른 schema 필드를 일반적으로 금지하지 않는다. 승강기의 옥상 정류장은 여전히 중앙 하나이며 `support_elevator.exits={}`와 일반 Exit의 승강기 직접 연결 금지는 유지한다. integrity와 반복 bootstrap/실제 이동 검사가 이를 검증한다.
+
+지도는 실제 출구와 폐쇄 출구의 방향을 먼저 합쳐 `ordered_directions()`로 한 번 정렬한다. 한 Room의 전체 표시가 canonical 시계방향 순서를 따르며 기타 특수 출구는 원래 입력 순서대로 뒤에 표시한다. 방문한 목적지 이름·미탐사·폐쇄·현재 위치와 semantic 방향 token은 유지한다.
 
 Web은 기존 `pz_state.exits`만 렌더링한다. 오른쪽 DOM은 SURROUNDINGS → PARTY → OBJECTIVE → TRAINING → EQUIPMENT & SUPPLIES이며 SURROUNDINGS 안에서는 compass → hint/context 순이다. 고정 3×3 grid의 중앙은 row 2/column 2이며 출구가 없는 방향은 버튼만 생략한다. 출구 개수와 주변 행동 수가 grid geometry와 panel 내 위치를 바꾸지 않는다. connector/has-direction 가변 행은 제거했고 기타 특수 출구 fallback은 유지한다. 기존 1150px grid·700px flex breakpoint를 따르며 서비스/action 선정 정책과 서버가 소유하는 텍스트 명령은 바꾸지 않는다.
 

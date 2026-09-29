@@ -275,17 +275,19 @@ class Map(GameCommand):
             for key in region_rooms:
                 room = ROOMS[key]
                 mark = " ← 현재" if self.caller.zone == key else ""
+                directions = ordered_directions([*room["exits"], *room.get("blocked_exits", {})])
                 exits = ft.join(
                     [
                         ft.text(
                             ft.token("direction", direction),
                             ": ",
-                            ROOMS[room["exits"][direction]]["name"]
-                            if room["exits"][direction] in visited else "미탐사",
+                            "폐쇄" if direction not in room["exits"] else (
+                                ROOMS[room["exits"][direction]]["name"]
+                                if room["exits"][direction] in visited else "미탐사"
+                            ),
                         )
-                        for direction in ordered_directions(room["exits"])
-                    ] + [ft.text(ft.token("direction", direction), ": 폐쇄")
-                         for direction in ordered_directions(room.get("blocked_exits", {}))],
+                        for direction in directions
+                    ],
                     ", ",
                 )
                 lines.append(ft.text(room["name"], mark, " / ", exits))
