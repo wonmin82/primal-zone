@@ -52,6 +52,7 @@ class Harness:
         self.handles = []
         self.ports = {}
         self.reservations = []
+        self.restarting = False
         self.credentials = [(name, secrets.token_urlsafe(24))
                             for name in ("검증가", "검증나", "검증다")]
 
@@ -86,7 +87,7 @@ class Harness:
         self.reservations.clear()
         # Launcher의 daemon/자동 재시작을 쓰지 않아 두 프로세스의 실제 exit를 추적한다.
         for name, module in (("portal", "server/portal/portal.py"), ("server", "server/server.py")):
-            log = (self.run_dir / f"{name}.log").open("w", encoding="utf-8")
+            log = (self.run_dir / f"{name}.log").open("a", encoding="utf-8")
             self.handles.append(log)
             flags = {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {
                 "start_new_session": True}
@@ -131,7 +132,8 @@ class Harness:
     async def supervise(self, scenario):
         async def monitor():
             while True:
-                self.check_alive()
+                if not self.restarting:
+                    self.check_alive()
                 await asyncio.sleep(0.2)
 
         work, health = asyncio.create_task(scenario), asyncio.create_task(monitor())
@@ -144,6 +146,24 @@ class Harness:
                 if not task.done():
                     task.cancel()
             await asyncio.gather(work, health, return_exceptions=True)
+
+    async def restart(self):
+        """같은 DB/설정/포트에서 소유한 Portal과 Server를 실제로 재시작한다."""
+        self.restarting = True
+        try:
+            await asyncio.to_thread(self.stop)
+            self.processes.clear()
+            self.handles.clear()
+            self.start()
+            await self.ready()
+        finally:
+            self.restarting = False
+
+    def checkpoint(self):
+        output = subprocess.check_output(
+            [sys.executable, str(ROOT / "scripts" / "smoke_snapshot.py")],
+            cwd=self.run_dir / "game", env=self.env, text=True, timeout=SETUP_TIMEOUT)
+        return json.loads(output.splitlines()[-1])
 
     def stop(self):
         failures = []

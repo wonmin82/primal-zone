@@ -47,6 +47,12 @@ def setup(credentials):
         # 맨손 공격으로 양쪽 참여와 outsider 거절을 확인할 시간을 확보한다.
         profile["equipment"]["weapon"] = None
         profile["hp"] = rules.stats(profile)["max_hp"]
+        if settings.PRIMAL_SMOKE_MODE == "full":
+            # 진행 전제만 준비한다. 수리·정산·구매·패배 결과는 실제 명령으로 만든다.
+            if name == credentials[0][0]:
+                profile["inventory"]["scrap"] = 10
+            if name == credentials[2][0]:
+                profile["hp"] = 1
         character.save_profile(profile)
     call_command("collectstatic", interactive=False, verbosity=0)
     # 정상 초기 객체·정적 파일 준비를 마쳤다. 첫 시작의 자동 재시작은 필요하지 않다.

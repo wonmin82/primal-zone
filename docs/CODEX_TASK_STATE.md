@@ -4,7 +4,36 @@
 
 ## Objective
 
-본부 1~6단계와 테스트 성능 개선은 PR #13~#19로 병합 완료됐다. 이번 작업 시작 시 작업 트리는 깨끗했고 fetch 후 HEAD/origin/main은 모두 `e4977132206e9edc285a35773758ef989d4fb6dd`였다. [PR #19](https://github.com/wonmin82/primal-zone/pull/19)는 MERGED이며 해당 main [Game checks](https://github.com/wonmin82/primal-zone/actions/runs/36522062461)는 success다(순수 91·통합 248·총 339). 최신 main에서 `codex/smoke-p0-isolation`을 생성했다. 현재 승인된 작업은 7단계 시작 전 P0 smoke 인프라 개선이며 구현·자동 검사·Quick 연속 2회·Full 실제 실행·문서·commit/push/PR/최신 HEAD CI 확인을 포함한다. PR은 병합하지 않고 7단계는 시작하지 않는다. 아래 OPEN 상태와 이전 smoke 동선·시간은 시점별 과거 기록이다.
+본부 1~6단계와 P0 smoke 인프라는 PR #13~#20으로 병합 완료됐다. 7단계 시작 시 작업 트리는 깨끗하고 fetch 후 HEAD/origin/main은 `63dca1bf9366d60af06a1728f0aaefb2bfdb6526`였다. PR #20은 MERGED이며 병합 후 [Game checks #106](https://github.com/wonmin82/primal-zone/actions/runs/36528666351)은 test/smoke 모두 success다(순수 99·통합 250·총 349, runner 100.141초, Quick 19.336초). 열린 PR은 없었다. 최신 main에서 `codex/hq-final-closeout`을 생성했다. 7단계 통합 cleanup·전체 회귀검증·closeout으로 실제 restart/Full progression/최종 Web 확인을 완료하고 PR #21을 생성했다. 아래 OPEN 및 부두 서비스 설명은 시점별 과거 기록이다. 본부 재설계 1~7단계 구현 및 로컬 최종 검증을 완료했다. 구현 HEAD의 test/smoke CI도 성공했다. 문서 후속 커밋의 최종 HEAD CI는 PR Validation에서 별도 확인하며 PR은 병합하지 않는다.
+
+### 본부 7단계 closeout (2026-09-29)
+
+시작 main `63dca1bf9366d60af06a1728f0aaefb2bfdb6526`, branch `codex/hq-final-closeout`. PR #13~#20 MERGED, 시작 시 열린 PR 없음과 main Game checks #106/run 36528666351의 test/smoke success를 확인했다. 아래 결과는 이번 최종 코드의 새 실행이며 과거 수치를 재사용하지 않는다.
+
+| 검사 | 실제 결과 |
+| --- | --- |
+| `scripts/dev.py check` | 통과 |
+| `scripts/dev.py test` | pure 101 / 1.875초, integration 252 / 84.920초, total 353, 통합 runner 94.315초 |
+| `scripts/dev.py test world.test_smoke tests.test_hq_closeout tests.test_hq_services --parallel 2 --reverse` | 18 통과 / 14.875초, runner 23.496초 |
+| `node --check game/web/static/webclient/js/primal.js` | 통과, JS 변경 없음 |
+| `scripts/dev.py smoke` 즉시 연속 #1 / #2 | 45.956초 / 44.344초, 둘 다 성공·owned process 종료·temp 삭제 |
+| `scripts/dev.py smoke-full` | 293.796초, 실제 restart와 두 임무/보스 최종 보고 포함, 성공·정리 완료 |
+| Full 실제 첫 combat / corpse / respawn / protection | 2.835초 / 29.886초 / 44.501초 / 121.950초 |
+| play SQLite 안전성 | 모든 실행에서 size 733184, mtime_ns 1790080153765082800, SHA256 `b1318296f505b9b7522fcbdedff7642a06cf055e9de72802198c70e6b8a7f700` 동일 |
+
+전체 managed Object의 DB IDs/key/location/destination/aliases/stable tags/shop_id를 두 번 bootstrap 전후 비교했다. player profile 전체와 저장 위치, 공용 contents, 승강기 3층, facility/environment state가 같았고 integrity/stale는 비었다. malformed normalization·selector/poor/locked/distant privacy·멀티플레이 leader/leave/removal/XP/loot/한 명 패배 후 잔여 전투/rollback·동승 독립 하차는 기존 전체 integration 회귀가 유지한다.
+
+Live Full에서는 보관상자/개인 보관함에 넣기·꺼내기와 일부 보관, 부품 7개 정산/3개 수리용 보존, 강타 Rank 2 학습, Doctor 치료, outsider 실제 패배·의무실 HP 1·최대 10C·Bed 회복, 옥상 귀환·3종 상점 구매·장착을 연결했다. 정비기록→발전기 부품 3개 소비→능선 보스→윤대장 보고, 길잡이→두 표식→신호전지 소비→두 번째 gate→밀림 보스→최종 보고가 actual 서버/명령/DB/WS로 완료됐다. 두 gate의 미충족 거절도 확인했다. RNG drop을 반복 기다리거나 결과를 fixture로 완료하지 않았다.
+
+실제 restart 전 A는 승강기 3층에 있었고 B는 초지의 live claimed combat 중이었다. 공용 발전기와 상자·개인 보관·완료 임무·전리품이 있었다. harness가 같은 SQLite/설정/포트의 Portal+Server 두 프로세스를 실제 종료/시작한 뒤 세 계정 모두 재인증했다. DB identity/location/home=dock·XP/Credits/inventory/equipment/storage/growth/quests/discoveries/visited·파티·승강기·공용 contents·시설·환경 clock이 보존됐다. live combat/claim은 정리되고 남은 시체와 respawn은 실제 callback/sweep을 기다려 완료됐으며 모든 기존 loot entry가 ground에 유지됐다. forced OS crash 검증과 다르며 광원은 기존 off 정책을 따른다.
+
+브라우저는 별도의 guarded 격리 SQLite/서버에서 일반 Player 권한 계정으로 진행했다. 대기실/중앙홀·보관 보기/넣기·정산 환율/모두 교환(부품 10→0, 1000C→1100C)·승강기 1/2/3층/옥상·TRAINING disclosure와 Rank 2 학습·Doctor/Bed full HP·세 판매자 메뉴/붕대·마체테·강화조끼 구매·부두 윤대장/서비스 버튼 없음·초지 실제 사냥/바닥 회수 버튼을 확인했다. DOM clientWidth/scrollWidth는 데스크톱 1234/1234, 390px override 375/375로 같았고 구매 control 시각 줄바꿈도 확인했다. 앱 console error/warning은 발견하지 않았고 Chrome extension의 async listener channel 종료 오류 3건은 구분했다. viewport override를 복원하고 탭·서버·temp DB/runtime credential 파일을 정리했다. JS/CSS asset 변경이 없어 cache version을 올리지 않았으며 fixture setup에서 격리 서버의 static을 수집했다.
+
+근거는 Git 제외 `work/hq-closeout-tests.log`, `work/hq-closeout-quick1.log`, `work/hq-closeout-quick2.log`, `work/hq-closeout-full.log`, `work/hq-closeout-desktop.png`, `work/hq-closeout-mobile.png`다. 초기 관련 검사의 없는 모듈명/Evennia FK 필드명 기대를 바로잡고 실패한 새 검사부터 재검증했다. 개발 중 확장 Full 270.196초도 성공했지만 위 최종 Full은 restart callback 완료 polling까지 포함한다. assertion을 느슨하게 하거나 기존 테스트를 삭제하지 않았다.
+
+실제 OS IME·강제 OS crash·Windows CI·PostgreSQL/운영 DB·모든 날씨/달 조합·모든 quest branching은 미실행이며 이 closeout의 의도된 non-scope다. live 주요 progression의 최종 보고와 production timing은 이번 Full로 새로 검증했다. test/smoke CI job은 그대로 분리하고 Full은 일반 CI에 추가하지 않았다. branch protection 설정은 수정하지 않았다. 최신 PR HEAD/CI는 PR Validation 및 완료 보고에서 직접 대조한다.
+
+### 선행 단계 착수·검증 이력 (과거 기록)
 
 본부 재설계 1단계와 방향 정정은 [PR #13](https://github.com/wonmin82/primal-zone/pull/13)으로 병합됐다. 병합 커밋은 `f9fcd52feb7c449eb94519d9e36f3504558056f4`다. 중앙홀 남/1층 중앙 북과 남쪽 폐쇄 출입구, 대기실 남/중앙홀 북과 중앙홀 서/부두 동을 유지한다. 상세 설계는 [본부 Room 구조 1단계](architecture.md#본부-room-구조-1단계)를 따른다.
 
@@ -16,7 +45,7 @@
 
 기존 광원 기능은 PR #11로 완료됐고 인계 문서는 PR #12로 병합됐다. 아래 광원·본부 1~3단계·테스트 성능 개선의 설계·검증은 시점별 과거 기록이며 보존한다. 본부 1~4단계는 PR #13/#14/#15/#16/#17 MERGED다. 2026-09-29 이번 작업 시작 시 status·unstaged/staged diff는 없었고 fetch 후 HEAD와 origin/main은 모두 `d1f3e54bcd7172bd11aec1a10624d4084b03e8c5`였다. PR #17 MERGED와 해당 main [Game checks](https://github.com/wonmin82/primal-zone/actions/runs/36502424759) success를 직접 확인했다. 병합 CI는 pure 82개(0.024초)·integration 231개(57.207초), total 313개·runner 60.563초다. 최신 origin/main에서 `codex/hq-resource-settlement`를 생성했다. 현재 작업은 5단계 단일 화폐 및 회수 자원 정산이며 아래 PR #17 OPEN 서술은 과거 생성 시점 기록이다.
 
-### 본부 6단계 구현과 검증 (2026-09-29)
+### 본부 6단계 구현과 검증 (2026-09-29, 과거 기록)
 
 - 시작 main은 `d7141fbfd12572a19e744b36fd978fd8150c135e`, branch는 `codex/hq-npc-shops`다. PR #13/#14/#15/#16/#17/#18는 MERGED다. 최종 재fetch에서도 origin/main은 시작 SHA와 같고 이미 포함하므로 rebase 재작성은 필요 없었다. 6단계 구현·로컬/브라우저 검증·commit/push·PR 생성을 완료했다.
 - `Shopkeeper(ActionObject)`의 `supply_shopkeeper`(보급관/보급상인)→supply_shop, `weapon_shopkeeper`(무기상/무기 상인)→weapon_shop, `armor_shopkeeper`(방어구상/방어구 상인)→armor_shop을 추가했다. persistent `db.shop_id`는 각각 supply/weapon/armor이며 `world/content/shops.py`의 SHOP_CATALOGS가 유일한 catalog/가격 SSOT다. 기존 14개 가격과 Credits-only 1개 구매·무한 재고를 보존한다.
@@ -119,6 +148,14 @@
 - 최종 `scripts/dev.py check` 통과, `scripts/dev.py test` 순수 72 + 통합 199 = 총 271 통과(통합 1153.144초, `work/hq-direction-full.log`). 관련 통합에서 발견한 미사용 옛 tag 잔존을 수정하고 실패한 bootstrap 1개를 먼저 통과시킨 뒤 전체를 실행했다. 전체 성공 후 실행 코드·테스트는 고정했다. 상세는 [본부 확인 기록](playtest.md#본부-room-구조-1단계-확인)에 남긴다. 수정 커밋을 같은 PR에 푸시하며 최신 HEAD의 원격 CI는 GitHub/PR 설명에서 직접 확인한다.
 
 ## Current Repository State
+
+현재 기준은 Objective와 7단계 closeout 기록이다. branch는 `codex/hq-final-closeout`, 시작/fetch main은 `63dca1bf9366d60af06a1728f0aaefb2bfdb6526`이며 PR #13~#20 MERGED다. [PR #21](https://github.com/wonmin82/primal-zone/pull/21)은 OPEN·비Draft·MERGEABLE이며 병합하지 않았다. 구현 커밋은 `736f10df437f3d809d779838a50c61d30a6b00fa`다.
+
+구현 HEAD와 직접 대조한 [Game checks run 36545108714](https://github.com/wonmin82/primal-zone/actions/runs/36545108714)의 test/smoke는 모두 success다. CI는 pure 101개 / 0.766초, integration 252개 / 101.456초, total 353개, 통합 runner 107.901초이며 Quick은 20.265초다. 위 로컬 결과와 별도의 원격 실행이다. branch protection의 required context는 실제 API 확인 시 `test`만이며 smoke job은 자동 실행된다.
+
+이 원격 기록은 문서 전용 후속 커밋에 포함한다. 실행 코드·테스트가 동일하므로 로컬 전체 검사는 반복하지 않고 문서 diff·링크·기록을 검사한다. 문서 후속 커밋까지 포함한 최종 HEAD의 test/smoke CI는 push 후 따로 확인하고 PR Validation과 완료 보고에 SHA·실행 링크·결과를 기록한다. 구현 HEAD의 성공을 최종 HEAD 결과로 대신하지 않는다.
+
+### 최초 인계 시점 저장소 기록
 
 아래 표는 인계 문서 최초 작성 시점의 기록이다. 이후 사용자 요청으로 이 문서를 `codex/task-state-handoff` 브랜치의 문서 PR에 포함한다. 현재 브랜치·HEAD·추적 여부·PR·CI 상태는 시작 시 실제 저장소와 GitHub에서 다시 확인하며, 이 표의 과거 상태를 현재 상태로 간주하지 않는다.
 
@@ -225,7 +262,7 @@
 
 ## Partially Implemented / In Progress
 
-본부 1~6단계는 병합 완료다. P0 smoke 인프라 구현·로컬 검증·commit/push·PR #20 생성을 완료했다. Quick 연속 2회와 production Full 1회, 전체 순수/통합 검사와 구현 HEAD의 원격 test·smoke CI를 통과했다. PR은 검토를 기다리는 OPEN 상태이며 병합하지 않는다. 문서 후속 커밋을 포함한 최신 HEAD/CI는 실제 PR Validation을 따른다. 남은 기능 구현은 없고 7단계는 PR 검토·병합 후 별도 요청까지 시작하지 않는다.
+본부 1~6단계와 P0는 병합 완료이며 7단계 구현·전체 자동 검사·Quick 연속 실행·production Full·실제 Portal/Server restart·브라우저 확인을 완료했다. 본부 재설계 계획의 미구현 기능이나 closeout blocker는 발견하지 않았다. 남은 절차는 현재 closeout PR의 검토·병합이며 사용자의 별도 병합 요청 전에는 merge하지 않는다. 현재 구현 상태와 과거 PR OPEN 기록을 구분한다.
 
 ## Validation
 
@@ -254,7 +291,7 @@
 - 실제 OS 한글 IME, 이전 asset cache를 미리 채운 조건, 모든 날씨/달/노출 조합의 수동 브라우저 전수 검증은 미실행이다. 자동 문자열 입력/단위 테스트로 대체해 통과라고 쓰지 않는다.
 - PostgreSQL 운영·실제 배포 환경 검증은 이 세션에서 확인하지 않았다. 운영 DB/server 상태는 시작 시 확인 필요이며 인계가 배포 실행을 의미하지 않는다.
 - **기록의 차이:** docs/playtest.md의 238/252개와 중간 실패 후 관련 재검증은 이전 HEAD 기록이다. 최종은 전체 suite 255개 성공이다. 병합 전 PR 본문의 “PR은 병합하지 않습니다” 문구도 과거 단계의 서술이며 GitHub의 실제 MERGED 상태가 우선이다.
-- **설계 문서의 차이:** docs/architecture.md의 기존 데이터 절은 최신 profile을 v5로 적지만 실제 `rules.PROFILE_VERSION`과 후반 광원 설계는 v6다. 기존 데이터 절의 버전 설명은 갱신이 필요한 과거 기록이며 실제 코드와 광원 migration 설계를 기준으로 삼는다.
+- **7단계 해결:** README/architecture의 최신 profile v5 오기는 실제 v6 migration에 맞춰 바로잡았다. 코드 schema/version은 변경하지 않았다.
 
 ## Remaining Work
 
@@ -267,7 +304,7 @@
 
 ## Recommended Next Step
 
-P0 smoke 인프라 PR을 검토·병합한 후 최신 main에서 별도 요청으로 7단계 통합 cleanup/전체 회귀검증을 진행한다. legacy dock/서비스 zone gate·dead compatibility 검토, 전체 본부 E2E·멀티플레이·bootstrap/restart/reconnect·Full Gameplay E2E·최종 Web/문서 closeout이 예정 범위다. 현재 PR 병합 전에 시작하지 않는다.
+본부 재설계 1~7단계의 구현·검증과 문서 closeout은 완료됐다. closeout PR을 검토하고 별도 요청으로 병합한다. 새로운 기능 작업은 새로운 요구사항을 확정한 뒤 최신 main의 독립 브랜치에서 시작한다. 기존 의도적 비범위/최적화 후보는 자동 구현 요청이나 본부 closeout blocker가 아니다.
 
 ## Important Files
 

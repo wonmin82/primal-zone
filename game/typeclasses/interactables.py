@@ -211,6 +211,18 @@ class Generator(ActionObject):
         caller.msg(body)
 
 
+def _service_available(obj, caller, observed_at=None):
+    from world.observation import can_perceive, context_for
+
+    return (
+        obj.location is not None and obj.location == caller.location
+        and ROOMS.get(caller.zone, {}).get("safe", False)
+        and not caller.profile_snapshot().get("combat_target")
+        and can_perceive(obj, context_for(caller, observed_at=observed_at))
+    )
+
+
+
 class Instructor(ActionObject):
     detectability = "conspicuous"
     distant_visible = True
@@ -219,15 +231,7 @@ class Instructor(ActionObject):
     description = "전투 기록을 분석하고 신체 훈련과 전술을 다시 설계하는 교관이다."
     actions = ("대화", "배워", "배분", "재분배")
 
-    def available(self, caller, observed_at=None):
-        from world.observation import can_perceive, context_for
-
-        return (
-            self.location is not None and self.location == caller.location
-            and ROOMS.get(caller.zone, {}).get("safe", False)
-            and not caller.profile_snapshot().get("combat_target")
-            and can_perceive(self, context_for(caller, observed_at=observed_at))
-        )
+    available = _service_available
 
     def act(self, caller, action, args):
         safe = self.available(caller)
@@ -253,15 +257,6 @@ class Instructor(ActionObject):
             caller.msg("재훈련 완료. 투자 포인트를 반환했습니다. 숙련과 탐사 기록은 유지됩니다.")
 
 
-def _medical_available(obj, caller, observed_at=None):
-    from world.observation import can_perceive, context_for
-
-    return (
-        obj.location is not None and obj.location == caller.location
-        and ROOMS.get(caller.zone, {}).get("safe", False)
-        and not caller.profile_snapshot().get("combat_target")
-        and can_perceive(obj, context_for(caller, observed_at=observed_at))
-    )
 
 
 class Doctor(ActionObject):
@@ -270,7 +265,7 @@ class Doctor(ActionObject):
     presence = "탐사자의 상태를 살피며 진료를 준비하고 있다."
     description = "탐사자의 부상을 살피고 치료하는 의무관이다."
     actions = ("치료",)
-    available = _medical_available
+    available = _service_available
 
     def return_appearance(self, looker, **kwargs):
         return ft.sheet(ft.token(self.semantic_role, self.key), self.description, "",
@@ -286,7 +281,7 @@ class Bed(ActionObject):
     presence = "깨끗한 시트와 담요로 정돈되어 있다."
     description = "몸을 눕히고 회복할 수 있는 의료용 침대다."
     actions = ("휴식",)
-    available = _medical_available
+    available = _service_available
 
     def return_appearance(self, looker, **kwargs):
         return ft.sheet(ft.token(self.semantic_role, self.key), self.description, "",
@@ -304,15 +299,7 @@ class SettlementOfficer(ActionObject):
     description = "회수부품을 크레딧으로 정산하는 담당자다."
     actions = ("환율", "교환")
 
-    def available(self, caller, observed_at=None):
-        from world.observation import can_perceive, context_for
-
-        return (
-            self.location is not None and self.location == caller.location
-            and ROOMS.get(caller.zone, {}).get("safe", False)
-            and not caller.profile_snapshot().get("combat_target")
-            and can_perceive(self, context_for(caller, observed_at=observed_at))
-        )
+    available = _service_available
 
     def web_actions(self, caller, target, observed_at=None):
         if not self.available(caller, observed_at):
@@ -360,7 +347,7 @@ class Shopkeeper(ActionObject):
     actions = ("대화", "상점", "구매")
 
     def available(self, caller, observed_at=None):
-        return _medical_available(self, caller, observed_at) and self.db.shop_id in SHOP_CATALOGS
+        return _service_available(self, caller, observed_at) and self.db.shop_id in SHOP_CATALOGS
 
     def web_actions(self, caller, target, observed_at=None):
         if not self.available(caller, observed_at):

@@ -244,6 +244,10 @@ class Scenario:
             await first.open()
             assert saved == {key: first.state[key] for key in saved}
             self.report("persistence", "disconnect / fixture relogin / 상태 보존")
+            if self.harness.mode == "full":
+                from smoke_closeout import Closeout
+
+                await Closeout(self).run()
         except BaseException:
             details = {"mode": self.harness.mode, "scenario": self.phase,
                        "players": [player.summary() for player in self.players],

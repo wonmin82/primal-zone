@@ -1,5 +1,48 @@
 # 원시구역 테스트 안내
 
+## 현재 기준: 본부 전체 연결 검증
+
+아래 절차가 1~7단계 완료 후 현재 상태다. 뒤의 단계별 실행 수치·PR OPEN·부두 서비스 기록은 당시의 검증 이력이며 현재 기능의 기준이 아니다. 각 과거 기록은 삭제하지 않는다.
+
+1. 새 캐릭터는 출정 대기실에서 `남`으로 중앙홀에 들어간다. 재로그인은 저장 위치를 유지한다.
+2. 중앙홀 `남` → 1층 중앙 `서` → `북`으로 보관실. 두 보기 버튼과 공용/개인 `붕대 넣어`·`꺼내`를 확인한다.
+3. 보관실 `남` → `서` → `북`으로 정산소. 정산관 환율, 1개/N개/모두 정산과 Credits/resource 구분을 확인한다. 수리용 3개를 남기면 발전기에서도 사용할 수 있다.
+4. 정산소 `남` → `동` → `동`으로 1층 중앙, `승강기` → `2층` → `내리기` → `동` → `북`으로 훈련실. TRAINING에서 기술 disclosure를 열어 학습·배분·재훈련 control을 확인한다.
+5. 훈련실 `남` → `서` → `서` → `북`으로 의무실. HP 감소 상태에서 실제 의무관 치료와 침대 휴식 버튼을 확인한다. 둘 다 무료 full HP이며 패배 자동 회복 HP 1과 별개다.
+6. `귀환` → 옥상, `승강기` → `1층` → `내리기` → `동` → `북`은 보급관. 3층 중앙 `동` → `북`은 무기상, `서` → `북`은 방어구상. 메뉴는 각 catalog만, 구매는 Credits만 사용한다.
+7. 1층 중앙 `북` → `서`로 부두. 윤대장·탐사 동선만 남고 보관/훈련/의료/상점 서비스는 없다. `북`으로 초지에 들어가 실제 사냥·전리품 회수를 확인한다.
+8. 낮은 HP에서 실제 적에게 패배하면 의무실·HP 1·최대 10C 감소·전투 종료다. 직접 치료/휴식 후 나갈 수 있다. 일반 귀환은 옥상이며 home은 부두다.
+9. 데스크톱과 390px에서 SURROUNDINGS·hint·승강기·TRAINING·세 상점·resource/Credits·combat/loot control의 가로 넘침과 앱 console error/warning을 확인한다. 실제 OS IME는 별도 수동 검증이다.
+
+자동 연결 검증은 `scripts/dev.py smoke-full`이다. 실제 restart와 두 임무/보스 최종 보고가 포함되며 production 30/45/120초도 매 실행에서 측정한다. Quick `smoke`는 빠른 CI 연결 검증으로 계속 분리한다.
+
+### 본부 7단계 최종 로컬 검증 (2026-09-29)
+
+시작 main `63dca1bf9366d60af06a1728f0aaefb2bfdb6526`, branch `codex/hq-final-closeout`. PR #13~#20 MERGED, 시작 시 열린 PR 없음과 main Game checks #106/run 36528666351의 test/smoke success를 확인했다. 아래 결과는 이번 최종 코드의 새 실행이며 과거 수치를 재사용하지 않는다.
+
+| 검사 | 실제 결과 |
+| --- | --- |
+| `scripts/dev.py check` | 통과 |
+| `scripts/dev.py test` | pure 101 / 1.875초, integration 252 / 84.920초, total 353, 통합 runner 94.315초 |
+| `scripts/dev.py test world.test_smoke tests.test_hq_closeout tests.test_hq_services --parallel 2 --reverse` | 18 통과 / 14.875초, runner 23.496초 |
+| `node --check game/web/static/webclient/js/primal.js` | 통과, JS 변경 없음 |
+| `scripts/dev.py smoke` 즉시 연속 #1 / #2 | 45.956초 / 44.344초, 둘 다 성공·owned process 종료·temp 삭제 |
+| `scripts/dev.py smoke-full` | 293.796초, 실제 restart와 두 임무/보스 최종 보고 포함, 성공·정리 완료 |
+| Full 실제 첫 combat / corpse / respawn / protection | 2.835초 / 29.886초 / 44.501초 / 121.950초 |
+| play SQLite 안전성 | 모든 실행에서 size 733184, mtime_ns 1790080153765082800, SHA256 `b1318296f505b9b7522fcbdedff7642a06cf055e9de72802198c70e6b8a7f700` 동일 |
+
+전체 managed Object의 DB IDs/key/location/destination/aliases/stable tags/shop_id를 두 번 bootstrap 전후 비교했다. player profile 전체와 저장 위치, 공용 contents, 승강기 3층, facility/environment state가 같았고 integrity/stale는 비었다. malformed normalization·selector/poor/locked/distant privacy·멀티플레이 leader/leave/removal/XP/loot/한 명 패배 후 잔여 전투/rollback·동승 독립 하차는 기존 전체 integration 회귀가 유지한다.
+
+Live Full에서는 보관상자/개인 보관함에 넣기·꺼내기와 일부 보관, 부품 7개 정산/3개 수리용 보존, 강타 Rank 2 학습, Doctor 치료, outsider 실제 패배·의무실 HP 1·최대 10C·Bed 회복, 옥상 귀환·3종 상점 구매·장착을 연결했다. 정비기록→발전기 부품 3개 소비→능선 보스→윤대장 보고, 길잡이→두 표식→신호전지 소비→두 번째 gate→밀림 보스→최종 보고가 actual 서버/명령/DB/WS로 완료됐다. 두 gate의 미충족 거절도 확인했다. RNG drop을 반복 기다리거나 결과를 fixture로 완료하지 않았다.
+
+실제 restart 전 A는 승강기 3층에 있었고 B는 초지의 live claimed combat 중이었다. 공용 발전기와 상자·개인 보관·완료 임무·전리품이 있었다. harness가 같은 SQLite/설정/포트의 Portal+Server 두 프로세스를 실제 종료/시작한 뒤 세 계정 모두 재인증했다. DB identity/location/home=dock·XP/Credits/inventory/equipment/storage/growth/quests/discoveries/visited·파티·승강기·공용 contents·시설·환경 clock이 보존됐다. live combat/claim은 정리되고 남은 시체와 respawn은 실제 callback/sweep을 기다려 완료됐으며 모든 기존 loot entry가 ground에 유지됐다. forced OS crash 검증과 다르며 광원은 기존 off 정책을 따른다.
+
+브라우저는 별도의 guarded 격리 SQLite/서버에서 일반 Player 권한 계정으로 진행했다. 대기실/중앙홀·보관 보기/넣기·정산 환율/모두 교환(부품 10→0, 1000C→1100C)·승강기 1/2/3층/옥상·TRAINING disclosure와 Rank 2 학습·Doctor/Bed full HP·세 판매자 메뉴/붕대·마체테·강화조끼 구매·부두 윤대장/서비스 버튼 없음·초지 실제 사냥/바닥 회수 버튼을 확인했다. DOM clientWidth/scrollWidth는 데스크톱 1234/1234, 390px override 375/375로 같았고 구매 control 시각 줄바꿈도 확인했다. 앱 console error/warning은 발견하지 않았고 Chrome extension의 async listener channel 종료 오류 3건은 구분했다. viewport override를 복원하고 탭·서버·temp DB/runtime credential 파일을 정리했다. JS/CSS asset 변경이 없어 cache version을 올리지 않았으며 fixture setup에서 격리 서버의 static을 수집했다.
+
+근거는 Git 제외 `work/hq-closeout-tests.log`, `work/hq-closeout-quick1.log`, `work/hq-closeout-quick2.log`, `work/hq-closeout-full.log`, `work/hq-closeout-desktop.png`, `work/hq-closeout-mobile.png`다. 초기 관련 검사의 없는 모듈명/Evennia FK 필드명 기대를 바로잡고 실패한 새 검사부터 재검증했다. 개발 중 확장 Full 270.196초도 성공했지만 위 최종 Full은 restart callback 완료 polling까지 포함한다. assertion을 느슨하게 하거나 기존 테스트를 삭제하지 않았다.
+
+실제 OS IME·강제 OS crash·Windows CI·PostgreSQL/운영 DB·모든 날씨/달 조합·모든 quest branching은 미실행이며 이 closeout의 의도된 non-scope다. live 주요 progression의 최종 보고와 production timing은 이번 Full로 새로 검증했다. test/smoke CI job은 그대로 분리하고 Full은 일반 CI에 추가하지 않았다. branch protection 설정은 수정하지 않았다. 최신 PR HEAD/CI는 PR Validation 및 완료 보고에서 직접 대조한다.
+
 ## 보기 별칭과 방향 정찰
 
 - 현재 방의 `대상 보기`와 `대상 봐`, `대상 2 보기`와 `대상 2 봐`, `대상 모두 보기`와 `대상 모두 봐`를 비교한다. 적·시체·NPC·상자·가방 아이템과 단독 보기/봐에서 같은 정밀 정보를 제공해야 한다.
@@ -480,7 +523,7 @@ Set-Location -LiteralPath 'E:\Work\primal-zone'
 7. 귀환→옥상→공용 승강기 3층→동·북 무기점, 무기상 메뉴와 Credits 구매
 8. disconnect/logout→fixture 재인증, name/zone/hp/xp/credits/inventory/quest 비교
 
-사냥은 1회이며 구매 자금 100C·충분한 HP만 시작 fixture에 지급한다. blade·시체·전리품 결과를 미리 만들지 않는다. mock delay나 미래 시각의 직접 reconcile을 사용하지 않는다. 접속 인증은 WebSocket handshake 다음 실제 서버 연결 안내를 기다려 Portal→Server 등록 race를 피한다. timeout은 인증/상태/전투/lifecycle/readiness/setup/종료별로 구분한다. Full은 monotonic 관찰 시각으로 조기 만료와 Quick 타이머 누출도 검사한다(시간 허용 오차: lifecycle 하한 1.5초·상한 10초, 첫 combat round 하한 0.5초).
+Quick 사냥은 1회이며 구매 자금 100C·충분한 HP만 시작 fixture에 지급한다. Full은 첫 player의 회수부품 10개와 outsider의 HP 1도 전제로 준비한다. blade·시체·전리품 결과를 미리 만들지 않는다. mock delay나 미래 시각의 직접 reconcile을 사용하지 않는다. 접속 인증은 WebSocket handshake 다음 실제 서버 연결 안내를 기다려 Portal→Server 등록 race를 피한다. timeout은 인증/상태/전투/lifecycle/readiness/setup/종료별로 구분한다. Full은 monotonic 관찰 시각으로 조기 만료와 Quick 타이머 누출도 검사한다(시간 허용 오차: lifecycle 하한 1.5초·상한 10초, 첫 combat round 하한 0.5초).
 
 | 항목 | Production / Full | Quick |
 | --- | ---: | ---: |
@@ -499,7 +542,7 @@ Quick는 3분 이내의 연결 검증이 목적이며 PR/main CI의 별도 `smok
 
 공개 가입과 production signup throttle은 gameplay와 분리된 auth/registration 정책 검사다. Quick에서 fixture login/logout/relogin을 실제 검증하고, 가입·입력 검증은 기존 auth 통합/수동 절차를 따른다. 610초 정책 대기를 수행하는 공개 가입 system 검사는 필요 시 별도로 실행하며 Quick/Full의 선행 조건이 아니다. production signup 제한을 낮추거나 gameplay 실패를 가입 재시도로 숨기지 않는다.
 
-브라우저 DOM 자동화·실제 서버 restart E2E·OS IME·전체 보스/진행 closeout은 이 smoke에 포함하지 않는다. 아래 단계별 과거 기록의 로컬 DB/610초/5회 사냥 설명은 당시 스크립트에 대한 기록이며 현재 실행 방법은 이 절을 따른다.
+Full은 이어 본부 전체 서비스·실제 패배/회복·통신탑/밀림 임무와 두 보스 최종 보고·같은 DB의 Portal+Server 실제 restart를 검증한다. 재로그인 후 persistent profile·party·승강기·상자·시설·환경 clock을 비교하고 live combat/claim 정리·실제 시체/respawn callback 완료·ground entry 보존을 확인한다. 브라우저 표시·OS IME와 모든 임무 branching은 smoke에 포함하지 않는다. 아래 단계별 과거 기록의 로컬 DB/610초/5회 사냥 설명은 당시 스크립트에 대한 기록이며 현재 실행 방법은 이 절을 따른다.
 
 ## 7. 막혔을 때 확인할 사항
 
