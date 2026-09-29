@@ -16,7 +16,9 @@ profile v8은 heal Rank/queued action을 firstaid로 변환하고 저장된 명�
 
 최종 `scripts/dev.py check` 성공, 전체 `scripts/dev.py test`는 pure 120(1.767초)·integration 292(102.089초)·total 412·runner 110.948초 성공이다. 관련 50개는 `--parallel 2 --reverse`에서 22.607초·runner 31.509초 통과했다. 최종 Quick live smoke는 48.391초 성공, Full은 294.325초 성공하며 실제 첫 공격 2.928초·시체 만료 29.868초·적 재생성 44.762초·전리품 보호 만료 121.177초와 Portal+Server 재시작을 검증했다. 첫 Full 시도에서는 재시작 중 SQLite 잠금이 재현됐고 smoke 전용 DB 설정을 수정한 뒤 최종 Full을 성공시켰다. 일반 플레이 SQLite는 두 smoke의 SHA256·mtime_ns·size가 시작 전 값과 동일했다.
 
-격리 브라우저의 desktop 1249px·중간 1100px·mobile 390px에서 소지품/응급처치/도망·진료·상품 버튼, 3×3 방향도·SURROUNDINGS 순서, 승강기 3층 자동 하차, Credits 구매, 재로그인 대기실 시작·진행 보존을 확인했다. 앱 console error/warning과 가로 overflow는 없었다. 실제 체력 가득 상태에서 진료/붕대 버튼의 명령 연결과 정상 거절을 확인했으며 OS IME 입력 자체는 미검증이다. `node --check`와 격리 환경 collectstatic도 성공했다. commit/PR/최신 HEAD CI는 push 후 기록한다. 상세 어휘/migration/예약·묶음 한계는 [command-shortcuts.md](command-shortcuts.md), 구조는 [architecture.md](architecture.md), 최신 수동 절차는 [playtest.md](playtest.md) 앞부분을 따른다.
+격리 브라우저의 desktop 1249px·중간 1100px·mobile 390px에서 소지품/응급처치/도망·진료·상품 버튼, 3×3 방향도·SURROUNDINGS 순서, 승강기 3층 자동 하차, Credits 구매, 재로그인 대기실 시작·진행 보존을 확인했다. 앱 console error/warning과 가로 overflow는 없었다. 실제 체력 가득 상태에서 진료/붕대 버튼의 명령 연결과 정상 거절을 확인했으며 OS IME 입력 자체는 미검증이다. `node --check`와 격리 환경 collectstatic도 성공했다. 상세 어휘/migration/예약·묶음 한계는 [command-shortcuts.md](command-shortcuts.md), 구조는 [architecture.md](architecture.md), 최신 수동 절차는 [playtest.md](playtest.md) 앞부분을 따른다.
+
+기능 commit은 `df1648e4efb8493fa2a130414146cedd158e2724`, 새 [PR #24](https://github.com/wonmin82/primal-zone/pull/24)는 OPEN·base main·branch `codex/command-vocabulary-help`다. 기능 commit의 [Game checks run 36637618558](https://github.com/wonmin82/primal-zone/actions/runs/36637618558)는 headSha 일치, `test`·`smoke` 모두 success였다. 이 인계 기록을 추가한 뒤 바뀌는 최종 PR HEAD의 CI는 PR Validation과 GitHub Actions에서 다시 확인한다.
 
 ## 이전 PR #23 Objective (과거 기록)
 
