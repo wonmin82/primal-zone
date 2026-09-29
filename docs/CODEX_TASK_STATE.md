@@ -4,7 +4,7 @@
 
 ## Objective
 
-본부 1~5단계는 PR #13~#18로 병합 완료됐다. 6단계 작업 시작 시 깨끗한 main에서 fetch 후 HEAD와 origin/main은 모두 `d7141fbfd12572a19e744b36fd978fd8150c135e`였다. PR #18 MERGED와 해당 main [Game checks](https://github.com/wonmin82/primal-zone/actions/runs/36507707184) success를 직접 확인했다. 순수 88개(0.034초)·통합 239개(74.402초), 총 327개·runner 79.240초 통과이며 열린 PR은 없었다. 최신 main에서 `codex/hq-npc-shops`를 생성했고 현재 작업은 6단계 NPC 기반 상점 시스템이다. 아래 단계별 OPEN 및 이전 동선 서술은 당시 기록으로 보존한다.
+본부 1~5단계는 PR #13~#18로 병합 완료됐다. 6단계 작업 시작 시 깨끗한 main에서 fetch 후 HEAD와 origin/main은 모두 `d7141fbfd12572a19e744b36fd978fd8150c135e`였다. PR #18 MERGED와 해당 main [Game checks](https://github.com/wonmin82/primal-zone/actions/runs/36507707184) success를 직접 확인했다. 순수 88개(0.034초)·통합 239개(74.402초), 총 327개·runner 79.240초 통과이며 열린 PR은 없었다. 최신 main에서 `codex/hq-npc-shops`를 생성했고 6단계 NPC 기반 상점 구현·검증·commit/push와 [PR #19](https://github.com/wonmin82/primal-zone/pull/19) 생성을 완료했다. 구현 HEAD의 CI는 success이며 문서 후속 커밋까지 포함한 최신 HEAD/CI는 실제 GitHub 및 PR Validation을 따른다. PR은 OPEN이며 병합하지 않는다. 아래 단계별 OPEN 및 이전 동선 서술은 당시 기록으로 보존한다.
 
 본부 재설계 1단계와 방향 정정은 [PR #13](https://github.com/wonmin82/primal-zone/pull/13)으로 병합됐다. 병합 커밋은 `f9fcd52feb7c449eb94519d9e36f3504558056f4`다. 중앙홀 남/1층 중앙 북과 남쪽 폐쇄 출입구, 대기실 남/중앙홀 북과 중앙홀 서/부두 동을 유지한다. 상세 설계는 [본부 Room 구조 1단계](architecture.md#본부-room-구조-1단계)를 따른다.
 
@@ -18,7 +18,7 @@
 
 ### 본부 6단계 구현과 검증 (2026-09-29)
 
-- 시작 main은 `d7141fbfd12572a19e744b36fd978fd8150c135e`, branch는 `codex/hq-npc-shops`다. PR #13/#14/#15/#16/#17/#18는 MERGED다. 최종 재fetch에서도 origin/main은 시작 SHA와 같고 이미 포함하므로 rebase 재작성은 필요 없었다. 6단계 구현·로컬 검증은 완료했으며 현재 commit/push/PR/최신 HEAD CI를 진행한다.
+- 시작 main은 `d7141fbfd12572a19e744b36fd978fd8150c135e`, branch는 `codex/hq-npc-shops`다. PR #13/#14/#15/#16/#17/#18는 MERGED다. 최종 재fetch에서도 origin/main은 시작 SHA와 같고 이미 포함하므로 rebase 재작성은 필요 없었다. 6단계 구현·로컬/브라우저 검증·commit/push·PR 생성을 완료했다.
 - `Shopkeeper(ActionObject)`의 `supply_shopkeeper`(보급관/보급상인)→supply_shop, `weapon_shopkeeper`(무기상/무기 상인)→weapon_shop, `armor_shopkeeper`(방어구상/방어구 상인)→armor_shop을 추가했다. persistent `db.shop_id`는 각각 supply/weapon/armor이며 `world/content/shops.py`의 SHOP_CATALOGS가 유일한 catalog/가격 SSOT다. 기존 14개 가격과 Credits-only 1개 구매·무한 재고를 보존한다.
 - 메뉴는 `상점`/`메뉴`/`무기상 상점`/`무기상 메뉴`, 구매는 `강철마체테 구매`/`무기상에게 강철마체테 구매`처럼 사용한다. current room_objects의 실제 visible NPC를 공통 selector로 고른다. bare 메뉴는 보이는 상인이 하나일 때, bare 구매는 해당 상품 판매자가 하나일 때 선택하며 여럿은 이름·번호 지정이 필요하다. 실제 같은 Room·safe·비전투를 검사하며 hidden/view lock은 후보·오류·명령·hint·Web에서 제외한다. 다른 safe Room으로 실제 NPC를 옮기면 서비스가 따라간다.
 - global SHOP, 부두 Shop/Buy gate·static 상점 hint·Web 보급소 버튼과 더 이상 호출하지 않는 GameCommand.at_dock()을 제거했다. 모든 ActionObject가 web_actions capability를 제공하고 state는 subclass 이름을 구분하지 않는다. 기본 allowlist는 Commander/조사/수리/의료/Container 보기·Instructor 대화와 별도 TRAINING UI를 보존하며 SettlementOfficer/Shopkeeper만 동적 action을 override한다. 메뉴·가격 포함 구매 label·targeted command는 서버가 생성한다. client 상점 zone 특례는 없다.
@@ -27,6 +27,8 @@
 - 최종 `scripts/dev.py check` 통과, 전체 `scripts/dev.py test` pure 91개(0.127초)·integration 248개(82.570초), total 339개 통과·실패/skip 없음, 통합 runner 91.606초다. 근거는 `work/shops-final-full-success.log`다. 초기 fixture 실패 2개와 새 suite 역순·병렬 11개(15.312초, runner 26.203초)도 통과했다. 옛 자산 query assertion 실패는 해당 1개부터 수정 검증한 뒤 위 전체를 실행했다. 최종 성공 이후 production/test 변경은 없다.
 - JS 문법·smoke Python syntax·diff 검사 통과다. game과 별도 SQLite 검증 서버에서 최종 정적 파일을 수집했다. 일반 계정으로 세 NPC/메뉴/구매, 버튼·직접 붕대 구매의 동일 효과, 정산 6개→60C→무기점 구매, 부두 상인 없음·윤대장 보존을 확인했다. 정산·의료·Container 보기와 기존 훈련 panel 표시/활성을 확인했으며 의료·훈련을 브라우저에서 다시 실행하지는 않았다. 데스크톱 폭 1234/1234px, 390px에서 375/375px로 가로 overflow가 없었다. 앱 JS stack 오류는 관찰하지 않았고 Chrome 비동기 listener 채널 오류 2건은 별도 기록했다. 검증 탭/서버 종료·viewport 원복 완료, 플레이 DB는 읽거나 변경하지 않았다. [상세 기록](playtest.md#6단계-실제-검증-기록-2026-09-29)을 따른다.
 - 전체 smoke는 610초 가입 대기와 실제 반복 전투 때문에 미실행이며 변경된 경로를 자동/별도 DB 브라우저/syntax로 확인했다. 실제 OS IME·이번 변경의 전체 restart/reconnect·운영 DB 적용·전체 멀티플레이 수동 검증도 미실행이다. 7단계 통합 cleanup/전체 회귀검증은 이 PR 검토·병합 후 최신 main에서 별도 요청으로 진행한다. PR은 병합하지 않는다.
+- 원격 기록 작성 시 로컬/원격/PR 구현 HEAD는 `117bc17beaf1c73417ecd150b2145997f2a551ef`로 같고 작업 트리는 깨끗했다. [PR #19](https://github.com/wonmin82/primal-zone/pull/19)는 OPEN·비Draft·MERGEABLE이다. 이 SHA의 [Game checks](https://github.com/wonmin82/primal-zone/actions/runs/36518994902) success를 headSha와 직접 대조했다. 원격 check 통과, pure 91개(0.045초)·integration 248개(99.501초), total 339개·runner 105.321초다. 근거는 `work/shops-first-ci.log`다.
+- 이 PR/CI 기록은 문서 전용 후속 커밋에 포함한다. 위 SHA/CI는 기능 구현의 확인 기준이며 최종 문서 HEAD의 원격 CI는 push 후 별도로 직접 확인해 PR Validation과 완료 보고에 기록한다. 실행 코드·테스트가 같아 로컬 전체 검사는 반복하지 않고 문서 diff·링크·기록을 검증한다. 기존 구현 CI를 최종 HEAD 결과로 대신하지 않는다.
 
 ### 본부 5단계 구현과 검증 (2026-09-29, 과거 기록)
 
@@ -206,7 +208,7 @@
 
 ## Partially Implemented / In Progress
 
-본부 1~5단계와 테스트 성능 개선은 PR #13~#18로 병합 완료다. 6단계 NPC 상점의 구현·자동/브라우저 검증은 완료했고 commit/push/PR/최신 HEAD CI를 진행한다. 7단계 통합 closeout은 현재 PR 검토·병합 후 별도 요청으로 진행하는 후속 범위다.
+본부 1~5단계와 테스트 성능 개선은 PR #13~#18로 병합 완료다. 6단계 NPC 상점은 구현·자동/브라우저 검증·commit/push 완료이며 PR #19 검토·병합을 남긴다. 구현 HEAD CI는 success이고 문서 후속 커밋의 최종 HEAD/CI는 실제 GitHub 및 PR Validation을 따른다. 7단계 통합 closeout은 현재 PR 검토·병합 후 별도 요청으로 진행하는 후속 범위다.
 
 ## Validation
 
