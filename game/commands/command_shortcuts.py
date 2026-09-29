@@ -100,10 +100,13 @@ class Shortcuts(GameCommand):
         "줄임말 · 줄임말 추가 이름 정의 · 줄임말 삭제 이름 · "
         "줄임말 모두 삭제 · 줄임말 모두 삭제 확인"
     )
-    summary = "캐릭터 개인 줄임말을 관리합니다. 전체 삭제는 요청 후 60초 안에 확인해야 하며 목록 변경 시 요청이 취소됩니다."
+    summary = "캐릭터 개인 줄임말을 관리합니다. 전체 삭제 요청과 확인은 각각 직접 입력하며, 60초 안에 확인해야 합니다. 목록 변경 시 요청이 취소됩니다."
 
     def run(self):
         args = self.args.strip()
+        # 금지된 간접 실행은 요청 생성·기존 요청 소비 전에 거절한다.
+        if args in ("모두 삭제", "모두 삭제 확인") and getattr(self, "primal_sequence_leaf", False):
+            raise rules.RuleError("전체 삭제 요청과 확인은 각각 직접 입력하세요. 묶음·줄임말로 실행할 수 없습니다.")
         shortcuts = self.caller.profile_snapshot().get("command_shortcuts", {})
         if not args:
             entries = [f"{name} = {', '.join(commands) + ' 해' if len(commands) > 1 else commands[0]}"

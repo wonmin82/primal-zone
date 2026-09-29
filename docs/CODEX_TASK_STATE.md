@@ -6,11 +6,23 @@
 
 본부 재설계 1~7단계와 P0 smoke 인프라는 PR #13~#21으로 병합·closeout 완료됐다. 현재 작업은 본부 8단계가 아닌 **개인 줄임말 / 묶음 명령** 독립 기능이다. 시작 시 main 작업 트리는 깨끗했고 status·unstaged/staged diff 확인 및 fetch 후 HEAD/origin/main은 모두 `a748d284d42935ce42ca151cf9e8c36c6942b731`이었다. PR #21 MERGED와 병합 후 [Game checks run 36547264547](https://github.com/wonmin82/primal-zone/actions/runs/36547264547)의 test/smoke success를 실제 확인했다. 해당 과거 main CI는 pure 101·integration 252·total 353, runner 100.197초·Quick 18.965초다. 최신 main에서 `codex/personal-command-shortcuts`를 생성했다. 아래 단계별 OPEN·부두 서비스 설명은 당시 기록이며 현재 상태보다 우선하지 않는다.
 
-### 개인 줄임말 / 묶음 명령 (2026-09-29)
+### PR #22 리뷰 반영 (2026-09-29)
+
+이번 작업 시작 시 PR #22는 OPEN, branch는 `codex/personal-command-shortcuts`, 로컬/원격 PR HEAD는 `7cb85ad37ac5fb5516769acd1db03a855aeba87c`였다. 작업 트리는 깨끗했고 status·unstaged/staged diff 확인 및 fetch 후 origin/main은 `a748d284d42935ce42ca151cf9e8c36c6942b731`로 동일했다. 새 PR 없이 기존 branch에서 P1 코드/테스트와 P2 문서만 수정한다.
+
+P1: `Shortcuts.run()`의 전체 삭제 request/confirmation은 각각 top-level 직접 입력만 허용한다. 기존 `primal_sequence_leaf`를 pending 읽기·생성·소비·검증·profile 변경 전에 검사하므로 묶음/개인 줄임말의 간접 request는 pending을 만들거나 갱신하지 않고 간접 confirmation은 기존 valid pending을 보존한다. 이후 직접 confirmation은 TTL/fingerprint가 유효하면 정상 동작한다. 기존 확인 단독 차단·60초·목록 변경 취소·정상 확인 one-shot·0개·캐릭터 격리·logout/shutdown 계약은 유지한다. 새 integration 5개가 request+confirm 묶음/초기화 shortcut·간접 request·간접 confirmation·이후 직접 확인을 검증하며 기존 안전 테스트도 그대로 유지한다.
+
+P2는 구현 확장 없이 알려진 한계로 기록한다. 묶음은 단순 comma split이므로 literal comma가 있는 command는 직접 segment로 표현할 수 없다. 단일 개인 줄임말로 저장한 뒤 `인사, 상태 해`로 참조할 수 있다. progressive 사전 검사는 시작 시점 merged cmdset 기준이며 이동/상태 변경 후 새 CmdSet에 나타나는 progressive command까지 예측하지 않는다. 현재 `game/commands`의 실제 `func()` 5개를 AST로 확인했고 generator/coroutine은 없었다. escaping/quoting·future CmdSet 합성·runtime 중단/partial execution 정책·completion/result contract는 향후 설계 후보이며 이번 PR에서 구현하지 않았다. 상세 SSOT는 [command-shortcuts.md](command-shortcuts.md)다.
+
+관련 `world.test_command_shortcuts tests.test_command_shortcuts tests.test_integration tests.test_text --parallel 2 --reverse`는 63개 / 21.685초·runner 29.934초 통과했고 `scripts/dev.py check`도 통과했다. 최종 `scripts/dev.py test`는 pure 109 / 2.144초·integration 274 / 89.825초·total 383·통합 runner 99.229초 성공이다. `scripts/dev.py smoke`는 54.160초 성공했고 owned process/temp 정리 및 play SQLite SHA256·mtime_ns·size 불변을 확인했다. 근거는 Git 제외 `work/shortcuts-review-related.log`, `work/shortcuts-review-full.log`, `work/shortcuts-review-quick.log`다. 아래 378개/46.471초는 최초 구현 시점 결과이며 리뷰 수정의 새 결과로 재사용하지 않는다.
+
+Full/브라우저/OS IME는 미실행이다. 이번 변경은 destructive 관리 guard와 문서이며 Web UI/asset/gameplay timer를 바꾸지 않아 관련 integration·전체 test·Quick으로 검증했다. JS가 동일하므로 node/collectstatic도 반복하지 않았다. 최종 fetch의 origin/main은 동일했고 이미 포함하므로 rebase로 커밋을 재작성하지 않았다. 전체 검사 이후 실행 코드·테스트는 변경하지 않고 문서에 결과만 반영했다. 후속 commit의 최종 PR HEAD와 test/smoke CI는 push 후 workflow headSha를 직접 대조해 PR Validation에 기록한다.
+
+### 개인 줄임말 / 묶음 최초 구현 (2026-09-29, 과거 검증 기록)
 
 `해` 인자의 콤마만 sequence separator로 사용하며 일반 콤마 채팅은 유지한다. `줄임말 추가 이름 정의`는 = 없는 prefix 문법이고 목록·교체·개별 삭제·중첩·exact-match를 지원한다. profile v7의 `command_shortcuts`는 캐릭터별 명령 list이며 v1~v6 migration은 기존 게임 데이터를 보존한다. 실제 명령·lock·시스템 shortcut이 개인 설정보다 우선한다. parser 조회는 `profile_snapshot()`으로 저장 부작용이 없다.
 
-순수 helper는 `commands/shortcuts.py`, 서버 관리/dispatch는 `commands/command_shortcuts.py`, parser fallback은 `server/conf/cmdparser.py`다. 실행 전에 전체 재귀 flatten과 순환/깊이 5/명령 10/문자 합계 1000 검사를 완료하고 각 `execute_cmd()` 완료를 기다린다. 개별 gameplay 실패는 다음 실행을 막지 않는다. 설치된 Evennia 6.1의 progressive engine `func` 완료 계약 때문에 해당 명령의 묶음 자동화는 사전 거절하며 단독 실행은 유지한다.
+순수 helper는 `commands/shortcuts.py`, 서버 관리/dispatch는 `commands/command_shortcuts.py`, parser fallback은 `server/conf/cmdparser.py`다. 실행 전에 전체 재귀 flatten과 순환/깊이 5/명령 10/문자 합계 1000 검사를 완료하고 각 `execute_cmd()` 완료를 기다린다. 개별 gameplay 실패는 다음 실행을 막지 않는다. 설치된 Evennia 6.1의 progressive engine `func` 완료 계약 때문에 시작 cmdset에서 식별되는 해당 명령의 묶음 자동화는 사전 거절하며 단독 실행은 유지한다. 동적 CmdSet의 보장 경계는 위 리뷰 기록을 따른다.
 
 전체 삭제 요청은 캐릭터 `ndb.shortcut_delete_all_request`의 monotonic timestamp + 목록 SHA256 fingerprint다. 요청만으로 삭제하지 않고, 확인 단독 입력도 삭제하지 않는다. 60초 내 동일 목록인 경우만 한 번 삭제하며 등록·교체·개별 삭제·로그아웃·종료에서 무효화한다. 0개 요청·캐릭터 간 권한 공유·확인 재사용을 차단한다. 현재 설계/안전 계약/한계/향후 후보는 [command-shortcuts.md](command-shortcuts.md), 짧은 사용법은 README에 있다.
 
@@ -165,7 +177,7 @@ Live Full에서는 보관상자/개인 보관함에 넣기·꺼내기와 일부 
 
 ## Current Repository State
 
-현재 branch는 `codex/personal-command-shortcuts`, 시작 main은 `a748d284d42935ce42ca151cf9e8c36c6942b731`이다. PR #13~#21 MERGED이며 본부 계획은 closeout 완료다. 개인 줄임말/묶음 기능의 구현·검증·문서화를 완료하고 [PR #22](https://github.com/wonmin82/primal-zone/pull/22)을 OPEN·비Draft로 생성했다. 구현 커밋은 `ce3dfe8fad5ce2f91d99f927c40cf08d158bd952`다. PR 생성 뒤 이 문서 전용 커밋을 추가하며 실행 코드·테스트는 동일하므로 로컬 검사를 반복하지 않는다. 문서까지 포함한 최종 HEAD의 test/smoke CI는 push 후 확인해 PR Validation에 SHA와 실행 링크를 기록한다. 구현 HEAD의 CI를 최종 결과로 대신하지 않으며 PR을 merge하지 않는다.
+현재 branch는 `codex/personal-command-shortcuts`, 시작 main은 `a748d284d42935ce42ca151cf9e8c36c6942b731`이다. PR #13~#21 MERGED이며 본부 계획은 closeout 완료다. [PR #22](https://github.com/wonmin82/primal-zone/pull/22)은 OPEN·비Draft이며 최초 구현 커밋은 `ce3dfe8fad5ce2f91d99f927c40cf08d158bd952`, 이번 리뷰 시작 HEAD는 `7cb85ad37ac5fb5516769acd1db03a855aeba87c`다. 위 리뷰 보강을 후속 commit으로 같은 PR에 push하며 문서까지 포함한 최종 HEAD의 test/smoke CI를 workflow headSha와 직접 대조해 PR Validation에 기록한다. 과거 HEAD의 CI를 이번 최종 결과로 대신하지 않으며 PR을 merge하지 않는다.
 
 ### 7단계 PR 생성 직후 저장소 상태 (과거 기록)
 

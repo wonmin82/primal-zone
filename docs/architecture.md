@@ -177,9 +177,9 @@ parser는 마지막 token으로 행동만 찾는다. Command는 인자 문법·�
 
 `해`의 인자에서만 콤마를 구분자로 사용하며 일반 채팅은 바꾸지 않는다. 순수 `commands/shortcuts.py`가 정의 parsing·재귀 flatten·cycle/depth/count/size 검증·전체 삭제 fingerprint/TTL을 담당하고, `commands/command_shortcuts.py`가 관리와 기존 dispatcher의 순차 호출을 연결한다. parser는 실제 명령·lock·시스템 shortcut을 먼저 처리한 뒤 입력 전체가 개인 이름일 때만 `profile_snapshot()`으로 조회한다. 설정 등록은 `줄임말 추가 이름 정의`의 명시적인 전치형이다.
 
-실행 전 전체 flat 목록을 확정한 뒤 각 `execute_cmd()` Deferred 완료를 기다린다. Evennia 6.1은 일반 `func`의 Deferred 반환을 기다리지 않으므로 dispatch는 `at_post_cmd`에서 수행한다. 추가 입력을 받는 progressive engine 명령은 사전 거절하며 game command failure는 이후 실행을 막지 않는다. 전체 묶음은 transaction이 아니다. 실행 중 새로 등록된 정의는 같은 묶음에서 재확장하지 않는다.
+실행 전 전체 flat 목록을 확정한 뒤 각 `execute_cmd()` Deferred 완료를 기다린다. Evennia 6.1은 일반 `func`의 Deferred 반환을 기다리지 않으므로 dispatch는 `at_post_cmd`에서 수행한다. 시작 시점 merged cmdset에서 식별되는 generator/coroutine 명령은 사전 거절한다. 앞 명령이 새 CmdSet을 활성화한 뒤 등장하는 progressive command는 예측하지 않으며 현재 gameplay에는 해당 command가 없다. game command failure는 이후 실행을 막지 않는다. 전체 묶음은 transaction이 아니다. 실행 중 새로 등록된 정의는 같은 묶음에서 재확장하지 않는다.
 
-`profile.command_shortcuts`는 캐릭터별 영구 설정이며 profile v7 migration은 기존 게임 상태를 유지한 채 빈 기본값만 보완한다. 전체 삭제는 캐릭터 ndb의 60초 요청과 목록 fingerprint를 검증한 경우에만 한 번 저장한다. 확인 단독 입력·만료·목록 변경·로그아웃/종료 후에는 삭제하지 않는다. 한도·예약 이름·현재 한계와 향후 후보는 [개인 줄임말과 묶음 명령](command-shortcuts.md)을 따른다.
+`profile.command_shortcuts`는 캐릭터별 영구 설정이며 profile v7 migration은 기존 게임 상태를 유지한 채 빈 기본값만 보완한다. 전체 삭제 요청과 확인은 각각 별개의 top-level 직접 입력만 허용하며 `primal_sequence_leaf` 간접 실행은 pending을 건드리기 전에 거절한다. 캐릭터 ndb의 60초 요청과 목록 fingerprint를 검증한 경우에만 한 번 저장한다. 확인 단독 입력·만료·목록 변경·로그아웃/종료 후에는 삭제하지 않는다. 콤마 segment·동적 CmdSet preflight의 한계와 향후 후보는 [개인 줄임말과 묶음 명령](command-shortcuts.md)을 따른다.
 
 ## Party의 단일 상태
 

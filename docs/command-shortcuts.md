@@ -70,29 +70,32 @@ Syntax/expansion/사전 안전 검사 실패는 전체를 거절하고 어떤 �
 
 설치된 Evennia **6.1.0**의 `DefaultObject.execute_cmd()`는 cmdhandler의 Deferred를 반환한다. cmdhandler는 pre/post hook을 기다리지만 일반 `func()`가 반환한 Deferred는 기다리지 않는다. 따라서 묶음의 `Sequence.at_post_cmd()`에서 각 dispatch Deferred를 순서대로 yield한다. 임의 sleep으로 순서를 맞추거나 gameplay rule을 직접 호출하지 않는다. 실제 비동기 pre/post hook을 가진 명령에서도 다음 dispatch가 먼저 시작되지 않는 것을 integration으로 검증한다.
 
-추가 입력/대기를 사용하는 generator/coroutine `func`의 엔진 명령은 실행 전 거절한다. 특히 Evennia의 progressive generator는 command dispatcher의 Deferred보다 나중에 완료되므로 이번 기능으로 자동화하지 않는다. 해당 명령은 단독 실행한다. 기존 게임 명령과 일반 엔진 명령의 단독 semantics를 변경하지 않는다.
+묶음 시작 시점의 merged cmdset(`self.cmdset`)에서 식별되는 generator/coroutine `func`는 실행 전에 거절한다. 특히 Evennia의 progressive generator는 command dispatcher의 Deferred보다 나중에 완료되므로 해당 명령은 단독 실행한다. 앞 명령이 위치/상태를 바꿔 새로운 CmdSet을 활성화한 뒤에만 나타나는 progressive command까지 사전에 예측하는 것은 보장하지 않는다. 상세 경계는 아래 현재 한계를 따른다. 기존 게임 명령과 일반 엔진 명령의 단독 semantics는 변경하지 않는다.
 
 개별 command가 RuleError·대상 없음·UnknownCommand로 실패해도 다음 command를 계속 실행한다. 묶음은 `&&`나 transaction이 아니며 이미 성공한 행동을 되돌리지 않는다. 다른 사용자/입력과 전체 묶음을 하나의 atomic action으로 만들지도 않는다.
 
 ## 전체 삭제 안전 계약
 
 ```text
-줄임말 모두 삭제
+사용자 직접 입력 #1: 줄임말 모두 삭제
 → 현재 개수 안내 + 삭제 요청만 생성
 → 실제 shortcut 변경 없음
 
-줄임말 모두 삭제 확인
+사용자 직접 입력 #2: 줄임말 모두 삭제 확인
 → 유효한 요청·TTL·fingerprint 확인 후 한 번에 삭제
 ```
 
 향후 refactor에서도 다음 계약을 유지해야 한다.
 
 - **확인 command 단독 입력은 삭제 권한이 아니다.** 이전 요청이 없으면 안내만 하고 정의를 보존한다.
+- **전체 삭제 요청과 확인은 각각 별개의 top-level 직접 입력만 허용한다.** 묶음/개인 줄임말의 최종 dispatch에는 `primal_sequence_leaf=True`가 붙으며 `Shortcuts.run()`은 두 operation의 간접 실행을 pending 읽기·생성·소비·검증과 profile 변경 전에 거절한다.
+- `줄임말 모두 삭제, 줄임말 모두 삭제 확인 해`, `상태, 줄임말 모두 삭제 해`, `상태, 줄임말 모두 삭제 확인 해`와 같은 묶음이나 이를 저장한 개인 줄임말로는 삭제 요청/확인을 할 수 없다. 일반 묶음의 상태 조회 등 다른 명령은 기존 실패 후 계속 semantics를 따른다.
+- `삭제요청 = 줄임말 모두 삭제`, `확정 = 줄임말 모두 삭제 확인`, `초기화 = 줄임말 모두 삭제, 줄임말 모두 삭제 확인 해`를 등록해도 간접 요청은 pending을 만들거나 갱신하지 않는다. 간접 확인은 기존 유효 pending을 소비하지 않으므로 이후 직접 확인은 TTL/fingerprint가 유효하면 성공한다.
 - 요청은 캐릭터의 `ndb.shortcut_delete_all_request`에 monotonic timestamp와 정렬된 이름/command list의 SHA256 fingerprint로 저장한다. profile/DB/account에 저장하지 않는다.
 - 요청부터 60초 미만에만 확인할 수 있다. timestamp가 역행하거나 만료하면 거절하며 lazy expiry를 사용한다. 별도 scheduler가 없다.
 - 성공한 등록·교체·개별 삭제는 pending request를 취소한다. 별도 경로에서 목록이 바뀌어도 확인 시 fingerprint 불일치로 차단한다.
 - 새 요청은 현재 상태 기준으로 이전 요청을 교체한다. 0개이면 요청을 만들지 않고 이전 요청도 제거한다.
-- 확인 시 request를 먼저 소비한다. 성공은 `profile["command_shortcuts"] = {}` 한 번의 저장으로 처리하며 같은 확인을 재사용할 수 없다. 실패 후에도 새 요청이 필요하다.
+- 허용된 top-level 확인 시 request를 먼저 소비한다. 성공은 `profile["command_shortcuts"] = {}` 한 번의 저장으로 처리하며 같은 확인을 재사용할 수 없다. 실패한 정상 확인 후에도 새 요청이 필요하다. 금지된 간접 확인은 이 one-shot flow에 진입하지 않는다.
 - 로그아웃/정상 서버 종료 hook에서 제거하고 실제 프로세스 restart에서도 non-persistent 요청은 살아남지 않는다.
 - char1의 요청으로 char2가 확인할 수 없고 char2의 확인이 char1 요청을 소비하지도 않는다.
 
@@ -108,6 +111,27 @@ Syntax/expansion/사전 안전 검사 실패는 전체를 거절하고 어떤 �
 | 공백 포함 이름·account 공용 설정 | 한-token/캐릭터 단위만 지원 |
 | import/export·Web 관리 UI | 현재는 서버 텍스트 명령만 지원 |
 | 무제한 확장 | 10개/5단계/1000자 한도로 부하·순환 방지 |
+| Literal comma를 포함하는 묶음 segment | 단순 `split(",")`이며 segment escaping/quoting은 지원하지 않음. 개인 줄임말 참조로 사용 |
+| 동적 CmdSet에서 새로 나타나는 progressive command | 사전 검사는 시작 시점 cmdset 기준. 이동/상태 변경 후 등장하는 command의 완료는 사전 보장하지 않음 |
+
+### 콤마가 포함된 명령을 묶음에서 사용하기
+
+일반 단일 입력 `안녕, 반가워 말`은 한 번의 채팅이다. 하지만 `안녕, 반가워 말, 상태 해`는 `안녕` / `반가워 말` / `상태`로 나뉘므로 literal comma가 포함된 command를 묶음의 한 segment로 직접 작성할 수 없다. 작은따옴표 채팅 문법은 묶음 segment를 quoting하는 문법이 아니다. `\,` escape·CSV-like parser·새 separator는 구현하지 않는다.
+
+현재 workaround는 해당 command를 단일 개인 줄임말로 저장하고 묶음에서 이름을 참조하는 것이다.
+
+```text
+줄임말 추가 인사 안녕, 반가워 말
+인사, 상태 해
+```
+
+최종 expansion은 `["안녕, 반가워 말", "상태"]`이며 단일 command 안의 콤마는 그대로 유지된다. 즉석 묶음과 저장 정의의 separator 문법은 동일하다.
+
+### 동적 CmdSet과 progressive 사전 검사
+
+예를 들어 `북`으로 이동한 연구소에서만 추가 입력을 받는 `해킹` 명령이 활성화된다면, `북, 해킹, 상태 해`를 시작할 때의 cmdset에는 해킹이 없어 사전 검사에서 발견하지 못할 수 있다. 실제 두 번째 dispatch는 이동 후 cmdset을 사용한다. 현재 `game/commands`의 실제 gameplay `func()`에는 이 조건을 만족하는 generator/coroutine command가 없어 알려진 실제 회귀는 없다.
+
+미래의 위치/상태 CmdSet을 예측·합성하지 않으며 dispatch 직전 progressive를 발견해 중단하는 정책도 이번 PR에서는 추가하지 않는다. 앞 명령이 이미 실행된 뒤의 중단은 partial execution 계약을 따로 정의해야 한다. 향후 그러한 command를 추가할 때 metadata(`allow_in_sequence`/progressive 여부), 현재 cmdset 재검사, runtime 중단과 partial execution 허용 여부, command completion/result contract를 함께 검토한다.
 
 ## 향후 구현 후보
 
@@ -125,12 +149,30 @@ Syntax/expansion/사전 안전 검사 실패는 전체를 거절하고 어떤 �
 | rename | 다른 정의의 참조를 함께 바꿀지 결정 |
 | 검색/필터 | 안정적인 목록 순서와 결과 범위 |
 | 시스템 기본 단축어 사용자화 | 기존 명령 precedence와 호환성 |
+| 묶음 segment escaping/quoting | escape syntax·채팅 quoting과의 관계·backward compatibility·저장 정의와 즉석 묶음의 동일 grammar |
+| 동적 CmdSet + progressive 실행 정책 | command metadata·dispatch 직전 재검사·중단/partial execution·completion/result contract |
 
 ## 검증 위치
 
 순수 suite는 `world.test_command_shortcuts`, DB/dispatcher suite는 `tests.test_command_shortcuts`다. 기존 `tests.test_integration`/`tests.test_text`와 전체 suite가 후치형·채팅·관리·lock·인증 parser와 기존 gameplay 회귀를 검증한다. Quick live smoke는 실제 서버/WS/scheduler의 기존 전체 경로를 검증한다. 이번 기능 때문에 smoke scenario나 client UI를 확장하지 않는다.
 
-### 2026-09-29 구현 검증
+### 2026-09-29 PR #22 리뷰 반영 검증
+
+시작 PR HEAD는 `7cb85ad37ac5fb5516769acd1db03a855aeba87c`, fetch 후 origin/main은 `a748d284d42935ce42ca151cf9e8c36c6942b731`이었다. 기존 `codex/personal-command-shortcuts`에서 P1 guard·회귀를 추가했고 P2는 문서만 보완했다.
+
+| 실행 | 새 실제 결과 |
+| --- | --- |
+| `scripts/dev.py check` | 통과 |
+| `scripts/dev.py test world.test_command_shortcuts tests.test_command_shortcuts tests.test_integration tests.test_text --parallel 2 --reverse` | 63 통과 / 21.685초, runner 29.934초 |
+| `scripts/dev.py test` | pure 109 / 2.144초, integration 274 / 89.825초, total 383, 통합 runner 99.229초 |
+| `scripts/dev.py smoke` | Quick 성공 / 54.160초, process stop·temp cleanup 완료 |
+| 플레이 SQLite 보호 | smoke 전후 SHA256·mtime_ns·size 동일 |
+
+새 integration 5개는 request+confirm 한 묶음·초기화 shortcut, 간접 request의 pending 생성/갱신 차단, shortcut/sequence 간접 confirmation의 pending 보존과 이후 직접 confirmation 성공을 검증한다. 기존 직접 요청·단독 확인 차단·TTL/fingerprint·목록 변경 취소·one-shot·0개·캐릭터 격리·logout/shutdown·이름 모두 테스트는 유지했다.
+
+Full/브라우저/OS IME는 미실행이며 UI/asset/gameplay timer 변경이 없어 반복하지 않았다. AST로 현재 gameplay `func()` 5개에 generator/coroutine이 없음을 확인했고 순수 expansion으로 literal comma의 개인 줄임말 workaround를 확인했다. escaping/quoting·동적 CmdSet 예측·progressive runtime 중단·command-result framework는 구현하지 않았다. 최종 PR HEAD의 원격 test/smoke CI는 push 후 PR Validation에서 workflow headSha와 대조한다.
+
+### 2026-09-29 최초 구현 검증 (과거 기록)
 
 기준 main은 `a748d284d42935ce42ca151cf9e8c36c6942b731`, branch는 `codex/personal-command-shortcuts`다. 아래는 이번 구현에서 실제 실행한 로컬 결과다.
 

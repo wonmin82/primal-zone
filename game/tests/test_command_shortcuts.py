@@ -198,12 +198,83 @@ class CommandShortcutsTests(WorldCommandTest):
         self.assertEqual(self.saved(), before)
         self.run_raw("줄임말 모두 삭제")
         self.assertEqual(self.saved(), before)
+        self.assertIsNotNone(self.char1.ndb.shortcut_delete_all_request)
         self.assertIn("2개", self.run_raw("줄임말 모두 삭제 확인"))
         self.assertEqual(self.saved(), {})
         self.assertIsNone(self.char1.ndb.shortcut_delete_all_request)
         self.register("c", "가방")
         self.run_raw("줄임말 모두 삭제 확인")
         self.assertEqual(self.saved(), {"c": ["가방"]})
+
+    def test_sequence_cannot_request_and_confirm_all_deletion(self):
+        self.register("a", "상태")
+        self.register("b", "장비")
+        before = self.char1.profile_snapshot()
+        # 설정 prefix가 먼저 해석하는 입력도 삭제 경로에 들어가면 안 된다.
+        output = self.run_raw("줄임말 모두 삭제, 줄임말 모두 삭제 확인 해")
+        self.assertIn("줄임말 모두 삭제 확인", output)
+        self.assertEqual(self.char1.profile_snapshot(), before)
+        self.assertIsNone(self.char1.ndb.shortcut_delete_all_request)
+        output = self.run_raw("상태, 줄임말 모두 삭제, 줄임말 모두 삭제 확인 해")
+        self.assertIn("체력", output)
+        self.assertEqual(output.count("각각 직접 입력"), 2)
+        self.assertEqual(self.char1.profile_snapshot(), before)
+        self.assertIsNone(self.char1.ndb.shortcut_delete_all_request)
+
+    def test_shortcut_cannot_request_and_confirm_all_deletion(self):
+        self.register("a", "상태")
+        self.register("초기화", "줄임말 모두 삭제, 줄임말 모두 삭제 확인 해")
+        before = self.char1.profile_snapshot()
+        output = self.run_raw("초기화")
+        self.assertEqual(output.count("각각 직접 입력"), 2)
+        self.assertEqual(self.char1.profile_snapshot(), before)
+        self.assertIn("초기화", self.saved())
+        self.assertIsNone(self.char1.ndb.shortcut_delete_all_request)
+
+    def test_indirect_request_cannot_create_or_replace_pending(self):
+        self.register("삭제요청", "줄임말 모두 삭제")
+        before = self.char1.profile_snapshot()
+        for raw in ("삭제요청", "상태, 줄임말 모두 삭제 해"):
+            self.assertIn("각각 직접 입력", self.run_raw(raw))
+            self.assertEqual(self.char1.profile_snapshot(), before)
+            self.assertIsNone(self.char1.ndb.shortcut_delete_all_request)
+        self.run_raw("줄임말 모두 삭제")
+        request = deepcopy(self.char1.ndb.shortcut_delete_all_request)
+        for raw in ("삭제요청", "상태, 줄임말 모두 삭제 해"):
+            self.assertIn("각각 직접 입력", self.run_raw(raw))
+            self.assertEqual(self.char1.profile_snapshot(), before)
+            self.assertEqual(self.char1.ndb.shortcut_delete_all_request, request)
+
+    def test_shortcut_confirmation_preserves_pending_for_direct_confirmation(self):
+        self.register("a", "상태")
+        self.register("확정", "줄임말 모두 삭제 확인")
+        before = self.char1.profile_snapshot()
+        self.assertIn("각각 직접 입력", self.run_raw("확정"))
+        self.assertEqual(self.char1.profile_snapshot(), before)
+        self.assertIsNone(self.char1.ndb.shortcut_delete_all_request)
+        self.run_raw("줄임말 모두 삭제")
+        request = deepcopy(self.char1.ndb.shortcut_delete_all_request)
+        self.assertIn("각각 직접 입력", self.run_raw("확정"))
+        self.assertEqual(self.char1.profile_snapshot(), before)
+        self.assertEqual(self.char1.ndb.shortcut_delete_all_request, request)
+        self.assertIn("2개", self.run_raw("줄임말 모두 삭제 확인"))
+        self.assertEqual(self.saved(), {})
+        self.assertIsNone(self.char1.ndb.shortcut_delete_all_request)
+
+    def test_sequence_confirmation_preserves_pending_for_direct_confirmation(self):
+        self.register("a", "상태")
+        self.register("b", "장비")
+        before = self.char1.profile_snapshot()
+        self.run_raw("줄임말 모두 삭제")
+        request = deepcopy(self.char1.ndb.shortcut_delete_all_request)
+        output = self.run_raw("상태, 줄임말 모두 삭제 확인 해")
+        self.assertIn("체력", output)
+        self.assertIn("각각 직접 입력", output)
+        self.assertEqual(self.char1.profile_snapshot(), before)
+        self.assertEqual(self.char1.ndb.shortcut_delete_all_request, request)
+        self.assertIn("2개", self.run_raw("줄임말 모두 삭제 확인"))
+        self.assertEqual(self.saved(), {})
+        self.assertIsNone(self.char1.ndb.shortcut_delete_all_request)
 
     def test_confirmation_mutation_invalidation_for_add_replace_and_delete(self):
         self.register("a", "상태")
