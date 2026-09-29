@@ -8,7 +8,7 @@ from commands.registry import COMMANDS
 from typeclasses.explorers import Explorer
 from world import presentation as view
 from world import rules
-from world.content import EQUIPMENT_ACTIONS, ITEMS, SHOP
+from world.content import EQUIPMENT_ACTIONS, ITEMS, SHOP_CATALOGS
 
 from tests.base import WorldCommandTest
 
@@ -22,7 +22,8 @@ class EquipmentTests(WorldCommandTest):
 
     def setUp(self):
         super().setUp()
-        self.char1.location = self.world_rooms()["dock"]
+        self.rooms = self.world_rooms()
+        self.char1.location = self.rooms["dock"]
         self.char1.push_state = Mock()
 
     def test_all_gear_commands_save_only_the_matching_slot_and_emit_item_role(self):
@@ -71,6 +72,7 @@ class EquipmentTests(WorldCommandTest):
             ("강철 마체테", "blade", "WIELD"),
             ("강화 조끼", "armor", "wear"),
         ):
+            self.char1.location = self.rooms["weapon_shop" if identity == "blade" else "armor_shop"]
             self.char1.execute_cmd(f"{name} 구매")
             self.char1.execute_cmd(f"{name} {alias}")
             self.assertEqual(self.char1.profile()["equipment"][ITEMS[identity]["slot"]], identity)
@@ -107,7 +109,8 @@ class EquipmentTests(WorldCommandTest):
         for identity in ("jungle_blade", "tactical_vest"):
             self.char1.change(lambda p: rules.equip(p, identity, ITEMS[identity]["slot"]))
         self.assertIn("공격 +9 · 방어 +3", view.equipment(self.char1.profile()))
-        self.assertTrue({ITEMS[i]["name"] for i in SHOP} <= set(tokens(view.shop(), "item")))
+        for shop_id, catalog in SHOP_CATALOGS.items():
+            self.assertEqual({ITEMS[i]["name"] for i in catalog}, set(tokens(view.shop(shop_id, "상인"), "item")))
         for action, alias in (("무장", "wield"), ("착용", "wear")):
             registered = [c for c in COMMANDS if c.key == action]
             self.assertEqual(len(registered), 1)

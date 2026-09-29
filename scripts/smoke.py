@@ -108,8 +108,14 @@ async def route(player, steps):
         await player.act(command, lambda state, zone=zone: state["zone"] == zone)
 
 
-async def return_to_dock(player):
+async def return_to_weapon_shop(player):
     await route(player, (("귀환", "support_roof"), ("승강기", "support_elevator")))
+    await player.act("3층", lambda state: state["elevator"]["current_stop"] == "3f")
+    await route(player, (("내리기", "support_3f_c"), ("동", "support_3f_e1"), ("북", "weapon_shop")))
+
+
+async def weapon_shop_to_dock(player):
+    await route(player, (("남", "support_3f_e1"), ("서", "support_3f_c"), ("승강기", "support_elevator")))
     await player.act("1층", lambda state: state["elevator"]["current_stop"] == "1f")
     await route(player, (("내리기", "support_1f_c"), ("북", "hq_concourse"), ("서", "dock")))
 
@@ -208,11 +214,12 @@ async def main():
         )
         await outsider.act("모두 가져", lambda state: count_item(state, "scrap") > 0)
         print("PASS: 시체 소멸·바닥 전리품·보호 만료 후 외부 회수", flush=True)
-        await return_to_dock(first)
+        await return_to_weapon_shop(first)
         if not count_item(first.state, "blade"):
             await first.act("강철마체테 구매", lambda state: count_item(state, "blade") > 0)
         before_attack = first.state["attack"]
         await first.act("강철마체테 무장", lambda state: state["attack"] > before_attack)
+        await weapon_shop_to_dock(first)
         for direction, zone in (("북", "grass"), ("북", "trail"), ("동", "office")):
             await first.act(direction, lambda state, zone=zone: state["zone"] == zone)
         await first.act("정비기록 조사", lambda state: "발전기 수리" in state["quest"])

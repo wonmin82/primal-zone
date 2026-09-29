@@ -4,6 +4,8 @@
 
 ## Objective
 
+본부 1~5단계는 PR #13~#18로 병합 완료됐다. 6단계 작업 시작 시 깨끗한 main에서 fetch 후 HEAD와 origin/main은 모두 `d7141fbfd12572a19e744b36fd978fd8150c135e`였다. PR #18 MERGED와 해당 main [Game checks](https://github.com/wonmin82/primal-zone/actions/runs/36507707184) success를 직접 확인했다. 순수 88개(0.034초)·통합 239개(74.402초), 총 327개·runner 79.240초 통과이며 열린 PR은 없었다. 최신 main에서 `codex/hq-npc-shops`를 생성했고 현재 작업은 6단계 NPC 기반 상점 시스템이다. 아래 단계별 OPEN 및 이전 동선 서술은 당시 기록으로 보존한다.
+
 본부 재설계 1단계와 방향 정정은 [PR #13](https://github.com/wonmin82/primal-zone/pull/13)으로 병합됐다. 병합 커밋은 `f9fcd52feb7c449eb94519d9e36f3504558056f4`다. 중앙홀 남/1층 중앙 북과 남쪽 폐쇄 출입구, 대기실 남/중앙홀 북과 중앙홀 서/부두 동을 유지한다. 상세 설계는 [본부 Room 구조 1단계](architecture.md#본부-room-구조-1단계)를 따른다.
 
 테스트 성능 개선은 [PR #14](https://github.com/wonmin82/primal-zone/pull/14)로 병합됐으며 병합 커밋은 `ada6487f254beb3a662340ce81fa75771092cce1`다. 2026-09-28 승강기 작업 시작 시 fetch 후 실제 최신 origin/main도 같은 SHA였고 main 작업 트리는 깨끗했다. 당시 PR #13·#14의 MERGED와 main CI 성공을 직접 확인했다. 아래 테스트 성능 개선 기록은 해당 시점의 결과다.
@@ -14,7 +16,19 @@
 
 기존 광원 기능은 PR #11로 완료됐고 인계 문서는 PR #12로 병합됐다. 아래 광원·본부 1~3단계·테스트 성능 개선의 설계·검증은 시점별 과거 기록이며 보존한다. 본부 1~4단계는 PR #13/#14/#15/#16/#17 MERGED다. 2026-09-29 이번 작업 시작 시 status·unstaged/staged diff는 없었고 fetch 후 HEAD와 origin/main은 모두 `d1f3e54bcd7172bd11aec1a10624d4084b03e8c5`였다. PR #17 MERGED와 해당 main [Game checks](https://github.com/wonmin82/primal-zone/actions/runs/36502424759) success를 직접 확인했다. 병합 CI는 pure 82개(0.024초)·integration 231개(57.207초), total 313개·runner 60.563초다. 최신 origin/main에서 `codex/hq-resource-settlement`를 생성했다. 현재 작업은 5단계 단일 화폐 및 회수 자원 정산이며 아래 PR #17 OPEN 서술은 과거 생성 시점 기록이다.
 
-### 본부 5단계 구현과 검증 (2026-09-29)
+### 본부 6단계 구현과 검증 (2026-09-29)
+
+- 시작 main은 `d7141fbfd12572a19e744b36fd978fd8150c135e`, branch는 `codex/hq-npc-shops`다. PR #13/#14/#15/#16/#17/#18는 MERGED다. 최종 재fetch에서도 origin/main은 시작 SHA와 같고 이미 포함하므로 rebase 재작성은 필요 없었다. 6단계 구현·로컬 검증은 완료했으며 현재 commit/push/PR/최신 HEAD CI를 진행한다.
+- `Shopkeeper(ActionObject)`의 `supply_shopkeeper`(보급관/보급상인)→supply_shop, `weapon_shopkeeper`(무기상/무기 상인)→weapon_shop, `armor_shopkeeper`(방어구상/방어구 상인)→armor_shop을 추가했다. persistent `db.shop_id`는 각각 supply/weapon/armor이며 `world/content/shops.py`의 SHOP_CATALOGS가 유일한 catalog/가격 SSOT다. 기존 14개 가격과 Credits-only 1개 구매·무한 재고를 보존한다.
+- 메뉴는 `상점`/`메뉴`/`무기상 상점`/`무기상 메뉴`, 구매는 `강철마체테 구매`/`무기상에게 강철마체테 구매`처럼 사용한다. current room_objects의 실제 visible NPC를 공통 selector로 고른다. bare 메뉴는 보이는 상인이 하나일 때, bare 구매는 해당 상품 판매자가 하나일 때 선택하며 여럿은 이름·번호 지정이 필요하다. 실제 같은 Room·safe·비전투를 검사하며 hidden/view lock은 후보·오류·명령·hint·Web에서 제외한다. 다른 safe Room으로 실제 NPC를 옮기면 서비스가 따라간다.
+- global SHOP, 부두 Shop/Buy gate·static 상점 hint·Web 보급소 버튼과 더 이상 호출하지 않는 GameCommand.at_dock()을 제거했다. 모든 ActionObject가 web_actions capability를 제공하고 state는 subclass 이름을 구분하지 않는다. 기본 allowlist는 Commander/조사/수리/의료/Container 보기·Instructor 대화와 별도 TRAINING UI를 보존하며 SettlementOfficer/Shopkeeper만 동적 action을 override한다. 메뉴·가격 포함 구매 label·targeted command는 서버가 생성한다. client 상점 zone 특례는 없다.
+- bootstrap은 stable tag로 세 NPC를 한 개씩 생성·재사용하고 위치/alias/shop_id를 정규화한다. 반복 두 번 실행에서 DB ID·객체 수·기존 모든 interactable·두 플레이어 전체 profile·shared contents·공용 승강기 현재 층을 보존했다. profile migration·persistent stock은 없다. integrity는 세 배치/행동/catalog ID와 14개 상품 합집합·중복·상품 존재·양의 정수 가격·빈 catalog를 검사한다.
+- smoke는 옥상 귀환→승강기 3층→동·북 무기점에서 구매·무장 후 남·서→승강기 1층→북·서 부두→초지·관리동으로 복귀한다. 죽은 return_to_dock helper를 목적에 맞게 교체했다. 정산→무기점 구매 E2E도 갱신했으며 scrap 3개 발전기 소비, loot/이전/보관, 기술 Credits·패배 패널티·의료·훈련·승강기는 유지한다.
+- 최종 `scripts/dev.py check` 통과, 전체 `scripts/dev.py test` pure 91개(0.127초)·integration 248개(82.570초), total 339개 통과·실패/skip 없음, 통합 runner 91.606초다. 근거는 `work/shops-final-full-success.log`다. 초기 fixture 실패 2개와 새 suite 역순·병렬 11개(15.312초, runner 26.203초)도 통과했다. 옛 자산 query assertion 실패는 해당 1개부터 수정 검증한 뒤 위 전체를 실행했다. 최종 성공 이후 production/test 변경은 없다.
+- JS 문법·smoke Python syntax·diff 검사 통과다. game과 별도 SQLite 검증 서버에서 최종 정적 파일을 수집했다. 일반 계정으로 세 NPC/메뉴/구매, 버튼·직접 붕대 구매의 동일 효과, 정산 6개→60C→무기점 구매, 부두 상인 없음·윤대장 보존을 확인했다. 정산·의료·Container 보기와 기존 훈련 panel 표시/활성을 확인했으며 의료·훈련을 브라우저에서 다시 실행하지는 않았다. 데스크톱 폭 1234/1234px, 390px에서 375/375px로 가로 overflow가 없었다. 앱 JS stack 오류는 관찰하지 않았고 Chrome 비동기 listener 채널 오류 2건은 별도 기록했다. 검증 탭/서버 종료·viewport 원복 완료, 플레이 DB는 읽거나 변경하지 않았다. [상세 기록](playtest.md#6단계-실제-검증-기록-2026-09-29)을 따른다.
+- 전체 smoke는 610초 가입 대기와 실제 반복 전투 때문에 미실행이며 변경된 경로를 자동/별도 DB 브라우저/syntax로 확인했다. 실제 OS IME·이번 변경의 전체 restart/reconnect·운영 DB 적용·전체 멀티플레이 수동 검증도 미실행이다. 7단계 통합 cleanup/전체 회귀검증은 이 PR 검토·병합 후 최신 main에서 별도 요청으로 진행한다. PR은 병합하지 않는다.
+
+### 본부 5단계 구현과 검증 (2026-09-29, 과거 기록)
 
 - 시작 main은 `d1f3e54bcd7172bd11aec1a10624d4084b03e8c5`, 작업 branch는 `codex/hq-resource-settlement`다. 최종 fetch에서도 origin/main은 같고 이미 포함하므로 rebase 재작성은 필요 없다. Stage 1~4와 테스트 인프라는 그대로다.
 - 실제 `SettlementOfficer`의 stable ID는 `salvage_officer`, 표시명 자원 정산관, alias 정산관이며 `salvage_office`에 배치한다. 기존 bootstrap이 stable tag로 같은 DB 객체·alias를 재사용하고 두 번 실행 후 객체 수·모든 기존 서비스 ID/위치·공용 contents·개인 inventory/storage/profile이 보존됨을 자동 테스트로 확인했다. 정산관 mutable inventory나 profile migration·자동 환전은 없다.
@@ -182,17 +196,17 @@
 - profile v6의 `light_sources[item_id]`는 `on/power_source/charge_seconds/started_at`를 저장한다. `storage/discoveries` 및 기존 임무·장비·전투 데이터를 보존하며 emergency claim은 `discoveries.emergency_light_cache`다.
 - timestamp projection/ceil 분 표시, 켜/꺼/확인, 소진 자동 off/전원 제거, logout/정상 종료 잔량 확정, 마지막 광원 이전 상태 폐기가 구현됐다. 매 tick 잔량 저장은 하지 않는다.
 - `손전등 보기`는 정적 설명+현재 status+사용법, `손전등 확인`은 같은 lighting.status의 빠른 조회다. 보기/확인/웹은 동일 observed_at projection을 사용한다.
-- wreck 비상장비함은 conspicuous, 플레이어당 최초 손전등 ×1/건전지 ×2다. 부두 상점 30/6크레딧, JungleCache는 기존 붕대 ×2+건전지 ×2다. 60분 compatible 전원은 test fixture이며 production 아이템으로 추가하지 않았다.
+- wreck 비상장비함은 conspicuous, 플레이어당 최초 손전등 ×1/건전지 ×2다. 현재 손전등/건전지는 1층 보급관에게 30/6크레딧으로 구매한다. JungleCache는 기존 붕대 ×2+건전지 ×2다. 60분 compatible 전원은 test fixture이며 production 아이템으로 추가하지 않았다.
 - `FACILITY_STATE_VERSION=1`, `db.facilities={"version":1,"states":{"outpost_power":false}}`다. legacy bare dict True를 보존하고 None/빈 dict는 기본값, 미래 version은 오류/덮어쓰기 없음이다. light 조회는 write-free다.
 - FACILITIES ID/dict/엄격한 bool default와 Room 조명의 양수 strength·always_on/power 배타 조건을 integrity에서 검사한다. runtime 일반 helper에 특정 power ID 분기를 두지 않는다.
 - dock 상시 조명 4, office/generator는 outpost_power일 때 4다. clear day dock은 낮빛, 밤이나 어두운 실내는 실제 기여한 시설 조명 문장이다.
 - 개인 발전기 진행+공용 전력 저장은 원자적이며 False→True에 영향권 접속자 시설 가동 알림, True→True에는 반복 알림 없음이다. 기존 state push도 유지한다.
-- 웹은 environment와 observation payload를 분리하고 현재 시야, compatible 전원별 삽입 버튼·광원 controls를 제공한다. FIELD GUIDE 환경 확인은 `날씨`이며 현재 CSS query는 `lighting`, JS query는 `hq-medical`이다.
-- clear dock `윤대장 대화 · 상점`, commander view:false이면 `상점`; wreck clear/손전등 clear는 두 상자 안내, poor는 `비상장비함 조사`만 표시한다. 의무실 의료 hint는 실제 보이는/이용 가능한 의무관·침대의 target/action을 따른다.
+- 웹은 environment와 observation payload를 분리하고 현재 시야, compatible 전원별 삽입 버튼·광원 controls를 제공한다. FIELD GUIDE 환경 확인은 `날씨`이며 현재 CSS query는 `lighting`, JS query는 `hq-shops`다.
+- clear dock `윤대장 대화`, commander view:false이면 안내 없음이다. 실제 상점 hint는 지원동의 보이는/이용 가능한 Shopkeeper를 따른다. wreck clear/손전등 clear는 두 상자 안내, poor는 `비상장비함 조사`만 표시한다. 의무실 의료 hint는 실제 보이는/이용 가능한 의무관·침대의 target/action을 따른다.
 
 ## Partially Implemented / In Progress
 
-본부 1~4단계와 테스트 성능 개선은 PR #13~#17로 병합 완료다. 5단계 단일 화폐·회수 자원 정산은 구현·로컬/브라우저 검증·commit/push 완료이며 PR #18 검토·병합을 남긴다. 구현 HEAD의 CI는 success이며 최종 문서 커밋 HEAD/CI는 실제 GitHub와 PR Validation을 따른다. NPC 상점과 통합 closeout은 후속 범위다.
+본부 1~5단계와 테스트 성능 개선은 PR #13~#18로 병합 완료다. 6단계 NPC 상점의 구현·자동/브라우저 검증은 완료했고 commit/push/PR/최신 HEAD CI를 진행한다. 7단계 통합 closeout은 현재 PR 검토·병합 후 별도 요청으로 진행하는 후속 범위다.
 
 ## Validation
 
@@ -234,7 +248,7 @@
 
 ## Recommended Next Step
 
-5단계 PR 검토·병합 후 최신 main에서 별도 요청으로 6단계 NPC 기반 상점 시스템을 진행한다. 보급관·무기상·방어구상과 actual Shopkeeper/room-local catalog/Credits-only 상점·메뉴·구매가 예정 범위다. 현재 PR이 병합되기 전에는 시작하지 않는다.
+6단계 NPC 상점 PR 검토·병합 후 최신 main에서 별도 요청으로 7단계 통합 cleanup/전체 회귀검증을 진행한다. legacy dock/서비스 zone gate·dead compatibility 검토, 전체 본부 E2E·멀티플레이·bootstrap/restart/reconnect·전체 smoke 검토·최종 Web/문서 closeout이 예정 범위다. 이번 PR 병합 전에 시작하지 않는다.
 
 ## Important Files
 
@@ -259,6 +273,7 @@
 | `game/commands/character.py`, `game/commands/items.py`, `game/commands/inventory.py`, `game/commands/combat.py`, `game/commands/registry.py` | Look/Weather, 이전/광원/소비/해제, 구매/회수, 기존 공격, help 등록 |
 | `game/web/templates/webclient/webclient.html`, `game/web/static/webclient/js/primal.js`, `game/web/static/webclient/css/primal.css` | 웹 표시/controls/cache query |
 | `game/tests/test_hq_services.py`, `game/tests/test_growth.py`, `game/world/test_headquarters.py` | 보관·훈련 이전/저장 보존/객체·가시성 정책, 성장 회귀와 본부 배치 integrity |
+| `game/world/content/shops.py`, `game/commands/shops.py`, `game/world/test_shops.py`, `game/tests/test_shops.py` | 고정 catalog/가격, 현재 보이는 판매자 선택, 구매 원자성·상점 privacy·bootstrap·Web·실제 구매 동선 |
 | `game/world/test_medical.py`, `game/tests/test_medical.py`, `game/commands/world_actions.py` | 독립 의료/패배 pure rule, 의료 대상 선택과 객체 기반 권한, 복귀·멀티플레이 패배·rollback·Web state 검증 |
 | `game/world/test_lighting.py`, `game/world/test_environment.py`, `game/world/test_rules.py` | pure 규칙·migration·환경/광원 테스트 |
 | `game/tests/test_lighting.py`, `game/tests/test_environment.py`, `game/tests/test_distant_view.py`, `game/tests/test_item_interactions.py` | 통합 광원/시설/hint, 환경 저장, 정찰 privacy, stack 이전 |

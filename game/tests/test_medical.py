@@ -138,9 +138,9 @@ class MedicalCommandsTests(WorldCommandTest):
             self.assertIn("이용할 대상을 찾지", self.command(raw))
             self.assertEqual(self.char1.profile(), before)
         self.assertEqual({obj["name"] for obj in multiplayer_state(self.char1)["interactables"]}, {"윤대장"})
-        self.assertEqual(render(context_for(self.char1)), "윤대장 대화 · 상점")
+        self.assertEqual(render(context_for(self.char1)), "윤대장 대화")
 
-    def test_return_roof_elevator_medical_and_dock_purchase_paths(self):
+    def test_return_roof_elevator_medical_supply_purchase_and_expedition_paths(self):
         self.char1.location = self.rooms["grass"]
         self.command("귀환")
         self.assertEqual(self.char1.zone, "support_roof")
@@ -151,12 +151,13 @@ class MedicalCommandsTests(WorldCommandTest):
         self.char1.change(lambda p: p.update(hp=1))
         self.command("휴식")
         self.assertEqual(self.char1.profile()["hp"], 60)
-        for raw in ("남", "동", "승강기", "1층", "내리기", "북", "서"):
+        for raw in ("남", "동", "승강기", "1층", "내리기", "동", "북"):
             self.command(raw)
-        self.assertEqual(self.char1.zone, "dock")
+        self.assertEqual(self.char1.zone, "supply_shop")
         self.command("붕대 구매")
         self.assertEqual(self.char1.profile()["inventory"]["bandage"], 4)
-        self.command("북")
+        for raw in ("남", "서", "북", "서", "북"):
+            self.command(raw)
         self.assertEqual(self.char1.zone, "grass")
         self.char1.change(lambda p: p.update(combat_target=999))
         before = deepcopy(self.char1.profile())

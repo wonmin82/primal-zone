@@ -115,6 +115,8 @@ def _build_world():
             obj.location = rooms[data["room"]]
             obj.aliases.clear()
             obj.aliases.add(data["aliases"])
+        if "shop_id" in data:
+            obj.db.shop_id = data["shop_id"]
     return rooms
 
 

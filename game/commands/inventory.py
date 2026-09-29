@@ -4,9 +4,10 @@ from world import presentation as view
 from world import rules
 from world import text as ft
 from world.content import EQUIPMENT_ACTIONS, ITEMS
-from world.targets import item_selector, parse_loot
+from world.targets import item_selector, names, parse_loot, parse_relation, resolve
 
 from commands.base import GameCommand
+from commands.shops import resolve_shopkeeper, shopkeepers
 
 
 class Inventory(GameCommand):
@@ -50,31 +51,35 @@ class Wield(Equip):
 
 class Shop(GameCommand):
     category = "보급"
-    usage = "상점"
-    summary = "부두의 크레딧 판매 가격을 확인합니다."
+    usage = "상점 · 무기상 상점 · 무기상 메뉴"
+    summary = "주변 상인의 크레딧 판매 목록을 확인합니다."
+    input_style = "target"
     key = "상점"
-    aliases = ["shop"]
+    aliases = ["shop", "메뉴"]
 
     def run(self):
-        self.at_dock()
-        self.caller.msg(view.shop())
+        resolve_shopkeeper(self.caller, self.args).perform_action(self.caller, self.key)
 
 
 class Buy(GameCommand):
     category = "보급"
-    usage = "붕대 구매"
-    summary = "크레딧으로 물건을 구매합니다."
+    usage = "붕대 구매 · 보급관에게 붕대 구매"
+    summary = "주변 판매자에게 크레딧으로 물건 1개를 구매합니다."
     input_style = "target"
     key = "구매"
     aliases = ["buy"]
 
     def run(self):
-        self.at_dock()
-        item = item_selector(self.args, ITEMS, self.key)
+        objects = shopkeepers(self.caller)
+        value, seller = self.args, None
+        if any(word.endswith("에게") for word in value.split()):
+            selector, value = parse_relation(value, "에게", [n for obj in objects for n in names(obj)])
+            seller = resolve(objects, selector, self.caller, self.key)[0]
+        item = item_selector(value, ITEMS, self.key)
         if not item:
             raise rules.RuleError("물건 이름을 확인하세요. 예: 붕대 구매")
-        self.caller.change(lambda profile: rules.buy(profile, item))
-        self.caller.msg(ft.text(ft.item(item), " 1개를 받아 가방에 넣었다."))
+        seller = seller or resolve_shopkeeper(self.caller, item=item, objects=objects)
+        seller.perform_action(self.caller, self.key, item)
 
 
 class Take(GameCommand):

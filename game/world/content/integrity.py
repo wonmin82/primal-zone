@@ -9,7 +9,7 @@ from world.content import (
     REGION_ENEMIES,
     REGIONS,
     ROOMS,
-    SHOP,
+    SHOP_CATALOGS,
     spawn_id_for,
 )
 from world.content.economy import SALVAGE_CREDIT_RATE
@@ -108,8 +108,31 @@ def elevator_errors():
     return issues
 
 
+def shop_errors():
+    issues = []
+    if set(SHOP_CATALOGS) != {"supply", "weapon", "armor"}:
+        issues.append("상점 catalog ID가 올바르지 않습니다.")
+    items = []
+    for shop_id, catalog in SHOP_CATALOGS.items():
+        if not catalog:
+            issues.append(f"{shop_id}: 상점 판매 목록이 비었습니다.")
+        for item, price in catalog.items():
+            items.append(item)
+            if item not in ITEMS:
+                issues.append(f"{item}: 상점 아이템 정의가 없습니다.")
+            if type(price) is not int or price <= 0:
+                issues.append(f"{shop_id}/{item}: 가격은 양의 정수여야 합니다.")
+    if len(items) != len(set(items)):
+        issues.append("상점 catalog 아이템이 중복되었습니다.")
+    if set(items) != {"flashlight", "battery", "bandage", "field_ration", "water",
+                      "spear", "blade", "jungle_blade", "carbine", "heavy_carbine",
+                      "leather_suit", "tactical_vest", "armor", "heavy_suit"}:
+        issues.append("상점 catalog 합집합이 기존 판매 14개와 다릅니다.")
+    return issues
+
+
 def errors(interactables):
-    issues = headquarters_errors() + elevator_errors()
+    issues = headquarters_errors() + elevator_errors() + shop_errors()
     if type(SALVAGE_CREDIT_RATE) is not int or SALVAGE_CREDIT_RATE <= 0:
         issues.append("회수부품 정산율은 양의 정수여야 합니다.")
     for identity, room in (
@@ -117,6 +140,8 @@ def errors(interactables):
         ("instructor", "training_room"),
         ("doctor", "infirmary"), ("infirmary_bed", "infirmary"),
         ("salvage_officer", "salvage_office"),
+        ("supply_shopkeeper", "supply_shop"), ("weapon_shopkeeper", "weapon_shop"),
+        ("armor_shopkeeper", "armor_shop"),
     ):
         if interactables.get(identity, {}).get("room") != room:
             issues.append(f"{identity}: 본부 서비스는 {room}에 배치해야 합니다.")
@@ -205,9 +230,6 @@ def errors(interactables):
             issues.append(f"{enemy}: 전리품 정의가 없습니다.")
         if data.get("boss_quest") and data["boss_quest"] not in QUESTS:
             issues.append(f"{enemy}: 임무 정의가 없습니다.")
-    for key in SHOP:
-        if key not in ITEMS:
-            issues.append(f"{key}: 상점 아이템 정의가 없습니다.")
     for key, data in ITEMS.items():
         source = data.get("power_source")
         if source and (not isinstance(source.get("type"), str) or not source["type"].strip() or not positive_number(source.get("capacity_seconds"))):
@@ -218,6 +240,12 @@ def errors(interactables):
     for identity, data in interactables.items():
         if data["room"] not in ROOMS:
             issues.append(f"{identity}: 대상 Room이 없습니다.")
+        if data.get("typeclass") == "Shopkeeper" and data.get("shop_id") not in SHOP_CATALOGS:
+            issues.append(f"{identity}: 상점 catalog가 없습니다.")
+    for identity, shop_id in (("supply_shopkeeper", "supply"), ("weapon_shopkeeper", "weapon"), ("armor_shopkeeper", "armor")):
+        data = interactables.get(identity, {})
+        if data.get("shop_id") != shop_id or tuple(data.get("actions", ())) != ("대화", "상점", "구매"):
+            issues.append(f"{identity}: 상점 catalog/행동 정의가 올바르지 않습니다.")
     for identity, action in (("doctor", "치료"), ("infirmary_bed", "휴식")):
         if tuple(interactables.get(identity, {}).get("actions", ())) != (action,):
             issues.append(f"{identity}: 의료 행동 정의가 올바르지 않습니다.")

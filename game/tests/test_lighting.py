@@ -314,14 +314,14 @@ class LightingTests(WorldCommandTest):
             with self.subTest(definition=definition), patch.dict(FACILITIES, test_power=definition):
                 self.assertIn("test_power: 시설 상태 정의가 유효하지 않습니다.", errors(INTERACTABLES))
 
-    def test_clear_dock_combines_target_and_guidance_even_if_target_is_hidden(self):
+    def test_clear_dock_only_hints_at_visible_commander(self):
         self.clear()
         self.char1.location = self.rooms["dock"]
         context = context_for(self.char1, observed_at=100)
-        self.assertEqual(room_hint(context), "윤대장 대화 · 상점")
+        self.assertEqual(room_hint(context), "윤대장 대화")
         commander = next(obj for obj in context.room.contents if obj.tags.has("commander", category="primal_interactable"))
         commander.locks.add("view:false()")
-        self.assertEqual(room_hint(context), "상점")
+        self.assertEqual(room_hint(context), "")
         self.assertNotIn("윤대장", str(multiplayer_state(self.char1, 100)))
 
     def test_hint_declaration_order_is_preserved_for_interleaved_text_and_targets(self):

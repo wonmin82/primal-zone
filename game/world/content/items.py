@@ -48,22 +48,6 @@ OPPOSITES = {"북": "n", "남": "s", "동": "e", "서": "w"}
 # 행동 선택은 아이템 이름이 아니라 slot만 사용한다.
 EQUIPMENT_ACTIONS = {"weapon": "무장", "armor": "착용"}
 UNEQUIP_ACTIONS = {"weapon": "해제", "armor": "벗어"}
-SHOP = {
-    "flashlight": 30,
-    "battery": 6,
-    "bandage": 8,
-    "field_ration": 4,
-    "water": 3,
-    "spear": 35,
-    "blade": 60,
-    "jungle_blade": 95,
-    "carbine": 130,
-    "heavy_carbine": 240,
-    "leather_suit": 35,
-    "tactical_vest": 85,
-    "armor": 65,
-    "heavy_suit": 190,
-}
 
 
 def find_id(catalog, name):

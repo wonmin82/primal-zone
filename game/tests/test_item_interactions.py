@@ -10,7 +10,7 @@ from typeclasses.interactables import Container
 from typeclasses.loot import DroppedLoot, room_loot, take_loot
 from world import presentation as view
 from world import rules
-from world.content import ENEMIES, ITEMS, SHOP
+from world.content import ENEMIES, ITEMS, SHOP_CATALOGS
 from world.item_transfers import transfer
 from world.state import multiplayer_state
 from world.targets import Mode, TargetSelector, parse_relation, parse_selector, stack_selector
@@ -136,14 +136,14 @@ class ItemInteractionTests(WorldCommandTest):
         self.assertNotIn("jungle_cell", self.char1.profile()["inventory"])
 
     def test_food_shop_actions_and_failure_immutability(self):
-        self.char1.location = self.rooms["dock"]
+        self.char1.location = self.rooms["supply_shop"]
         self.char1.change(lambda p: p.update(hp=20, credits=50))
         for identity, action in (("field_ration", "먹어"), ("water", "마셔")):
             name = ITEMS[identity]["name"]
-            self.assertIn(name, view.shop())
+            self.assertIn(name, view.shop("supply", "보급관"))
             before = self.char1.profile()
             self.command(name + " 구매")
-            self.assertEqual(self.char1.profile()["credits"], before["credits"] - SHOP[identity])
+            self.assertEqual(self.char1.profile()["credits"], before["credits"] - SHOP_CATALOGS["supply"][identity])
             self.command(name + " " + action)
             self.assertEqual(self.char1.profile()["hp"], before["hp"] + ITEMS[identity]["heal"])
             self.assertEqual(self.char1.profile()["proficiencies"], before["proficiencies"])
