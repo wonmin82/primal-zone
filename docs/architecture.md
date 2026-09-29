@@ -69,7 +69,7 @@ bootstrap은 stable `primal_interactable` tag로 기존 객체를 찾아 DB ID�
 
 서버 interactable allowlist에는 의료 `치료`/`휴식`만 추가한다. 같은 객체의 visible/safe/noncombat availability로 Web action과 target/action Room hint를 결정한다. 클라이언트는 서버 명령을 렌더링할 뿐 infirmary zone 특례가 없다. 부두의 휴식 버튼·hint는 제거했으며 현재는 6단계에서 상점 특례도 제거됐다. 원거리 관찰은 의료 서비스 행동을 노출하지 않는다.
 
-의료 동선과 회복 규칙은 통합/수동 검사로 확인한다. 실제 서버 gameplay smoke는 fixture 로그인과 공동 사냥 1회, 귀환→옥상→승강기 3층→무기상 구매·재접속을 확인한다. 공개 가입 rate limit은 그대로 유지하며 gameplay smoke와 분리한다. 시체/재생성/보호의 production 시간 의미는 Full Gameplay E2E가 맡는다.
+의료 동선과 회복 규칙은 통합/수동 검사와 Full의 실제 패배→의무실→Bed 회복 및 Doctor 치료로 확인한다. Quick smoke는 fixture 로그인과 공동 사냥 1회, 귀환→옥상→승강기 3층→무기상 구매·재접속을 확인한다. 공개 가입 rate limit은 그대로 유지하며 gameplay smoke와 분리한다. 시체/재생성/보호의 production 시간 의미는 Full Gameplay E2E가 맡는다.
 
 ## 본부 5단계: 단일 화폐와 회수 자원 정산
 
@@ -95,7 +95,7 @@ Credits는 유일한 구매 currency, scrap은 material/resource다. `profile.in
 
 모든 `ActionObject`가 `web_actions(caller, target, observed_at)` capability를 제공한다. 기본 allowlist는 대화/조사/수리/보기와 available 의료 행동을 보존한다. Container는 보기만, Instructor는 기존 대화와 별도 TRAINING UI를 유지한다. SettlementOfficer와 Shopkeeper만 필요한 동적 action을 override한다. `world.state`는 subclass를 구분하지 않고 capability만 호출한다. Shopkeeper는 available일 때 메뉴와 catalog별 targeted 구매의 완성된 label/command를 서버에서 만든다. client는 기존 렌더링을 사용하며 Room·가격·이름으로 구매를 추론하지 않는다.
 
-Integrity는 세 판매자 배치·catalog ID/행동, catalog 비어 있지 않음·상품 존재·양의 정수 가격·중복 금지·기존 14개 합집합을 검사한다. smoke의 구매는 옥상→승강기 3층→동·북 무기점에서 실제 Credits 차감/장비 증가를 확인하고 해당 Room에서 재로그인 상태를 비교한다. 7단계 전체 closeout은 별도 요청이다.
+Integrity는 세 판매자 배치·catalog ID/행동, catalog 비어 있지 않음·상품 존재·양의 정수 가격·중복 금지·기존 14개 합집합을 검사한다. smoke의 구매는 옥상→승강기 3층→동·북 무기점에서 실제 Credits 차감/장비 증가를 확인하고 해당 Room에서 재로그인 상태를 비교한다. 7단계 closeout의 Full은 본부 전체 서비스와 두 임무/보스 최종 보고 및 실제 Portal+Server 재시작을 연결 검증한다.
 
 ## 공통 대상 선택
 
