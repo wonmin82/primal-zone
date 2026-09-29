@@ -215,14 +215,16 @@ class HeadquartersTests(GameCommandTest):
         south = next(obj for obj in self.char1.location.exits if obj.key == "남")
         self.assertIn("남쪽 출입문은 현재 폐쇄되어 있다.", south.return_appearance(self.char1))
 
-    def test_dock_keeps_shop_and_commander_without_storage_training_or_medical(self):
+    def test_dock_keeps_commander_without_support_services(self):
         self.char1.location = self.rooms["dock"]
         self.assertEqual(search_tag("commander", category="primal_interactable")[0].location, self.rooms["dock"])
         for key in ("instructor", "personal_locker", "shared_container"):
             self.assertNotEqual(search_tag(key, category="primal_interactable")[0].location, self.rooms["dock"])
         self.assertIsNone(instructor_for(self.char1))
-        self.char1.execute_cmd("붕대 구매")
-        self.assertEqual(self.char1.profile()["inventory"]["bandage"], 4)
+        before = self.char1.profile()
+        for raw in ("상점", "붕대 구매", "강철마체테 구매", "강화조끼 구매"):
+            self.char1.execute_cmd(raw)
+            self.assertEqual(self.char1.profile(), before)
         self.char1.execute_cmd("개인 보관함에 붕대 넣어")
         self.assertEqual(self.char1.profile()["storage"], {})
         self.char1.change(lambda profile: profile.update(hp=1))

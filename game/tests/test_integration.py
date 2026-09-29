@@ -146,6 +146,7 @@ class GameplayIntegrationTests(WorldCommandTest):
         self.assertTrue(self.char1.move_to(self.rooms["ridge"]))
 
     def test_failed_purchase_does_not_change_saved_data(self):
+        self.char1.location = self.rooms["weapon_shop"]
         before = deepcopy(self.char1.profile())
         self.call(gameplay.Buy(), "탐사카빈", "크레딧이 부족합니다.", caller=self.char1)
         self.assertEqual(self.char1.profile(), before)
@@ -185,10 +186,12 @@ class GameplayIntegrationTests(WorldCommandTest):
 
     def test_raw_commands_purchase_equip_and_quest(self):
         self.char1.change(lambda data: data.update(credits=200))
+        self.char1.location = self.rooms["weapon_shop"]
         self.char1.execute_cmd("  강철 마체테   구매  ")
         self.assertEqual(self.char1.profile()["inventory"]["blade"], 1)
         self.char1.execute_cmd("강철 마체테 WIELD")
         self.assertEqual(self.char1.profile()["equipment"]["weapon"], "blade")
+        self.char1.location = self.rooms["dock"]
         self.char1.execute_cmd("윤대장 대화")
         self.assertTrue(self.char1.profile()["quests"]["radio_tower"]["started"])
         self.char1.location = self.rooms["office"]
@@ -200,9 +203,9 @@ class GameplayIntegrationTests(WorldCommandTest):
         self.assertTrue(self.char1.profile()["quests"]["radio_tower"]["generator_fixed"])
         self.char1.execute_cmd("귀환")
         self.assertEqual(self.char1.location, self.rooms["support_roof"])
-        for raw in ("승강기", "1층", "내리기", "북", "서"):
+        for raw in ("승강기", "3층", "내리기", "서", "북"):
             self.char1.execute_cmd(raw)
-        self.assertEqual(self.char1.location, self.rooms["dock"])
+        self.assertEqual(self.char1.location, self.rooms["armor_shop"])
         self.char1.execute_cmd("강화조끼 구매")
         self.assertEqual(self.char1.profile()["inventory"]["armor"], 1)
 

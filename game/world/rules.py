@@ -8,7 +8,7 @@ from world.content import (
     EQUIPMENT_ACTIONS,
     ITEMS,
     SALVAGE_CREDIT_RATE,
-    SHOP,
+    SHOP_CATALOGS,
     UNEQUIP_ACTIONS,
 )
 from world.progression import (
@@ -123,11 +123,14 @@ def equip(profile, item_id, expected_slot=None):
     profile["equipment"][slot] = item_id
 
 
-def buy(profile, item_id):
+def buy(profile, shop_id, item_id):
     require_peace(profile)
-    if item_id not in SHOP:
+    if shop_id not in SHOP_CATALOGS:
+        raise RuleError("상점 판매 목록을 확인할 수 없습니다.")
+    catalog = SHOP_CATALOGS[shop_id]
+    if item_id not in catalog:
         raise RuleError("취급하지 않는 물건입니다.")
-    price = SHOP[item_id]
+    price = catalog[item_id]
     if profile["credits"] < price:
         raise RuleError("크레딧이 부족합니다.")
     profile["credits"] -= price

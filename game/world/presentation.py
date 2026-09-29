@@ -2,7 +2,7 @@
 
 from world import rules
 from world import text as ft
-from world.content import EQUIPMENT_ACTIONS, ITEMS, SHOP
+from world.content import EQUIPMENT_ACTIONS, ITEMS, SHOP_CATALOGS
 from world.progression import (
     ATTRIBUTES,
     PROFICIENCIES,
@@ -151,9 +151,9 @@ def inventory(profile):
     return ft.compact("가방", *lines, summary="" if lines else "비어 있다.")
 
 
-def shop():
+def shop(shop_id, seller):
     lines = []
-    for key, price in SHOP.items():
+    for key, price in SHOP_CATALOGS[shop_id].items():
         parts = [ft.item(key), ft.token("reward", f"{price}C")]
         lines.append(ft.join(parts, " · "))
     lines.append(
@@ -163,7 +163,7 @@ def shop():
             " · C=크레딧 (1개씩)",
         )
     )
-    return ft.compact("부두 보급소", *lines)
+    return ft.compact(ft.token("npc", seller), *lines)
 
 
 def quest(profile):

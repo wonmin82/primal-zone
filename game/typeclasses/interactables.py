@@ -3,7 +3,7 @@
 from evennia.objects.objects import DefaultObject
 from world import rules
 from world import text as ft
-from world.content import ENEMIES, ITEMS, ROOMS, SALVAGE_CREDIT_RATE
+from world.content import ENEMIES, ITEMS, ROOMS, SALVAGE_CREDIT_RATE, SHOP_CATALOGS
 from world.distant_presentation import DistantPresence, DistantPresenceMixin
 from world.progression import ATTRIBUTES, SKILLS
 
@@ -34,6 +34,15 @@ class ActionObject(DistantPresenceMixin, DefaultObject):
 
     def supports_action(self, action):
         return action in self.actions
+
+    def web_actions(self, caller, target, observed_at=None):
+        """기존 Web control allowlist. 성장·보관 조작은 전용 UI/명령을 유지한다."""
+        return [
+            {"label": action, "command": target + " " + action}
+            for action in (("보기",) if isinstance(self, Container) else self.actions)
+            if action in ("대화", "조사", "수리", "보기", "치료", "휴식")
+            and (action not in ("치료", "휴식") or self.available(caller, observed_at=observed_at))
+        ]
 
     def perform_action(self, caller, action, args=None):
         from world.observation import can_perceive, context_for
@@ -343,6 +352,53 @@ class SettlementOfficer(ActionObject):
         caller.msg(ft.text(ft.item("scrap"), f" {quantity}개를 정산했다. {earned}크레딧을 받았다."))
 
 
+class Shopkeeper(ActionObject):
+    semantic_role = "npc"
+    detectability = "conspicuous"
+    presence = "판매대에서 탐사 장비와 보급품을 정리하고 있다."
+    description = "탐사자를 위한 물품을 크레딧으로 판매하는 상인이다."
+    actions = ("대화", "상점", "구매")
+
+    def available(self, caller, observed_at=None):
+        return _medical_available(self, caller, observed_at) and self.db.shop_id in SHOP_CATALOGS
+
+    def web_actions(self, caller, target, observed_at=None):
+        if not self.available(caller, observed_at):
+            return []
+        return [
+            {"label": "상점", "command": target + " 상점"},
+            *[{"label": f"{ITEMS[item]['name']} · {price}C 구매",
+               "command": f"{target}에게 {ITEMS[item]['name']} 구매"}
+              for item, price in SHOP_CATALOGS[self.db.shop_id].items()],
+        ]
+
+    def return_appearance(self, looker, **kwargs):
+        from world.targets import labels, room_objects
+
+        usage = ""
+        if self.available(looker):
+            target = labels(room_objects(looker))[self.id]
+            usage = ft.join([ft.usage(command, set(self.actions) | {"메뉴"}) for command in (
+                f"{target} 상점", f"{target} 메뉴", f"{target}에게 물건이름 구매",
+            )], " · ")
+        return ft.sheet(ft.token("npc", self.key), self.description, "", usage)
+
+    def act(self, caller, action, args):
+        from world import presentation as view
+
+        if not ROOMS.get(caller.zone, {}).get("safe", False):
+            raise rules.RuleError("안전한 곳에서만 상점을 이용할 수 있습니다.")
+        if self.db.shop_id not in SHOP_CATALOGS:
+            raise rules.RuleError("상점 판매 목록을 확인할 수 없습니다.")
+        if action == "상점":
+            caller.msg(view.shop(self.db.shop_id, self.key))
+        elif action == "구매":
+            caller.change(lambda profile: rules.buy(profile, self.db.shop_id, args))
+            caller.msg(ft.text(ft.item(args), " 1개를 받아 가방에 넣었다."))
+        else:
+            caller.msg(ft.text(ft.token("npc", self.key), "\n\n필요한 물품은 판매 목록을 살펴보세요. 크레딧으로 하나씩 구매할 수 있습니다."))
+
+
 class Pathfinder(ActionObject):
     detectability = "conspicuous"
     distant_visible = True
@@ -444,6 +500,9 @@ def instructor_for(caller, observed_at=None):
 
 
 INTERACTABLES = {
+    "supply_shopkeeper": {"room": "supply_shop", "typeclass": "Shopkeeper", "name": "보급관", "aliases": ["보급상인"], "shop_id": "supply"},
+    "weapon_shopkeeper": {"room": "weapon_shop", "typeclass": "Shopkeeper", "name": "무기상", "aliases": ["무기 상인"], "shop_id": "weapon"},
+    "armor_shopkeeper": {"room": "armor_shop", "typeclass": "Shopkeeper", "name": "방어구상", "aliases": ["방어구 상인"], "shop_id": "armor"},
     "salvage_officer": {"room": "salvage_office", "typeclass": "SettlementOfficer", "name": "자원 정산관", "aliases": ["정산관"]},
     "doctor": {"room": "infirmary", "typeclass": "Doctor", "name": "의무관", "aliases": ["의사"]},
     "infirmary_bed": {"room": "infirmary", "typeclass": "Bed", "name": "침대", "aliases": ["병상"]},

@@ -20,6 +20,8 @@ def content_targets():
         "instructor": {"room": "training_room", "actions": ["대화", "배워", "배분", "재분배"]},
         "salvage_officer": {"room": "salvage_office", "actions": ["환율", "교환"]},
     }
+    for shop_id, room in (("supply", "supply_shop"), ("weapon", "weapon_shop"), ("armor", "armor_shop")):
+        targets[shop_id + "_shopkeeper"] = {"room": room, "typeclass": "Shopkeeper", "shop_id": shop_id, "actions": ["대화", "상점", "구매"]}
     for zone, room in ROOMS.items():
         for hint in room.get("hints", []):
             if "target" in hint:
@@ -65,6 +67,8 @@ class HeadquartersRulesTests(TestCase):
                                                   {"target": "infirmary_bed", "action": "휴식"}])
             elif zone == "salvage_office":
                 self.assertEqual(room["hints"], [{"target": "salvage_officer", "action": "환율"}])
+            elif zone in ("supply_shop", "weapon_shop", "armor_shop"):
+                self.assertEqual(room["hints"], [{"target": zone.replace("_shop", "_shopkeeper"), "action": "상점"}])
             else:
                 self.assertFalse(room.get("hints"))
 

@@ -7,13 +7,13 @@ from evennia.objects.objects import DefaultCharacter
 from evennia.utils.ansi import parse_ansi, strip_raw_ansi
 from typeclasses.enemies import room_enemies
 from typeclasses.explorers import Explorer
-from typeclasses.interactables import Container, SettlementOfficer, action_objects
+from typeclasses.interactables import Container, SettlementOfficer, Shopkeeper, action_objects
 from typeclasses.loot import room_loot, take_loot
 from typeclasses.parties import invite, respond
 from world import presentation as view
 from world import rules
 from world import text as ft
-from world.content import ITEMS, ROOMS, SHOP
+from world.content import ITEMS, ROOMS, SHOP_CATALOGS
 from world.progression import ATTRIBUTES, SKILLS
 
 from tests.base import WorldCommandTest
@@ -68,6 +68,8 @@ class SemanticTextTests(WorldCommandTest):
                     self.assertTrue(set(tokens(output, "command")) <= set(obj.actions))
                 elif isinstance(obj, SettlementOfficer):
                     self.assertEqual(tokens(output, "command"), ["환율", "교환", "교환", "교환", "교환"])
+                elif isinstance(obj, Shopkeeper):
+                    self.assertEqual(tokens(output, "command"), ["상점", "메뉴", "구매"])
                 else:
                     self.assertEqual(tokens(output, "command"), list(obj.actions))
                 self.assertIn(obj.key, tokens(output, obj.semantic_role))
@@ -111,8 +113,8 @@ class SemanticTextTests(WorldCommandTest):
         next_xp = rules.xp_threshold(rules.level_of(profile) + 1)
         self.assertIn(f"200/{next_xp}", view.experience(profile))
         self.assertIn(str(next_xp - 200), view.experience(profile))
-        shop = view.shop()
-        for key, price in SHOP.items():
+        shop = view.shop("supply", "보급관")
+        for key, price in SHOP_CATALOGS["supply"].items():
             self.assertIn(ITEMS[key]["name"], tokens(shop, "item"))
             self.assertIn(f"{price}C", tokens(shop, "reward"))
         self.assertNotIn("교환", shop)
@@ -217,7 +219,7 @@ class SemanticTextTests(WorldCommandTest):
         self.assertIn(f"공격 +{attack} · 방어 +{defense}", equip.splitlines()[-1])
         profile["inventory"] = {}
         self.assertEqual(str(view.inventory(profile)), "[가방] 비어 있다.")
-        self.assertEqual(tokens(view.shop(), "command"), ["구매"])
+        self.assertEqual(tokens(view.shop("supply", "보급관"), "command"), ["구매"])
         profile["quests"]["radio_tower"].update(started=True, record_read=True)
         quest = view.quest(profile)
         self.assertIn("2/5", quest.splitlines()[1])

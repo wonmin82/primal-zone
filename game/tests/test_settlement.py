@@ -10,7 +10,7 @@ from typeclasses.explorers import Explorer
 from typeclasses.interactables import INTERACTABLES, SettlementOfficer
 from world import rules
 from world.bootstrap import build_world, stale_definitions
-from world.content import SALVAGE_CREDIT_RATE, SHOP
+from world.content import SALVAGE_CREDIT_RATE, SHOP_CATALOGS
 from world.content.integrity import errors
 from world.observation import context_for
 from world.room_hints import render
@@ -192,16 +192,18 @@ class SettlementWorldTests(SettlementFixture, WorldCommandTest):
         self.assertIn(f"{SALVAGE_CREDIT_RATE}크레딧", self.command("정산관 환율"))
         self.command("회수부품 6개 교환")
         self.assertNotIn("scrap", self.char1.profile()["inventory"])
-        self.assertEqual(self.char1.profile()["credits"], SHOP["blade"])
-        for raw in ("남", "동", "동", "북", "서"):
+        self.assertEqual(self.char1.profile()["credits"], SHOP_CATALOGS["weapon"]["blade"])
+        for raw in ("남", "동", "동", "승강기", "3층", "내리기", "동", "북"):
             self.command(raw)
-        self.assertEqual(self.char1.zone, "dock")
+        self.assertEqual(self.char1.zone, "weapon_shop")
         shop = self.command("상점")
         self.assertNotIn("교환", shop)
         self.assertNotIn("회수부품", shop)
         self.command("강철마체테 구매")
         self.assertEqual(self.char1.profile()["credits"], 0)
         self.assertEqual(self.char1.profile()["inventory"]["blade"], 1)
+        for raw in ("남", "서", "승강기", "1층", "내리기", "북", "서"):
+            self.command(raw)
         self.command("윤대장 대화")
         self.char1.change(lambda p: rules.add_item(p, "scrap", 3))
         self.char1.location = self.rooms["office"]

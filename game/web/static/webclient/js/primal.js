@@ -209,7 +209,6 @@
       el.replaceChildren(semantic(object.role, object.label), " ", semantic("command", action.label));
       actions.push(el);
     }
-    if (state.zone === "dock") actions.push(button("보급소 보기", "상점"));
     byId("context-actions").replaceChildren(...actions);
     const rows = state.inventory.map((item) => {
       const row = document.createElement("li"), name = document.createElement("span");

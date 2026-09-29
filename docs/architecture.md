@@ -31,7 +31,7 @@
 
 Room의 local/distant 표시 경로는 정적 설명 다음에 폐쇄 문구를 넣는다. 지도는 방문한 실제 Room의 방향 목록에 폐쇄 방향을 표시하며 1층 중앙은 `북: 본부 중앙홀`, `남: 폐쇄`다. 방향도·웹 이동 버튼·`pz_state.exits`는 실제 출구만 사용하며 1층 중앙은 서·동·북만 제공한다. 폐쇄 방향을 지도 노드나 동작 버튼으로 만들지 않는다. 기능 없는 시설에는 NPC·보관함·가짜 action hint를 추가하지 않는다.
 
-새 캐릭터는 기존 최초 puppet의 비월드 위치 fallback에서 출정 대기실로 배치되고 새 profile의 `visited`도 대기실에서 시작한다. 재접속 시 유효한 저장 위치와 기존 방문 기록을 보존한다. Evennia fallback `home=dock`은 유지한다. 일반 귀환은 `support_roof`, 전투 패배는 `infirmary`로 명시적으로 이동한다. 상점은 부두, 의료·휴식은 의무실의 실제 객체를 따른다. 보관·훈련 객체는 아래 3단계 배치를 따른다. bootstrap은 기존 stable tag로 Room/실제 Exit를 재사용·갱신하며 개인 기록을 초기화하지 않는다. 이전 본부 배치의 중앙홀 동쪽·1층 중앙 남쪽 관리 Exit는 같은 목적지를 유지하며 새 남쪽·북쪽 stable tag와 alias로 갱신한다. 이미 새 출구가 있다면 해당 옛 관리 Exit만 제거한다. integrity는 목적지·정반대 방향의 양방향 연결·폐쇄 문구/충돌·본부 고정 배치·시설의 유일 진입·Region membership을 검사한다.
+새 캐릭터는 기존 최초 puppet의 비월드 위치 fallback에서 출정 대기실로 배치되고 새 profile의 `visited`도 대기실에서 시작한다. 재접속 시 유효한 저장 위치와 기존 방문 기록을 보존한다. Evennia fallback `home=dock`은 유지한다. 일반 귀환은 `support_roof`, 전투 패배는 `infirmary`로 명시적으로 이동한다. 상점은 지원동의 실제 Shopkeeper, 의료·휴식은 의무실의 실제 객체를 따른다. 보관·훈련 객체는 아래 3단계 배치를 따른다. bootstrap은 기존 stable tag로 Room/실제 Exit를 재사용·갱신하며 개인 기록을 초기화하지 않는다. 이전 본부 배치의 중앙홀 동쪽·1층 중앙 남쪽 관리 Exit는 같은 목적지를 유지하며 새 남쪽·북쪽 stable tag와 alias로 갱신한다. 이미 새 출구가 있다면 해당 옛 관리 Exit만 제거한다. integrity는 목적지·정반대 방향의 양방향 연결·폐쇄 문구/충돌·본부 고정 배치·시설의 유일 진입·Region membership을 검사한다.
 
 ## 본부 2단계: 공용 승강기
 
@@ -45,11 +45,11 @@ Room의 local/distant 표시 경로는 정적 설명 다음에 폐쇄 문구를 
 
 Room 본문은 기존 `world.text` semantic 조각으로 호출 방법 또는 현재 층·가능한 명령을 표시한다. `pz_state.elevator`는 서버가 결정한 `inside`, 내부의 `current_stop/current_floor`, `actions[{label, command}]`를 제공하며 이용 불가능한 곳에서는 null이다. 클라이언트는 이 값을 주변 행동에 렌더링하고 같은 텍스트 명령을 보낸다. zone ID 분기나 별도 웹 이동 API는 없다. 지도는 방문한 승강기·상층·옥상을 기존 Room 목록에 표시하며 가짜 방향 연결을 추가하지 않는다. 순수 검사는 cardinal graph와 stop을 포함한 transport reachability를 따로 확인한다.
 
-Integrity는 승강기 Room·headquarters 소속, default·정류 층 ID/label/목적지의 유효성·중복, 정확히 세 중앙 복도와 옥상인 정류 구성, 가짜 방향 출구 금지와 기존 HQ reverse/blocked 검증을 함께 수행한다. 귀환은 옥상에 도착한 뒤 이 승강기로 이동한다. 의료·패배 흐름은 아래 4단계를 따르며 회수 자원 정산은 아래 5단계를 따르며 NPC 상점은 후속 단계다.
+Integrity는 승강기 Room·headquarters 소속, default·정류 층 ID/label/목적지의 유효성·중복, 정확히 세 중앙 복도와 옥상인 정류 구성, 가짜 방향 출구 금지와 기존 HQ reverse/blocked 검증을 함께 수행한다. 귀환은 옥상에 도착한 뒤 이 승강기로 이동한다. 의료·패배 흐름은 아래 4단계를 따르며 회수 자원 정산은 아래 5단계, NPC 상점은 6단계를 따른다.
 
 ## 본부 3단계: 보관·훈련 서비스 이전
 
-`INTERACTABLES`의 기존 `shared_container`와 `personal_locker`는 `storage_room`, `instructor`는 `training_room`에 배치한다. 1층 중앙에서 서·북으로 보관실, 승강기로 2층에 내려 동·북으로 훈련실에 도착한다. 시설 문은 기존 북/남 양방향 출구를 그대로 사용하며 승강기 코드는 변경하지 않는다. 부두에는 윤대장·상점이 남는다. 의료·귀환·패배의 현재 배치는 아래 4단계를 따른다.
+`INTERACTABLES`의 기존 `shared_container`와 `personal_locker`는 `storage_room`, `instructor`는 `training_room`에 배치한다. 1층 중앙에서 서·북으로 보관실, 승강기로 2층에 내려 동·북으로 훈련실에 도착한다. 시설 문은 기존 북/남 양방향 출구를 그대로 사용하며 승강기 코드는 변경하지 않는다. 부두에는 윤대장과 탐사 출발 동선이 남는다. 의료·귀환·패배의 현재 배치는 아래 4단계를 따른다.
 
 서비스는 Room 이름이 아니라 실제 world object를 따른다. 보관 명령은 기존 `room_objects`와 Container 대상 선택·가시성·이전 규칙을 사용한다. 훈련 명령도 기존 `resolve_action`으로 Instructor에 위임하며 현재 방의 safe 속성·비전투 상태·Observation/view 정책을 검사한다. `instructor_for`는 같은 관찰 가능한 객체 풀과 `Instructor.available`을 사용하고, 웹의 `training_available`은 그 결과에서 파생된다. 클라이언트가 시설 Room ID로 활성 여부를 판단하지 않는다. 원거리 표시는 존재만 보여 주고 contents·개인 보관·훈련 행동과 성장 상태를 노출하지 않는다.
 
@@ -67,13 +67,13 @@ bootstrap은 stable `primal_interactable` tag로 기존 객체를 찾아 DB ID�
 
 `enemy_attack`은 피해·defeated 판정만 반환한다. `apply_defeat`가 `lost=min(credits,10)`을 차감하고 `DEFEAT_RECOVERY_HP=1`로 최소 생존 상태를 설정한다. 일반 의료 rule/객체는 호출하지 않는다. Enemy lifecycle은 하나의 `world_change` 안에서 피해·패널티·저장·`leave_combat`·의무실 이동을 처리한다. 패배자만 combatants/threat/contribution과 queued action·guard·타이머를 정리하고 다른 참가자는 유지한다. 이동 False/실패는 예외로 rollback하며 DB profile·FK와 Evennia attribute/location/contents 캐시를 복구한다. 타이머 취소와 구조 안내는 `after_change`로 commit 뒤 실행한다. 기존 `save_profile`의 deferred push가 새 의무실 상태를 패배자에게 보내므로 적 Room의 broadcast에만 의존하지 않는다. visited는 실제 이동 hook으로 의무실 방문을 추가하며 나머지 진행 기록은 보존한다. 출력 문구로 lifecycle을 판정하지 않는다.
 
-서버 interactable allowlist에는 의료 `치료`/`휴식`만 추가한다. 같은 객체의 visible/safe/noncombat availability로 Web action과 target/action Room hint를 결정한다. 클라이언트는 서버 명령을 렌더링할 뿐 infirmary zone 특례가 없다. 부두의 휴식 버튼·hint는 제거하고 기존 dock 상점 특례와 `at_dock()`은 유지한다. 원거리 관찰은 의료 서비스 행동을 노출하지 않는다.
+서버 interactable allowlist에는 의료 `치료`/`휴식`만 추가한다. 같은 객체의 visible/safe/noncombat availability로 Web action과 target/action Room hint를 결정한다. 클라이언트는 서버 명령을 렌더링할 뿐 infirmary zone 특례가 없다. 부두의 휴식 버튼·hint는 제거했으며 현재는 6단계에서 상점 특례도 제거됐다. 원거리 관찰은 의료 서비스 행동을 노출하지 않는다.
 
-`scripts/smoke.py`의 반복 회복은 귀환→옥상→승강기 2층→의무실 침대→승강기 1층→부두→초지로, 구매는 귀환→옥상→승강기 1층→부두로 바꾼다. 이미 full HP이면 휴식을 요청하지 않는다. 가입 rate limit과 610초 대기는 변경하지 않는다.
+`scripts/smoke.py`의 반복 회복은 귀환→옥상→승강기 2층→의무실 침대→승강기 1층→부두→초지로, 구매는 현재 귀환→옥상→승강기 3층→무기점 후 1층→중앙홀→부두→초지로 이동한다. 이미 full HP이면 휴식을 요청하지 않는다. 가입 rate limit과 610초 대기는 변경하지 않는다.
 
 ## 본부 5단계: 단일 화폐와 회수 자원 정산
 
-Credits는 유일한 구매 currency, scrap은 material/resource다. `profile.inventory["scrap"]`와 개인 storage의 기존 저장 형식을 유지하며 migration·자동 환전은 없다. 적 전리품·이전·보관 정책과 발전기의 부품 3개 소비를 보존한다. `world/content/economy.py`의 `SALVAGE_CREDIT_RATE=10`은 정산율 SSOT다. 기존 장비용 EXCHANGE 정의/export와 구매 flag를 제거하고 `rules.buy(profile, item_id)`는 SHOP의 크레딧 가격만 사용한다. SHOP은 가격을 유지한 중간 단계의 Credit catalog이며 부두 `상점`/`구매`의 `at_dock()`은 그대로다. 6단계에서 실제 Shopkeeper와 room-local catalog로 전환할 예정이다.
+Credits는 유일한 구매 currency, scrap은 material/resource다. `profile.inventory["scrap"]`와 개인 storage의 기존 저장 형식을 유지하며 migration·자동 환전은 없다. 적 전리품·이전·보관 정책과 발전기의 부품 3개 소비를 보존한다. `world/content/economy.py`의 `SALVAGE_CREDIT_RATE=10`은 정산율 SSOT다. 기존 장비용 EXCHANGE 정의/export와 구매 flag를 제거하고 `rules.buy(profile, shop_id, item_id)`는 6단계 SHOP_CATALOGS의 명시적 catalog에서 크레딧 가격을 조회한다. 5단계 당시 부두 임시 상점은 6단계에서 실제 Shopkeeper로 대체됐다.
 
 실제 persistent `SettlementOfficer`의 stable ID는 `salvage_officer`, 표시명은 자원 정산관, alias는 정산관이며 `salvage_office`에 배치한다. 기존 bootstrap의 stable tag 재사용으로 객체 ID·alias·정상 배치를 유지하고 다른 객체·개인 profile·shared inventory를 초기화하지 않는다. integrity는 위치·환율/교환 action 정의·양의 정수 정산율과 기존 본부 구조를 검사한다.
 
@@ -82,6 +82,20 @@ Credits는 유일한 구매 currency, scrap은 material/resource다. `profile.in
 `world/settlement.py`는 정산 resource와 1/N개/모두 수량만 해석한다. 일반 가방/보관/전리품 parser의 수량 범위를 확장하지 않는다. `rules.settle_salvage(profile, quantity)`는 비전투·양의 정수·가방 보유량을 전부 검증한 뒤 consume과 Credits 증가를 수행하고 획득액을 반환한다. 객체가 `caller.change()` 경계 안의 최신 profile에서 모두 수량을 구하므로 실패 시 부분 저장이 없다. 0개 inventory entry는 consume이 제거한다. 저장한 부품·임무용 부품·성장 등은 정산 대상 가방 수량 이외에 변경하지 않는다.
 
 서버는 실제 visible/available NPC에서 환율 명령과 보유 scrap이 있을 때 대상 지정 모두 정산 명령을 만든다. 기존 interactable actions를 재사용하고 전체 ActionObject action을 개방하지 않는다. Room hint도 실제 target/action의 availability를 따른다. `pz_state.resources.scrap={name,count}`는 같은 profile snapshot의 가방에서 파생하고 Credits wallet과 구분한다. 별도 balance를 저장하지 않으며 client는 payload와 완성된 command를 렌더링한다. zone ID·NPC 이름·환율·수량으로 action을 추론하지 않는다.
+
+## 본부 6단계: NPC 기반 상점
+
+`Shopkeeper(ActionObject)`는 실제 persistent NPC다. `supply_shopkeeper`(보급관/보급상인)는 `supply_shop`, `weapon_shopkeeper`(무기상/무기 상인)는 `weapon_shop`, `armor_shopkeeper`(방어구상/방어구 상인)는 `armor_shop`에 배치한다. `db.shop_id`의 supply/weapon/armor가 catalog identity이며 Room ID나 NPC 이름에서 추론하지 않는다. bootstrap은 stable tag로 같은 객체를 재사용하고 정의의 위치·alias·shop_id를 정규화한다. 재고 상태·profile migration은 없다.
+
+`world/content/shops.py`의 `SHOP_CATALOGS`가 유일한 판매/가격 SSOT다. 보급품 5종·무기 5종·방어구 4종의 기존 14개 가격을 모두 보존한다. `rules.buy(profile, shop_id, item_id)`는 비전투·유효 catalog·해당 상품·Credits 충분 여부를 전부 검증한 뒤 Credits와 가방을 함께 변경한다. scrap 정산·임무 소비·전리품·기술 가격·패배 패널티는 변경하지 않는다. 무한 재고로 매번 1개만 판매한다.
+
+`상점`(`메뉴`/`shop`)과 `구매`는 현재 `room_objects`의 실제 보이는 Shopkeeper를 찾는다. 메뉴의 bare 후보는 모든 판매자, 구매의 bare 후보는 그 물건을 파는 판매자만이다. 0명 거절·1명 선택·여럿 대상 지정 요구이며 targeted 구매는 `무기상에게 강철마체테 구매`처럼 기존 parse_relation/names/selector/resolve를 사용한다. 번호는 기존 공통 정렬의 임시 번호다. 발견 후 같은 Room·safe·비전투를 검사하며 숨은 판매자는 selector·개수·오류·hint·Web에서 제외한다. 서비스는 실제 NPC를 따라 다른 safe Room에서도 동작한다.
+
+메뉴는 실제 NPC 제목과 그 catalog의 Credit 가격만 표시하고 상세 보기는 메뉴/targeted 구매 사용법을 안내한다. 각 시설 hint는 actual stable NPC와 상점 action을 참조하며 availability를 확인한다. 부두의 static 상점 hint·Shop/Buy gate·Web 상점 버튼을 제거했다. 다른 사용처가 없는 `GameCommand.at_dock()`과 global SHOP도 제거했다.
+
+모든 `ActionObject`가 `web_actions(caller, target, observed_at)` capability를 제공한다. 기본 allowlist는 대화/조사/수리/보기와 available 의료 행동을 보존한다. Container는 보기만, Instructor는 기존 대화와 별도 TRAINING UI를 유지한다. SettlementOfficer와 Shopkeeper만 필요한 동적 action을 override한다. `world.state`는 subclass를 구분하지 않고 capability만 호출한다. Shopkeeper는 available일 때 메뉴와 catalog별 targeted 구매의 완성된 label/command를 서버에서 만든다. client는 기존 렌더링을 사용하며 Room·가격·이름으로 구매를 추론하지 않는다.
+
+Integrity는 세 판매자 배치·catalog ID/행동, catalog 비어 있지 않음·상품 존재·양의 정수 가격·중복 금지·기존 14개 합집합을 검사한다. smoke 구매 helper는 옥상→승강기 3층→동·북 무기점, 구매 후 남·서→승강기 1층→북·서 부두→초지·관리동의 실제 동선을 사용한다. 7단계 전체 closeout은 별도 요청이다.
 
 ## 공통 대상 선택
 
@@ -229,7 +243,7 @@ profile의 최신 버전은 5다. v1/v2의 개인 encounter 제거·전투 입�
 
 세계 사건과 조회 화면은 같은 데이터를 서로 다른 형식으로 표현한다. Room·공격·처치·전리품·NPC 대화는 한국어 서술이고, 상태·능력·경험치·기술·장비·가방·상점·임무·파티·도움말은 `[제목]`과 짧은 행으로 구성한 compact 정보창이다. Room과 대상 보기는 기존 구분선과 설명·행동 안내를 유지한다. Room은 실제로 보이는 대상만 묘사하며 명령 목록을 넣지 않는다. 가능한 행동은 대상 보기와 command registry 기반 도움말에서 확인한다.
 
-`world/text.py`의 `Text`는 색 없는 문자열과 `{text, role}` 조각을 함께 가진다. `token`, `text`, `join`, `sheet`, `compact`, `row`가 조합과 한글 표시 폭을 담당한다. 조사는 색 코드를 붙이기 전 원래 이름의 받침으로 선택한다. `world/presentation.py`는 기존 rules·성장 정의·ITEMS·SHOP에서 조회값을 읽는다. Enemy/Corpse/DroppedLoot/ActionObject/Explorer의 실제 타입과 콘텐츠 정의가 대상 역할과 행동을 결정한다. 이름별 색상 목록이나 완성된 문자열 검색은 사용하지 않는다.
+`world/text.py`의 `Text`는 색 없는 문자열과 `{text, role}` 조각을 함께 가진다. `token`, `text`, `join`, `sheet`, `compact`, `row`가 조합과 한글 표시 폭을 담당한다. 조사는 색 코드를 붙이기 전 원래 이름의 받침으로 선택한다. `world/presentation.py`는 기존 rules·성장 정의·ITEMS·SHOP_CATALOGS에서 조회값을 읽는다. Enemy/Corpse/DroppedLoot/ActionObject/Explorer의 실제 타입과 콘텐츠 정의가 대상 역할과 행동을 결정한다. 이름별 색상 목록이나 완성된 문자열 검색은 사용하지 않는다.
 
 `rules.player_attack()`은 피해량과 구조화된 행동 결과를 반환한다. Enemy가 실제 HP 감소량을 확정한 뒤 문장을 만든다. 사망·보상·전리품 권한 판정에 출력 문장을 사용하지 않는다. 전투 공식, 타이머, 포인트 경제, 가격, 보상·배정, profile 버전과 저장 구조는 변경하지 않는다.
 
@@ -300,7 +314,7 @@ equipment 슬롯은 `None`을 정상 값으로 허용한다. 해제/벗어는 �
 
 ## Region·임무·Gate 확장
 
-`world/content/starter.py`에는 기존 8개 Room/4종 Enemy의 stable ID를 보존한다. `deep_jungle.py`에는 7개 Room/4종 Enemy를 정의한다. `items.py`는 공통 아이템과 상점 가격을 담고 `content/__init__.py`가 기존 `from world.content import ROOMS, ENEMIES, ITEMS` 경로를 유지한다. `REGIONS[region].rooms`는 각 지역 파일의 Room key에서 파생되므로 Room↔Region 소속을 두 곳에 입력하지 않는다. `ROOM_REGION`은 이 정의에서 파생된다. ID 충돌·참조 누락·출구 역방향·spawn 충돌은 `content.integrity.errors()`로 검사한다.
+`world/content/starter.py`에는 기존 8개 Room/4종 Enemy의 stable ID를 보존한다. `deep_jungle.py`에는 7개 Room/4종 Enemy를 정의한다. `items.py`는 공통 아이템, `shops.py`는 세 상점 catalog와 가격을 담고 `content/__init__.py`가 기존 `from world.content import ROOMS, ENEMIES, ITEMS` 경로를 유지한다. `REGIONS[region].rooms`는 각 지역 파일의 Room key에서 파생되므로 Room↔Region 소속을 두 곳에 입력하지 않는다. `ROOM_REGION`은 이 정의에서 파생된다. ID 충돌·참조 누락·출구 역방향·spawn 충돌은 `content.integrity.errors()`로 검사한다.
 
 첫 지역 `dock`~`ridge`의 Room ID, `zone:enemy` spawn ID, 기존 아이템 ID를 바꾸지 않았다. `ridge` 북쪽에 밀림 입구를 연결했다. Spawn을 다른 Room으로 옮길 때는 새 Room의 `spawn_ids[enemy_id]`에 이전 stable tag를 명시하면 동일한 Enemy 객체와 HP를 유지한다. Room의 `requires`는 도착 시 필요한 임무 ID·진행 필드·거절 문구를 선언한다. `Explorer.at_pre_move()`는 이 데이터만 해석하며 지역 이름을 하드코딩하지 않는다. 통신탑은 발전기 복구, 밀림 입구는 첫 임무 보고, 연구구역 외곽은 밀림의 두 표식·신호전지를 확인한 신호 장치 가동을 요구한다. `exits`는 기존 `방향 → Room ID` 형태를 유지해 방향도·웹 버튼·서버 이동이 같은 정의를 읽는다.
 

@@ -6,7 +6,7 @@ from unittest import TestCase
 from unittest.mock import patch
 
 from world import content, rules
-from world.content import ITEMS, SALVAGE_CREDIT_RATE, SHOP
+from world.content import ITEMS, SALVAGE_CREDIT_RATE, SHOP_CATALOGS
 from world.content.integrity import errors
 from world.settlement import parse_salvage
 from world.test_headquarters import content_targets
@@ -17,10 +17,11 @@ class SettlementRulesTests(TestCase):
         self.assertEqual(SALVAGE_CREDIT_RATE, 10)
         self.assertFalse(hasattr(content, "EXCHANGE"))
         self.assertFalse(hasattr(content.items, "EXCHANGE"))
-        self.assertEqual(tuple(signature(rules.buy).parameters), ("profile", "item_id"))
+        self.assertEqual(tuple(signature(rules.buy).parameters), ("profile", "shop_id", "item_id"))
         self.assertEqual(ITEMS["scrap"]["slot"], "material")
         self.assertTrue(ITEMS["scrap"]["transferable"])
-        self.assertEqual(SHOP, {
+        self.assertFalse(hasattr(content, "SHOP"))
+        self.assertEqual({item: price for catalog in SHOP_CATALOGS.values() for item, price in catalog.items()}, {
             "flashlight": 30, "battery": 6, "bandage": 8, "field_ration": 4, "water": 3,
             "spear": 35, "blade": 60, "jungle_blade": 95, "carbine": 130, "heavy_carbine": 240,
             "leather_suit": 35, "tactical_vest": 85, "armor": 65, "heavy_suit": 190,

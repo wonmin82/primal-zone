@@ -10,7 +10,7 @@ from world.content import (
     ITEMS,
     ROOMS,
     SALVAGE_CREDIT_RATE,
-    SHOP,
+    SHOP_CATALOGS,
     find_id,
 )
 from world.navigation import entry_block
@@ -82,14 +82,14 @@ class ItemInteractionRulesTests(TestCase):
         for identity, action in (("field_ration", "먹어"), ("water", "마셔")):
             with self.subTest(identity=identity):
                 profile = rules.new_profile()
-                rules.buy(profile, identity)
+                rules.buy(profile, "supply", identity)
                 profile["hp"] = 20
                 before = deepcopy(profile["proficiencies"])
                 self.assertEqual(rules.eat_or_drink(profile, identity, action), ITEMS[identity]["heal"])
                 self.assertEqual(profile["hp"], 20 + ITEMS[identity]["heal"])
                 self.assertEqual(profile["proficiencies"], before)
                 self.assertNotIn(identity, profile["inventory"])
-                self.assertLess(ITEMS[identity]["heal"] / SHOP[identity], ITEMS["bandage"]["heal"] / SHOP["bandage"])
+                self.assertLess(ITEMS[identity]["heal"] / SHOP_CATALOGS["supply"][identity], ITEMS["bandage"]["heal"] / SHOP_CATALOGS["supply"]["bandage"])
         for identity, action, hp, combat in (
             ("field_ration", "마셔", 20, None), ("water", "먹어", 20, None),
             ("bandage", "먹어", 20, None), ("water", "마셔", 60, None),
@@ -170,14 +170,14 @@ class RuleTests(TestCase):
         profile = rules.new_profile()
         before = deepcopy(profile)
         with self.assertRaises(rules.RuleError):
-            rules.buy(profile, "carbine")
+            rules.buy(profile, "weapon", "carbine")
         self.assertEqual(profile, before)
 
     def test_salvage_settlement_funds_a_credit_gear_purchase(self):
         profile = rules.new_profile()
         rules.add_item(profile, "scrap", 6)
         self.assertEqual(rules.settle_salvage(profile, 6), 6 * SALVAGE_CREDIT_RATE)
-        rules.buy(profile, "blade")
+        rules.buy(profile, "weapon", "blade")
         self.assertEqual(profile["inventory"]["blade"], 1)
         self.assertNotIn("scrap", profile["inventory"])
 
@@ -191,10 +191,10 @@ class RuleTests(TestCase):
                 self.assertTrue(
                     all(isinstance(data[k], int) and data[k] >= 0 for k in ("attack", "defense"))
                 )
-                sources = set(SHOP) | {e["drop"] for e in ENEMIES.values()}
+                sources = {item for catalog in SHOP_CATALOGS.values() for item in catalog} | {e["drop"] for e in ENEMIES.values()}
                 sources |= set(rules.new_profile()["inventory"])
                 self.assertIn(identity, sources)
-        for catalog in (SHOP,):
+        for catalog in SHOP_CATALOGS.values():
             for identity, price in catalog.items():
                 self.assertIn(identity, ITEMS)
                 self.assertGreater(price, 0)
@@ -251,21 +251,22 @@ class RuleTests(TestCase):
             self.assertEqual(profile, before)
 
     def test_every_credit_purchase_exact_cost_and_lossless_failure(self):
-        for identity, price in SHOP.items():
-            with self.subTest(item=identity):
-                profile = rules.new_profile()
-                profile["credits"] = price - 1
-                profile["inventory"]["scrap"] = price
-                before = deepcopy(profile)
-                with self.assertRaises(rules.RuleError):
-                    rules.buy(profile, identity)
-                self.assertEqual(profile, before)
-                profile["credits"] = price
-                expected = deepcopy(profile)
-                expected["credits"] = 0
-                expected["inventory"][identity] = expected["inventory"].get(identity, 0) + 1
-                rules.buy(profile, identity)
-                self.assertEqual(profile, expected)
+        for shop_id, catalog in SHOP_CATALOGS.items():
+            for identity, price in catalog.items():
+                with self.subTest(item=identity):
+                    profile = rules.new_profile()
+                    profile["credits"] = price - 1
+                    profile["inventory"]["scrap"] = price
+                    before = deepcopy(profile)
+                    with self.assertRaises(rules.RuleError):
+                        rules.buy(profile, shop_id, identity)
+                    self.assertEqual(profile, before)
+                    profile["credits"] = price
+                    expected = deepcopy(profile)
+                    expected["credits"] = 0
+                    expected["inventory"][identity] = expected["inventory"].get(identity, 0) + 1
+                    rules.buy(profile, shop_id, identity)
+                    self.assertEqual(profile, expected)
 
     def test_heal_is_capped_and_consumes_one_bandage(self):
         profile = rules.new_profile()
