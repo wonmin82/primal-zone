@@ -6,6 +6,8 @@ from unittest.mock import patch
 
 from world import rules
 from world.content import REGIONS, ROOMS
+from world.content.directions import DIRECTION_ORDER, OPPOSITE_DIRECTIONS
+from world.content.headquarters import ROOF_ROOMS, ROOF_SIDES
 from world.content.headquarters import ROOMS as HQ_ROOMS
 from world.content.integrity import errors, headquarters_errors
 from world.navigation import blocked_exit_message
@@ -47,7 +49,7 @@ class HeadquartersRulesTests(TestCase):
         self.assertTrue(any("instructor: 본부 서비스" in issue for issue in errors(targets)))
 
     def test_hub_layout_and_prepared_rooms_are_valid(self):
-        self.assertEqual(len(HQ_ROOMS), 26)
+        self.assertEqual(len(HQ_ROOMS), 34)
         self.assertEqual(errors(content_targets()), [])
         self.assertEqual(ROOMS["staging_room"]["exits"], {"남": "hq_concourse"})
         self.assertEqual(ROOMS["hq_concourse"]["exits"], {
@@ -58,7 +60,7 @@ class HeadquartersRulesTests(TestCase):
         })
         self.assertEqual(ROOMS["support_1f_c"]["blocked_exits"], {"남": "남쪽 출입문은 현재 폐쇄되어 있다."})
         self.assertEqual(ROOMS["dock"]["exits"], {"북": "grass", "동": "hq_concourse"})
-        self.assertEqual(ROOMS["support_roof"]["exits"], {})
+        self.assertEqual(ROOMS["support_roof"]["exits"], ROOF_SIDES)
         for zone, room in HQ_ROOMS.items():
             self.assertTrue(room["safe"])
             self.assertEqual(room["enemies"], [])
@@ -87,6 +89,55 @@ class HeadquartersRulesTests(TestCase):
         ):
             self.assertEqual(ROOMS[corridor]["exits"]["북"], facility)
             self.assertEqual(ROOMS[facility]["exits"], {"남": corridor})
+
+    def test_roof_star_is_safe_outdoor_and_has_no_services_or_progression(self):
+        suffixes = ("n", "ne", "e", "se", "s", "sw", "w", "nw")
+        expected = {"support_roof_" + suffix for suffix in suffixes}
+        self.assertEqual(ROOMS["support_roof"]["exits"],
+                         dict(zip(("북", "북동", "동", "남동", "남", "남서", "서", "북서"),
+                                  ("support_roof_" + suffix for suffix in suffixes))))
+        self.assertEqual(set(ROOF_SIDES.values()), expected)
+        self.assertEqual(set(ROOF_SIDES), set(DIRECTION_ORDER))
+        self.assertEqual(ROOF_ROOMS, expected | {"support_roof"})
+        for direction, zone in ROOF_SIDES.items():
+            self.assertEqual(ROOMS[zone]["exits"], {OPPOSITE_DIRECTIONS[direction]: "support_roof"})
+        for zone in ROOF_ROOMS:
+            room = ROOMS[zone]
+            self.assertIn(zone, REGIONS["headquarters"]["rooms"])
+            self.assertTrue(room["safe"])
+            self.assertEqual(room["enemies"], [])
+            self.assertEqual((room["exposure"], room["light_profile"]), ("outdoor", "natural"))
+            for field in ("hints", "requires", "quest", "items", "rewards"):
+                self.assertFalse(room.get(field))
+
+    def test_roof_invalid_topology_safety_and_membership_are_detected(self):
+        for change in ({"exits": {}}, {"exits": {"남서": "support_roof_n"}},
+                       {"safe": False}, {"enemies": ["scavenger"]}, {"exposure": "indoor"}):
+            with self.subTest(change=change), patch.dict(ROOMS["support_roof_ne"], change):
+                self.assertTrue(headquarters_errors())
+        with patch.dict(REGIONS["headquarters"], rooms=tuple(zone for zone in HQ_ROOMS if zone != "support_roof_ne")):
+            self.assertTrue(headquarters_errors())
+
+    def test_roof_content_fields_are_rejected_by_integrity(self):
+        targets = content_targets()
+        fields = {
+            "hints": [{"text": "진행 안내"}],
+            "requires": {"quest": "radio_tower", "flag": QUESTS["radio_tower"]["steps"][0][0]},
+            "quest": "radio_tower",
+            "items": {"scrap": 1},
+            "rewards": {"credits": 10},
+        }
+        for zone in ROOF_ROOMS:
+            for field, value in fields.items():
+                with self.subTest(zone=zone, field=field), patch.dict(ROOMS[zone], {field: value}):
+                    issues = errors(targets)
+                    self.assertTrue(any(zone in issue and field in issue and "옥상 검증 Room" in issue
+                                        for issue in issues))
+
+    def test_roof_empty_content_fields_remain_valid(self):
+        for zone in ROOF_ROOMS:
+            with self.subTest(zone=zone), patch.dict(ROOMS[zone], hints=[], requires={}, quest=None, items={}, rewards={}):
+                self.assertEqual(errors(content_targets()), [])
 
     def test_blocked_direction_projection_is_read_only_and_reuses_aliases(self):
         before = deepcopy(ROOMS)

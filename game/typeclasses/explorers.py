@@ -10,7 +10,15 @@ from evennia.utils import delay
 from evennia.utils.dbserialize import deserialize
 from world import rules
 from world import text as ft
-from world.content import EQUIPMENT_ACTIONS, ITEMS, REGIONS, ROOM_REGION, ROOMS, UNEQUIP_ACTIONS
+from world.content import (
+    EQUIPMENT_ACTIONS,
+    ITEMS,
+    REGIONS,
+    ROOM_REGION,
+    ROOMS,
+    UNEQUIP_ACTIONS,
+    ordered_directions,
+)
 from world.distant_presentation import DistantPresence, DistantPresenceMixin
 from world.multiplayer import after_change
 from world.navigation import entry_block
@@ -156,7 +164,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             "safe": room.get("safe", False),
             "inventory": inventory,
             "equipment": {slot: ITEMS[identity]["name"] if identity else None for slot, identity in profile["equipment"].items()},
-            "exits": list(room.get("exits", {})),
+            "exits": ordered_directions(room.get("exits", {})),
             "hint": room_hint(observation),
             **multiplayer_state(self, now=observed_at),
             "player_round": profile["player_round"],

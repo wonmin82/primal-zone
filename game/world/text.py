@@ -97,8 +97,13 @@ def compact(title, *lines, summary=""):
     return text(join([heading, *lines]), kind="sheet")
 
 
+def display_width(value):
+    """색 변환 전 visible text의 기존 동아시아 표시 폭 정책."""
+    return sum(2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in str(value))
+
+
 def row(label, value, width=12):
-    columns = sum(2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in str(label))
+    columns = display_width(label)
     return text(label, " " * max(2, width - columns), value)
 
 

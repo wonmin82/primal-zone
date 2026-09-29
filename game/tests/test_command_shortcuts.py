@@ -136,7 +136,8 @@ class CommandShortcutsTests(WorldCommandTest):
 
     def test_reserved_names_and_invalid_prospective_graph_do_not_replace_data(self):
         self.register("a", "b")
-        for name in ("상태", "공격", "해", "줄임말", "ㅂ", "look", "quit", "connect", "n", "2층", "emit"):
+        for name in ("상태", "공격", "해", "줄임말", "ㅂ", "look", "quit", "connect", "n", "2층", "emit",
+                     "북동", "남동", "남서", "북서", "ne", "se", "sw", "nw"):
             before = self.saved()
             self.run_raw(f"줄임말 추가 {name} 가방")
             self.assertEqual(self.saved(), before, name)

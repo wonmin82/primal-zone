@@ -1,5 +1,22 @@
 # 원시구역 테스트 안내
 
+## 현재 기준: 8방향과 고정 방향 인터페이스
+
+1. 비전투 `귀환` 또는 승강기 `옥상` → `내리기`로 지원동 옥상 중앙에 간다. 지도와 Web에 북부터 시계방향의 여덟 실제 Exit가 보여야 한다.
+2. `북동 보기`·`ne 보기`·`남서 봐`·`sw 봐`로 정찰한다. 현재 위치와 방문 기록은 바뀌지 않아야 한다.
+3. 북/남, 북동/남서, 동/서, 남동/북서를 왕복하고 n/s·ne/sw·e/w·se/nw alias도 비교한다. 각 주변 구역에는 중앙으로 돌아가는 Exit 하나만 있다. `북동, 남서 해`도 중앙에 돌아온다.
+4. desktop과 390px에서 옥상의 8개 버튼을 확인하고 북동 버튼으로 설비 구역에 들어간다. 남서 버튼 하나만 남아도 3×3 공간·중앙의 panel 내 좌표는 같아야 한다. 남서로 돌아온다. 글자 잘림·가로 overflow·앱 console 오류를 확인한다.
+5. 오른쪽 DOM/화면은 SURROUNDINGS → PARTY → OBJECTIVE다. 1150px 이하 grid에서는 세 panel이 같은 첫 줄, 700px 이하에서는 같은 순서의 flex column이다. compass는 hint/context 위에 있다. 승강기·상점처럼 context action 수가 다른 방에서도 compass 위치와 footprint를 비교한다.
+6. Telnet 방향도는 출구 0/1/4/8개 모두 30 cells × 5줄이며 `[현재]` 시작은 12열(0 기준)이다. 북/남 fullwidth 축과 방향 semantic 색이 유지되어야 한다. 실제 terminal/font의 glyph 폭도 별도로 확인한다.
+
+### 8방향 브라우저 검증 (2026-09-29)
+
+별도 guarded smoke SQLite/Portal/Server와 일반 Player fixture로 확인했다. setup의 `collectstatic --noinput`은 격리된 game 디렉터리에서 실행됐고 CSS/JS의 `?v=eight-directions`를 실제 로드했다. Chrome desktop 1424px에서 옥상 8개 → 북동 구역 1개 → 옥상, 승강기 0개 → 3층 중앙/복도 → 무기점을 이동했다. grid 높이 148px와 중앙 좌표는 출구·context 수에 따라 변하지 않았다. 승강기 층 선택/하차와 상점 상품 버튼도 실제 실행해 100C→40C·강철마체테 +1을 확인했다.
+
+701px에서는 SURROUNDINGS/PARTY/OBJECTIVE가 같은 첫 줄이며 390px에서는 같은 순서의 flex column이고 3×3 compass를 유지했다. mobile 8↔1 전환에서도 중앙의 panel 내 좌표는 같았다(클릭 시 브라우저 자동 스크롤은 문서 내 배치를 바꾸지 않는다). 가로 overflow·대각선 text clipping·앱 console error/warning은 없었다. viewport를 복원하고 탭/owned server/temp DB를 정리했으며 일반 play SQLite SHA256·mtime_ns·size는 불변이었다. 검증 screenshot/log는 Git 제외 work에만 보관한다. 실제 OS IME·Telnet 클라이언트/font 렌더링은 미실행이며 텍스트 폭/semantic은 자동 검증한다. Full은 production gameplay timing 변경이 없어 반복하지 않는다.
+
+최종 자동 검증은 check/node/diff 검사 통과, pure 115 / 1.975초·integration 282 / 139.278초·total 397·통합 runner 151.385초다. Quick smoke 68.232초는 기존 파티/점유/전리품·실제 timer·옥상/승강기/상점·재접속 흐름을 성공했다. 이 결과는 이번 branch의 새 실행이며 아래 과거 closeout 수치를 재사용하지 않는다.
+
 ## 현재 기준: 본부 전체 연결 검증
 
 아래 절차가 1~7단계 완료 후 현재 상태다. 뒤의 단계별 실행 수치·PR OPEN·부두 서비스 기록은 당시의 검증 이력이며 현재 기능의 기준이 아니다. 각 과거 기록은 삭제하지 않는다.

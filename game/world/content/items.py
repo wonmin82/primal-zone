@@ -44,7 +44,6 @@ ITEMS = {
 for definition in ITEMS.values():
     definition.setdefault("transferable", True)
 
-OPPOSITES = {"북": "n", "남": "s", "동": "e", "서": "w"}
 # 행동 선택은 아이템 이름이 아니라 slot만 사용한다.
 EQUIPMENT_ACTIONS = {"weapon": "무장", "armor": "착용"}
 UNEQUIP_ACTIONS = {"weapon": "해제", "armor": "벗어"}
