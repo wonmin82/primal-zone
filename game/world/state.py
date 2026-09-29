@@ -142,7 +142,8 @@ def multiplayer_state(player, now=None):
                 "actions": [
                     {"label": action, "command": controls[obj.id] + " " + action}
                     for action in (("보기",) if isinstance(obj, Container) else obj.actions)
-                    if action in ("대화", "조사", "수리", "보기")
+                    if action in ("대화", "조사", "수리", "보기", "치료", "휴식")
+                    and (action not in ("치료", "휴식") or obj.available(player, observed_at=now))
                 ],
                 "look_command": controls[obj.id] + " 보기",
             }

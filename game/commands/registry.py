@@ -39,7 +39,7 @@ from commands.party import (
 )
 from commands.skills import Allocate, Learn, Retrain
 from commands.social import Say
-from commands.world_actions import Investigate, Repair, Rest, Return, Talk
+from commands.world_actions import Investigate, Repair, Rest, Return, Talk, Treat
 
 COMMANDS = [
     Abilities,
@@ -83,6 +83,7 @@ COMMANDS = [
     Flee,
     Return,
     Rest,
+    Treat,
     Shop,
     Buy,
     Exchange,

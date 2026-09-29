@@ -199,6 +199,9 @@ class GameplayIntegrationTests(WorldCommandTest):
         self.char1.execute_cmd("발전 기 수리")
         self.assertTrue(self.char1.profile()["quests"]["radio_tower"]["generator_fixed"])
         self.char1.execute_cmd("귀환")
+        self.assertEqual(self.char1.location, self.rooms["support_roof"])
+        for raw in ("승강기", "1층", "내리기", "북", "서"):
+            self.char1.execute_cmd(raw)
         self.assertEqual(self.char1.location, self.rooms["dock"])
         self.char1.execute_cmd("강화조끼 교환")
         self.assertEqual(self.char1.profile()["inventory"]["armor"], 1)

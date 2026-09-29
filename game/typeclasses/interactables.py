@@ -244,6 +244,50 @@ class Instructor(ActionObject):
             caller.msg("재훈련 완료. 투자 포인트를 반환했습니다. 숙련과 탐사 기록은 유지됩니다.")
 
 
+def _medical_available(obj, caller, observed_at=None):
+    from world.observation import can_perceive, context_for
+
+    return (
+        obj.location is not None and obj.location == caller.location
+        and ROOMS.get(caller.zone, {}).get("safe", False)
+        and not caller.profile_snapshot().get("combat_target")
+        and can_perceive(obj, context_for(caller, observed_at=observed_at))
+    )
+
+
+class Doctor(ActionObject):
+    semantic_role = "npc"
+    detectability = "conspicuous"
+    presence = "탐사자의 상태를 살피며 진료를 준비하고 있다."
+    description = "탐사자의 부상을 살피고 치료하는 의무관이다."
+    actions = ("치료",)
+    available = _medical_available
+
+    def return_appearance(self, looker, **kwargs):
+        return ft.sheet(ft.token(self.semantic_role, self.key), self.description, "",
+                        ft.actions(self.actions if self.available(looker) else ()))
+
+    def act(self, caller, action, args):
+        caller.change(lambda profile: rules.treat(profile, safe=ROOMS.get(caller.zone, {}).get("safe", False)))
+        caller.msg("의무관의 치료로 체력을 모두 회복했습니다.")
+
+
+class Bed(ActionObject):
+    detectability = "conspicuous"
+    presence = "깨끗한 시트와 담요로 정돈되어 있다."
+    description = "몸을 눕히고 회복할 수 있는 의료용 침대다."
+    actions = ("휴식",)
+    available = _medical_available
+
+    def return_appearance(self, looker, **kwargs):
+        return ft.sheet(ft.token(self.semantic_role, self.key), self.description, "",
+                        ft.actions(self.actions if self.available(looker) else ()))
+
+    def act(self, caller, action, args):
+        caller.change(lambda profile: rules.rest(profile, safe=ROOMS.get(caller.zone, {}).get("safe", False)))
+        caller.msg("침대에서 휴식하며 체력을 모두 회복했습니다.")
+
+
 class Pathfinder(ActionObject):
     detectability = "conspicuous"
     distant_visible = True
@@ -345,6 +389,8 @@ def instructor_for(caller, observed_at=None):
 
 
 INTERACTABLES = {
+    "doctor": {"room": "infirmary", "typeclass": "Doctor", "name": "의무관", "aliases": ["의사"]},
+    "infirmary_bed": {"room": "infirmary", "typeclass": "Bed", "name": "침대", "aliases": ["병상"]},
     "emergency_light_cache": {"room": "wreck", "typeclass": "EmergencyLightCache", "name": "비상장비함", "aliases": ["비상함", "장비함"]},
     "shared_container": {"room": "storage_room", "typeclass": "Container", "name": "보관상자", "aliases": []},
     "personal_locker": {"room": "storage_room", "typeclass": "PersonalLocker", "name": "개인 보관함", "aliases": ["보관함"]},

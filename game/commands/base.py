@@ -26,7 +26,7 @@ class GameCommand(Command):
     def at_dock(self):
         self.peaceful()
         if self.caller.zone != "dock":
-            raise rules.RuleError("부두에서만 이용할 수 있습니다. '귀환'으로 돌아가세요.")
+            raise rules.RuleError("부두에서만 이용할 수 있습니다. 귀환 후 승강기로 1층에 내려 중앙홀을 거쳐 부두로 가세요.")
 
 
 class UnknownCommand(Command):

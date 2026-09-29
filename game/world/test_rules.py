@@ -308,7 +308,9 @@ class RuleTests(TestCase):
         profile.update(hp=1, credits=3, xp=20)
         outcome = rules.enemy_attack(profile, "alpha", 3, 100, Random(4))
         self.assertTrue(outcome["defeated"])
-        self.assertEqual((profile["credits"], profile["xp"], profile["hp"]), (0, 20, 60))
+        self.assertEqual((profile["credits"], profile["xp"]), (3, 20))
+        self.assertEqual(rules.apply_defeat(profile), 3)
+        self.assertEqual((profile["credits"], profile["xp"], profile["hp"]), (0, 20, rules.DEFEAT_RECOVERY_HP))
 
     def test_multiple_level_gains_cap_at_ten(self):
         profile = rules.new_profile()

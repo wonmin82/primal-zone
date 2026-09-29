@@ -300,22 +300,31 @@ class Enemy(DistantPresenceMixin, DefaultObject):
             result = rules.enemy_attack(
                 result_profile, self.db.enemy_id, self.db.enemy_round, now, rng
             )
+            lost = rules.apply_defeat(result_profile) if result["defeated"] else 0
             target.save_profile(result_profile)
-            target.msg(
-                ft.text(
-                    ft.named("hostile", self.key, "이/가"),
-                    f" {ENEMIES[self.db.enemy_id].get('special_verb', '거세게 돌진해')} "
-                    if result["charged"] else " 달려들어 ",
-                    f"{result['damage']}의 피해를 입혔다.",
-                    f" 방어로 {result['prevented']}의 피해를 막았다."
-                    if result["prevented"]
-                    else "",
-                )
+            message = ft.text(
+                ft.named("hostile", self.key, "이/가"),
+                f" {ENEMIES[self.db.enemy_id].get('special_verb', '거세게 돌진해')} "
+                if result["charged"] else " 달려들어 ",
+                f"{result['damage']}의 피해를 입혔다.",
+                f" 방어로 {result['prevented']}의 피해를 막았다."
+                if result["prevented"]
+                else "",
             )
+            after_change(lambda: target.msg(message))
             if result["defeated"]:
+                from world.bootstrap import get_room
+
                 target.leave_combat()
-                target.move_to(target.home, quiet=True)
-                target.msg("탐사대가 부두로 구조했습니다. 최대 10크레딧을 잃었습니다.")
+                destination = get_room("infirmary")
+                if destination is None or not target.move_to(destination, quiet=True):
+                    raise RuntimeError("패배 후 의무실 이동을 완료하지 못했습니다.")
+                rescue = (
+                    "탐사대가 지원동 의무실로 구조했습니다.\n"
+                    + (f"{lost}크레딧을 잃었습니다.\n" if lost else "")
+                    + f"응급 처치로 체력 {rules.DEFEAT_RECOVERY_HP}을 회복했습니다. 추가 회복이 필요합니다."
+                )
+                after_change(lambda: target.msg(rescue))
             if rules.boss_telegraph(self.db.enemy_id, self.db.enemy_round):
                 for player in self.active_players():
                     player.msg(

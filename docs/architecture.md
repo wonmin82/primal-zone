@@ -31,7 +31,7 @@
 
 Room의 local/distant 표시 경로는 정적 설명 다음에 폐쇄 문구를 넣는다. 지도는 방문한 실제 Room의 방향 목록에 폐쇄 방향을 표시하며 1층 중앙은 `북: 본부 중앙홀`, `남: 폐쇄`다. 방향도·웹 이동 버튼·`pz_state.exits`는 실제 출구만 사용하며 1층 중앙은 서·동·북만 제공한다. 폐쇄 방향을 지도 노드나 동작 버튼으로 만들지 않는다. 기능 없는 시설에는 NPC·보관함·가짜 action hint를 추가하지 않는다.
 
-새 캐릭터는 기존 최초 puppet의 비월드 위치 fallback에서 출정 대기실로 배치되고 새 profile의 `visited`도 대기실에서 시작한다. 재접속 시 유효한 저장 위치와 기존 방문 기록을 보존한다. `home`과 귀환·패배 목적지, 상점·휴식은 계속 부두다. 보관·훈련 객체는 아래 3단계 배치를 따른다. bootstrap은 기존 stable tag로 Room/실제 Exit를 재사용·갱신하며 개인 기록을 초기화하지 않는다. 이전 본부 배치의 중앙홀 동쪽·1층 중앙 남쪽 관리 Exit는 같은 목적지를 유지하며 새 남쪽·북쪽 stable tag와 alias로 갱신한다. 이미 새 출구가 있다면 해당 옛 관리 Exit만 제거한다. integrity는 목적지·정반대 방향의 양방향 연결·폐쇄 문구/충돌·본부 고정 배치·시설의 유일 진입·Region membership을 검사한다.
+새 캐릭터는 기존 최초 puppet의 비월드 위치 fallback에서 출정 대기실로 배치되고 새 profile의 `visited`도 대기실에서 시작한다. 재접속 시 유효한 저장 위치와 기존 방문 기록을 보존한다. Evennia fallback `home=dock`은 유지한다. 일반 귀환은 `support_roof`, 전투 패배는 `infirmary`로 명시적으로 이동한다. 상점은 부두, 의료·휴식은 의무실의 실제 객체를 따른다. 보관·훈련 객체는 아래 3단계 배치를 따른다. bootstrap은 기존 stable tag로 Room/실제 Exit를 재사용·갱신하며 개인 기록을 초기화하지 않는다. 이전 본부 배치의 중앙홀 동쪽·1층 중앙 남쪽 관리 Exit는 같은 목적지를 유지하며 새 남쪽·북쪽 stable tag와 alias로 갱신한다. 이미 새 출구가 있다면 해당 옛 관리 Exit만 제거한다. integrity는 목적지·정반대 방향의 양방향 연결·폐쇄 문구/충돌·본부 고정 배치·시설의 유일 진입·Region membership을 검사한다.
 
 ## 본부 2단계: 공용 승강기
 
@@ -45,15 +45,31 @@ Room의 local/distant 표시 경로는 정적 설명 다음에 폐쇄 문구를 
 
 Room 본문은 기존 `world.text` semantic 조각으로 호출 방법 또는 현재 층·가능한 명령을 표시한다. `pz_state.elevator`는 서버가 결정한 `inside`, 내부의 `current_stop/current_floor`, `actions[{label, command}]`를 제공하며 이용 불가능한 곳에서는 null이다. 클라이언트는 이 값을 주변 행동에 렌더링하고 같은 텍스트 명령을 보낸다. zone ID 분기나 별도 웹 이동 API는 없다. 지도는 방문한 승강기·상층·옥상을 기존 Room 목록에 표시하며 가짜 방향 연결을 추가하지 않는다. 순수 검사는 cardinal graph와 stop을 포함한 transport reachability를 따로 확인한다.
 
-Integrity는 승강기 Room·headquarters 소속, default·정류 층 ID/label/목적지의 유효성·중복, 정확히 세 중앙 복도와 옥상인 정류 구성, 가짜 방향 출구 금지와 기존 HQ reverse/blocked 검증을 함께 수행한다. 귀환·패배는 계속 dock이며 의료·휴식·상점과 경제 개편은 후속 단계다.
+Integrity는 승강기 Room·headquarters 소속, default·정류 층 ID/label/목적지의 유효성·중복, 정확히 세 중앙 복도와 옥상인 정류 구성, 가짜 방향 출구 금지와 기존 HQ reverse/blocked 검증을 함께 수행한다. 귀환은 옥상에 도착한 뒤 이 승강기로 이동한다. 의료·패배 흐름은 아래 4단계를 따르며 상점·경제 개편은 후속 단계다.
 
 ## 본부 3단계: 보관·훈련 서비스 이전
 
-`INTERACTABLES`의 기존 `shared_container`와 `personal_locker`는 `storage_room`, `instructor`는 `training_room`에 배치한다. 1층 중앙에서 서·북으로 보관실, 승강기로 2층에 내려 동·북으로 훈련실에 도착한다. 시설 문은 기존 북/남 양방향 출구를 그대로 사용하며 승강기 코드는 변경하지 않는다. 부두에는 윤대장·상점·휴식과 기존 귀환·패배 목적지가 남는다.
+`INTERACTABLES`의 기존 `shared_container`와 `personal_locker`는 `storage_room`, `instructor`는 `training_room`에 배치한다. 1층 중앙에서 서·북으로 보관실, 승강기로 2층에 내려 동·북으로 훈련실에 도착한다. 시설 문은 기존 북/남 양방향 출구를 그대로 사용하며 승강기 코드는 변경하지 않는다. 부두에는 윤대장·상점이 남는다. 의료·귀환·패배의 현재 배치는 아래 4단계를 따른다.
 
 서비스는 Room 이름이 아니라 실제 world object를 따른다. 보관 명령은 기존 `room_objects`와 Container 대상 선택·가시성·이전 규칙을 사용한다. 훈련 명령도 기존 `resolve_action`으로 Instructor에 위임하며 현재 방의 safe 속성·비전투 상태·Observation/view 정책을 검사한다. `instructor_for`는 같은 관찰 가능한 객체 풀과 `Instructor.available`을 사용하고, 웹의 `training_available`은 그 결과에서 파생된다. 클라이언트가 시설 Room ID로 활성 여부를 판단하지 않는다. 원거리 표시는 존재만 보여 주고 contents·개인 보관·훈련 행동과 성장 상태를 노출하지 않는다.
 
 bootstrap은 stable `primal_interactable` tag로 기존 객체를 찾아 DB ID를 유지한 채 위치·이름·alias 목록을 갱신한다. 다중 alias도 목록으로 전달해 각 이름을 보존한다. 공용 `db.items`와 각 탐사자의 `profile.storage`, 장비·성장·방문 기록에는 쓰지 않으며 profile migration도 없다. 반복 실행은 객체를 중복 생성하지 않는다. integrity는 세 서비스의 본부 배치를 검사하며 실제 사용 권한은 이 정적 배치 검사와 독립적이다.
+
+## 본부 4단계: 의료와 복귀·패배
+
+신규 시작은 `staging_room`, 재접속은 저장된 유효 위치, Evennia fallback `home`은 `dock`이다. `Return`은 비전투 중 `support_roof`로 실제 이동하고, 패배는 home과 무관하게 `infirmary`를 조회한다. 옥상과 의무실 이후 이동은 기존 공용 승강기·사방 출구를 사용한다.
+
+`Doctor(ActionObject)`의 stable ID는 `doctor`(의무관/의사), `Bed(ActionObject)`는 `infirmary_bed`(침대/병상)이며 `INTERACTABLES`에서 의무실에 배치한다. bootstrap은 기존 stable tag 기반으로 하나씩 생성·재사용하며 Room·Exit·개인 기록과 기존 서비스 객체를 보존한다. Room 정적 설명은 환경만 담고 객체 presence가 실제 존재를 표현한다. integrity는 의료 배치와 행동 정의를 검사한다.
+
+`치료`/`의무관 치료`/`의무관에게 치료`와 `휴식`/`침대 휴식`/`침대에서 휴식`은 현재 `room_objects`의 보이는 Doctor/Bed를 공통 selector로 선택한다. bare 입력은 0개면 대상 없음, 1개면 자동 선택, 2개 이상이면 명시적 지정 요구다. 숨은 대상은 개수·오류·selector·hint·Web에 포함하지 않는다. 발견 이후 `perform_action`이 같은 Room·관찰·비전투를 검사하고 각 pure rule이 현재 Room의 safe를 검사한다. 실제 객체를 다른 안전 Room으로 옮겨도 서비스는 객체를 따른다. 전투 중 보이는 대상은 대상 없음 대신 기존 RuleError로 거절한다.
+
+`rules.treat`와 `rules.rest`는 별도 public rule이며 현재는 각각 무료·즉시 full HP다. 내부 유효성 검사만 공유하고 서로 호출하지 않는다. 최대 HP이면 쓰기 없이 거절한다. 붕대 `rules.heal`과 독립이며 아이템·크레딧·medicine 숙련·heal Rank를 변경하지 않는다. 침대 점유·예약·시간 지연은 없다.
+
+`enemy_attack`은 피해·defeated 판정만 반환한다. `apply_defeat`가 `lost=min(credits,10)`을 차감하고 `DEFEAT_RECOVERY_HP=1`로 최소 생존 상태를 설정한다. 일반 의료 rule/객체는 호출하지 않는다. Enemy lifecycle은 하나의 `world_change` 안에서 피해·패널티·저장·`leave_combat`·의무실 이동을 처리한다. 패배자만 combatants/threat/contribution과 queued action·guard·타이머를 정리하고 다른 참가자는 유지한다. 이동 False/실패는 예외로 rollback하며 DB profile·FK와 Evennia attribute/location/contents 캐시를 복구한다. 타이머 취소와 구조 안내는 `after_change`로 commit 뒤 실행한다. 기존 `save_profile`의 deferred push가 새 의무실 상태를 패배자에게 보내므로 적 Room의 broadcast에만 의존하지 않는다. visited는 실제 이동 hook으로 의무실 방문을 추가하며 나머지 진행 기록은 보존한다. 출력 문구로 lifecycle을 판정하지 않는다.
+
+서버 interactable allowlist에는 의료 `치료`/`휴식`만 추가한다. 같은 객체의 visible/safe/noncombat availability로 Web action과 target/action Room hint를 결정한다. 클라이언트는 서버 명령을 렌더링할 뿐 infirmary zone 특례가 없다. 부두의 휴식 버튼·hint는 제거하고 기존 dock 상점 특례와 `at_dock()`은 유지한다. 원거리 관찰은 의료 서비스 행동을 노출하지 않는다.
+
+`scripts/smoke.py`의 반복 회복은 귀환→옥상→승강기 2층→의무실 침대→승강기 1층→부두→초지로, 구매는 귀환→옥상→승강기 1층→부두로 바꾼다. 이미 full HP이면 휴식을 요청하지 않는다. 가입 rate limit과 610초 대기는 변경하지 않는다.
 
 ## 공통 대상 선택
 
@@ -149,7 +165,7 @@ Enemy가 HP/max HP, alive/respawning 상태, respawn_at, claim, claim_last_activ
 
 위협도는 실제 깎은 HP만큼 증가한다. 적은 같은 방·접속 중·해당 적을 공격 중인 탐사자 중 위협도가 가장 높은 사람을 선택하고 동률은 캐릭터 ID 순서로 해결한다. 강타는 7.5초 재사용 대기시간, 회복은 다음 개인 공격을 대체하며, 방어는 개인 공격을 유지하고 다음 공격 간격 동안 받는 피해를 줄인다.
 
-보스의 예고/돌진은 공유 enemy_round를 따른다. 능선 보스는 2·5차례에 예고하고 3·6차례에 돌진하며 밀림 보스는 3·7차례에 예고하고 4·8차례에 돌진한다. 주기는 Enemy 정의의 `special_period`를 사용한다. 도주·패배·접속 종료·장소 이탈 시 전투 소속과 위협도·기여도를 정리한다. 일반 이동은 전투 중 거부하며, 강제 이동도 이동 후 정리한다. 패배 시 장비·경험치는 보존하고 최대 10크레딧을 잃으며 부두에서 회복한다.
+보스의 예고/돌진은 공유 enemy_round를 따른다. 능선 보스는 2·5차례에 예고하고 3·6차례에 돌진하며 밀림 보스는 3·7차례에 예고하고 4·8차례에 돌진한다. 주기는 Enemy 정의의 `special_period`를 사용한다. 도주·패배·접속 종료·장소 이탈 시 전투 소속과 위협도·기여도를 정리한다. 일반 이동은 전투 중 거부하며, 강제 이동도 이동 후 정리한다. 패배 시 장비·경험치·소지품·진행은 보존하고 최대 10크레딧을 잃으며 의무실에서 체력 1로 의식을 되찾는다. 일반 치료·휴식은 이후 플레이어가 직접 사용한다.
 
 ## 점유와 보상 자격
 

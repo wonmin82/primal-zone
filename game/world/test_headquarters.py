@@ -35,7 +35,7 @@ class HeadquartersRulesTests(TestCase):
     def test_service_layout_is_checked_without_room_based_authorization(self):
         targets = content_targets()
         self.assertEqual(errors(targets), [])
-        for identity in ("shared_container", "personal_locker", "instructor"):
+        for identity in ("shared_container", "personal_locker", "instructor", "doctor", "infirmary_bed"):
             for wrong in ("dock", "missing_room", "support_roof"):
                 with self.subTest(identity=identity, wrong=wrong), patch.dict(targets[identity], room=wrong):
                     self.assertTrue(any(f"{identity}: 본부 서비스" in issue for issue in errors(targets)))
@@ -55,10 +55,14 @@ class HeadquartersRulesTests(TestCase):
         self.assertEqual(ROOMS["support_1f_c"]["blocked_exits"], {"남": "남쪽 출입문은 현재 폐쇄되어 있다."})
         self.assertEqual(ROOMS["dock"]["exits"], {"북": "grass", "동": "hq_concourse"})
         self.assertEqual(ROOMS["support_roof"]["exits"], {})
-        for room in HQ_ROOMS.values():
+        for zone, room in HQ_ROOMS.items():
             self.assertTrue(room["safe"])
             self.assertEqual(room["enemies"], [])
-            self.assertFalse(room.get("hints"))
+            if zone == "infirmary":
+                self.assertEqual(room["hints"], [{"target": "doctor", "action": "치료"},
+                                                  {"target": "infirmary_bed", "action": "휴식"}])
+            else:
+                self.assertFalse(room.get("hints"))
 
     def test_each_floor_has_five_corridors_and_facilities_have_single_returns(self):
         for floor in (1, 2, 3):

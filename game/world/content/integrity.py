@@ -113,6 +113,7 @@ def errors(interactables):
     for identity, room in (
         ("shared_container", "storage_room"), ("personal_locker", "storage_room"),
         ("instructor", "training_room"),
+        ("doctor", "infirmary"), ("infirmary_bed", "infirmary"),
     ):
         if interactables.get(identity, {}).get("room") != room:
             issues.append(f"{identity}: 본부 서비스는 {room}에 배치해야 합니다.")
@@ -214,6 +215,9 @@ def errors(interactables):
     for identity, data in interactables.items():
         if data["room"] not in ROOMS:
             issues.append(f"{identity}: 대상 Room이 없습니다.")
+    for identity, action in (("doctor", "치료"), ("infirmary_bed", "휴식")):
+        if tuple(interactables.get(identity, {}).get("actions", ())) != (action,):
+            issues.append(f"{identity}: 의료 행동 정의가 올바르지 않습니다.")
     for quest_id, data in QUESTS.items():
         requirement = data.get("requires")
         if requirement and (
