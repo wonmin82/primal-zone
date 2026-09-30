@@ -159,7 +159,7 @@ class Eat(GameCommand):
     category = "아이템·보급"
     input_style = "target"
     usage = "야전식량 먹어"
-    summary = "비전투 중 음식 하나를 먹어 체력을 회복합니다. 의료 숙련은 오르지 않습니다."
+    summary = "비전투 중 음식 하나를 먹어 체력을 회복합니다. 의술 숙련은 오르지 않습니다."
 
     def run(self):
         identity, _ = stack_selector(self.args, ITEMS, self.key, allow_all=False)
@@ -178,7 +178,7 @@ class Drink(Eat):
     key = "마셔"
     aliases = ["drink"]
     usage = "정제수 마셔"
-    summary = "비전투 중 음료 하나를 마셔 체력을 회복합니다. 의료 숙련은 오르지 않습니다."
+    summary = "비전투 중 음료 하나를 마셔 체력을 회복합니다. 의술 숙련은 오르지 않습니다."
 
 
 class RemoveArmor(GameCommand):

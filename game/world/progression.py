@@ -6,7 +6,7 @@ ATTRIBUTES = {
     "constitution": {"name": "체질", "description": "투자 1점마다 최대 HP +4"},
     "wisdom": {"name": "지혜", "description": "투자 1점마다 붕대 회복 +2"},
 }
-PROFICIENCIES = {"weapon": "무기", "defense": "방어", "medicine": "의료"}
+PROFICIENCIES = {"weapon": "무기", "defense": "방어", "medicine": "의술"}
 PROFICIENCY_MAX_RANK = 10
 PROFICIENCY_XP_PER_RANK = 20
 SAFE_FIRSTAID_TRAINING_CAP = 2

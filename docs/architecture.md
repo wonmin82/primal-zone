@@ -146,11 +146,11 @@ DEFAULT는 구조적으로 행동을 지원하는 첫 대상을 선택한다. IN
 
 ## 숙련의 실제 결과와 한계
 
-`proficiencies`는 무기(weapon), 방어(defense), 의료(medicine)별 `{xp: 0}`이다. 20 XP마다 1 Rank, 최대 10 Rank/200 XP다. 실제 Enemy HP를 감소시킨 개인 공격 한 번, guard로 실제 피해를 줄인 적 공격 한 번, 붕대로 실제 HP를 높인 회복 한 번에 해당 숙련 XP 1을 준다. 피해량에 비례하지 않는다.
+`proficiencies`는 무기(weapon), 방어(defense), 의술(medicine)별 `{xp: 0}`이다. 20 XP마다 1 Rank, 최대 10 Rank/200 XP다. 실제 Enemy HP를 감소시킨 개인 공격 한 번, guard로 실제 피해를 줄인 적 공격 한 번, 붕대로 실제 HP를 높인 회복 한 번에 해당 숙련 XP 1을 준다. 피해량에 비례하지 않는다.
 
 순수 규칙의 공격 계산만으로 무기 XP를 주지 않고 Enemy의 실제 HP 감소와 개인 profile 저장을 같은 world_change 트랜잭션에서 처리한다. 적 차례와 회복도 기존 영속 next_attack_at 검사를 통과한 행동에만 적용한다. 실패·가득 찬 HP·예약/명령 반복·중복 callback은 성장시키지 않으며 타 파티원의 숙련도 공유하지 않는다. 파티의 처치 XP 분배는 그대로 별도 시스템이다.
 
-약한 적 반복으로 최고 숙련을 달성하지 못하도록 적 정의의 training_cap을 사용한다. 어린청소룡은 Rank 2, 갈퀴사냥룡은 4, 고장난경비기은 7, 우두머리는 10까지다. 비전투 붕대 사용은 Rank 2까지다. 이미 상한보다 높은 XP는 깎지 않고 더 주지 않는다. 무기 Rank 3마다 공격 +1, 방어 Rank 3마다 guard 적용 후 피해 추가 -1, 응급처치 Rank 2마다 회복 +1이다. 모든 실제 피해의 최솟값은 1이다.
+약한 적 반복으로 최고 숙련을 달성하지 못하도록 적 정의의 training_cap을 사용한다. 어린청소룡은 Rank 2, 갈퀴사냥룡은 4, 고장난경비기은 7, 우두머리는 10까지다. 비전투 붕대 사용은 Rank 2까지다. 이미 상한보다 높은 XP는 깎지 않고 더 주지 않는다. 무기 Rank 3마다 공격 +1, 방어 Rank 3마다 guard 적용 후 피해 추가 -1, 의술 숙련 Rank 2마다 붕대 회복량 +1이다. 모든 실제 피해의 최솟값은 1이다.
 
 ## 기술 학습과 두 포인트 경제
 
@@ -163,7 +163,7 @@ DEFAULT는 구조적으로 행동을 지원하는 첫 대상을 선택한다. IN
 
 기술점수 총량은 `레벨 + 1`이다. 사용량은 무료 Rank를 제외한 각 Rank별 point_cost의 합계로 계산한다. 두 자원 모두 **총 획득 = 현재 투자 + 미사용** 관계를 유지한다. 포인트·레벨·크레딧·최대 Rank를 전부 검사한 뒤 한 번만 저장한다.
 
-강타 피해 배율은 Rank 1/2/3에서 1.8/2.0/2.2이고 재사용 대기는 7.5초다. 방어는 적 피해를 `2 + Rank`로 정수 나눗셈한 뒤 방어 숙련 보정을 뺀다. 붕대 회복은 `35 + 지혜 투자×2 + (Rank-1)×5 + 의료 숙련 Rank//2`이며 실제 부족한 HP까지만 회복한다. 전투 중 회복은 여전히 기본 공격을 대체한다. Skill은 기존 두 타이머와 전투 상태 머신 위에 수치 계층만 더한다.
+강타 피해 배율은 Rank 1/2/3에서 1.8/2.0/2.2이고 재사용 대기는 7.5초다. 방어는 적 피해를 `2 + Rank`로 정수 나눗셈한 뒤 방어 숙련 보정을 뺀다. 붕대 회복은 `35 + 지혜 투자×2 + (응급처치 기술 Rank-1)×5 + 의술 숙련 Rank//2`이며 실제 부족한 HP까지만 회복한다. `firstaid`의 사용자 이름은 응급처치이며 `related_proficiency=medicine`(의술)이다. 기술 Rank의 +5 보정과 숙련 Rank 2마다 +1 보정은 서로 다른 성장축이다. 전투 중 응급처치는 다음 기본 공격을 대체한다. Skill은 기존 두 타이머와 전투 상태 머신 위에 수치 계층만 더한다.
 
 ## 지원동 훈련관과 재훈련
 
@@ -187,7 +187,9 @@ parser는 마지막 token으로 행동만 찾는다. Command는 인자 문법·�
 
 ## 명령 vocabulary·글로벌 단축어·도움말
 
-방향 정의의 `shortcut`에서 8방향 초성 mapping을 파생한다. `commands/aliases.py`는 정보 단축어와 합성한 `SHORTCUTS`를 제공하며 `단축어` 조회도 같은 mapping에서 semantic command/direction token을 만든다. 개인 설정은 `줄임말`이며 `치료/heal`은 future-reserved SSOT에 있고 active 명령은 없다. 응급처치의 skill ID/action_type/queued action/전투 결과는 `firstaid`, medicine 저장 ID의 표시명은 의료다. 붕대와 음식의 numeric `heal` 필드는 일반 회복량으로 유지한다.
+방향 정의의 `shortcut`에서 8방향 초성 mapping을 파생한다. `commands/aliases.py`는 정보 단축어와 합성한 `SHORTCUTS`를 제공하며 `단축어` 조회도 같은 mapping에서 semantic command/direction token을 만든다. 개인 설정은 `줄임말`이며 `치료/힐/heal`은 future-reserved SSOT에 있고 active 명령은 없다. 응급처치의 skill ID/action_type/queued action/전투 결과는 `firstaid`, medicine 저장 ID의 표시명은 의술이다. 붕대와 음식의 numeric `heal` 필드는 일반 회복량으로 유지한다.
+
+의료는 분야 전체, 의술은 proficiency, 응급처치는 붕대 기술, 진료(treat)는 Doctor 서비스, 휴식(rest)은 Bed 서비스, 회복은 HP 증가 결과를 뜻한다. 진료·휴식은 무료·즉시 최대 HP이며 붕대·크레딧·의술 XP·응급처치 Rank와 무관하다. `rules.treat()`와 `rules.rest()` 내부 이름은 유지한다. 향후 치료 기술은 `치료`(힐/heal, 예정 ID heal)로 정신력을 소비해 자신 또는 다른 플레이어를 치료하도록 설계할 예정이다. 단독 입력은 자신, `플레이어이름 치료/힐/heal`은 타인을 대상으로 하는 UX 후보이며 평상시·전투 중 사용을 예정한다. 현재 정신력·Heal command·대상 회복 rule·queue·Rank·Web 버튼은 구현하지 않았으며 도움말의 활성 명령에도 넣지 않는다. 표시명 변경으로 persistent medicine XP/Rank와 profile version 8은 바뀌지 않는다.
 
 `commands/help_pages.py`의 명시적 여섯 분류 순서·query·대표 명령과 각 command의 help-only `category`가 root/분류/detail을 구성한다. 입력할 수 없는 '8방향 이동'은 text role이다. query는 casefold → 글로벌 단축어 → 실제 command key/alias → 방향/영문 alias → category/topic 순서로 판정한다. 파티 detail이 category보다 우선하며 parser 상세는 `입력 도움말`로 분리했다. 승강기 내부 명령은 registry에 넣지 않고 이동 분류에서 현재 stop SSOT로 안내한다.
 
@@ -342,7 +344,7 @@ Room `requires.message`는 이동 실패 안내, optional `requires.observe_mess
 
 equipment 슬롯은 `None`을 정상 값으로 허용한다. 해제/벗어는 소지 수량을 바꾸지 않으며 stats·상태·장비·전투 문장·웹 state에서 빈 슬롯을 처리한다. 맨손 공격은 기존 base attack과 성장 보정만 사용한다. migration은 명시적 None을 초기 장비로 되돌리지 않는다.
 
-야전식량/정제수의 `consume_action`과 `heal`이 소비 행동과 고정 효과의 출처다. 비전투 중 하나만 사용하고 최대 HP에서는 소비하지 않는다. 붕대 회복과 의료 숙련/성장 보정을 재사용하거나 변경하지 않는다. 모든 이전과 장비 해제도 비전투 중만 허용하며 줘의 받는 탐사자도 비전투 상태여야 한다. 웹은 서버의 remove_action/consume_action을 기존 텍스트 명령 버튼으로 전송한다.
+야전식량/정제수의 `consume_action`과 `heal`이 소비 행동과 고정 효과의 출처다. 비전투 중 하나만 사용하고 최대 HP에서는 소비하지 않는다. 붕대 회복과 의술 숙련/성장 보정을 재사용하거나 변경하지 않는다. 모든 이전과 장비 해제도 비전투 중만 허용하며 줘의 받는 탐사자도 비전투 상태여야 한다. 웹은 서버의 remove_action/consume_action을 기존 텍스트 명령 버튼으로 전송한다.
 
 ## Region·임무·Gate 확장
 

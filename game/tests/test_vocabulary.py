@@ -42,7 +42,7 @@ class VocabularyTests(WorldCommandTest):
         self.assertEqual(len(set(outputs)), 1)
         self.assertIn("소지품", outputs[0])
         self.char1.location = self.rooms["weapon_shop"]
-        for old in ("상점", "메뉴", "shop", "도주", "회복", "응급치료", "heal", "치료", "내리기"):
+        for old in ("상점", "메뉴", "shop", "도주", "회복", "응급치료", "heal", "치료", "힐", "내리기"):
             before = self.char1.profile_snapshot()
             self.assertIn("명령을 확인", self.raw(old), old)
             self.assertEqual(self.char1.profile_snapshot(), before)
@@ -56,10 +56,14 @@ class VocabularyTests(WorldCommandTest):
             self.assertGreater(self.char1.profile_snapshot()["hp"], 20)
             self.assertEqual(self.char1.profile_snapshot()["inventory"].get("bandage", 0), 0)
         self.char1.location = self.rooms["infirmary"]
-        for command in ("진료", "의무관 진료", "의무관에게 진료", "treat"):
+        for command in ("진료", "의무관 진료", "의무관에게 진료", "treat", "휴식", "침대 휴식", "침대에서 휴식", "rest"):
             self.char1.change(lambda p: p.update(hp=1))
-            self.assertIn("진료를 받고", self.raw(command))
+            before = self.char1.profile_snapshot()
+            output = self.raw(command)
+            self.assertIn("진료를 받고" if command in ("진료", "의무관 진료", "의무관에게 진료", "treat") else "휴식하며", output)
             self.assertGreater(self.char1.profile_snapshot()["hp"], 1)
+            for field in ("credits", "inventory", "proficiencies", "skills"):
+                self.assertEqual(self.char1.profile_snapshot()[field], before[field])
 
     def test_jamo_direction_shortcuts_traverse_roof_round_trips(self):
         for source, direction in DIRECTION_SHORTCUTS.items():
@@ -71,12 +75,20 @@ class VocabularyTests(WorldCommandTest):
             self.assertEqual(self.char1.zone, "support_roof")
 
     def test_reserved_names_and_released_ga_shortcut(self):
-        for name in ("소", "ㅂㄷ", "ㄴㄷ", "ㄴㅅ", "ㅂㅅ", "치료", "heal"):
+        for name in ("소", "ㅂㄷ", "ㄴㄷ", "ㄴㅅ", "ㅂㅅ", "치료", "힐", "heal"):
             self.raw(f"줄임말 추가 {name} 상태")
             self.assertEqual(self.char1.profile_snapshot()["command_shortcuts"], {})
         self.raw("줄임말 추가 가 상태")
         self.assertEqual(self.char1.profile_snapshot()["command_shortcuts"], {"가": ["상태"]})
         self.assertIn("체력", self.raw("가"))
+
+    def test_medical_help_keeps_future_healing_inactive(self):
+        for query in ("응급처치", "진료", "휴식"):
+            self.assertIn("사용법", self.raw(query + " 도움말"))
+        registered = {name for cls in COMMANDS for name in (cls.key, *cls.aliases)}
+        self.assertTrue({"치료", "힐", "heal"}.isdisjoint(registered))
+        for query in ("치료", "힐", "heal"):
+            self.assertIsNone(help_page(query, COMMANDS))
 
     def test_help_taxonomy_routes_semantics_and_shortcut_ssot(self):
         commands = [cls for cls in COMMANDS if getattr(cls, "input_style", None)]

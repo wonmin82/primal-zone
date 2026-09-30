@@ -1,6 +1,6 @@
 """예약 어휘와 저장된 명령의 v8 변환. DB와 Evennia에 의존하지 않는다."""
 
-FUTURE_RESERVED_COMMAND_NAMES = frozenset({"치료", "heal"})
+FUTURE_RESERVED_COMMAND_NAMES = frozenset({"치료", "힐", "heal"})
 NEW_RESERVED_NAMES = frozenset({"소지품", "소", "ㅂㄷ", "ㄴㄷ", "ㄴㅅ", "ㅂㅅ", "상품", "도망", "응급처치", "진료", "내려", "단축어", "firstaid", "가진거"}) | FUTURE_RESERVED_COMMAND_NAMES
 
 # 저장된 v7 입력만 해석한다. 새 runtime alias를 제공하는 표가 아니다.

@@ -4,15 +4,21 @@
 
 ## Objective
 
-PR #23은 MERGED이며 시작 main은 `d30fa74f25166cf79565b205a028ae10a02deffc`다. 깨끗한 작업 트리·원격 wonmin82/primal-zone·fetch 후 최신 main을 확인하고 `codex/command-vocabulary-help`를 생성했다. 현재 작업은 본부 후속 독립 기능 **명령 vocabulary / 글로벌 단축어 / 도움말 / 승강기 자동 하차 / 로그인 정책 개편**이다. 새 PR을 생성하며 merge하지 않는다. 아래 PR #23 OPEN 설명과 과거 검증 수치는 당시 기록으로 보존한다.
+PR #23은 MERGED이며 시작 main은 `d30fa74f25166cf79565b205a028ae10a02deffc`다. 현재 작업은 기존 OPEN [PR #24](https://github.com/wonmin82/primal-zone/pull/24)의 **의료 용어 체계 정리**이며 `codex/command-vocabulary-help`에서 이어간다. 시작 fetch 후 로컬·원격·PR HEAD는 `2c425bf55339ab924b662a165189d446945593dd`로 일치했고 작업 트리는 깨끗했다. origin/main은 기존 base와 동일하다. 새 PR을 만들거나 merge하지 않는다. 아래 PR #23 OPEN 설명과 과거 검증 수치는 당시 기록으로 보존한다.
 
 ### 현재 구현
 
-소지품(가방/가진거/i/인벤토리)·상품(별칭 없음)·도망(flee)·응급처치(붕대/firstaid)·진료(treat)·내려로 어휘를 정리한다. 방향 SSOT에 8방향 초성을 추가하고 정보 단축어는 상/능/기/장/소다. 가는 글로벌에서 제거하고 개인 이름으로 허용한다. 단축어는 고정 조회, 줄임말은 캐릭터 설정이다. 도움말은 여섯 분류 root/category/detail/input이며 실제 command detail이 category보다 우선한다. 치료/heal은 미래 예약 이름이다.
+소지품(가방/가진거/i/인벤토리)·상품(별칭 없음)·도망(flee)·응급처치(붕대/firstaid)·진료(treat)·내려로 어휘를 정리한다. 방향 SSOT에 8방향 초성을 추가하고 정보 단축어는 상/능/기/장/소다. 가는 글로벌에서 제거하고 개인 이름으로 허용한다. 단축어는 고정 조회, 줄임말은 캐릭터 설정이다. 도움말은 여섯 분류 root/category/detail/input이며 실제 command detail이 category보다 우선한다. 의료는 분야, 의술(medicine)은 숙련, 응급처치(firstaid)는 붕대 기술, 진료(treat)·휴식(rest)은 시설 서비스, 회복은 HP 증가 결과다. 치료/힐/heal은 미래 정신력 기반 자신·타인 치료 기술용 예약 이름이며 실제 기능은 구현하지 않는다.
 
 profile v8은 heal Rank/queued action을 firstaid로 변환하고 저장된 명령 위치만 canonical로 migration한다. 새 예약 이름 충돌 데이터는 _개인[번호]로 보존하고 exact nested 참조도 갱신한다. 진행 데이터와 read-only snapshot·전체 삭제 직접 요청/확인 safety는 유지한다. 승강기 층 선택자는 자동 하차하고 다른 승객은 남으며 내려는 같은 helper를 사용한다. 새 puppet은 출정 대기실, live-session reload at_sync는 기존 위치다. Web canonical 버튼과 공통 asset version을 갱신한다. Full smoke에서 Portal+Server 재시작 시 격리 SQLite의 read→write 경합이 재현되어 smoke 전용 DB만 IMMEDIATE transaction/30초 busy timeout으로 직렬화하고 회귀 검사를 추가했다. 일반 플레이 DB 설정과 production timer는 변경하지 않았다.
 
-### 검증 및 인계
+### 의료 용어 후속 검증 (2026-09-30)
+
+medicine 표시명을 의술로 바꾸고 미래 예약 이름에 힐을 추가했다. v7의 힐 충돌은 기존 _개인[번호] 정책과 exact nested 참조 갱신으로 보존한다. historical 치료→진료·heal→응급처치와 v7 고정 단축어 계약, profile version 8, 실제 응급처치·진료·휴식 규칙은 유지한다. 새 profile의 능력·경험치·기술과 응급처치/진료/휴식 도움말을 생성해 현재 문서와 대조했고 Web 성장 이름도 서버 PROFICIENCIES에서 파생됨을 확인했다. README·architecture·command-shortcuts·text-examples·playtest 현재 절차를 갱신하고 과거 기록은 보존했다.
+
+관련 `scripts/dev.py test world.test_vocabulary tests.test_vocabulary tests.test_text world.test_medical tests.test_medical --parallel 2 --reverse`는 41개 / 19.370초·runner 33.165초 통과했다. 최종 `scripts/dev.py check` 통과, 전체 `scripts/dev.py test`는 pure 123개 / 1.679초·integration 293개 / 100.727초·total 416개·통합 runner 109.625초 통과했다. `git diff --check` 통과. 최종 서비스 출력 assertion 보강도 위 전체 검사에서 검증했다. 이번 diff는 Python 표시명·예약 상수·테스트와 Markdown이며 gameplay 공식·타이머·Web static은 변경하지 않아 로컬 smoke/Full·browser·node·collectstatic·OS IME는 반복하지 않았다. 기존 PR #24에 후속 commit을 push하고 최종 HEAD와 두 CI job의 headSha·결과는 PR Validation에 기록한다. 치료/힐/heal의 실제 기술과 정신력 시스템은 구현하지 않았으며 PR은 merge하지 않는다.
+
+### 기존 구현 검증 및 인계 (과거 기록)
 
 최종 `scripts/dev.py check` 성공, 전체 `scripts/dev.py test`는 pure 120(1.767초)·integration 292(102.089초)·total 412·runner 110.948초 성공이다. 관련 50개는 `--parallel 2 --reverse`에서 22.607초·runner 31.509초 통과했다. 최종 Quick live smoke는 48.391초 성공, Full은 294.325초 성공하며 실제 첫 공격 2.928초·시체 만료 29.868초·적 재생성 44.762초·전리품 보호 만료 121.177초와 Portal+Server 재시작을 검증했다. 첫 Full 시도에서는 재시작 중 SQLite 잠금이 재현됐고 smoke 전용 DB 설정을 수정한 뒤 최종 Full을 성공시켰다. 일반 플레이 SQLite는 두 smoke의 SHA256·mtime_ns·size가 시작 전 값과 동일했다.
 

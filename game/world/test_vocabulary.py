@@ -7,11 +7,39 @@ from commands.aliases import SHORTCUTS
 from commands.shortcuts import shortcut_name
 from commands.vocabulary import V7_GLOBAL_SHORTCUTS, migrate_shortcuts
 
-from world import rules
+from world import presentation, rules
 from world.content.directions import DIRECTION_SHORTCUTS, DIRECTIONS
+from world.progression import PROFICIENCIES, SKILLS
 
 
 class VocabularyTests(TestCase):
+    def test_medicine_proficiency_and_firstaid_skill_have_distinct_display_names(self):
+        self.assertEqual(PROFICIENCIES["medicine"], "의술")
+        self.assertEqual(SKILLS["firstaid"]["name"], "응급처치")
+        self.assertEqual(SKILLS["firstaid"]["related_proficiency"], "medicine")
+        profile = rules.new_profile()
+        self.assertEqual(profile["version"], 8)
+        self.assertIn("의술 R0", presentation.abilities(profile))
+        self.assertIn("의술 R0 XP0", presentation.experience(profile))
+        self.assertIn("응급처치 R1/3", presentation.skills(profile))
+        medicine = next(entry for entry in rules.growth_state(profile)["proficiencies"] if entry["id"] == "medicine")
+        self.assertEqual(medicine["name"], "의술")
+
+    def test_v7_hil_name_collision_preserves_data_and_exact_references(self):
+        old = rules.new_profile()
+        old.update(version=7, command_shortcuts={
+            "힐": ["가방"], "힐_개인": ["장비"], "힐_개인2": ["상태"],
+            "생존": ["힐", "힐 보기", "힐 말", "'힐, 회복", "치료", "heal"],
+        })
+        before = deepcopy(old)
+        migrated = rules.migrate_profile(old)
+        self.assertEqual(migrated["command_shortcuts"], {
+            "힐_개인3": ["소지품"], "힐_개인": ["장비"], "힐_개인2": ["상태"],
+            "생존": ["힐_개인3", "힐 보기", "힐 말", "'힐, 회복", "진료", "응급처치"],
+        })
+        self.assertEqual(old, before)
+        self.assertEqual(rules.migrate_profile(migrated), migrated)
+
     def test_v7_global_shortcuts_are_fixed_historical_input(self):
         historical = {
             "ㅂ": "북", "ㄴ": "남", "ㄷ": "동", "ㅅ": "서",
