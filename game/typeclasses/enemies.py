@@ -127,7 +127,7 @@ class Enemy(DistantPresenceMixin, DefaultObject):
             if profile.get("combat_target") != self.id and not can_perceive(self, context_for(player, observed_at=now)):
                 raise rules.RuleError("지금은 그 상대를 식별할 수 없습니다. 광원을 사용하세요.")
             if profile.get("combat_target") not in (None, self.id):
-                raise rules.RuleError("현재 상대에게서 먼저 도주하세요.")
+                raise rules.RuleError("현재 상대에게서 먼저 도망하세요.")
             if not self.can_attack(player):
                 owner = "다른 파티" if str(self.db.claim).startswith("party:") else "다른 탐사자"
                 raise rules.RuleError(

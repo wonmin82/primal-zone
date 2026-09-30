@@ -69,7 +69,7 @@ class SemanticTextTests(WorldCommandTest):
                 elif isinstance(obj, SettlementOfficer):
                     self.assertEqual(tokens(output, "command"), ["환율", "교환", "교환", "교환", "교환"])
                 elif isinstance(obj, Shopkeeper):
-                    self.assertEqual(tokens(output, "command"), ["상점", "메뉴", "구매"])
+                    self.assertEqual(tokens(output, "command"), ["상품", "구매"])
                 else:
                     self.assertEqual(tokens(output, "command"), list(obj.actions))
                 self.assertIn(obj.key, tokens(output, obj.semantic_role))
@@ -128,9 +128,17 @@ class SemanticTextTests(WorldCommandTest):
         with patch.object(self.char1, "msg") as message:
             command.run()
         output = message.call_args.args[0]
+        from commands.help_pages import HELP_CATEGORIES, category_page
+
+        for category, data in HELP_CATEGORIES.items():
+            self.assertIn(category + " |", output)
+            for key in data["examples"]:
+                self.assertIn(key, tokens(output, "command"))
         for cls in COMMANDS:
             if getattr(cls, "input_style", None):
-                self.assertIn(cls.key, tokens(output, "command"))
+                self.assertIn(cls.category, HELP_CATEGORIES)
+                self.assertIn(cls.key, tokens(category_page(cls.category, COMMANDS), "command"))
+        self.assertNotIn("8방향 이동", tokens(output, "command"))
 
     def test_compact_progression_values_and_maximums(self):
         from copy import deepcopy
@@ -218,7 +226,7 @@ class SemanticTextTests(WorldCommandTest):
         defense = sum(ITEMS[i].get("defense", 0) for i in profile["equipment"].values())
         self.assertIn(f"공격 +{attack} · 방어 +{defense}", equip.splitlines()[-1])
         profile["inventory"] = {}
-        self.assertEqual(str(view.inventory(profile)), "[가방] 비어 있다.")
+        self.assertEqual(str(view.inventory(profile)), "[소지품] 비어 있다.")
         self.assertEqual(tokens(view.shop("supply", "보급관"), "command"), ["구매"])
         profile["quests"]["radio_tower"].update(started=True, record_read=True)
         quest = view.quest(profile)
@@ -259,7 +267,7 @@ class SemanticTextTests(WorldCommandTest):
         for cls in COMMANDS:
             if getattr(cls, "input_style", None):
                 self.assertIn(f"{getattr(cls, 'category', '탐사')} |", help_text)
-                self.assertIn(cls.key, tokens(help_text, "command"))
+                self.assertIn(cls.key, tokens(output(Help(), self.char1, cls.category), "command"))
         for query in (Attack.key, *Attack.aliases):
             detail = output(Help(), self.char1, query)
             self.assertIn(Attack.summary, detail)
@@ -280,7 +288,7 @@ class SemanticTextTests(WorldCommandTest):
         self.assertEqual(tokens(output, "command"), ["착용"])
         self.assertIn("강화 조끼", tokens(output, "text"))
         self.assertIn("대상 기타", tokens(output, "text"))
-        self.assertEqual(tokens(ft.usage("회복", {"회복"}), "command"), ["회복"])
+        self.assertEqual(tokens(ft.usage("응급처치", {"응급처치"}), "command"), ["응급처치"])
 
     def test_shared_kill_and_round_robin_text_matches_committed_results(self):
         for player in (self.char1, self.char2):

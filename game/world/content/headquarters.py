@@ -131,7 +131,7 @@ ROOMS = {
     },
     "supply_shop": {
         "name": "보급품 상점",
-        "hints": [{"target": "supply_shopkeeper", "action": "상점"}],
+        "hints": [{"target": "supply_shopkeeper", "action": "상품"}],
         "desc": "낮은 진열대와 비어 있는 판매대가 놓인 공간이다. 남쪽 문 너머로 1층 복도가 이어진다.",
         "exits": {"남": "support_1f_e1"},
     },
@@ -139,7 +139,7 @@ ROOMS = {
         "name": "의무실",
         "desc": "밝은 타일로 마감된 넓은 공간이다. 벽의 수납장은 비어 있고 남쪽 문은 2층 복도로 이어진다.",
         "exits": {"남": "support_2f_w1"},
-        "hints": [{"target": "doctor", "action": "치료"}, {"target": "infirmary_bed", "action": "휴식"}],
+        "hints": [{"target": "doctor", "action": "진료"}, {"target": "infirmary_bed", "action": "휴식"}],
     },
     "training_room": {
         "name": "훈련실",
@@ -148,13 +148,13 @@ ROOMS = {
     },
     "armor_shop": {
         "name": "방어구점",
-        "hints": [{"target": "armor_shopkeeper", "action": "상점"}],
+        "hints": [{"target": "armor_shopkeeper", "action": "상품"}],
         "desc": "빈 진열대가 벽을 따라 놓여 있다. 남쪽 출입문은 지원동 3층의 서쪽 복도로 이어진다.",
         "exits": {"남": "support_3f_w1"},
     },
     "weapon_shop": {
         "name": "무기점",
-        "hints": [{"target": "weapon_shopkeeper", "action": "상점"}],
+        "hints": [{"target": "weapon_shopkeeper", "action": "상품"}],
         "desc": "튼튼한 판매대와 비어 있는 장비 걸이가 놓인 공간이다. 남쪽 문은 3층의 동쪽 복도로 이어진다.",
         "exits": {"남": "support_3f_e1"},
     },

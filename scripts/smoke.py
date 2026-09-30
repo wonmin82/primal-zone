@@ -226,11 +226,11 @@ class Scenario:
             self.report("protection", "outsider blocked → allowed / 실제 회수")
             self.phase = "shop"
             await route(first, (("귀환", "support_roof"), ("승강기", "support_elevator")))
-            await first.act("3층", lambda state: state["elevator"]["current_stop"] == "3f")
-            await route(first, (("내리기", "support_3f_c"), ("동", "support_3f_e1"),
+            await first.act("3층", lambda state: state["zone"] == "support_3f_c")
+            await route(first, (("동", "support_3f_e1"),
                                 ("북", "weapon_shop")))
             assert any(obj["name"] == "무기상" for obj in first.state["interactables"])
-            await first.expect_text("무기상 상점", "60C")
+            await first.expect_text("무기상 상품", "60C")
             before_credits = first.state["credits"]
             # RNG drop은 남겨 둔 ground에서 outsider만 회수한다. 구매 결과는 미리 지급하지 않는다.
             assert count_item(first.state, "blade") == 0
@@ -239,11 +239,12 @@ class Scenario:
             self.report("shop", "옥상 귀환 / 공용 승강기 / Shopkeeper Credit 구매")
             self.phase = "persistence"
             saved = {key: first.state[key] for key in
-                     ("name", "zone", "hp", "xp", "credits", "inventory", "quest")}
+                     ("name", "hp", "xp", "credits", "inventory", "quest")}
             await first.close()
             await first.open()
+            assert first.state["zone"] == "staging_room"
             assert saved == {key: first.state[key] for key in saved}
-            self.report("persistence", "disconnect / fixture relogin / 상태 보존")
+            self.report("persistence", "disconnect / fixture relogin / 대기실 시작 및 진행 상태 보존")
             if self.harness.mode == "full":
                 from smoke_closeout import Closeout
 

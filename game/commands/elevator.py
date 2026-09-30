@@ -20,7 +20,7 @@ class SelectFloor(GameCommand):
 
 
 class Disembark(GameCommand):
-    key = "내리기"
+    key = "내려"
 
     def run(self):
         elevator.disembark(self.caller)

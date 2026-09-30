@@ -108,7 +108,7 @@ class SharedCombatTests(WorldCommandTest):
             if self.enemy.db.enemy_round % 3 == 2:
                 rules.queue_action(profile, "guard", now)
             elif profile["hp"] < 45 and profile["inventory"].get("bandage"):
-                rules.queue_action(profile, "heal", now)
+                rules.queue_action(profile, "firstaid", now)
             elif now >= profile["heavy_ready_at"]:
                 rules.queue_action(profile, "heavy", now)
             self.char1.save_profile(profile)

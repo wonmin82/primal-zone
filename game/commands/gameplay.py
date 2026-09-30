@@ -8,9 +8,9 @@ from commands.character import Map as Map
 from commands.character import Quest as Quest
 from commands.character import Status as Status
 from commands.combat import Attack as Attack
+from commands.combat import FirstAid as FirstAid
 from commands.combat import Flee as Flee
 from commands.combat import Guard as Guard
-from commands.combat import Heal as Heal
 from commands.combat import Heavy as Heavy
 from commands.inventory import Buy as Buy
 from commands.inventory import Equip as Equip

@@ -49,7 +49,7 @@ class HeadquartersTests(GameCommandTest):
         self.char1.execute_cmd("북")
         self.assertEqual(self.char1.zone, "grass")
 
-    def test_logout_and_reconnect_restore_existing_location_and_progress(self):
+    def test_logout_and_reconnect_stage_preserving_progress(self):
         self.char1.location = self.rooms["support_1f_c"]
         self.char1.change(lambda profile: profile.update(credits=77, storage={"bandage": 2}))
         before = deepcopy(self.char1.profile())
@@ -60,7 +60,7 @@ class HeadquartersTests(GameCommandTest):
         self.char1.at_pre_puppet(self.account, session=self.session)
         with patch.object(DefaultCharacter, "at_post_puppet"):
             self.char1.at_post_puppet()
-        self.assertEqual(self.char1.location, self.rooms["support_1f_c"])
+        self.assertEqual(self.char1.location, self.rooms["staging_room"])
         self.assertEqual(self.char1.profile(), before)
         self.assertEqual(self.char1.home, self.rooms["dock"])
         self.char1.location = self.rooms["grass"]
@@ -222,7 +222,7 @@ class HeadquartersTests(GameCommandTest):
             self.assertNotEqual(search_tag(key, category="primal_interactable")[0].location, self.rooms["dock"])
         self.assertIsNone(instructor_for(self.char1))
         before = self.char1.profile()
-        for raw in ("상점", "붕대 구매", "강철마체테 구매", "강화조끼 구매"):
+        for raw in ("상품", "붕대 구매", "강철마체테 구매", "강화조끼 구매"):
             self.char1.execute_cmd(raw)
             self.assertEqual(self.char1.profile(), before)
         self.char1.execute_cmd("개인 보관함에 붕대 넣어")

@@ -84,7 +84,7 @@ class ServiceRelocationTests(WorldCommandTest):
         self.assertEqual(self.char1.zone, "storage_room")
         self.command("보관상자에 붕대 넣어")
         self.assertEqual(self.services["shared_container"].db.items, {"bandage": 1})
-        for command in ("남", "동", "승강기", "2층", "내리기", "동", "북"):
+        for command in ("남", "동", "승강기", "2층", "동", "북"):
             self.command(command)
         self.assertEqual(self.char1.zone, "training_room")
         self.assertIn("재훈련은 무료", self.command("탐사대 훈련관 대화"))

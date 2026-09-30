@@ -32,7 +32,7 @@ class ElevatorRulesTests(TestCase):
             self.assertEqual(controls(data["room"])["actions"], [{"label": "승강기", "command": "승강기"}])
             inside = controls(ELEVATOR_ROOM, stop)
             self.assertEqual(inside["current_floor"], data["label"])
-            self.assertEqual([a["command"] for a in inside["actions"]], [s["label"] for s in before.values()] + ["내리기"])
+            self.assertEqual([a["command"] for a in inside["actions"]], [s["label"] for s in before.values()] + ["내려"])
         for invalid in (None, "", "2층", "missing", 1, [], {}):
             self.assertEqual(normalized_stop(invalid), ELEVATOR_DEFAULT_STOP)
         self.assertIsNone(controls("support_1f_w1"))

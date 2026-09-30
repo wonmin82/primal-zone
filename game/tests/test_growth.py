@@ -144,7 +144,7 @@ class GrowthIntegrationTests(WorldCommandTest):
         enemy.enemy_tick(now=102.5, rng=Random(1))
         enemy.enemy_tick(now=102.5, rng=Random(1))
         self.assertEqual(self.char1.profile()["proficiencies"]["defense"]["xp"], 1)
-        self.char1.change(lambda p: p.update(hp=20, queued_action="heal"))
+        self.char1.change(lambda p: p.update(hp=20, queued_action="firstaid"))
         enemy.receive_attack(self.char1, now=105, rng=Random(1))
         enemy.receive_attack(self.char1, now=105, rng=Random(1))
         self.assertEqual(self.char1.profile()["proficiencies"]["medicine"]["xp"], 1)
@@ -170,7 +170,7 @@ class GrowthIntegrationTests(WorldCommandTest):
             ("능", "능력"),
             ("기", "기술"),
             ("장", "장비"),
-            ("가", "가방"),
+            ("소", "소지품"),
         ):
             self.assertEqual(cmdparser(alias, cmdset, self.char1)[0][2].key, key)
         north = Command(key="북")

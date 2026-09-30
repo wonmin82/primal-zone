@@ -7,7 +7,7 @@ from commands.base import GameCommand
 
 
 class Return(GameCommand):
-    category = "탐사"
+    category = "이동·탐사"
     usage = "귀환"
     summary = "비전투 상태에서 지원동 옥상으로 돌아갑니다."
     key = "귀환"
@@ -21,7 +21,7 @@ class Return(GameCommand):
 
 
 class Rest(GameCommand):
-    category = "보급"
+    category = "전투·회복"
     input_style = "target"
     usage = "휴식 · 침대 휴식 · 침대에서 휴식"
     summary = "주변 침대에서 무료로 체력을 모두 회복합니다."
@@ -33,11 +33,11 @@ class Rest(GameCommand):
 
 
 class Treat(GameCommand):
-    category = "보급"
+    category = "전투·회복"
     input_style = "target"
-    usage = "치료 · 의무관 치료 · 의무관에게 치료"
+    usage = "진료 · 의무관 진료 · 의무관에게 진료"
     summary = "주변 의무관에게 무료로 체력을 모두 회복합니다."
-    key = "치료"
+    key = "진료"
     aliases = ["treat"]
 
     def run(self):
@@ -48,7 +48,7 @@ def resolve_medical(caller, action, name=""):
     """의료 bare 입력은 보이는 서비스가 정확히 하나일 때만 선택한다."""
     from typeclasses.interactables import Bed, Doctor
 
-    kind = Doctor if action == "치료" else Bed
+    kind = Doctor if action == "진료" else Bed
     objects = [obj for obj in room_objects(caller) if isinstance(obj, kind)]
     name = name.strip()
     known = [n for obj in objects for n in names(obj)]
@@ -58,7 +58,7 @@ def resolve_medical(caller, action, name=""):
         if len(objects) > 1:
             raise rules.RuleError(f"이용할 대상이 여러 개입니다. 대상 이름과 번호를 지정해 {action}하세요.")
         return objects[0]
-    particle = "에게" if action == "치료" else "에서"
+    particle = "에게" if action == "진료" else "에서"
     if normalized(name) not in {normalized(n) for n in known} and name.endswith(particle):
         name = name[:-len(particle)].strip()
     return resolve(objects, parse_selector(name, known), caller, action)[0]

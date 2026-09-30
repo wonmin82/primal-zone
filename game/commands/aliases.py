@@ -1,13 +1,6 @@
-"""게임 모드에서 독립된 입력 전체에만 적용하는 서버 공용 단축어."""
+"""게임이 제공하는 고정 단축어. 개인 줄임말과 별개의 입력 SSOT."""
 
-SHORTCUTS = {
-    "ㅂ": "북",
-    "ㄴ": "남",
-    "ㄷ": "동",
-    "ㅅ": "서",
-    "상": "상태",
-    "능": "능력",
-    "기": "기술",
-    "장": "장비",
-    "가": "가방",
-}
+from world.content.directions import DIRECTION_SHORTCUTS
+
+INFORMATION_SHORTCUTS = {"상": "상태", "능": "능력", "기": "기술", "장": "장비", "소": "소지품"}
+SHORTCUTS = {**DIRECTION_SHORTCUTS, **INFORMATION_SHORTCUTS}

@@ -29,8 +29,9 @@ def reserved_names(cmdset):
     from commands.default_cmdsets import UnloggedinCmdSet
     from commands.elevator import ElevatorInsideCmdSet, ElevatorLandingCmdSet
     from commands.registry import COMMANDS
+    from commands.vocabulary import FUTURE_RESERVED_COMMAND_NAMES
 
-    names = set(SHORTCUTS)
+    names = set(SHORTCUTS) | set(FUTURE_RESERVED_COMMAND_NAMES)
     for commands in (cmdset, UnloggedinCmdSet(), ElevatorInsideCmdSet(), ElevatorLandingCmdSet()):
         names.update(commands.get_all_cmd_keys_and_aliases())
     for cls in COMMANDS:
@@ -48,8 +49,8 @@ class Sequence(Command):
     key = "해"
     input_style = "target"
     help_category = "원시구역"
-    category = "조작"
-    usage = "상태, 장비, 가방 해"
+    category = "편의"
+    usage = "상태, 장비, 소지품 해"
     summary = "두 명령 이상을 순서대로 실행합니다. 개별 명령 실패 뒤에도 계속하며 묶음은 transaction이 아닙니다."
 
     def commands_to_expand(self):
@@ -95,7 +96,7 @@ class PersonalShortcut(Sequence):
 class Shortcuts(GameCommand):
     key = "줄임말"
     input_style = "prefix"
-    category = "조작"
+    category = "편의"
     usage = (
         "줄임말 · 줄임말 추가 이름 정의 · 줄임말 삭제 이름 · "
         "줄임말 모두 삭제 · 줄임말 모두 삭제 확인"

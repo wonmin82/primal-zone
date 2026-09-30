@@ -185,7 +185,7 @@ class EnvironmentTests(WorldCommandTest):
         self.assertIn(env.description(snapshot_for(target, 100)), distant)
         self.assertEqual(self.command("날씨"), self.command("환경"))
         self.assertIn("08:00", self.command("날씨"))
-        self.assertIn("날씨", self.command("도움말"))
+        self.assertIn("날씨", self.command("이동 도움말"))
         with (
             patch.object(self.char1.sessions, "count", return_value=1),
             patch.object(self.char1, "msg") as message,
@@ -403,8 +403,8 @@ class EnvironmentTests(WorldCommandTest):
 class EnvironmentWebTemplateTests(SimpleTestCase):
     def test_fresh_assets_and_field_guide_weather_entry_use_existing_command(self):
         html = render_to_string("webclient/webclient.html")
-        self.assertIn("webclient/css/primal.css?v=eight-directions", html)
-        self.assertIn("webclient/js/primal.js?v=eight-directions", html)
+        self.assertIn("webclient/css/primal.css?v=command-vocabulary", html)
+        self.assertIn("webclient/js/primal.js?v=command-vocabulary", html)
         self.assertNotIn("webclient/js/primal.js?v=elevator", html)
         self.assertNotIn("webclient/js/primal.js?v=lighting", html)
         self.assertNotIn("?v=compact", html)

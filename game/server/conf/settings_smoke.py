@@ -20,7 +20,12 @@ PRIMAL_SMOKE = True
 PRIMAL_SMOKE_RUN_DIR = str(_run)
 PRIMAL_SMOKE_MODE = os.environ["PRIMAL_SMOKE_MODE"]
 DATABASES = {
-    "default": {"ENGINE": "django.db.backends.sqlite3", "NAME": str(_run / "evennia-smoke.sqlite3")}
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": str(_run / "evennia-smoke.sqlite3"),
+        # 재시작 시 Portal과 Server의 SQLite read→write 승격 경합을 직렬화한다.
+        "OPTIONS": {"timeout": 30, "transaction_mode": "IMMEDIATE"},
+    }
 }
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 NEW_ACCOUNT_REGISTRATION_ENABLED = False

@@ -26,7 +26,7 @@ def resolve_officer(caller, action, name="", objects=None):
 
 
 class Exchange(GameCommand):
-    category = "보급"
+    category = "아이템·보급"
     input_style = "target"
     key = "교환"
     aliases = ["exchange"]
@@ -45,7 +45,7 @@ class Exchange(GameCommand):
 
 
 class Rate(GameCommand):
-    category = "보급"
+    category = "아이템·보급"
     input_style = "target"
     key = "환율"
     aliases = ["rate"]

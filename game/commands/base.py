@@ -8,6 +8,7 @@ from world import text as ft
 class GameCommand(Command):
     help_category = "원시구역"
     input_style = "standalone"
+    category = "이동·탐사"
 
     def func(self):
         try:

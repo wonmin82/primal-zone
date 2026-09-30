@@ -9,7 +9,7 @@ from commands.base import GameCommand
 
 
 class Attack(GameCommand):
-    category = "전투"
+    category = "전투·회복"
     usage = "어린청소룡 공격 · 갈퀴사냥룡 2 공격"
     summary = "공유 적에게 2.5초 간격으로 기본 공격합니다."
     input_style = "target"
@@ -41,7 +41,7 @@ class Attack(GameCommand):
 
 
 class Heavy(GameCommand):
-    category = "전투"
+    category = "전투·회복"
     usage = "강타"
     summary = "다음 차례에 강타를 예약합니다. 반복 입력으로 빨라지지 않습니다."
     key = "강타"
@@ -54,7 +54,7 @@ class Heavy(GameCommand):
 
 
 class Guard(Heavy):
-    category = "전투"
+    category = "전투·회복"
     usage = "방어"
     summary = "다음 차례에 방어를 예약합니다."
     key = "방어"
@@ -62,29 +62,29 @@ class Guard(Heavy):
     action = "guard"
 
 
-class Heal(GameCommand):
-    category = "전투"
-    usage = "회복"
+class FirstAid(GameCommand):
+    category = "전투·회복"
+    usage = "응급처치"
     summary = "붕대로 회복합니다. 전투 중에는 다음 기본 공격을 대신합니다."
-    key = "회복"
-    aliases = ["붕대", "heal", "응급치료"]
+    key = "응급처치"
+    aliases = ["붕대", "firstaid"]
 
     def run(self):
         if self.caller.profile().get("combat_target"):
-            self.caller.change(lambda profile: rules.queue_action(profile, "heal"))
+            self.caller.change(lambda profile: rules.queue_action(profile, "firstaid"))
             self.caller.msg(
                 ft.text("다음 차례에는 공격 대신 ", ft.item("bandage"), "를 사용할 준비를 한다.")
             )
         else:
-            amount = self.caller.change(rules.heal)
+            amount = self.caller.change(rules.first_aid)
             self.caller.msg(view.healing(amount))
 
 
 class Flee(GameCommand):
-    category = "전투"
-    usage = "도주"
+    category = "전투·회복"
+    usage = "도망"
     summary = "교전에서 이탈합니다."
-    key = "도주"
+    key = "도망"
     aliases = ["flee"]
 
     def run(self):

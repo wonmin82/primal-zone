@@ -42,23 +42,20 @@ class ElevatorTests(WorldCommandTest):
                 self.assertEqual(self.lift.db.current_stop, stop)
                 self.assertIn(ELEVATOR_ROOM, self.char1.profile()["visited"])
                 self.char1.execute_cmd(data["label"])
-                self.assertEqual(self.char1.location, self.lift)
-                self.char1.execute_cmd("내리기")
                 self.assertEqual(self.char1.location, self.rooms[data["room"]])
                 self.assertIn(data["room"], self.char1.profile()["visited"])
         self.char1.execute_cmd("승강기")
         for stop, data in ELEVATOR_STOPS.items():
             self.char1.execute_cmd(data["label"])
-            self.assertEqual(self.char1.location, self.lift)
+            self.assertEqual(self.char1.location, self.rooms[data["room"]])
             self.assertEqual(self.lift.db.current_stop, stop)
-            self.char1.execute_cmd("내리기")
             self.assertEqual(self.char1.zone, data["room"])
             self.char1.execute_cmd(" 승강기 ")
 
     def test_unknown_scope_and_closed_directions_preserve_location_and_state(self):
         self.char1.location = self.rooms["support_1f_w1"]
         before = deepcopy(self.char1.profile())
-        for command in ["승강기", "내리기", *[stop["label"] for stop in ELEVATOR_STOPS.values()]]:
+        for command in ["승강기", *[stop["label"] for stop in ELEVATOR_STOPS.values()]]:
             with patch.object(self.char1, "msg") as output:
                 self.char1.execute_cmd(command)
             self.assertIn("명령을 확인하세요.", str(output.call_args_list))
@@ -81,6 +78,7 @@ class ElevatorTests(WorldCommandTest):
     def test_same_stop_selection_and_same_landing_board_do_not_save_floor(self):
         self.char1.execute_cmd("승강기")
         self.char1.execute_cmd("2층")
+        self.char1.execute_cmd("승강기")
         with patch.object(self.lift.attributes, "add", wraps=self.lift.attributes.add) as save, patch.object(self.char1, "msg") as output:
             self.char1.execute_cmd("2층")
             save.assert_not_called()
@@ -97,8 +95,13 @@ class ElevatorTests(WorldCommandTest):
         with patch.object(self.char2, "msg") as output:
             self.char1.execute_cmd("3층")
             self.assertIn("3층에 멈추고", str(output.call_args_list))
-        self.assertEqual(self.char1.location, self.lift)
+        self.assertEqual(self.char1.zone, "support_3f_c")
         self.assertEqual(self.char2.location, self.lift)
+        with patch.object(self.char2, "msg") as output:
+            self.char2.execute_cmd("내리기")
+            self.assertIn("명령을 확인하세요.", str(output.call_args_list))
+        self.assertEqual(self.char2.location, self.lift)
+        self.char1.execute_cmd("승강기")
         third = create_object(Explorer, key="승강기세번째탐사자", location=self.rooms["support_roof"])
         with patch.object(self.char1, "msg") as first, patch.object(self.char2, "msg") as second:
             third.execute_cmd("승강기")
@@ -106,18 +109,19 @@ class ElevatorTests(WorldCommandTest):
             self.assertIn("옥상", str(second.call_args_list))
         self.assertEqual(self.lift.db.current_stop, "roof")
         self.assertEqual([p.location for p in (self.char1, self.char2, third)], [self.lift] * 3)
-        self.char1.execute_cmd("내리기")
+        self.char1.execute_cmd("내려")
         self.assertEqual(self.char1.zone, "support_roof")
         self.assertEqual(self.char2.location, self.lift)
         self.assertEqual(third.location, self.lift)
         self.char2.execute_cmd("1층")
-        third.execute_cmd("내리기")
+        third.execute_cmd("내려")
         self.assertEqual(third.zone, "support_1f_c")
-        self.assertEqual(self.char2.location, self.lift)
+        self.assertEqual(self.char2.zone, "support_1f_c")
 
     def test_bootstrap_and_reload_preserve_shared_floor_room_ids_and_occupants(self):
         self.char1.execute_cmd("승강기")
         self.char1.execute_cmd("3층")
+        self.char1.execute_cmd("승강기")
         count = ObjectDB.objects.count()
         ids = {zone: room.id for zone, room in self.rooms.items()}
         exits = {(zone, obj.key): obj.id for zone, room in self.rooms.items() for obj in room.exits}
@@ -139,7 +143,7 @@ class ElevatorTests(WorldCommandTest):
             build_world()
             self.assertEqual(self.lift.db.current_stop, ELEVATOR_DEFAULT_STOP)
 
-    def test_reconnect_inside_uses_current_shared_floor_and_room_cmdset(self):
+    def test_reconnect_inside_stages_without_changing_shared_floor(self):
         self.char1.execute_cmd("승강기")
         before = deepcopy(self.char1.profile())
         with patch.object(self.char1.sessions, "count", return_value=0):
@@ -149,10 +153,9 @@ class ElevatorTests(WorldCommandTest):
         self.char1.at_pre_puppet(self.account, session=self.session)
         with patch.object(DefaultCharacter, "at_post_puppet"):
             self.char1.at_post_puppet()
-        self.assertEqual(self.char1.location, self.lift)
+        self.assertEqual(self.char1.zone, "staging_room")
         self.assertEqual(self.char1.profile(), before)
-        self.char1.execute_cmd("내리기")
-        self.assertEqual(self.char1.zone, "support_roof")
+        self.assertEqual(self.lift.db.current_stop, "roof")
 
     def test_failed_board_and_shared_transaction_roll_back_without_passenger_notice(self):
         self.char2.location = self.lift
@@ -190,25 +193,27 @@ class ElevatorTests(WorldCommandTest):
         self.char1.execute_cmd("승강기")
         self.char2.execute_cmd("승강기")
         self.char1.execute_cmd("2층")
-        state = multiplayer_state(self.char1)
+        self.assertEqual(self.char1.zone, "support_2f_c")
+        state = multiplayer_state(self.char2)
         self.assertEqual(state["elevator"]["current_floor"], "2층")
         self.assertEqual(state["elevator"]["current_stop"], "2f")
-        self.assertEqual([a["command"] for a in state["elevator"]["actions"]], [s["label"] for s in ELEVATOR_STOPS.values()] + ["내리기"])
+        self.assertEqual([a["command"] for a in state["elevator"]["actions"]], [s["label"] for s in ELEVATOR_STOPS.values()] + ["내려"])
         self.assertIn("현재 위치: 2층", self.lift.return_appearance(self.char1))
+        self.char1.execute_cmd("승강기")
         with patch.object(self.char2.sessions, "count", return_value=1):
             self.char2.push_state.reset_mock()
             self.char1.execute_cmd("3층")
             self.char2.push_state.assert_called()
+        self.char1.execute_cmd("승강기")
         with patch.object(self.char1.sessions, "count", return_value=1), patch.object(self.char1, "msg") as output:
             Explorer.push_state(self.char1)
             payload = output.call_args.kwargs["pz_state"][0][0]
             self.assertEqual(payload["exits"], [])
             self.assertEqual(payload["elevator"]["current_floor"], "3층")
             json.dumps(payload)
-        self.char1.execute_cmd("내리기")
+        self.char1.execute_cmd("내려")
         self.char1.execute_cmd("승강기")
         self.char1.execute_cmd("옥상")
-        self.char1.execute_cmd("내리기")
         with patch.object(self.char1, "msg") as output:
             self.char1.execute_cmd("지도")
             text = str(output.call_args_list)

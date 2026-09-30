@@ -20,7 +20,7 @@ from commands.base import GameCommand
 
 class Drop(GameCommand):
     key = "버려"
-    category = "보급"
+    category = "아이템·보급"
     input_style = "target"
     usage = "붕대 버려 · 붕대 모두 버려"
     summary = "장착분을 남기고 물건 하나 또는 스택 전부를 공개된 바닥에 옮깁니다."
@@ -98,7 +98,7 @@ class Store(Drop):
         if identity and ITEMS[identity].get("light_source"):
             require_single(selector, self.key)
             if selector.index:
-                raise rules.RuleError("가방의 광원은 번호 없이 지정하세요.")
+                raise rules.RuleError("소지품의 광원은 번호 없이 지정하세요.")
             power, _ = stack_selector(value, ITEMS, self.key, allow_all=False)
             self.caller.change(lambda profile: lighting.insert_power(profile, identity, power, time()))
             self.caller.msg(ft.text(ft.item(identity), "에 ", ft.item(power), " 한 개를 넣었다."))
@@ -108,10 +108,10 @@ class Store(Drop):
 
 class LightOn(GameCommand):
     key = "켜"
-    category = "탐사"
+    category = "이동·탐사"
     input_style = "target"
     usage = "손전등 켜 · 탐사용손전등 켜"
-    summary = "전원이 있는 가방의 광원을 켭니다."
+    summary = "전원이 있는 소지품의 광원을 켭니다."
     enabled = True
 
     def run(self):
@@ -132,7 +132,7 @@ class LightOff(LightOn):
 
 class LightStatus(GameCommand):
     key = "확인"
-    category = "탐사"
+    category = "이동·탐사"
     input_style = "target"
     usage = "손전등 확인"
     summary = "광원의 상태, 전원 종류와 남은 사용 시간을 확인합니다."
@@ -156,10 +156,10 @@ class Retrieve(Drop):
 class Eat(GameCommand):
     key = "먹어"
     aliases = ["eat"]
-    category = "보급"
+    category = "아이템·보급"
     input_style = "target"
     usage = "야전식량 먹어"
-    summary = "비전투 중 음식 하나를 먹어 체력을 회복합니다. 치료 숙련은 오르지 않습니다."
+    summary = "비전투 중 음식 하나를 먹어 체력을 회복합니다. 의술 숙련은 오르지 않습니다."
 
     def run(self):
         identity, _ = stack_selector(self.args, ITEMS, self.key, allow_all=False)
@@ -178,17 +178,17 @@ class Drink(Eat):
     key = "마셔"
     aliases = ["drink"]
     usage = "정제수 마셔"
-    summary = "비전투 중 음료 하나를 마셔 체력을 회복합니다. 치료 숙련은 오르지 않습니다."
+    summary = "비전투 중 음료 하나를 마셔 체력을 회복합니다. 의술 숙련은 오르지 않습니다."
 
 
 class RemoveArmor(GameCommand):
     key = UNEQUIP_ACTIONS["armor"]
     aliases = ["remove"]
     expected_slot = "armor"
-    category = "보급"
+    category = "아이템·보급"
     input_style = "target"
     usage = "강화 조끼 벗어"
-    summary = "현재 입은 방어구를 벗어 가방에 남깁니다."
+    summary = "현재 입은 방어구를 벗어 소지품에 남깁니다."
 
     def run(self):
         identity, _ = stack_selector(self.args, ITEMS, self.key, allow_all=False)
@@ -207,4 +207,4 @@ class Unwield(RemoveArmor):
     aliases = ["unwield"]
     expected_slot = "weapon"
     usage = "강철 마체테 해제"
-    summary = "현재 무기를 해제해 가방에 남깁니다. 맨손으로도 공격할 수 있습니다."
+    summary = "현재 무기를 해제해 소지품에 남깁니다. 맨손으로도 공격할 수 있습니다."

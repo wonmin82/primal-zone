@@ -13,8 +13,7 @@ class Closeout:
 
     async def floor(self, player, stop, zone):
         await player.act("승강기", lambda s: s["zone"] == "support_elevator")
-        await player.act(stop, lambda s: s["elevator"]["current_floor"] == stop)
-        await player.act("내리기", lambda s: s["zone"] == zone)
+        await player.act(stop, lambda s: s["zone"] == zone)
 
     async def dock(self, player):
         await player.act("귀환", lambda s: s["zone"] == "support_roof")
@@ -52,7 +51,7 @@ class Closeout:
                                                   for skill in s["growth"]["skills"]))
         await route(player, (("남", "support_2f_e1"), ("서", "support_2f_c"),
                              ("서", "support_2f_w1"), ("북", "infirmary")))
-        await player.act("의무관 치료", lambda s: s["hp"] == s["max_hp"])
+        await player.act("의무관 진료", lambda s: s["hp"] == s["max_hp"])
         self.scenario.phase = "defeat"
         outsider = self.outsider
         before = outsider.state["credits"]
@@ -119,7 +118,8 @@ class Closeout:
         player = self.first
         await player.act("귀환", lambda s: s["zone"] == "support_roof")
         await player.act("승강기", lambda s: s["zone"] == "support_elevator")
-        await player.act("3층", lambda s: s["elevator"]["current_stop"] == "3f")
+        await player.act("3층", lambda s: s["zone"] == "support_3f_c")
+        await player.act("승강기", lambda s: s["zone"] == "support_elevator")
         await self.second.act("어린청소룡 공격", lambda s: s["combat_target"] is not None)
         before = await asyncio.to_thread(self.scenario.harness.checkpoint)
         assert before["players"][self.second.name]["profile"]["combat_target"] is not None
@@ -133,7 +133,7 @@ class Closeout:
                      "proficiencies", "quests", "discoveries", "visited")
         for name, saved in before["players"].items():
             restored = after["players"][name]
-            assert saved["id"] == restored["id"] and saved["zone"] == restored["zone"]
+            assert saved["id"] == restored["id"] and restored["zone"] == "staging_room"
             assert restored["home"] == "dock" and restored["profile"]["combat_target"] is None
             assert {key: saved["profile"][key] for key in preserved} == {
                 key: restored["profile"][key] for key in preserved}
@@ -143,7 +143,8 @@ class Closeout:
         assert not after["stale"] and all(not e["combatants"] and not e["claim"] for e in after["enemies"].values())
         assert player.state["party"]["id"] == self.second.state["party"]["id"]
         # 이미 만료한 시체는 ground로, 남은 시체는 실제 callback으로 재예약되어야 한다.
-        await route(player, (("내리기", "support_3f_c"),))
+        await route(player, (("남", "hq_concourse"), ("남", "support_1f_c")))
+        await self.floor(player, "3층", "support_3f_c")
         old_entries = [entry for loot in before["loot"].values() for entry in loot["entries"]]
         pending_corpses = {identity for identity, loot in before["loot"].items() if loot["corpse"]}
         pending_enemies = {identity for identity, enemy in before["enemies"].items() if enemy["state"] != "alive"}

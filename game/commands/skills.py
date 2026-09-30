@@ -13,7 +13,7 @@ class Learn(GameCommand):
     key = "배워"
     input_style = "target"
     category = "성장"
-    usage = "강타 배워 · 방어 배워 · 응급치료 배워"
+    usage = "강타 배워 · 방어 배워 · 응급처치 배워"
     summary = "주변 훈련관에게 기술점수와 크레딧으로 다음 Rank를 배웁니다."
 
     def run(self):

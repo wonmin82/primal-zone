@@ -16,13 +16,13 @@ from world.progression import (
     PROFICIENCIES,
     PROFICIENCY_MAX_RANK,
     PROFICIENCY_XP_PER_RANK,
-    SAFE_HEAL_TRAINING_CAP,
+    SAFE_FIRSTAID_TRAINING_CAP,
     SKILLS,
 )
 from world.quests import progress_defaults
 
 MAX_LEVEL = 10
-PROFILE_VERSION = 7
+PROFILE_VERSION = 8
 DEFEAT_RECOVERY_HP = 1
 
 
@@ -107,13 +107,13 @@ def gain_xp(profile, amount):
 
 def require_peace(profile):
     if profile.get("combat_target"):
-        raise RuleError("전투 중입니다. 먼저 승리하거나 도주하세요.")
+        raise RuleError("전투 중입니다. 먼저 승리하거나 도망하세요.")
 
 
 def equip(profile, item_id, expected_slot=None):
     require_peace(profile)
     if profile["inventory"].get(item_id, 0) < 1:
-        raise RuleError("가방에 없는 장비입니다.")
+        raise RuleError("소지품에 없는 장비입니다.")
     slot = ITEMS[item_id]["slot"]
     if slot not in EQUIPMENT_ACTIONS:
         raise RuleError("무기와 방어구만 장착할 수 있습니다.")
@@ -139,7 +139,7 @@ def buy(profile, shop_id, item_id):
 
 
 def settle_salvage(profile, quantity):
-    """가방의 회수부품만 정산한다. 모든 검증 후 자원과 크레딧을 함께 변경한다."""
+    """소지품의 회수부품만 정산한다. 모든 검증 후 자원과 크레딧을 함께 변경한다."""
     require_peace(profile)
     if type(quantity) is not int or quantity <= 0:
         raise RuleError("정산 수량은 1개 이상의 정수로 지정하세요.")
@@ -207,7 +207,7 @@ def eat_or_drink(profile, item_id, action):
     return restored
 
 
-def heal(profile, training_cap=SAFE_HEAL_TRAINING_CAP):
+def first_aid(profile, training_cap=SAFE_FIRSTAID_TRAINING_CAP):
     maximum = stats(profile)["max_hp"]
     if profile["hp"] >= maximum:
         raise RuleError("이미 체력이 가득합니다.")
@@ -215,7 +215,7 @@ def heal(profile, training_cap=SAFE_HEAL_TRAINING_CAP):
     amount = min(
         ITEMS["bandage"]["heal"]
         + allocated(profile, "wisdom") * 2
-        + (skill_rank(profile, "heal") - 1) * 5
+        + (skill_rank(profile, "firstaid") - 1) * 5
         + proficiency_rank(profile, "medicine") // 2,
         maximum - profile["hp"],
     )
@@ -230,11 +230,11 @@ def queue_action(profile, action, now=None):
     now = time() if now is None else now
     if not profile.get("combat_target"):
         raise RuleError("진행 중인 교전이 없습니다.")
-    if action not in ("heavy", "guard", "heal"):
+    if action not in ("heavy", "guard", "firstaid"):
         raise RuleError("알 수 없는 전투 행동입니다.")
     if action == "heavy" and now < profile["heavy_ready_at"]:
         raise RuleError("강타가 아직 준비되지 않았습니다.")
-    if action == "heal":
+    if action == "firstaid":
         if not profile["inventory"].get("bandage", 0):
             raise RuleError("붕대가 없습니다.")
         if profile["hp"] >= stats(profile)["max_hp"]:
@@ -249,10 +249,10 @@ def player_attack(profile, enemy_id, now, interval, rng=None):
     profile["queued_action"] = "attack"
     profile["player_round"] += 1
     profile["next_attack_at"] = now + interval
-    if action == "heal":
+    if action == "firstaid":
         try:
-            amount = heal(profile, ENEMIES[enemy_id]["training_cap"])
-            return 0, {"action": "heal", "amount": amount}
+            amount = first_aid(profile, ENEMIES[enemy_id]["training_cap"])
+            return 0, {"action": "firstaid", "amount": amount}
         except RuleError as error:
             return 0, {"action": "error", "message": str(error)}
     multiplier = 1.0
@@ -420,6 +420,15 @@ def migrate_profile(profile):
             progress["radio_tower"][flag] = bool(result.pop(old, False))
         result["quests"] = progress
         result["discoveries"] = {"supply_cache": bool(result.pop("cache_claimed", False))}
+    if version < 8:
+        from commands.vocabulary import migrate_shortcuts
+
+        skills = result.get("skills", {})
+        if "heal" in skills:
+            skills["firstaid"] = skills.pop("heal")
+        if result.get("queued_action") == "heal":
+            result["queued_action"] = "firstaid"
+        result["command_shortcuts"] = migrate_shortcuts(result.get("command_shortcuts", {}))
     if version < PROFILE_VERSION:
         result.setdefault("storage", {})
         result.setdefault("light_sources", {})
