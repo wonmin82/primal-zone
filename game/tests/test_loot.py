@@ -61,7 +61,7 @@ class LootTests(WorldCommandTest):
             take_loot(self.char2, corpse=True, now=103)
         take_loot(self.char1, "scrap", corpse=True, now=103)
         self.assertEqual(self.char1.profile()["inventory"]["scrap"], 1)
-        self.assertEqual(len(corpse.db.entries), 1)
+        self.assertEqual(len(corpse.db.entries), 2)
         take_loot(self.char1, corpse=True, now=104)
         self.assertEqual(self.char1.profile()["inventory"]["blade"], 1)
         with self.assertRaises(RuleError):
@@ -70,7 +70,7 @@ class LootTests(WorldCommandTest):
     def test_party_round_robin_delivers_to_assignees(self):
         corpse, party, _ = self.kill(party=True)
         self.assertEqual(
-            [entry["assigned_player"] for entry in corpse.db.entries],
+            [entry["assigned_player"] for entry in corpse.db.entries if entry["kind"] == "item"],
             [self.char1.id, self.char2.id],
         )
         take_loot(self.char2, corpse=True, now=103)
@@ -85,7 +85,7 @@ class LootTests(WorldCommandTest):
         corpse.reconcile(now=132.5)
         corpse.reconcile(now=133)
         self.assertEqual(Corpse.objects.count(), 0)
-        self.assertEqual(DroppedLoot.objects.count(), 2)
+        self.assertEqual(DroppedLoot.objects.count(), 3)
         self.assertEqual(
             [dict(obj.db.entries[0]) for obj in room_loot(self.rooms["grass"], False)], entries
         )
@@ -94,7 +94,7 @@ class LootTests(WorldCommandTest):
         self.enemy.reconcile(now=147.5)
         self.enemy.reconcile(now=148)
         self.assertEqual(self.enemy.db.state, "alive")
-        self.assertEqual(DroppedLoot.objects.count(), 2)
+        self.assertEqual(DroppedLoot.objects.count(), 3)
         take_loot(self.char2, "scrap", corpse=False, now=222.5)
         self.assertEqual(self.char2.profile()["inventory"]["scrap"], 1)
         take_loot(self.char2, corpse=False, now=223)
@@ -143,11 +143,11 @@ class LootTests(WorldCommandTest):
         boss.finish_death(self.char1, now=102, rng=Random(1))
         corpse = room_loot(self.rooms["ridge"])[0]
         self.assertEqual(
-            {entry["assigned_player"] for entry in corpse.db.entries},
+            {entry["assigned_player"] for entry in corpse.db.entries if entry["kind"] == "item"},
             {self.char1.id, self.char2.id},
         )
         take_loot(self.char1, corpse=True, now=103)
-        self.assertEqual(len(corpse.db.entries), 1)
+        self.assertEqual(len(corpse.db.entries), 2)
         take_loot(self.char2, corpse=True, now=103)
         self.assertEqual(len(corpse.db.entries), 0)
 
@@ -184,4 +184,4 @@ class LootTests(WorldCommandTest):
         corpse.reconcile(now=134)
         corpse.reconcile(now=135)
         self.assertEqual(Corpse.objects.count(), 0)
-        self.assertEqual(DroppedLoot.objects.count(), 2)
+        self.assertEqual(DroppedLoot.objects.count(), 3)

@@ -114,8 +114,12 @@ class ZoneRoom(DefaultRoom):
         )
         for dropped in (obj for obj in room_loot(self, corpse=False) if obj in pool):
             for entry in dropped.db.entries:
+                from world.loot_assets import asset_text, normalize_entry
+
+                entry = normalize_entry(entry)
                 lines.append(
-                    ft.text(ft.item(entry["item"]), f" {entry['quantity']}개가 바닥에 떨어져 있다.")
+                    ft.text(asset_text(entry), "이 바닥에 떨어져 있다.") if entry["kind"] == "currency"
+                    else ft.text(ft.item(entry["id"]), f" {entry['quantity']}개가 바닥에 떨어져 있다.")
                 )
         others = [obj for obj in pool if obj != looker and obj.has_account]
         for obj in others:

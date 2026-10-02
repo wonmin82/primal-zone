@@ -90,7 +90,7 @@ class ItemInteractionRulesTests(TestCase):
                 self.assertEqual(profile["hp"], 20 + ITEMS[identity]["heal"])
                 self.assertEqual(profile["proficiencies"], before)
                 self.assertNotIn(identity, profile["inventory"])
-                self.assertLess(ITEMS[identity]["heal"] / SHOP_CATALOGS["supply"][identity], ITEMS["bandage"]["heal"] / SHOP_CATALOGS["supply"]["bandage"])
+                self.assertLess(ITEMS[identity]["heal"] / ITEMS[identity]["value"], ITEMS["bandage"]["heal"] / ITEMS["bandage"]["value"])
         for identity, action, hp, combat in (
             ("field_ration", "마셔", 20, None), ("water", "먹어", 20, None),
             ("bandage", "먹어", 20, None), ("water", "마셔", 60, None),
@@ -196,7 +196,8 @@ class RuleTests(TestCase):
                 sources |= set(rules.new_profile()["inventory"])
                 self.assertIn(identity, sources)
         for catalog in SHOP_CATALOGS.values():
-            for identity, price in catalog.items():
+            for identity in catalog:
+                price = ITEMS[identity]["value"]
                 self.assertIn(identity, ITEMS)
                 self.assertGreater(price, 0)
         for enemy in ENEMIES.values():
@@ -253,7 +254,8 @@ class RuleTests(TestCase):
 
     def test_every_credit_purchase_exact_cost_and_lossless_failure(self):
         for shop_id, catalog in SHOP_CATALOGS.items():
-            for identity, price in catalog.items():
+            for identity in catalog:
+                price = ITEMS[identity]["value"]
                 with self.subTest(item=identity):
                     profile = rules.new_profile()
                     profile["credits"] = price - 1

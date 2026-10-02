@@ -5,10 +5,12 @@ from time import time
 from world import rules
 from world import text as ft
 from world.content import ITEMS, UNEQUIP_ACTIONS, find_id
-from world.item_transfers import transfer
+from world.currency import currency_names, currency_request, format_currency
+from world.item_transfers import transfer, transfer_currency
 from world.targets import (
     names,
     parse_relation,
+    parse_selector,
     require_single,
     resolve,
     room_objects,
@@ -22,7 +24,7 @@ class Drop(GameCommand):
     key = "버려"
     category = "아이템·보급"
     input_style = "target"
-    usage = "붕대 버려 · 붕대 모두 버려"
+    usage = "붕대 버려 · 붕대 모두 버려 · 20칩 버려 · 칩 모두 버려"
     summary = "장착분을 남기고 물건 하나 또는 스택 전부를 공개된 바닥에 옮깁니다."
     aliases = ["drop"]
     particle = None
@@ -45,6 +47,19 @@ class Drop(GameCommand):
                 objects, selector, self.caller, self.key, lambda obj: isinstance(obj, cls)
             )[0]
             kwargs["recipient" if cls is Explorer else "container"] = counterpart
+        currency = currency_request(parse_selector(value, currency_names()))
+        if currency and (counterpart is None or isinstance(self, Give)):
+            if currency[1].index:
+                raise rules.RuleError("보유 보급칩은 번호 없이 금액 또는 모두로 지정하세요.")
+            quantity = transfer_currency(self.caller, currency[0], counterpart)
+            item = ft.token("reward", format_currency(quantity))
+            if counterpart:
+                self.caller.msg(ft.text(ft.token("player", counterpart.key), "에게 ", item, "을 건넸다."))
+                counterpart.msg(ft.text(ft.token("player", self.caller.key), "에게서 ", item, "을 받았다."))
+                counterpart.push_state()
+            else:
+                self.caller.msg(ft.text(item, "을 바닥에 내려놓았다. 다른 탐사자도 가져갈 수 있다."))
+            return
         identity, all_items = stack_selector(value, ITEMS, self.key)
         if counterpart and not isinstance(self, Give):
             quantity = counterpart.perform_action(self.caller, self.key, (identity, all_items))
@@ -75,7 +90,7 @@ class Give(Drop):
     key = "줘"
     aliases = ["give"]
     particle = "에게"
-    usage = "탐사자에게 붕대 줘 · 탐사자에게 붕대 모두 줘"
+    usage = "탐사자에게 붕대 줘 · 탐사자에게 붕대 모두 줘 · 탐사자에게 20칩 줘 · 탐사자에게 칩 모두 줘"
     summary = "같은 장소의 다른 비전투 탐사자에게 물건을 건넵니다."
 
 

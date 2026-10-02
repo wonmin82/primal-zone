@@ -29,6 +29,12 @@ class Look(CmdLook):
 
         name = self.args.strip()
         observed_at = time()
+        from world.content.economy import CURRENCY
+        from world.currency import is_currency
+
+        if is_currency(name):
+            self.caller.msg(ft.compact(CURRENCY["name"], CURRENCY["description"]))
+            return
         if name and self.caller.location:
             from world.navigation import blocked_exit_message
 

@@ -187,7 +187,7 @@ class Scenario:
             for player in (first, second):
                 await player.until(lambda state: state["xp"] == 11 and state["combat_target"] is None,
                                    self.timeouts.combat)
-                assert player.state["credits"] == 104
+                assert player.state["credits"] == 150
             self.report("combat", "shared enemy defeated / 양쪽 참여 보상")
             self.phase = "corpse"
             await first.until(lambda state: bool(state["corpses"]))
@@ -195,12 +195,14 @@ class Scenario:
             corpse_id = first.state["corpses"][0]["id"]
             await second.until(lambda state: any(c["id"] == corpse_id for c in state["corpses"]))
             scrap = next(entry for entry in second.state["corpses"][0]["loot"]
-                         if entry["item"] == "scrap")
+                         if entry["kind"] == "item" and entry["id"] == "scrap")
             assert scrap["assigned_name"] == first.name and scrap["can_take"] and scrap["protected"]
             await outsider.until(lambda state: bool(state["corpses"]))
             await outsider.expect_text("시체에서 모두 가져", "보호된 전리품")
             # 권한을 확인하고 남겨 두어 같은 시체의 ground 전환을 검증한다.
-            self.report("corpse", "created / party assignment / outsider blocked")
+            await first.act("시체에서 2칩 가져", lambda state: state["credits"] == 151)
+            await second.until(lambda state: state["credits"] == 151)
+            self.report("corpse", "currency 즉시 지급 없음 / 부분 회수 1칩씩 분배 / outsider blocked")
             self.phase = "lifecycle"
             await outsider.until(lambda state: not state["corpses"] and bool(state["ground_loot"]),
                                  self.timeouts.lifecycle)
@@ -223,20 +225,25 @@ class Scenario:
             self.elapsed("loot protection expiry", death_seen, self.timings["LOOT_PROTECTION_SECONDS"])
             await outsider.act("모두 가져", lambda state: count_item(state, "scrap") == 1
                                and not state["ground_loot"])
-            self.report("protection", "outsider blocked → allowed / 실제 회수")
+            assert outsider.state["credits"] == 156
+            self.report("protection", "outsider blocked → allowed / 미회수 6칩 자유 획득")
             self.phase = "shop"
             await route(first, (("귀환", "support_roof"), ("승강기", "support_elevator")))
             await first.act("3층", lambda state: state["zone"] == "support_3f_c")
             await route(first, (("동", "support_3f_e1"),
                                 ("북", "weapon_shop")))
             assert any(obj["name"] == "무기상" for obj in first.state["interactables"])
-            await first.expect_text("무기상 상품", "60C")
+            await first.expect_text("무기상 상품", "60칩")
             before_credits = first.state["credits"]
             # RNG drop은 남겨 둔 ground에서 outsider만 회수한다. 구매 결과는 미리 지급하지 않는다.
             assert count_item(first.state, "blade") == 0
             await first.act("무기상에게 강철마체테 구매", lambda state: count_item(state, "blade") == 1)
             assert first.state["credits"] == before_credits - 60
-            self.report("shop", "옥상 귀환 / 공용 승강기 / Shopkeeper Credit 구매")
+            await first.expect_text("강철마체테 가치", "매입가는 30칩")
+            await first.act("무기상에게 강철마체테 판매", lambda state: count_item(state, "blade") == 0)
+            assert first.state["credits"] == before_credits - 30
+            await first.act("무기상에게 강철마체테 구매", lambda state: count_item(state, "blade") == 1)
+            self.report("shop", "옥상 귀환 / 승강기 / 가치·구매·판매 / 재구매")
             self.phase = "persistence"
             saved = {key: first.state[key] for key in
                      ("name", "hp", "xp", "credits", "inventory", "quest")}

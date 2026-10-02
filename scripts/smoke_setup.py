@@ -42,7 +42,8 @@ def setup(credentials):
         if errors or character is None:
             raise RuntimeError("smoke fixture character 생성에 실패했습니다.")
         profile = rules.new_profile()
-        profile["credits"] = 100
+        # 매입 후 재구매까지 포함한 Full 본부 서비스 동선의 준비금.
+        profile["credits"] = 150
         profile["attributes"]["constitution"]["allocated"] = 100
         # 맨손 공격으로 양쪽 참여와 outsider 거절을 확인할 시간을 확보한다.
         profile["equipment"]["weapon"] = None

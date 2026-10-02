@@ -40,7 +40,7 @@
 }
 ```
 
-profile 최신 버전은 **8**이다. 신규 profile에는 빈 dict가 있고 v1~v6는 기존 migration을 적용한 뒤 빈 `command_shortcuts`를 보완한다. 기존 Credits·소지품·장비·보관·성장·임무·전투·방문 데이터는 그대로 유지하며 반복 migration은 idempotent다. 등록·교체·개별 삭제·전체 삭제는 기존 `caller.change()` transaction과 저장 경계를 사용한다.
+profile 최신 버전은 **8**이다. 신규 profile에는 빈 dict가 있고 v1~v6는 기존 migration을 적용한 뒤 빈 `command_shortcuts`를 보완한다. 기존 보급칩(저장 키 credits)·소지품·장비·보관·성장·임무·전투·방문 데이터는 그대로 유지하며 반복 migration은 idempotent다. 등록·교체·개별 삭제·전체 삭제는 기존 `caller.change()` transaction과 저장 경계를 사용한다.
 
 ### v8 저장 어휘와 새 예약 이름 충돌
 

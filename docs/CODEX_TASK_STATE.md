@@ -1,8 +1,22 @@
 # Current Task State
 
-확인일: 2026-09-30. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
+확인일: 2026-10-03. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
 
 ## Objective
+
+PR #24는 MERGED이고 시작 fetch의 최신 origin/main은 `0229a2275f33436a74f75274c94e464c8077b3a2`다. 깨끗한 main에서 `codex/supply-chip-economy`를 생성해 보급칩 경제·시체 화폐·아이템 가치/판매를 하나의 새 PR로 구현한다. profile credits/version 8과 기존 gameplay 가격·화폐 총량·item loot 계약은 유지하며 PR은 merge하지 않는다. 아래 PR #24 OPEN/검증 기록은 당시 이력이다.
+
+### 현재 구현과 검증
+
+보급칩 currency SSOT/공통 formatter, 소지품 잔액, give/drop/부분·전체 take, typed item/currency와 legacy read, 처치 XP 즉시/화폐 corpse snapshot, party remaining shares·그룹 보호·expiry/decay, ITEMS.value 가격과 가치/판매, 서버 소유 Web action을 구현했다. 적 8종 화폐와 기존 14개 구매 가격·XP 분배·profile version 8 및 credits 저장 키는 유지한다. 새 PR의 최종 HEAD/CI 링크는 PR Validation에 기록한다.
+
+2026-10-03 관련 경제/상점/전리품/보상/선택자/지역/텍스트 90개를 `--parallel 2 --reverse`로 실행해 46.738초·runner 56.087초에 통과했다. 추가 Web 상태 3개도 통과했다. 최종 `scripts/dev.py check`와 전체 `scripts/dev.py test`는 pure 130개(2.081초)·integration 304개(109.920초)·total 434개·통합 runner 119.070초에 통과했다. 최초 전체 실행에서 currency 추가에 따른 기존 Web ground 개수 기대를 발견해 화폐 종류·금액·권한 assertion까지 보강했다.
+
+최종 Quick 50.463초, Full 296.236초 성공. Full의 실제 첫 round 2.813초·corpse→ground 29.955초·respawn 44.867초·protection 121.670초를 확인했다. 파티 부분 화폐 분배·expiry 후 outsider 자유 회수·가치/판매/재구매·재로그인 잔액 보존, Full의 본부/두 임무/보스/Portal+Server restart와 미회수 loot 보존을 검증했다. 첫 Full은 판매 후 재구매를 추가한 fixture 예산 부족으로 실패했고 준비금만 150칩으로 조정한 뒤 최종 성공했다. 실제 플레이어 시작 잔액 20칩과 게임 가격은 변경하지 않았다. 플레이 SQLite의 SHA256/mtime_ns/size는 smoke 전후 모두 동일했다.
+
+격리 DB/일반 fixture의 브라우저 desktop 1440px·mobile 390px에서 상태/소지품 잔액, 20칩 버리기·바닥 화폐 버튼·전체 회수, 상품 가격·가치·판매, 처치 직후 잔액 불변·20칩 초과 회수 거절·2칩 파티 분배 후 두 화면 각각 +1칩, currency decay 및 기존 item 버튼을 확인했다. 가로 overflow 없고 compass/SURROUNDINGS 순서를 유지했다. 앱 오류/경고는 관찰되지 않았으나 Chrome에서 비동기 listener/message channel 오류 3건이 기록되어 별도로 남긴다. OS IME 자체는 미검증이다. `node --check` 성공, 격리 game의 fixture setup에서 collectstatic 완료, 기본 formatter 7종의 실제 출력을 text-examples와 대조해 일치했다. 브라우저 소유 프로세스/탭은 종료했으며 정책이 삭제를 차단한 임시 브라우저 DB/자료는 Git 제외 work 아래에 보존했다. 일반 개발 서버와 DB는 변경하지 않았다.
+
+## 이전 PR #24 Objective (과거 기록)
 
 PR #23은 MERGED이며 시작 main은 `d30fa74f25166cf79565b205a028ae10a02deffc`다. 현재 작업은 기존 OPEN [PR #24](https://github.com/wonmin82/primal-zone/pull/24)의 **의료 용어 체계 정리**이며 `codex/command-vocabulary-help`에서 이어간다. 시작 fetch 후 로컬·원격·PR HEAD는 `2c425bf55339ab924b662a165189d446945593dd`로 일치했고 작업 트리는 깨끗했다. origin/main은 기존 base와 동일하다. 새 PR을 만들거나 merge하지 않는다. 아래 PR #23 OPEN 설명과 과거 검증 수치는 당시 기록으로 보존한다.
 

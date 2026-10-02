@@ -10,7 +10,7 @@ from typeclasses.interactables import Container
 from typeclasses.loot import DroppedLoot, room_loot, take_loot
 from world import presentation as view
 from world import rules
-from world.content import ENEMIES, ITEMS, SHOP_CATALOGS
+from world.content import ENEMIES, ITEMS
 from world.item_transfers import transfer
 from world.state import multiplayer_state
 from world.targets import Mode, TargetSelector, parse_relation, parse_selector, stack_selector
@@ -143,7 +143,7 @@ class ItemInteractionTests(WorldCommandTest):
             self.assertIn(name, view.shop("supply", "보급관"))
             before = self.char1.profile()
             self.command(name + " 구매")
-            self.assertEqual(self.char1.profile()["credits"], before["credits"] - SHOP_CATALOGS["supply"][identity])
+            self.assertEqual(self.char1.profile()["credits"], before["credits"] - ITEMS[identity]["value"])
             self.command(name + " " + action)
             self.assertEqual(self.char1.profile()["hp"], before["hp"] + ITEMS[identity]["heal"])
             self.assertEqual(self.char1.profile()["proficiencies"], before["proficiencies"])

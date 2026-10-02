@@ -9,6 +9,7 @@ from world import presentation as view
 from world import rules
 from world import text as ft
 from world.content import ENEMIES
+from world.currency import format_currency
 from world.distant_presentation import DistantPresence, DistantPresenceMixin
 from world.multiplayer import (
     CLAIM_TIMEOUT_SECONDS,
@@ -267,18 +268,17 @@ class Enemy(DistantPresenceMixin, DefaultObject):
         self.db.state = "respawning"
         self.db.respawn_at = now + CORPSE_TTL_SECONDS + RESPAWN_DELAY_SECONDS
         definition = ENEMIES[self.db.enemy_id]
-        for identity, share in rules.reward_shares(
-            definition["xp"], definition["credits"], groups
+        for identity, xp in rules.reward_allocation(
+            definition["xp"], groups
         ).items():
             player = object_by_id(identity)
             profile = player.profile()
-            rules.gain_xp(profile, share["xp"])
-            profile["credits"] += share["credits"]
+            rules.gain_xp(profile, xp)
             profile["kills"] += 1
             if definition.get("boss_quest"):
                 profile["quests"][definition["boss_quest"]]["boss_defeated"] = True
             player.save_profile(profile)
-            message = view.reward(share["xp"], share["credits"])
+            message = view.reward(xp)
             after_change(lambda player=player, message=message: player.msg(message))
         Corpse.from_enemy(self, groups, now, rng)
         for player in self.active_players():
@@ -321,7 +321,7 @@ class Enemy(DistantPresenceMixin, DefaultObject):
                     raise RuntimeError("패배 후 의무실 이동을 완료하지 못했습니다.")
                 rescue = (
                     "탐사대가 지원동 의무실로 구조했습니다.\n"
-                    + (f"{lost}크레딧을 잃었습니다.\n" if lost else "")
+                    + (f"{format_currency(lost)}을 잃었습니다.\n" if lost else "")
                     + f"응급 처치로 체력 {rules.DEFEAT_RECOVERY_HP}을 회복했습니다. 추가 회복이 필요합니다."
                 )
                 after_change(lambda: target.msg(rescue))

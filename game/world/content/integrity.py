@@ -127,10 +127,13 @@ def shop_errors():
     for shop_id, catalog in SHOP_CATALOGS.items():
         if not catalog:
             issues.append(f"{shop_id}: 상점 판매 목록이 비었습니다.")
-        for item, price in catalog.items():
+        if not isinstance(catalog, (tuple, list)):
+            issues.append(f"{shop_id}: catalog는 가격 없이 item ID 목록만 가져야 합니다.")
+        for item in catalog:
             items.append(item)
             if item not in ITEMS:
                 issues.append(f"{item}: 상점 아이템 정의가 없습니다.")
+            price = ITEMS.get(item, {}).get("value")
             if type(price) is not int or price <= 0:
                 issues.append(f"{shop_id}/{item}: 가격은 양의 정수여야 합니다.")
     if len(items) != len(set(items)):
@@ -235,6 +238,8 @@ def errors(interactables):
     if len(spawns) != len(set(spawns)):
         issues.append("Enemy spawn ID가 중복되었습니다.")
     for enemy, data in ENEMIES.items():
+        if type(data.get("currency")) is not int or data["currency"] <= 0:
+            issues.append(f"{enemy}: 시체 보급칩은 양의 정수여야 합니다.")
         if not data.get("presence") or not data.get("distant_presence"):
             issues.append(f"{enemy}: 현재/원거리 존재 묘사가 없습니다.")
         if data["drop"] not in ITEMS:
@@ -257,7 +262,7 @@ def errors(interactables):
             issues.append(f"{identity}: 상점 catalog가 없습니다.")
     for identity, shop_id in (("supply_shopkeeper", "supply"), ("weapon_shopkeeper", "weapon"), ("armor_shopkeeper", "armor")):
         data = interactables.get(identity, {})
-        if data.get("shop_id") != shop_id or tuple(data.get("actions", ())) != ("대화", "상품", "구매"):
+        if data.get("shop_id") != shop_id or tuple(data.get("actions", ())) != ("대화", "상품", "구매", "가치", "판매"):
             issues.append(f"{identity}: 상점 catalog/행동 정의가 올바르지 않습니다.")
     for identity, action in (("doctor", "진료"), ("infirmary_bed", "휴식")):
         if tuple(interactables.get(identity, {}).get("actions", ())) != (action,):

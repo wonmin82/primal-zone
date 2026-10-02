@@ -19,6 +19,8 @@ from world.content import (
     UNEQUIP_ACTIONS,
     ordered_directions,
 )
+from world.content.economy import CURRENCY
+from world.currency import format_currency
 from world.distant_presentation import DistantPresence, DistantPresenceMixin
 from world.multiplayer import after_change
 from world.navigation import entry_block
@@ -154,6 +156,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             "xp_floor": rules.xp_threshold(values["level"]),
             "xp_next": rules.xp_threshold(values["level"] + 1),
             "credits": profile["credits"],
+            "currency": {**CURRENCY, "formatted": format_currency(profile["credits"])},
             "resources": {"scrap": {"name": ITEMS["scrap"]["name"], "count": profile["inventory"].get("scrap", 0)}},
             "room": room.get("name", "탐사 준비"),
             "zone": zone,

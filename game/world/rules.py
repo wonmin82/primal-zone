@@ -11,6 +11,7 @@ from world.content import (
     SHOP_CATALOGS,
     UNEQUIP_ACTIONS,
 )
+from world.currency import format_currency
 from world.progression import (
     ATTRIBUTES,
     PROFICIENCIES,
@@ -131,15 +132,39 @@ def buy(profile, shop_id, item_id):
     catalog = SHOP_CATALOGS[shop_id]
     if item_id not in catalog:
         raise RuleError("취급하지 않는 물건입니다.")
-    price = catalog[item_id]
+    price = purchase_price(item_id)
     if profile["credits"] < price:
-        raise RuleError("크레딧이 부족합니다.")
+        raise RuleError("보급칩이 부족합니다.")
     profile["credits"] -= price
     add_item(profile, item_id)
 
 
+def purchase_price(item_id):
+    value = ITEMS.get(item_id, {}).get("value")
+    if type(value) is not int or value <= 0:
+        raise RuleError("일반 상인이 매매할 수 없는 물건입니다.")
+    return value
+
+
+def resale_price(item_id):
+    return max(1, purchase_price(item_id) // 2)
+
+
+def sell(profile, shop_id, item_id, *, all_items=False):
+    require_peace(profile)
+    if item_id not in SHOP_CATALOGS.get(shop_id, ()):
+        raise RuleError("취급하지 않는 물건입니다.")
+    price = resale_price(item_id)
+    # 장착 복사본 제외·임무 물품 차단은 기존 이동 규칙과 같은 정책이다.
+    quantity = move_item(profile["inventory"], {}, item_id, all_items=all_items,
+                         equipment=profile["equipment"])
+    proceeds = quantity * price
+    profile["credits"] += proceeds
+    return quantity, proceeds
+
+
 def settle_salvage(profile, quantity):
-    """소지품의 회수부품만 정산한다. 모든 검증 후 자원과 크레딧을 함께 변경한다."""
+    """소지품의 회수부품만 정산한다. 모든 검증 후 자원과 보급칩을 함께 변경한다."""
     require_peace(profile)
     if type(quantity) is not int or quantity <= 0:
         raise RuleError("정산 수량은 1개 이상의 정수로 지정하세요.")
@@ -292,7 +317,7 @@ def enemy_attack(profile, enemy_id, enemy_round, now, rng=None):
 
 
 def apply_defeat(profile):
-    """패배의 최소 생존 회복과 기존 크레딧 패널티. 일반 의료와 독립이다."""
+    """패배의 최소 생존 회복과 기존 보급칩 패널티. 일반 의료와 독립이다."""
     if profile["hp"] > 0:
         raise RuleError("패배한 상태가 아닙니다.")
     lost = min(profile["credits"], 10)
@@ -370,17 +395,23 @@ def weighted_split(pool, weights):
     return result
 
 
-def reward_shares(xp, credits, groups):
+def reward_allocation(amount, groups):
     """그룹 기여 비례 → 그룹 안에서는 참여자에게 균등 배분한다."""
     weights = {key: sum(members.values()) for key, members in groups.items()}
-    pools = [weighted_split(amount, weights) for amount in (xp, credits)]
+    pools = weighted_split(amount, weights)
     result = {}
     for key, members in groups.items():
         equal = {identity: 1 for identity in members}
-        shares = [weighted_split(pool[key], equal) for pool in pools]
-        for identity in members:
-            result[identity] = {"xp": shares[0][identity], "credits": shares[1][identity]}
+        result.update(weighted_split(pools.get(key, 0), equal))
     return result
+
+
+def reward_shares(xp, credits, groups):
+    """기존 규칙 호출자의 호환 형태. 실제 지급 시 XP와 화폐 경로는 분리한다."""
+    xp_shares = reward_allocation(xp, groups)
+    currency_shares = reward_allocation(credits, groups)
+    return {identity: {"xp": amount, "credits": currency_shares[identity]}
+            for identity, amount in xp_shares.items()}
 
 
 def growth_defaults():
@@ -509,7 +540,7 @@ def learn_skill(profile, skill, *, safe=False):
     if point_pools(profile)["skill_points"] < data["point_cost"][rank]:
         raise RuleError("기술점수가 부족합니다.")
     if profile["credits"] < data["credit_cost"][rank]:
-        raise RuleError("크레딧이 부족합니다.")
+        raise RuleError("보급칩이 부족합니다.")
     profile["credits"] -= data["credit_cost"][rank]
     profile["skills"][skill] = rank
 
@@ -665,6 +696,7 @@ def skill_state(profile, key):
         "max_rank": data["max_rank"],
         "next_points": points,
         "next_credits": credits,
+        "next_cost": format_currency(credits),
         "required_level": level,
         "can_learn": not maximum
         and level_of(profile) >= level

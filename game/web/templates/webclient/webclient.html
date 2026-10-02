@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#101b17">
   <title>원시구역 — 탐사 기록</title>
-  <link rel="stylesheet" href="{% static 'webclient/css/primal.css' %}?v=command-vocabulary">
-  <script defer src="{% static 'webclient/js/primal.js' %}?v=command-vocabulary"></script>
+  <link rel="stylesheet" href="{% static 'webclient/css/primal.css' %}?v=supply-chip-economy">
+  <script defer src="{% static 'webclient/js/primal.js' %}?v=supply-chip-economy"></script>
 </head>
 <body data-ws-url="{{ websocket_url|default:'' }}" data-ws-port="{{ websocket_port }}">
   <header class="masthead">
@@ -20,7 +20,7 @@
       <section class="panel explorer">
         <p class="eyebrow">EXPLORER</p>
         <h2 id="player-name">탐사자 미접속</h2>
-        <div class="level-line"><span id="level">Lv. —</span><span id="credits">— 크레딧</span></div>
+        <div class="level-line"><span id="level">Lv. —</span><span id="credits">— 보급칩</span></div>
         <p id="resources" class="muted">자원 · —</p>
         <div class="meter-label"><span>체력</span><span id="hp-label">— / —</span></div>
         <progress id="hp" max="100" value="0" aria-label="체력"></progress>
@@ -75,9 +75,9 @@
         <details><summary>숙련</summary><div id="proficiencies"></div><p class="muted">실제 행동으로 성장하며 재훈련 후에도 유지됩니다.</p></details>
         <details><summary>기술 <span id="skill-points"></span></summary><div id="skills"></div><button id="reset-skills" data-command="기술 재분배">기술 재분배</button></details>
         <button id="reset-all" data-command="전체 재훈련">전체 재훈련</button>
-        <p class="muted">재훈련 무료 · 투자 포인트 반환 · 기본 기술 Rank 1 유지 · 학습 크레딧 반환 없음</p>
+        <p class="muted">재훈련 무료 · 투자 포인트 반환 · 기본 기술 Rank 1 유지 · 학습 보급칩 반환 없음</p>
       </section>
-      <section class="panel inventory-panel"><p class="eyebrow">EQUIPMENT & SUPPLIES</p><h2>장비와 보급품</h2><ul id="inventory"><li class="muted">아직 탐사자가 없습니다.</li></ul></section>
+      <section class="panel inventory-panel"><p class="eyebrow">EQUIPMENT & SUPPLIES</p><h2>장비와 보급품</h2><p id="inventory-balance" class="muted">보급칩 —</p><ul id="inventory"><li class="muted">아직 탐사자가 없습니다.</li></ul></section>
     </aside>
   </main>
   <footer>PRIMAL ZONE <span>첫 탐사 · 개발 중인 플레이 버전</span><a href="{% static 'webclient/fonts/neodgm/LICENSE.txt' %}" target="_blank" rel="noopener">글꼴 라이선스</a><button id="logout" data-command="종료" hidden>접속 종료</button></footer>

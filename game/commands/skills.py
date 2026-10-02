@@ -14,7 +14,7 @@ class Learn(GameCommand):
     input_style = "target"
     category = "성장"
     usage = "강타 배워 · 방어 배워 · 응급처치 배워"
-    summary = "주변 훈련관에게 기술점수와 크레딧으로 다음 Rank를 배웁니다."
+    summary = "주변 훈련관에게 기술점수와 보급칩으로 다음 Rank를 배웁니다."
 
     def run(self):
         skill = item_selector(self.args, SKILLS, self.key)
