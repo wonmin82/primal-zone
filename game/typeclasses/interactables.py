@@ -354,19 +354,24 @@ class Shopkeeper(ActionObject):
         if not self.available(caller, observed_at):
             return []
         profile = caller.profile_snapshot()
-        return [
+        actions = [
             {"label": "상품", "command": target + " 상품"},
             *[{"label": f"{ITEMS[item]['name']} · {format_currency(rules.purchase_price(item))} 구매",
                "command": f"{target}에게 {ITEMS[item]['name']} 구매"}
               for item in SHOP_CATALOGS[self.db.shop_id]],
             *[{"label": ITEMS[item]["name"] + " 가치", "command": f"{target}에게 {ITEMS[item]['name']} 가치"}
               for item in SHOP_CATALOGS[self.db.shop_id]],
-            *[{"label": f"{ITEMS[item]['name']} · {format_currency(rules.resale_price(item))} 판매",
-               "command": f"{target}에게 {ITEMS[item]['name']} 모두 판매"}
-              for item in SHOP_CATALOGS[self.db.shop_id]
-              if ITEMS[item]["transferable"] and profile["inventory"].get(item, 0)
-              > sum(item == identity for identity in profile["equipment"].values())],
         ]
+        for item in SHOP_CATALOGS[self.db.shop_id]:
+            quantity = profile["inventory"].get(item, 0) - sum(item == identity for identity in profile["equipment"].values())
+            if not ITEMS[item]["transferable"] or quantity <= 0:
+                continue
+            name, price = ITEMS[item]["name"], rules.resale_price(item)
+            actions.append({"label": f"{name} · {format_currency(price)} 판매", "command": f"{target}에게 {name} 판매"})
+            if quantity >= 2:
+                actions.append({"label": f"{name} 모두 판매 · 총 {format_currency(quantity * price)}",
+                                "command": f"{target}에게 {name} 모두 판매"})
+        return actions
 
     def return_appearance(self, looker, **kwargs):
         from world.targets import labels, room_objects

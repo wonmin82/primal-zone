@@ -4,9 +4,23 @@
 
 ## Objective
 
-PR #24는 MERGED이고 시작 fetch의 최신 origin/main은 `0229a2275f33436a74f75274c94e464c8077b3a2`다. 깨끗한 main에서 `codex/supply-chip-economy`를 생성해 보급칩 경제·시체 화폐·아이템 가치/판매를 하나의 새 PR로 구현한다. profile credits/version 8과 기존 gameplay 가격·화폐 총량·item loot 계약은 유지하며 PR은 merge하지 않는다. 아래 PR #24 OPEN/검증 기록은 당시 이력이다.
+현재 작업은 OPEN [PR #25](https://github.com/wonmin82/primal-zone/pull/25)의 경제 후속 리뷰 네 항목 수정이다. 기존 `codex/supply-chip-economy`에서 계속 작업한다. 시작 fetch에서 로컬/원격/PR HEAD는 `1eb292d79be42a9f22c35c19a068c3250e43615b`, origin/main과 PR base는 `0229a2275f33436a74f75274c94e464c8077b3a2`로 일치했고 작업 트리는 깨끗했다. 최종 fetch에서도 main은 동일해 rebase가 필요하지 않다. 새 PR을 만들거나 merge하지 않는다.
 
-### 현재 구현과 검증
+### PR #25 후속 리뷰 구현과 검증 (2026-10-03)
+
+Web 기본 판매는 1개이며 판매 가능한 비착용 복사본이 2개 이상일 때만 별도 모두 판매/총액 action을 제공한다. 일반 전달·버리기·보관·판매는 공통 `lighting.discard_device_state_if_unowned`로 마지막 광원 소유권 상실 시 장치 상태를 제거하며 여분은 유지한다. 재구매 시 과거 건전지가 부활하지 않는다. protected currency는 고정 `eligible_players`와 감소하는 `remaining_shares`를 분리한다. 자기 몫이 0인 원래 참여자도 다른 참여자의 남은 지급을 trigger하고, payout은 remaining_shares만 weight로 쓴다. 현재 파티를 권한 계산에 다시 조회하지 않으며 offline persistent Explorer에도 지급한다. 객체 누락은 전체 rollback한다. expiry 후 free와 decay의 quantity/자격/잔여 몫/reservation/deadline 보존, 초기 PR shares·legacy item의 읽기 전용 normalize 호환을 유지한다. Web `display_label`은 8칩, `take_target`은 칩/칩 2로 분리했고 take_command를 그대로 전송한다. profile version 8·credits·기존 가격/XP/item 배정은 변경하지 않는다.
+
+새 pure 3개·integration 7개를 추가하고 기존 판매/파티 snapshot 검사를 보강했다. 먼저 25개 red 실행에서 판매 의미·광원 state·권리/표시 필드의 실패를 재현했다. 관련 경제/loot/reward/shop/Web/lighting/item interaction `--parallel 2 --reverse` 108개는 41.049초·runner 50.189초 통과, 이후 추가 경계 3개는 8.924초·runner 17.969초 통과했다. 최종 check 통과, 전체 test는 pure 133개 / 1.902초·integration 311개 / 128.939초·total 444개·통합 runner 139.261초 성공이다. 최초 Quick은 전체 테스트·Full과 동시 실행 중 outsider claim 거절 메시지 timeout으로 실패했고 당시 플레이어 state에는 사냥이 이미 종료되어 있었다. 실패 DB/로그를 보존했고 코드 변경 없이 재실행한 Quick은 66.657초 성공했다. Full은 335.086초 성공: 첫 round 2.970초·decay 29.892초·respawn 44.766초·protection 123.261초, 본부/두 임무/보스/실제 Portal+Server restart·권리/잔액 보존을 확인했다. 두 최종 smoke와 browser 전후 플레이 DB SHA256/mtime_ns/size는 동일했다.
+
+computer-use skill로 별도 DB/일반 fixture의 desktop 1440px·mobile 390px을 확인했다. 붕대 3개 기본 판매로 1개/4칩, 남은 2개 모두 판매로 8칩이 지급됐다. 강철마체테 3개/착용 1개에서는 모두 판매 60칩 후 착용 1개가 남았다. 두 참여자 화폐 fixture(각 4칩)에서 7칩 회수 후 자기 몫 0인 요청자의 1칩 버튼은 활성 상태였으며 다른 참여자에게만 마지막 1칩을 지급하고 양쪽 화면을 갱신했다. 시체/ground의 8칩 표시와 20칩 버리기, 칩 1/칩 2 버튼의 정확한 selector/회수, 기존 3×3 compass와 SURROUNDINGS 순서·가로 overflow/clipping 없음을 확인했다. 앱 소스 오류/경고는 관찰되지 않았고 두 Chrome 탭에서 각각 외부 listener/message-channel 계열 오류 3건을 별도 기록한다. node --check와 격리 game의 python -m evennia collectstatic --noinput 성공, CSS/JS cache query는 supply-chip-review다. browser viewport/탭과 소유한 서버/격리 DB는 정리했으며 screenshot/log·최초 실패 진단은 Git 제외 work에만 있다. 실제 OS IME는 미검증이다.
+
+최종 후속 commit/headSha와 test·smoke CI 결과는 PR Validation의 후속 검증 항목에서 대조한다. 초기 PR shares에서 이미 삭제된 참여자 key는 원본 정보가 없어 자격을 복원할 수 없고, 남아 있는 key로만 호환 해석한다. 최초 구현 검증과 이전 PR 기록은 아래에 보존한다.
+
+### 최초 경제 구현 시작 기준 (과거 기록)
+
+PR #24는 MERGED이고 시작 fetch의 최신 origin/main은 `0229a2275f33436a74f75274c94e464c8077b3a2`였다. 깨끗한 main에서 `codex/supply-chip-economy`를 생성해 경제 기능을 구현하고 PR #25를 만들었다. 아래 수치는 최초 구현 당시 기록이다.
+
+### 최초 구현과 검증 (과거 기록)
 
 보급칩 currency SSOT/공통 formatter, 소지품 잔액, give/drop/부분·전체 take, typed item/currency와 legacy read, 처치 XP 즉시/화폐 corpse snapshot, party remaining shares·그룹 보호·expiry/decay, ITEMS.value 가격과 가치/판매, 서버 소유 Web action을 구현했다. 적 8종 화폐와 기존 14개 구매 가격·XP 분배·profile version 8 및 credits 저장 키는 유지한다. 새 PR의 최종 HEAD/CI 링크는 PR Validation에 기록한다.
 

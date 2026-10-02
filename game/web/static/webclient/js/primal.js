@@ -177,8 +177,8 @@
         all.disabled = !corpse.loot.some((item) => item.can_take); actions.push(all);
       } else { const empty = document.createElement("small"); empty.textContent = corpse.loot_obscured ? "전리품을 식별하기 어려움" : "남은 전리품 없음"; actions.push(empty); }
       for (const item of corpse.loot) {
-        const el = button(item.label + " " + item.amount_label + " → " + (item.protected ? item.assigned_name : "자유 획득"), item.take_command);
-        el.replaceChildren(semantic(item.kind === "currency" ? "reward" : "item", item.label), " " + item.amount_label + " → ", semantic(item.protected ? "player" : "muted", item.protected ? item.assigned_name : "자유 획득"));
+        const el = button(item.display_label + " → " + (item.protected ? item.assigned_name : "자유 획득"), item.take_command);
+        el.replaceChildren(semantic(item.kind === "currency" ? "reward" : "item", item.display_label), " → ", semantic(item.protected ? "player" : "muted", item.protected ? item.assigned_name : "자유 획득"));
         el.disabled = !item.can_take; actions.push(el);
       }
     }
@@ -188,8 +188,8 @@
       actions.push(all);
     }
     for (const source of state.ground_loot) for (const item of source.loot) {
-      const el = button("바닥 · " + item.label + " " + item.amount_label + " → " + (item.protected ? item.assigned_name : "자유 획득"), item.take_command);
-      el.replaceChildren("바닥 · ", semantic(item.kind === "currency" ? "reward" : "item", item.label), " " + item.amount_label + " → ", semantic(item.protected ? "player" : "muted", item.protected ? item.assigned_name : "자유 획득"));
+      const el = button("바닥 · " + item.display_label + " → " + (item.protected ? item.assigned_name : "자유 획득"), item.take_command);
+      el.replaceChildren("바닥 · ", semantic(item.kind === "currency" ? "reward" : "item", item.display_label), " → ", semantic(item.protected ? "player" : "muted", item.protected ? item.assigned_name : "자유 획득"));
       el.disabled = !item.can_take; actions.push(el);
     }
     renderGrowth(state);

@@ -151,6 +151,8 @@ def resale_price(item_id):
 
 
 def sell(profile, shop_id, item_id, *, all_items=False):
+    from world.lighting import discard_device_state_if_unowned
+
     require_peace(profile)
     if item_id not in SHOP_CATALOGS.get(shop_id, ()):
         raise RuleError("취급하지 않는 물건입니다.")
@@ -158,6 +160,7 @@ def sell(profile, shop_id, item_id, *, all_items=False):
     # 장착 복사본 제외·임무 물품 차단은 기존 이동 규칙과 같은 정책이다.
     quantity = move_item(profile["inventory"], {}, item_id, all_items=all_items,
                          equipment=profile["equipment"])
+    discard_device_state_if_unowned(profile, item_id)
     proceeds = quantity * price
     profile["credits"] += proceeds
     return quantity, proceeds

@@ -13,7 +13,7 @@ from world.content import ENEMIES, ITEMS, find_id
 from world.content.economy import CURRENCY
 from world.currency import currency_request, format_currency
 from world.distant_presentation import DistantPresenceMixin
-from world.loot_assets import asset_name, asset_text, normalize_entry
+from world.loot_assets import asset_name, asset_text, currency_payouts, normalize_entry
 from world.multiplayer import (
     CORPSE_TTL_SECONDS,
     LOOT_PROTECTION_SECONDS,
@@ -76,26 +76,33 @@ def build_entries(enemy, groups, now, rng=None):
         kind, identity = group.split(":")
         entries.append({
             "kind": "currency", "id": CURRENCY["id"], "quantity": quantity,
-            "shares": shares, "reserved_party": int(identity) if kind == "party" else None,
+            "eligible_players": sorted(members), "remaining_shares": shares,
+            "reserved_party": int(identity) if kind == "party" else None,
             "reserved_player": int(identity) if kind == "player" else None,
             "assigned_player": None, "protection_until": now + LOOT_PROTECTION_SECONDS,
         })
     return entries
 
 
-def recipient_for(entry, caller, now):
+def recipient_for_item(entry, caller, now):
+    """item 순번 배정의 지급 대상. currency의 트리거 권한과 구분한다."""
     from typeclasses.parties import party_for
 
     entry = normalize_entry(entry)
     if now >= entry["protection_until"]:
         return caller
-    if entry["kind"] == "currency":
-        return caller if entry["shares"].get(caller.id, 0) > 0 else None
     party = party_for(caller)
     allowed = caller.id in (entry["reserved_player"], entry["assigned_player"]) or (
         party and party.id == entry["reserved_party"]
     )
     return object_by_id(entry["assigned_player"]) if allowed else None
+
+
+def can_take_entry(entry, caller, now):
+    entry = normalize_entry(entry)
+    if entry["kind"] == "currency":
+        return now >= entry["protection_until"] or caller.id in entry["eligible_players"]
+    return recipient_for_item(entry, caller, now) is not None
 
 
 def room_loot(room, corpse=True):
@@ -119,7 +126,7 @@ def create_dropped_loot(room, entries, source_spawn=None):
 
 
 def take_loot(caller, item=None, corpse=True, now=None, *, request=None):
-    """선택 범위/수량만 확장한다. 지급 권한은 recipient_for 한 곳에서 판단한다."""
+    """선택과 트리거 권한을 검증한 뒤 item 배정 또는 currency 잔여 몫을 지급한다."""
     from world.lifecycle import reconcile_room
     from world.observation import can_inspect_loot, can_perceive, context_for
     from world.target_presentation import count_word
@@ -153,7 +160,7 @@ def take_loot(caller, item=None, corpse=True, now=None, *, request=None):
             (source, index)
             for source in sources
             for index, entry in enumerate(entries_by_source[source.id])
-            if ((currency and entry["kind"] == "currency" and recipient_for(entry, caller, now))
+            if ((currency and entry["kind"] == "currency" and can_take_entry(entry, caller, now))
                 or (not currency and (item is None or entry["kind"] == "item" and entry["id"] == item)))
         ]
         chosen = {(source.id, index) for source, index in select(candidates, request.target)}
@@ -165,8 +172,7 @@ def take_loot(caller, item=None, corpse=True, now=None, *, request=None):
             remaining = []
             changed = False
             for index, entry in enumerate(entries_by_source[source.id]):
-                target = recipient_for(entry, caller, now)
-                if not target or (source.id, index) not in chosen:
+                if (source.id, index) not in chosen or not can_take_entry(entry, caller, now):
                     remaining.append(entry)
                     continue
                 changed = True
@@ -177,10 +183,8 @@ def take_loot(caller, item=None, corpse=True, now=None, *, request=None):
                 if entry["kind"] == "currency":
                     rules.require_peace(caller.profile())
                     protected = now < entry["protection_until"]
-                    shares = entry["shares"] if protected else {}
-                    if protected and sum(shares.values()) != entry["quantity"]:
-                        raise rules.RuleError("보급칩 분배 권리를 확인할 수 없습니다.")
-                    payouts = rules.weighted_split(quantity, shares) if protected else {caller.id: quantity}
+                    shares = entry["remaining_shares"] if protected else {}
+                    payouts = currency_payouts(entry, quantity, caller.id, now)
                     for identity, amount in payouts.items():
                         if not amount:
                             continue
@@ -191,10 +195,11 @@ def take_loot(caller, item=None, corpse=True, now=None, *, request=None):
                         profile["credits"] += amount
                         recipient.save_profile(profile)
                         received.append((recipient, CURRENCY["id"], amount))
-                    entry["shares"] = {identity: amount - payouts.get(identity, 0)
+                    entry["remaining_shares"] = {identity: amount - payouts.get(identity, 0)
                                        for identity, amount in shares.items() if amount > payouts.get(identity, 0)}
                     recovered_currency += quantity
                 else:
+                    target = recipient_for_item(entry, caller, now)
                     profile = target.profile()
                     rules.add_item(profile, entry["id"], quantity)
                     target.save_profile(profile)

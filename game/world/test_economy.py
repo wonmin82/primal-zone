@@ -6,7 +6,7 @@ from unittest import TestCase
 from world import presentation, rules
 from world.content import ENEMIES, ITEMS, SHOP_CATALOGS
 from world.currency import currency_names, currency_request, format_currency, spend_currency
-from world.loot_assets import normalize_entry
+from world.loot_assets import currency_payouts, normalize_entry
 from world.targets import parse_loot, parse_selector
 
 
@@ -88,3 +88,43 @@ class EconomyRulesTests(TestCase):
             with self.assertRaises(rules.RuleError):
                 rules.sell(profile, shop, item)
             self.assertEqual(profile, before)
+
+    def test_old_currency_normalization_separates_rights_without_writes(self):
+        old = {"kind": "currency", "id": "credits", "quantity": 21,
+               "shares": {"1": 11, "2": 10}, "protection_until": 220}
+        original = deepcopy(old)
+        canonical = normalize_entry(old)
+        self.assertEqual(canonical["eligible_players"], [1, 2])
+        self.assertEqual(canonical["remaining_shares"], {1: 11, 2: 10})
+        self.assertNotIn("shares", canonical)
+        self.assertEqual(old, original)
+        self.assertEqual(normalize_entry(canonical), canonical)
+        canonical["remaining_shares"] = {2: 1}
+        canonical["quantity"] = 1
+        self.assertEqual(normalize_entry(canonical)["eligible_players"], [1, 2])
+
+    def test_sale_discards_only_last_owned_device_and_rebuy_has_no_power(self):
+        from world import lighting
+
+        profile = rules.new_profile()
+        profile["credits"] = 100
+        profile["inventory"].update(flashlight=2, battery=1)
+        lighting.insert_power(profile, "flashlight", "battery", 100)
+        device = deepcopy(profile["light_sources"]["flashlight"])
+        rules.sell(profile, "supply", "flashlight")
+        self.assertEqual(profile["inventory"]["flashlight"], 1)
+        self.assertEqual(profile["light_sources"]["flashlight"], device)
+        rules.sell(profile, "supply", "flashlight")
+        self.assertNotIn("flashlight", profile["inventory"])
+        self.assertNotIn("flashlight", profile["light_sources"])
+        rules.buy(profile, "supply", "flashlight")
+        self.assertIsNone(lighting.projected(profile, "flashlight", 101)["power_source"])
+        self.assertEqual(lighting.projected(profile, "flashlight", 101)["charge_seconds"], 0)
+
+    def test_currency_payout_uses_only_remaining_obligations_until_expiry(self):
+        entry = {"kind": "currency", "id": "credits", "quantity": 1,
+                 "eligible_players": [1, 2, 3, 4], "remaining_shares": {4: 1}, "protection_until": 220}
+        before = deepcopy(entry)
+        self.assertEqual(currency_payouts(entry, 1, 1, 219), {4: 1})
+        self.assertEqual(currency_payouts(entry, 1, 5, 220), {5: 1})
+        self.assertEqual(entry, before)

@@ -28,6 +28,10 @@
 6. 무기상 상품·강철마체테 가치·무기상에게 강철마체테 판매를 실행한다. 60칩 구매가/30칩 매입가이며 장착한 복사본은 남긴다. 붕대 모두 판매, 잘못된 상인·가격 없는 물품·임무 물품의 거절과 불변을 확인한다.
 7. desktop/390px에서 상태·소지품 잔액, 상품 가격, 가치/판매 action, 시체/ground 화폐·기존 item·take button을 실행한다. 파티 지급 후 양쪽 state, 재로그인 잔액, console error/warning·가로 overflow를 확인한다.
 
+후속 리뷰 검증에서는 4명에게 8칩(각 2칩)을 배정한 뒤 7칩 회수로 남은 몫이 한 명의 1칩뿐이어도 원래 참여자가 마지막 분배를 trigger하는지 확인한다. outsider는 보호 중 거절되고 offline 수령자는 DB에 지급되며, 수령 객체 누락 시 entry/모든 잔액이 그대로여야 한다. decay 전후 자격·잔여 몫·기한을 비교하고 expiry 후 outsider 자유 획득도 확인한다. 초기 shares currency와 legacy item 조회가 저장을 바꾸지 않는지 확인한다.
+
+Web에서는 붕대 3개로 기본 판매 4칩/1개와 모두 판매 총 12칩을 구분하고, 강철마체테 3개 중 1개 착용이면 모두 판매 총액이 60칩이며 착용분이 남는지 본다. 마지막 손전등 판매 후 light_sources가 사라지고 재구매 시 전원이 없는지, 여분을 팔 때는 상태가 남는지도 확인한다. 시체/바닥 버튼은 8칩으로 표시하고 칩 8칩처럼 선택자와 금액을 중복하지 않으며 칩/칩 2 명령은 유지해야 한다.
+
 관련 자동 검사는 world.test_economy/tests.test_economy와 기존 reward/loot/targets/shop/regions/text suite다. Quick은 처치 즉시 미지급·2칩 부분 분배·보호/decay·만료 후 회수·가치/판매·재접속을 연결하며 Full은 같은 흐름과 production timing/restart/progression을 검사한다.
 
 ## 과거 단계별 검증 기록과 당시 절차

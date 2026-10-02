@@ -240,7 +240,10 @@ class Scenario:
             await first.act("무기상에게 강철마체테 구매", lambda state: count_item(state, "blade") == 1)
             assert first.state["credits"] == before_credits - 60
             await first.expect_text("강철마체테 가치", "매입가는 30칩")
-            await first.act("무기상에게 강철마체테 판매", lambda state: count_item(state, "blade") == 0)
+            single_sale = next(action for obj in first.state["interactables"] for action in obj["actions"]
+                               if action["label"] == "강철마체테 · 30칩 판매")
+            assert single_sale["command"].endswith("강철마체테 판매")
+            await first.act(single_sale["command"], lambda state: count_item(state, "blade") == 0)
             assert first.state["credits"] == before_credits - 30
             await first.act("무기상에게 강철마체테 구매", lambda state: count_item(state, "blade") == 1)
             self.report("shop", "옥상 귀환 / 승강기 / 가치·구매·판매 / 재구매")

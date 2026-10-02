@@ -3,12 +3,12 @@
 from time import time
 
 from typeclasses.enemies import room_enemies
-from typeclasses.loot import recipient_for, room_loot
+from typeclasses.loot import can_take_entry, room_loot
 from typeclasses.parties import invitation_for, party_for
 
 from world.content import ENEMIES
 from world.currency import currency_names, format_currency
-from world.loot_assets import asset_name, normalize_entry
+from world.loot_assets import asset_name, asset_text, normalize_entry
 from world.multiplayer import object_by_id
 from world.targets import labels, room_objects
 
@@ -28,9 +28,10 @@ def loot_entries(source, player, now):
             **entry,
             "name": asset_name(entry),
             "amount_label": format_currency(entry["quantity"]) if entry["kind"] == "currency" else f"×{entry['quantity']}",
-            "assigned_name": " · ".join(player_name(identity) for identity in entry["shares"]) if entry["kind"] == "currency" else player_name(entry["assigned_player"]),
+            "display_label": str(asset_text(entry)),
+            "assigned_name": " · ".join(player_name(identity) for identity in entry["remaining_shares"]) if entry["kind"] == "currency" else player_name(entry["assigned_player"]),
             "protected": now < entry["protection_until"],
-            "can_take": bool(recipient_for(entry, player, now)),
+            "can_take": can_take_entry(entry, player, now),
         }
         for entry in (normalize_entry(raw) for raw in source.db.entries)
     ]
@@ -56,11 +57,13 @@ def loot_controls(player, now, objects=None):
         )
         for index, entry in enumerate(entries):
             peers = [(obj, i) for obj, i, e in pool if (e["kind"], e["id"]) == (entry["kind"], entry["id"])
-                     and (entry["kind"] != "currency" or recipient_for(e, player, now))]
+                     and (entry["kind"] != "currency" or can_take_entry(e, player, now))]
             suffix = f" {peers.index((source, index)) + 1}" if len(peers) > 1 and (source, index) in peers else ""
             target = (currency_names()[1] if entry["kind"] == "currency" else entry["name"]) + suffix
             prefix = corpse_controls[source.id] + "에서 " if source in corpses else ""
-            entry.update(label=target, take_command=prefix + target + " 가져")
+            entry.update(label=target, take_target=target,
+                         display_label=entry["amount_label"] if entry["kind"] == "currency" else target + " " + entry["amount_label"],
+                         take_command=prefix + target + " 가져")
         return entries
 
     return {

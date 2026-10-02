@@ -42,7 +42,7 @@ class EconomyTests(WorldCommandTest):
 
     def currency_entry(self, quantity, shares=None, deadline=0):
         return {"kind": "currency", "id": "credits", "quantity": quantity,
-                "shares": shares or {}, "protection_until": deadline}
+                "eligible_players": sorted(shares or {}), "remaining_shares": shares or {}, "protection_until": deadline}
 
     def test_give_drop_and_indexed_ground_take_conserve_wallets(self):
         self.command(f"{self.char2.key}에게 칩 줘")
@@ -105,7 +105,7 @@ class EconomyTests(WorldCommandTest):
         self.assertEqual((self.char1.profile()["credits"], self.char1.profile()["xp"], self.char1.profile()["kills"]), (20, 22, 1))
         corpse = room_loot(self.char1.location)[0]
         entry = next(e for e in corpse.db.entries if e["kind"] == "currency")
-        self.assertEqual((entry["quantity"], dict(entry["shares"])), (8, {self.char1.id: 8}))
+        self.assertEqual((entry["quantity"], dict(entry["remaining_shares"])), (8, {self.char1.id: 8}))
         self.take("시체에서 칩 모두")
         self.assertEqual(self.char1.profile()["credits"], 28)
 
@@ -128,13 +128,15 @@ class EconomyTests(WorldCommandTest):
         self.assertIn(corpse, room_loot(self.char1.location))
         self.take("시체에서 10칩")
         self.assertEqual([p.profile()["credits"] for p in (self.char1, self.char2)], [25, 25])
-        self.assertEqual(dict(corpse.db.entries[0]["shares"]), {self.char1.id: 6, self.char2.id: 5})
+        self.assertEqual(dict(corpse.db.entries[0]["remaining_shares"]), {self.char1.id: 6, self.char2.id: 5})
+        self.assertEqual(list(corpse.db.entries[0]["eligible_players"]), [self.char1.id, self.char2.id])
         party.remove_member(third)
         party.remove_member(self.char2)
         corpse.reconcile(130)
         ground = room_loot(self.char1.location, False)[0]
         self.assertEqual((ground.db.entries[0]["quantity"], ground.db.entries[0]["protection_until"]), (11, 220))
-        self.assertEqual(dict(ground.db.entries[0]["shares"]), {self.char1.id: 6, self.char2.id: 5})
+        self.assertEqual(dict(ground.db.entries[0]["remaining_shares"]), {self.char1.id: 6, self.char2.id: 5})
+        self.assertEqual(list(ground.db.entries[0]["eligible_players"]), [self.char1.id, self.char2.id])
         self.take("칩 모두", self.char2, now=131)
         self.assertEqual([p.profile()["credits"] for p in (self.char1, self.char2)], [31, 30])
         self.assertEqual(third.profile()["credits"], 20)
@@ -206,14 +208,17 @@ class EconomyTests(WorldCommandTest):
 
     def test_value_sale_and_server_actions_preserve_equipped_copy(self):
         self.char1.location = self.rooms["weapon_shop"]
-        self.char1.change(lambda p: p["inventory"].update(blade=2))
+        self.char1.change(lambda p: p["inventory"].update(blade=3))
         self.command("강철마체테 무장")
         self.assertIn("60칩", self.command("무기상에게 강철마체테 가치"))
         self.assertIn("30칩", self.command("강철마체테 value"))
         actions = multiplayer_state(self.char1)["interactables"][0]["actions"]
-        command = next(a["command"] for a in actions if a["command"].endswith("모두 판매"))
-        self.assertIn("30칩", self.command(command))
-        self.assertEqual((self.char1.profile()["credits"], self.char1.profile()["inventory"]["blade"]), (50, 1))
+        single = next(a for a in actions if a["label"] == "강철마체테 · 30칩 판매")
+        self.assertTrue(single["command"].endswith("강철마체테 판매"))
+        bulk = next(a for a in actions if a["label"] == "강철마체테 모두 판매 · 총 60칩")
+        command = bulk["command"]
+        self.assertIn("60칩", self.command(command))
+        self.assertEqual((self.char1.profile()["credits"], self.char1.profile()["inventory"]["blade"]), (80, 1))
         before = self.char1.profile()
         for raw in ("강철마체테 판매", "회수부품 판매", "붕대 판매", "강철마체테 3개 판매"):
             self.command(raw)
@@ -230,3 +235,109 @@ class EconomyTests(WorldCommandTest):
             with self.assertRaises(RuntimeError):
                 self.char1.change(lambda p: rules.sell(p, "supply", "bandage", all_items=True))
         self.assertEqual(self.char1.profile(), before)
+
+    def test_web_single_sale_and_all_sale_have_distinct_amounts(self):
+        self.char1.location = self.rooms["supply_shop"]
+        seller = search_tag("supply_shopkeeper", category="primal_interactable")[0]
+        actions = seller.web_actions(self.char1, seller.key)
+        single = next(a for a in actions if a["label"] == "붕대 · 4칩 판매")
+        bulk = next(a for a in actions if a["label"] == "붕대 모두 판매 · 총 12칩")
+        self.assertTrue(single["command"].endswith("붕대 판매"))
+        self.assertTrue(bulk["command"].endswith("붕대 모두 판매"))
+        self.command(single["command"])
+        self.assertEqual((self.char1.profile()["inventory"]["bandage"], self.char1.profile()["credits"]), (2, 24))
+        actions = seller.web_actions(self.char1, seller.key)
+        bulk = next(a for a in actions if a["label"] == "붕대 모두 판매 · 총 8칩")
+        self.command(bulk["command"])
+        self.assertNotIn("bandage", self.char1.profile()["inventory"])
+        self.assertEqual(self.char1.profile()["credits"], 32)
+
+    def test_last_device_sale_via_dispatcher_cannot_restore_old_charge(self):
+        self.char1.location = self.rooms["supply_shop"]
+        self.char1.change(lambda p: p["inventory"].update(flashlight=2, battery=1))
+        self.command("손전등에 건전지 넣어")
+        device = deepcopy(self.char1.profile()["light_sources"]["flashlight"])
+        self.command("탐사용손전등 판매")
+        self.assertEqual(self.char1.profile()["light_sources"]["flashlight"], device)
+        self.command("탐사용손전등 판매")
+        self.assertNotIn("flashlight", self.char1.profile()["inventory"])
+        self.assertNotIn("flashlight", self.char1.profile()["light_sources"])
+        self.command("탐사용손전등 구매")
+        self.assertIn("전원이 없습니다", self.command("탐사용손전등 켜"))
+        self.assertNotIn("flashlight", self.char1.profile()["light_sources"])
+
+    def test_zero_remaining_share_keeps_eligibility_and_pays_offline_recipient(self):
+        players = [self.char1, self.char2]
+        for name in ("참여다", "참여라", "외부마"):
+            player = create_object(Explorer, key=name, location=self.char1.location)
+            player.push_state = Mock()
+            players.append(player)
+        participants, outsider = players[:4], players[4]
+        corpse = create_object(Corpse, key="공유 시체", location=self.char1.location)
+        corpse.db.decay_at = 130
+        corpse.db.entries = [self.currency_entry(8, {p.id: 2 for p in participants}, 220)]
+        original = deserialize(corpse.db.entries)
+        with self.assertRaises(rules.RuleError):
+            self.take("시체에서 칩 모두", outsider)
+        self.assertEqual(deserialize(corpse.db.entries), original)
+        self.take("시체에서 7칩")
+        entry = deserialize(corpse.db.entries)[0]
+        self.assertEqual(entry["remaining_shares"], {participants[-1].id: 1})
+        self.assertEqual(entry["eligible_players"], [p.id for p in participants])
+        self.assertEqual([p.profile()["credits"] for p in participants], [22, 22, 22, 21])
+        self.assertEqual(participants[-1].sessions.count(), 0)
+        self.assertTrue(loot_entries(corpse, self.char1, 104)[0]["can_take"])
+        corpse.reconcile(130)
+        ground = room_loot(self.char1.location, False)[0]
+        self.assertEqual(deserialize(ground.db.entries)[0], entry)
+        self.take("칩 모두", now=131)
+        self.assertEqual([p.profile()["credits"] for p in participants], [22, 22, 22, 22])
+        self.assertEqual(room_loot(self.char1.location, False), [])
+
+    def test_missing_currency_recipient_rolls_back_all_obligations(self):
+        corpse = create_object(Corpse, key="공유 시체", location=self.char1.location)
+        corpse.db.decay_at = 300
+        corpse.db.entries = [self.currency_entry(3, {self.char1.id: 2, 999999: 1}, 220)]
+        entry = deserialize(corpse.db.entries)
+        profile = self.char1.profile()
+        with self.assertRaises(rules.RuleError):
+            self.take("시체에서 칩 모두")
+        self.assertEqual(deserialize(corpse.db.entries), entry)
+        self.assertEqual(self.char1.profile(), profile)
+
+    def test_currency_display_and_indexed_take_target_are_independent(self):
+        for amount in (8, 1):
+            create_dropped_loot(self.char1.location, [self.currency_entry(amount)])
+        entries = [s["loot"][0] for s in multiplayer_state(self.char1)["ground_loot"]]
+        self.assertEqual([e["display_label"] for e in entries], ["8칩", "1칩"])
+        self.assertEqual([e["take_target"] for e in entries], ["칩 1", "칩 2"])
+        self.assertEqual([e["take_command"] for e in entries], ["칩 1 가져", "칩 2 가져"])
+        self.command(entries[1]["take_command"])
+        self.assertEqual(self.char1.profile()["credits"], 21)
+        self.assertEqual(room_loot(self.char1.location, False)[0].db.entries[0]["quantity"], 8)
+
+    def test_old_pr_currency_reads_without_write_and_decays_to_canonical_rights(self):
+        corpse = create_object(Corpse, key="옛 화폐 시체", location=self.char1.location)
+        corpse.db.decay_at = 130
+        corpse.db.entries = [{"kind": "currency", "id": "credits", "quantity": 21,
+                              "shares": {self.char1.id: 11, self.char2.id: 10}, "protection_until": 220}]
+        before = deserialize(corpse.db.entries)
+        state = loot_entries(corpse, self.char1, 103)[0]
+        self.assertTrue(state["can_take"])
+        self.assertEqual(state["display_label"], "21칩")
+        corpse.return_appearance(self.char1, observed_at=103)
+        self.assertEqual(deserialize(corpse.db.entries), before)
+        corpse.reconcile(130)
+        ground = room_loot(self.char1.location, False)[0]
+        self.assertEqual(list(ground.db.entries[0]["eligible_players"]), [self.char1.id, self.char2.id])
+        self.assertEqual(dict(ground.db.entries[0]["remaining_shares"]), {self.char1.id: 11, self.char2.id: 10})
+        self.assertNotIn("shares", ground.db.entries[0])
+        self.take("칩 모두", now=131)
+        self.assertEqual([p.profile()["credits"] for p in (self.char1, self.char2)], [31, 30])
+
+    def test_one_sellable_copy_has_only_single_sale_action(self):
+        self.char1.location = self.rooms["supply_shop"]
+        self.char1.change(lambda p: p["inventory"].update(bandage=1))
+        actions = multiplayer_state(self.char1)["interactables"][0]["actions"]
+        self.assertIn({"label": "붕대 · 4칩 판매", "command": "보급관에게 붕대 판매"}, actions)
+        self.assertFalse(any(a["command"].endswith("붕대 모두 판매") for a in actions))

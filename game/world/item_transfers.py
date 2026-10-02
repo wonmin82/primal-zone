@@ -34,7 +34,7 @@ def transfer_currency(caller, amount=None, recipient=None):
             recipient.save_profile(other)
         else:
             create_dropped_loot(caller.location, [{"kind": "currency", "id": CURRENCY["id"],
-                                "quantity": quantity, "shares": {}, "protection_until": 0}])
+                                "quantity": quantity, "eligible_players": [], "remaining_shares": {}, "protection_until": 0}])
         return quantity
 
 
@@ -43,7 +43,7 @@ def transfer(caller, item_id, *, all_items=False, recipient=None, container=None
     from typeclasses.interactables import Container
     from typeclasses.loot import create_dropped_loot
 
-    from world.lighting import normalize
+    from world.lighting import discard_device_state_if_unowned, normalize
     from world.observation import can_perceive, context_for
 
     with world_change():
@@ -83,7 +83,7 @@ def transfer(caller, item_id, *, all_items=False, recipient=None, container=None
             all_items=all_items,
             equipment=None if withdraw else profile["equipment"],
         )
-        lost_power = item_id in profile.get("light_sources", {}) and not profile["inventory"].get(item_id)
+        lost_power = discard_device_state_if_unowned(profile, item_id)
         normalize(profile, time())
         caller.save_profile(profile)
         if recipient is not None:
