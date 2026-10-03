@@ -4,6 +4,27 @@
 
 ## Objective
 
+기존 OPEN [PR #26](https://github.com/wonmin82/primal-zone/pull/26)의 Web 명령 입력 표현을 `codex/mental-recovery`에서 보강했다. 시작 fetch의 로컬·원격·PR HEAD는 `c18177736e44b93f9d469c22fd5caf661d52d823`, origin/main·PR base는 `500ad782a8f4c16621728a50d511be1b7d926523`이며 작업 트리는 깨끗했다. 완료 전 fetch에서도 같은 기준을 확인했다. 새 branch/PR, rebase, force push 또는 merge는 수행하지 않는다. 최종 후속 HEAD와 정확히 같은 headSha의 test·smoke CI 및 링크는 기존 PR의 최신 Validation에 기록한다. 아래 이전 검증 기록은 당시 결과로 보존한다.
+
+### Web 입력 행 후속 변경
+
+별도 `› 명령` log entry를 제거했다. 마지막 entry가 대기 prompt일 때만 command semantic을 오른쪽에 붙여 `[ 60/60 · 40/40 ] > 상태` 한 행으로 완료한다. 비동기 출력이나 완료한 입력 행 뒤에는 과거 prompt를 수정하지 않고 최신 서버 semantic으로 새 입력 행을 만든다. `pz_state.resource_prompt`는 서버 `world.text.resource_prompt()`의 입력 echo용 metadata이며 state 수신 자체로 화면에 prompt를 추가하지 않는다. 고정 prompt UI는 없다. currentServerPrompt와 lastRenderedPrompt를 구분하며 JS의 숫자/색/formatter 계산과 별도 ACK를 추가하지 않았다.
+
+빈/공백 Enter는 command span/history 없이 서버 prompt만 추가한다. 직접 입력·버튼·채팅·실패·Account 명령은 같은 경로를 사용하며 성공 전송한 실제 명령만 history에 저장한다. keepalive idle은 echo/history가 없고 Evennia inputfunc에서 consume된다. 직접 제출은 bottom으로, 비동기 출력은 기존 scroll-lock으로 처리한다. 정적 cache version은 `prompt-input-row`다. 서버 gameplay/lifecycle·회복·정신력·enemy recovery·Telnet prompt channel은 변경하지 않았다.
+
+### 후속 검증 (2026-10-04)
+
+- `.venv\Scripts\python.exe scripts/dev.py check`, `node --check game/web/static/webclient/js/primal.js`, `git diff --check` 성공. game의 `python -m evennia collectstatic --noinput` 성공(2개 복사/211개 최신 유지). 수집 이후 static 변경 없음.
+- `node --test scripts/tests/test_web_prompt.cjs`: 실제 primal.js의 DOM/WS 경계를 실행하는 9개 회귀 성공. 기본 행·비동기 피해·최신 회복 행·blank/history·버튼·60초 idle·연속 제출·scroll-lock·채팅/실패/Account/progressive 입력의 literal command semantic을 검사했다. 새 framework/의존성 없이 Node 표준 모듈을 사용하며 전체 Python suite의 tests.test_web_prompt로도 실행했다(Node 미설치 환경은 명시적 skip).
+- `scripts/dev.py test tests.test_prompt tests.test_recovery tests.test_web_prompt tests.test_text --parallel 2 --reverse`: 40개 / 17.644s, runner 26.602s 성공.
+- 전체 `scripts/dev.py test`: pure 147개 / 1.790s, integration 339개 / 123.478s, 합계 486개 성공, integration runner 132.635s. 이후 추가한 Telnet full-resource assertion의 formatter 인자 누락을 수정하고 `tests.test_recovery --parallel 2 --reverse` 14개 / 6.504s·runner 15.523s로 확인했다. 실행 코드 변경 없이 assertion만 보강했으므로 전체 검사를 반복하지 않았다.
+- Quick smoke 51.212s, Full smoke 332.477s 성공. Full은 첫 round 2.818s, corpse decay 29.903s/respawn 44.815s/protection expiry 121.310s, 적 15초 유예/17→18 점진 회복, 실제 패배·본부·두 임무/보스·Portal+Server restart와 진행 보존을 확인했다.
+- 격리 browser 1440/1100/390px에서 `[ 60/60 · 40/40 ] > 상태`·버튼 동일 행, 별도 command 행 없음, 실제 자동 공격 뒤 old 60 prompt 보존/current 57 입력 행, 자연회복 49→50의 최신 행에 입력, blank/space·history ↑↓·실패·채팅·접속자·종료를 확인했다. full 자원 상태의 96초 idle 동안 추가 로그가 없었고 위로 읽는 recovery scroll-lock과 직접 제출 bottom 이동을 확인했다. 390px 긴 명령은 한 입력 행에서 두 visual line으로 wrap되며 page/log 가로 overflow가 없다. 기존 3×3 compass/SURROUNDINGS 순서와 앱 console error/warning 없음도 확인했다.
+- Telnet 정상 prompt channel의 `[ 60/60 · 40/40 ] >`, ANSI와 Web semantic 동등 내용·기존 progressive/Account 완료 동작은 자동 검증했다. 실제 OS IME, 외부 Telnet 클라이언트/font와 browser의 실제 progressive 추가 응답은 수동 미검증이며 renderer 경계와 Evennia lifecycle은 자동 검사했다. 별도 echo ACK를 추가하지 않아 제출 직전 미수신 state의 작은 race는 다음 authoritative 결과 prompt로 정상화된다.
+- Quick·Full·browser 전후 플레이 DB size/mtime_ns/SHA256 불변. 테스트 서버/탭을 종료·정리했으며 DB/runtime/credential/log/screenshot은 Git 제외 work에만 보관했다. PR은 검토를 위해 OPEN으로 남기고 merge하지 않는다.
+
+## PR #26 회복 리뷰·출력 lifecycle Objective (과거 기록)
+
 기존 OPEN [PR #26](https://github.com/wonmin82/primal-zone/pull/26)의 회복 리뷰와 프롬프트 출력 lifecycle을 `codex/mental-recovery`에서 보강했다. 시작 fetch의 로컬·원격·PR HEAD는 `9fd2e1f5c1fb59cb8b3d560d44b36b2b089dba54`, origin/main과 PR base는 `500ad782a8f4c16621728a50d511be1b7d926523`로 일치했으며 작업 트리는 깨끗했다. 최종 검증 후 fetch에서도 기준은 동일했다. 새 PR을 만들거나 merge하지 않는다. 후속 최종 HEAD와 해당 HEAD의 test·smoke CI 링크는 PR Validation에 기록한다. 아래 최초 구현과 이전 PR 검증은 당시 기록으로 보존하며 현재 출력 정책보다 우선하지 않는다.
 
 ### 현재 구현과 정책

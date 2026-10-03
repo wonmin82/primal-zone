@@ -14,8 +14,12 @@
 8. 상태·잘못된 명령·이동·공격·응급처치·진료·휴식의 결과 뒤 prompt가 하나여야 한다. 빈 Enter와 공백 Enter는 서버 최신 값의 prompt만 추가하고 command echo/↑↓ history에는 넣지 않는다. 지난 10초 경계와 Enter 연타를 비교해 중복 회복이 없어야 한다.
 9. 자동 전투 공격 메시지에는 prompt가 붙지 않으며 자연회복으로 실제 정수 자원이 바뀔 때만 추가된다. 같은 이벤트 구간의 전투 메시지가 먼저 나와야 한다. 패배는 구조/손실·의무실 화면 뒤 최종 HP 1 prompt를 하나 출력한다. 새 로그인은 방/환영 출력 뒤 하나, logout은 없음이다.
 10. Telnet 실제 text-session 경로에서 결과→prompt channel 순서·blank·회복·패배·중복을 확인한다. progressive 입력 대기/완료와 blank의 비응답 경로를 확인한다. 실제 OS IME와 Telnet font 렌더링은 별도 수동 검사다.
+11. 일반 명령·실패·채팅·접속자와 compass/quick/context 버튼을 실행해 `[ 자원 ] > 명령` 한 행인지 확인한다. 별도 `› 명령` 행이 없어야 한다. 자동 적 공격 뒤 상태를 입력하면 과거 prompt와 공격 메시지를 보존하고 최신 서버 값의 입력 행을 끝에 추가해야 한다. 자연회복 prompt 뒤에는 가장 최신 행에 붙는다.
+12. 빈/공백 Enter는 command span/history 없이 새 서버 prompt만 추가한다. ↑/↓는 실제 명령과 버튼 명령을 되짚고 idle은 제외한다. 60초 keepalive 전후 echo/prompt/history가 없어야 한다(정상 회복 prompt는 별개). 위로 읽는 비동기 출력은 scroll-lock, 직접 제출은 bottom 이동이다. 390px에서 `어린청소룡의 시체 2에서 회수부품 모두 가져`가 같은 입력 행에서 시작해 자연스럽게 wrap되고 가로 overflow가 없어야 한다.
 
 자동 검사는 world.test_recovery·tests.test_recovery·tests.test_prompt와 의료/전투/성장/이동 suite를 사용한다. 계정 명령(접속자/종료) 뒤에도 context가 정리되고 실제 unpuppet/puppet 재접속에서 prompt가 정상 복원되어야 한다. Quick은 실제 정신력 경계 회복과 재접속, Full은 production 시체/보호/respawn·적 점진 회복과 restart를 검증한다. 이후 실행 수치는 당시의 과거 기록으로 보존하며 새 결과는 최상단 Task State에 기록한다.
+
+Web 입력 행 자동 회귀는 `node --test scripts/tests/test_web_prompt.cjs`로 실행한다. 별도 JS framework 없이 실제 client와 DOM/WS 경계를 검사하며 `tests.test_web_prompt`로 전체 suite에도 포함된다. Node.js가 없으면 그 검사는 skip이므로 실제 실행 여부를 결과에 기록한다.
 
 ## 정신력·회복 검증 기록 (2026-10-03, 프롬프트 변경 전 과거 기록)
 

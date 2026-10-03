@@ -33,7 +33,13 @@ save_profile은 저장·Web state·회복 예약만 맡고 prompt를 출력하�
 
 자동 전투 라운드·공격·레벨업 저장과 일반 비동기 알림은 prompt를 만들지 않는다. 입력 없는 recovery commit이 실제 HP/정신력 정수값을 바꿀 때만 prompt를 요청한다. fraction·재예약·full/no-change는 출력하지 않는다. 요청은 reactor의 다음 turn으로 합쳐 같은 구간의 전투 메시지 뒤에 출력하고, 중간에 사용자 명령이 시작되면 그 완료 prompt로 합친다. 패배는 공격/구조/손실·전투 종료·의무실 방 출력을 완료한 뒤 최종 HP 1의 prompt를 요청한다. 로그인도 offline 정산·위치·방/환영 출력을 끝낸 뒤 한 번 출력하며 logout/shutdown은 출력하지 않는다. sync/restart의 내부 state 갱신만으로 prompt를 중복 생성하지 않는다.
 
-Telnet은 정상 prompt channel, Web은 pz_log의 kind=prompt와 semantic segments로 같은 formatter를 전송한다. Web의 고정 prompt DOM/CSS와 pz_state.resource_prompt는 제거했다. prompt는 메인 로그에 일반 폰트·왼쪽 정렬·작은 간격으로 남고 기존 near-bottom 자동 scroll/위로 읽는 scroll-lock 및 400개 보관 한도를 따른다. 문자열/ANSI 재파싱으로 색이나 명령을 계산하지 않는다. Web max_mental과 HP/정신력/XP meter 갱신은 유지한다.
+Telnet은 정상 prompt channel, Web은 pz_log의 kind=prompt와 semantic segments로 같은 formatter를 전송한다. Web의 고정 prompt DOM/CSS는 제거했다. prompt는 메인 로그에 일반 폰트·왼쪽 정렬·작은 간격으로 남고 기존 near-bottom 자동 scroll/위로 읽는 scroll-lock 및 400개 보관 한도를 따른다. 문자열/ANSI 재파싱으로 색이나 명령을 계산하지 않는다. Web max_mental과 HP/정신력/XP meter 갱신은 유지한다.
+
+Web command echo는 별도 `› 명령` entry가 아니다. 마지막 entry가 대기 prompt이면 command semantic을 오른쪽에 붙여 `[ 60/60 · 40/40 ] > 상태` 입력 행으로 완료한다. 서버의 다음 prompt는 새 대기 행이다. 비동기 메시지 또는 이미 완료한 입력 행이 마지막이면 과거 prompt를 검색/수정하지 않고 로그 끝에 새 입력 행을 만든다. 이는 Telnet local echo와 같은 시각적 모델이며 blank는 어떤 command span도 붙이지 않는다.
+
+`pz_state.resource_prompt`는 `{kind: "prompt", segments: ...}`의 입력 echo용 metadata다. 현재 profile과 stats로 서버 resource_prompt formatter에서 생성하며 state 수신 자체는 로그나 고정 UI를 렌더링하지 않는다. client의 latestPrompt는 이 서버 metadata와 새 semantic prompt에서 갱신한다. 자동 피해로 currentServerPrompt가 바뀌어도 lastRenderedPrompt는 그대로일 수 있다. 이때 입력 행은 WebSocket FIFO에서 마지막으로 수신한 서버 값을 사용하며 별도 echo ACK/round-trip은 없다. 제출 직전 미수신 상태의 작은 race는 다음 authoritative 결과 prompt로 정상화된다.
+
+직접 입력·버튼·채팅·계정 명령은 공통 command 경로에서 같은 행을 만들고 성공 전송한 non-empty 명령만 history에 넣는다. 입력 제출은 bottom으로 이동하고 비동기 출력은 scroll-lock을 유지한다. 60초 keepalive는 send만 하고 echo/history를 만들지 않으며 Evennia inputfunc가 idle을 dispatch 전에 소비한다. progressive의 최초 입력과 non-empty 추가 응답도 같은 입력 행 표현을 사용하지만 get_input/완료 hook은 바꾸지 않는다. 회귀는 Node 표준 모듈의 `scripts/tests/test_web_prompt.cjs`가 실제 primal.js의 DOM/WS 경계를 실행하고 `tests.test_web_prompt`가 전체 Python suite에서 연결한다. Node.js가 없는 환경은 명시적으로 skip한다.
 
 ## 보급칩 경제와 전리품 자산
 

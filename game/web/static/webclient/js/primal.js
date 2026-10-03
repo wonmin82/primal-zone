@@ -3,10 +3,12 @@
   const byId = (id) => document.getElementById(id);
   const log = byId("log"), dialog = byId("auth-dialog"), input = byId("command");
   let socket, playing = false, history = [], historyIndex = 0, authTimer, growthKey = "", exitsKey = "";
+  let latestPrompt = [];
   function append(text, kind = "", segments = null) {
     const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 70;
     const entry = document.createElement("article");
     entry.className = "log-entry " + kind;
+    if (kind === "prompt") entry.dataset.awaitingInput = "true";
     if (segments) {
       const roles = new Set(["text", "muted", "title", "hostile", "npc", "player", "object", "remains", "item", "command", "direction", "reward", "warning", "success", "error", "critical"]);
       for (const part of segments) {
@@ -19,8 +21,9 @@
     } else entry.textContent = text;
     log.append(entry);
     while (log.children.length > 400) log.firstElementChild.remove();
-    if (nearBottom || kind === "command") log.scrollTop = log.scrollHeight;
+    if (nearBottom) log.scrollTop = log.scrollHeight;
     else byId("latest").hidden = false;
+    return entry;
   }
   function plainText(html) {
     // Inert template content is never inserted into the live document.
@@ -35,7 +38,17 @@
   }
   function command(text) {
     if (!playing) { if (!dialog.open) dialog.showModal(); return; }
-    if (send("text", [text]) && text.trim()) append("› " + text, "command");
+    if (!send("text", [text]) || !text.trim() || text === "idle") return;
+    // 과거 prompt를 검색하지 않는다. 비동기 출력 뒤에는 최신 서버 값으로 새 행을 만든다.
+    let entry = log.lastElementChild;
+    if (!entry?.classList.contains("prompt") || entry.dataset.awaitingInput !== "true") {
+      entry = append("", "prompt", latestPrompt);
+    }
+    entry.append(semantic("text", " "), semantic("command", text));
+    entry.dataset.awaitingInput = "false";
+    history.push(text); history = history.slice(-100); historyIndex = history.length;
+    log.scrollTop = log.scrollHeight;
+    byId("latest").hidden = true;
   }
   function semantic(role, text) {
     const span = document.createElement("span");
@@ -125,6 +138,7 @@
     ["reset-attributes", "reset-skills", "reset-all"].forEach((id) => { byId(id).disabled = !available; });
   }
   function render(state) {
+    if (Array.isArray(state.resource_prompt?.segments)) latestPrompt = state.resource_prompt.segments;
     playing = true;
     authBusy(false);
     if (dialog.open) dialog.close();
@@ -267,6 +281,7 @@
         if (text.trim()) append(text);
       } else if (kind === "pz_log" && Array.isArray(args?.[0]?.segments)) {
         const message = args[0];
+        if (message.kind === "prompt") latestPrompt = message.segments;
         append("", ["sheet", "event", "error", "chat", "prompt"].includes(message.kind) ? message.kind : "", message.segments);
       } else if (kind === "pz_state" && args?.[0]) render(args[0]);
       else if (kind === "pz_auth") {
@@ -276,7 +291,7 @@
       }
     });
     socket.addEventListener("close", () => {
-      playing = false; authBusy(false);
+      playing = false; latestPrompt = []; authBusy(false);
       input.disabled = true; byId("send-command").disabled = true;
       byId("connection-label").textContent = "연결 끊김";
       byId("connection-dot").classList.remove("connected");
@@ -310,8 +325,7 @@
     // Credentials belong in the password form, never in the visible log/history.
     const chat = text.startsWith("'") || /(?:^|\s)(말|say)$/i.test(text);
     if (!chat && /^(connect|create|접속|가입)\s/i.test(text)) { append("계정 접속은 전용 접속창을 사용하세요.", "event"); input.value = ""; return; }
-    command(text); history.push(text); history = history.slice(-100);
-    historyIndex = history.length; input.value = ""; input.focus();
+    command(text); input.value = ""; input.focus();
   });
   input.addEventListener("keydown", (event) => {
     if (event.isComposing || event.keyCode === 229) { if (event.key === "Enter") event.preventDefault(); return; }

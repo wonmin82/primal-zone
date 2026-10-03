@@ -85,6 +85,18 @@ class PromptTests(WorldCommandTest):
             self.assertEqual(len(self.messages()), 1)
             self.assertIsNone(self.char1.ndb.last_cmd)
 
+    def test_keepalive_is_consumed_before_dispatch_without_prompt(self):
+        from server.conf.primal_inputfuncs import text
+
+        with patch.object(self.session, "update_session_counters") as counters, patch.object(
+            self.char1, "execute_cmd"
+        ) as dispatch:
+            self.session.puppet = self.char1
+            text(self.session, "idle")
+        counters.assert_called_once_with(idle=True)
+        dispatch.assert_not_called()
+        self.char1.push_prompt.assert_not_called()
+
     def test_command_boundary_recovery_has_no_early_or_duplicate_prompt(self):
         self.clock.return_value = 120
         messages = self.one_final_prompt("상태")

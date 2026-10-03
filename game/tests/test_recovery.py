@@ -9,6 +9,7 @@ from evennia.utils.dbserialize import deserialize
 from typeclasses.enemies import room_enemies
 from typeclasses.explorers import Explorer
 from world import recovery, rules
+from world import text as ft
 from world.content import ITEMS
 from world.lifecycle import reconcile_world
 from world.multiplayer import world_change
@@ -206,7 +207,10 @@ class RecoveryTests(WorldCommandTest):
             self.char1.push_state(observed_at=100)
         state = next(call.kwargs["pz_state"][0][0] for call in output.call_args_list if "pz_state" in call.kwargs)
         self.assertEqual([state[key] for key in ("hp", "max_hp", "mental", "max_mental")], [10, 60, 10, 40])
-        self.assertNotIn("resource_prompt", state)
+        profile = self.char1.profile_snapshot()
+        self.assertEqual(state["resource_prompt"], {
+            "kind": "prompt", "segments": ft.resource_prompt(profile, rules.stats(profile)).segments,
+        })
         self.assertFalse(any("pz_log" in call.kwargs for call in output.call_args_list))
 
     def test_telnet_prompt_channel_and_web_semantic_prompt(self):
@@ -229,3 +233,14 @@ class RecoveryTests(WorldCommandTest):
         self.assertEqual(options, {})
         self.assertNotIn("text", telnet_call.kwargs)
         self.assertEqual(self.char1.profile_snapshot(), before)
+
+        self.char1.change(lambda p: p.update(hp=60, mental=40))
+        with patch.object(self.char1.sessions, "all", return_value=[telnet, web]), patch.object(
+            DefaultCharacter, "msg"
+        ) as output:
+            self.char1.push_prompt()
+        telnet_call = next(call for call in output.call_args_list if "prompt" in call.kwargs)
+        self.assertEqual(strip_ansi(telnet_call.kwargs["prompt"][0]), "[ 60/60 · 40/40 ] >")
+        web_call = next(call for call in output.call_args_list if "pz_log" in call.kwargs)
+        profile = self.char1.profile_snapshot()
+        self.assertEqual(web_call.kwargs["pz_log"][0][0]["segments"], ft.resource_prompt(profile, rules.stats(profile)).segments)

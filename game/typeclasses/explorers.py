@@ -267,6 +267,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             "name": self.key,
             "hp": profile["hp"],
             "mental": profile["mental"],
+            "resource_prompt": {"kind": "prompt", "segments": ft.resource_prompt(profile, values).segments},
             **values,
             "xp": profile["xp"],
             "xp_floor": rules.xp_threshold(values["level"]),
