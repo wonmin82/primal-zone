@@ -87,6 +87,9 @@ def accrue_player(profile, values, room, items, now):
     # 가득 찬 동안의 기여는 미래 피해를 미리 회복할 수 없다.
     full = [key for key in RESOURCES if profile[key] >= values["max_" + key]]
     accrue(state, now, rates, profile.get("recovery_effects", ()))
+    # 만료까지의 기여가 ready/credit에 반영된 뒤에만 제거한다.
+    profile["recovery_effects"] = [effect for effect in profile.get("recovery_effects", ())
+                                   if effect["expires_at"] > min(now, state["updated_at"])]
     for key in full:
         state["ready"][key] = state["credit"][key] = 0.0
     clamp(profile, values)
@@ -99,11 +102,21 @@ def needs_tick(profile, values, room, items, now):
     for key in RESOURCES:
         if profile[key] < values["max_" + key] and (
             rates[key] > 0 or profile.get("recovery", {}).get("ready", {}).get(key, 0) >= 1
-            or any(effect["expires_at"] > now and effect.get(key + "_per_minute", 0) > 0
+            or any(effect["started_at"] <= now < effect["expires_at"] and effect.get(key + "_per_minute", 0) > 0
                    for effect in effects)
         ):
             return True
     return False
+
+
+def next_wakeup(profile, values, room, items, now):
+    if needs_tick(profile, values, room, items, now):
+        return next_boundary(now)
+    starts = [effect["started_at"] for effect in profile.get("recovery_effects", ())
+              if now < effect["started_at"] < effect["expires_at"] and any(
+                  profile[key] < values["max_" + key] and effect.get(key + "_per_minute", 0) > 0
+                  for key in RESOURCES)]
+    return min(starts, default=None)
 
 
 def next_boundary(now):

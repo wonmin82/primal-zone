@@ -22,6 +22,8 @@ class ItemInteractionTests(WorldCommandTest):
     character_typeclass = Explorer
 
     def setUp(self):
+        # 아이템 실패 원자성과 실제 시간 경계의 자연회복을 분리해 검증한다.
+        self.enterContext(patch("typeclasses.explorers.time", return_value=100))
         super().setUp()
         self.rooms = self.world_rooms()
         for player in (self.char1, self.char2):

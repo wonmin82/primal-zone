@@ -35,7 +35,7 @@
   }
   function command(text) {
     if (!playing) { if (!dialog.open) dialog.showModal(); return; }
-    if (send("text", [text])) append("› " + text, "command");
+    if (send("text", [text]) && text.trim()) append("› " + text, "command");
   }
   function semantic(role, text) {
     const span = document.createElement("span");
@@ -147,7 +147,6 @@
     byId("hp").max = state.max_hp; byId("hp").value = state.hp;
     byId("mental-label").textContent = state.mental + " / " + state.max_mental;
     byId("mental").max = state.max_mental; byId("mental").value = state.mental;
-    byId("resource-prompt").replaceChildren(...(state.resource_prompt || []).map((part) => semantic(part.role, part.text)));
     byId("xp").max = state.xp_next - state.xp_floor;
     byId("xp").value = state.level >= 10 ? byId("xp").max : state.xp - state.xp_floor;
     renderExits(state.exits);
@@ -263,14 +262,12 @@
       try { frame = JSON.parse(event.data); } catch { return; }
       if (!Array.isArray(frame)) return;
       const [kind, args] = frame;
-      if (kind === "prompt") {
-        byId("resource-prompt").textContent = plainText(args?.[0] ?? "");
-      } else if (kind === "text") {
+      if (kind === "text") {
         const text = plainText(args?.[0] ?? "");
         if (text.trim()) append(text);
       } else if (kind === "pz_log" && Array.isArray(args?.[0]?.segments)) {
         const message = args[0];
-        append("", ["sheet", "event", "error", "chat"].includes(message.kind) ? message.kind : "", message.segments);
+        append("", ["sheet", "event", "error", "chat", "prompt"].includes(message.kind) ? message.kind : "", message.segments);
       } else if (kind === "pz_state" && args?.[0]) render(args[0]);
       else if (kind === "pz_auth") {
         authBusy(false);
@@ -308,7 +305,8 @@
   byId("command-form").addEventListener("submit", (event) => {
     event.preventDefault();
     const text = input.value.trim();
-    if (!text || !playing) return;
+    if (!playing) return;
+    if (!text) { command(""); input.value = ""; input.focus(); return; }
     // Credentials belong in the password form, never in the visible log/history.
     const chat = text.startsWith("'") || /(?:^|\s)(말|say)$/i.test(text);
     if (!chat && /^(connect|create|접속|가입)\s/i.test(text)) { append("계정 접속은 전용 접속창을 사용하세요.", "event"); input.value = ""; return; }

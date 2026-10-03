@@ -200,16 +200,16 @@ class RecoveryTests(WorldCommandTest):
         self.assertEqual((self.char1.profile()["hp"], self.char1.profile()["mental"]), (19, 18))
         self.assertEqual(self.char2.profile_snapshot(), before)
 
-    def test_web_payload_has_server_resources_and_prompt_without_log(self):
+    def test_web_state_has_resources_but_does_not_emit_prompt(self):
         self.char1.push_state = Explorer.push_state.__get__(self.char1)
         with patch.object(self.char1, "msg") as output:
             self.char1.push_state(observed_at=100)
         state = next(call.kwargs["pz_state"][0][0] for call in output.call_args_list if "pz_state" in call.kwargs)
         self.assertEqual([state[key] for key in ("hp", "max_hp", "mental", "max_mental")], [10, 60, 10, 40])
-        self.assertEqual("".join(part["text"] for part in state["resource_prompt"]), "[ 10/60 · 10/40 ] >")
+        self.assertNotIn("resource_prompt", state)
         self.assertFalse(any("pz_log" in call.kwargs for call in output.call_args_list))
 
-    def test_telnet_prompt_uses_prompt_channel_and_skips_web_log(self):
+    def test_telnet_prompt_channel_and_web_semantic_prompt(self):
         self.char1.change(lambda p: p.update(hp=0, mental=20))
         telnet = Mock(protocol_key="telnet")
         web = Mock(protocol_key="websocket")
@@ -218,11 +218,14 @@ class RecoveryTests(WorldCommandTest):
             DefaultCharacter, "msg"
         ) as output:
             self.char1.push_prompt()
-        output.assert_called_once()
-        self.assertIs(output.call_args.kwargs["session"], telnet)
-        prompt, options = output.call_args.kwargs["prompt"]
+        self.assertEqual(output.call_count, 2)
+        telnet_call = next(call for call in output.call_args_list if "prompt" in call.kwargs)
+        web_call = next(call for call in output.call_args_list if "pz_log" in call.kwargs)
+        self.assertEqual(web_call.kwargs["pz_log"][0][0]["kind"], "prompt")
+        self.assertIs(telnet_call.kwargs["session"], telnet)
+        prompt, options = telnet_call.kwargs["prompt"]
         self.assertEqual(strip_ansi(prompt), "[ 0/60 · 20/40 ] >")
         self.assertIn("\x1b[1m", prompt)
         self.assertEqual(options, {})
-        self.assertNotIn("text", output.call_args.kwargs)
+        self.assertNotIn("text", telnet_call.kwargs)
         self.assertEqual(self.char1.profile_snapshot(), before)

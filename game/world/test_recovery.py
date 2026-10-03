@@ -104,6 +104,25 @@ class RecoveryRulesTests(TestCase):
         recovery.commit(p, rules.stats(p))
         self.assertEqual((p["hp"], p["mental"]), (37, 40))
         self.assertEqual(p["recovery"]["credit"]["mental"], 0)
+        self.assertEqual(p["recovery_effects"], [])
+
+    def test_future_effect_is_not_active_and_only_schedules_its_start(self):
+        p = self.profile()
+        p.update(combat_target=1, mental=40)
+        p["recovery_effects"] = [{"started_at": 35, "expires_at": 95, "hp_per_minute": 6}]
+        values = rules.stats(p)
+        self.assertFalse(recovery.needs_tick(p, values, {}, ITEMS, 10))
+        self.assertEqual(recovery.next_wakeup(p, values, {}, ITEMS, 10), 35)
+        self.accrue(p, 30)
+        recovery.commit(p, values)
+        self.assertEqual(p["hp"], 10)
+        self.assertTrue(recovery.needs_tick(p, values, {}, ITEMS, 35))
+        self.accrue(p, 100)
+        recovery.commit(p, values)
+        self.assertEqual(p["hp"], 16)
+        self.assertEqual(p["recovery_effects"], [])
+        self.assertFalse(recovery.needs_tick(p, values, {}, ITEMS, 100))
+        self.assertIsNone(recovery.next_wakeup(p, values, {}, ITEMS, 100))
 
     def test_full_resources_clear_credit_and_never_bank_future_damage(self):
         p = rules.new_profile()

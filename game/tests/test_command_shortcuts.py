@@ -155,7 +155,8 @@ class CommandShortcutsTests(WorldCommandTest):
         commands.add(actual)
         matches = cmdparser("점검", commands, self.char1)
         self.assertEqual(matches, default_parser("점검", commands, self.char1))
-        self.assertIs(matches[0][2], actual)
+        self.assertIs(matches[0][2].func.__func__, actual.func.__func__)
+        self.assertEqual(matches[0][2].key, actual.key)
         commands.add(Command(key="점검", locks="cmd:false()"))
         self.assertEqual(cmdparser("점검", commands, self.char1), [])
         self.run_raw("상태")
@@ -344,7 +345,10 @@ class CommandShortcutsTests(WorldCommandTest):
         commands = CharacterCmdSet()
         management = Command(key="@관리", locks="cmd:all()")
         commands.add(management)
-        self.assertIs(cmdparser("@관리 대상 공격", commands, self.char1)[0][2], management)
+        match = cmdparser("@관리 대상 공격", commands, self.char1)[0]
+        self.assertEqual(match[0], "@관리")
+        self.assertEqual(match[1].strip(), "대상 공격")
+        self.assertIs(match[2].func.__func__, management.func.__func__)
         for raw in ("connect user password", "create user password"):
             commands = UnloggedinCmdSet()
             self.assertEqual(cmdparser(raw, commands, self.char1), default_parser(raw, commands, self.char1))

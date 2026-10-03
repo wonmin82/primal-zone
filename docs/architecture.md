@@ -13,15 +13,27 @@
 | 장착 ITEMS.recovery_bonus | hp_per_minute | mental_per_minute | 둘 다 유지 |
 | recovery_effects | hp_per_minute | mental_per_minute | 둘 다 유지 |
 
-Room/Item metadata는 누락 시 0이며 integrity가 유한한 0 이상의 수만 허용한다. 초기 장소는 의무실 6/2, 본부 중앙홀 2/2, 폐쇄된 관리동 2/1, 옥상 9개 Room 0/2다. 출정 대기실에는 보너스가 없다. 장비는 소지품이 아닌 equipment의 모든 장착 값을 집계하고 현재 실제 회복 장비나 새 슬롯은 만들지 않는다. recovery_effects는 started_at/expires_at와 선택 회복률을 저장하며 시작·만료 시각으로 구간을 나눈다. 새 소비품·범용 buff API는 없다.
+Room/Item metadata는 누락 시 0이며 integrity가 유한한 0 이상의 수만 허용한다. 초기 장소는 의무실 6/2, 본부 중앙홀 2/2, 폐쇄된 관리동 2/1, 옥상 9개 Room 0/2다. 출정 대기실에는 보너스가 없다. 장비는 소지품이 아닌 equipment의 모든 장착 값을 집계하고 현재 실제 회복 장비나 새 슬롯은 만들지 않는다. recovery_effects는 started_at/expires_at와 선택 회복률을 저장하며 시작·만료 시각으로 구간을 나눈다. 만료 시각까지의 기여를 반영한 뒤 expired effect를 제거한다. 활성 조건은 started_at <= now < expires_at이며 미래 효과만 필요하면 그 시작 시점 하나를 예약한다. 새 소비품·범용 buff API는 없다.
 
-Explorer.change와 전투의 직접 저장 경계는 변경 전 accrue를 수행한다. 공통 이동 hook은 이전 Room을 계산하므로 Exit·귀환·승강기·패배 이동이 같은 규칙을 쓴다. world_change의 profile/location rollback을 유지한다. 현재 자원은 주기 commit 또는 기존 명시적 회복/피해에서만 바뀐다. 접속 중 실제 회복할 자원이 있을 때 다음 경계 하나만 예약하며 full 또는 전투 중 HP만 부족하고 bonus가 없으면 예약하지 않는다.
+Explorer.change와 전투의 직접 저장 경계는 변경 전 accrue를 수행한다. 공통 이동 hook의 checkpoint_recovery는 이전 Room의 기여만 저장하고 state/prompt를 보내지 않는다. Exit·귀환·승강기·패배 이동이 같은 규칙을 쓴다. move_to의 world_change는 목적지 hook 거절도 실패로 rollback하고, 도착 state와 방 출력은 성공 후 실행한다. world_change의 profile/location rollback을 유지한다. 현재 자원은 주기 commit 또는 기존 명시적 회복/피해에서만 바뀐다. 접속 중 실제 회복할 자원이 있을 때 다음 경계 하나만 예약하며 full 또는 전투 중 HP만 부족하고 bonus가 없으면 예약하지 않는다.
 
 마지막 unpuppet에서 전투를 끝내고 경과를 checkpoint한다. Evennia 6.1은 location을 비우고 db.prelogout_location에 옛 Room을 남기므로 offline batch는 그 Room을 사용한다. 새 puppet은 offline의 경계 통과분을 지급한 뒤 staging_room으로 이동한다. 살아 있는 session의 at_sync는 위치를 유지하고 restart reconcile은 접속자만 회복 저장·재예약한다. offline 캐릭터마다 timer를 만들거나 restart에서 모든 profile을 회복 저장하지 않는다.
 
 적은 같은 credit/commit 계산을 사용하되 HP만 회복한다. 교전 종료의 15초 유예, alive·비교전·0<HP<max 조건과 `8+max_hp/15`를 적용한다. 빈 방은 접근 때 batch 계산하고 관찰 중만 다음 경계를 예약한다. 재교전 구간은 기여 0으로 시간만 진행하고 앞 소수 기여는 보존한다. 위협·점유·차례 정리는 회복과 분리되며 사망/45초 respawn은 기존 정책을 유지한다.
 
-`world.text.resource_prompt`는 `[ 60/60 · 40/40 ] >`를 만들고 현재 숫자만 67% 이상 success·34% 이상 warning·양수 error·0 critical 역할로 표시한다. Explorer는 Telnet의 prompt 채널과 Web pz_state.resource_prompt를 전송한다. Web은 서버의 max_mental을 사용하며 자연회복을 로그로 출력하지 않는다. 정신력 meter를 체력과 경험치 사이에 배치하고 mobile에서도 각 meter 행을 분리한다.
+## 프롬프트 출력 lifecycle
+
+`world.text.resource_prompt`는 `[ 60/60 · 40/40 ] >`의 내용과 현재 숫자 색을 소유한다. 67% 이상 success·34% 이상 warning·양수 error·0 critical이며 최대치·구두점은 기본색이다. prompt는 자원 요약과 한 입력 처리가 끝났다는 표식이다. Explorer meter는 최신 HUD이고 prompt는 출력의 시간 순서/스크롤 기록이다.
+
+save_profile은 저장·Web state·회복 예약만 맡고 prompt를 출력하지 않는다. parser는 선택된 command의 사본에 `commands/prompt.py`의 pre/post lifecycle만 연결한다. func·locks·dispatch와 progressive generator 처리는 그대로이며 Evennia 6.1이 generator 완료 때 호출하는 실제 at_post_cmd를 사용한다. 일반/실패/Exit/관리 명령과 묶음·개인 줄임말은 중첩 context를 공유해 모든 결과 뒤 최종 prompt 하나를 출력한다. 시스템 no-match/no-input/multimatch도 동일 완료 경계를 사용한다. 사용자 명령 시작 때 이미 지난 회복 경계만 정산하고 회복 prompt는 명령 완료에 합친다.
+
+출력 context는 시작한 Explorer를 별도로 보관한다. MuxAccountCommand의 parse가 caller를 Account로 바꾸는 접속자·종료 명령도 같은 Explorer의 context를 종료한다. 마지막 unpuppet에서는 중단된 입력 대기의 context와 예약 prompt를 정리해 재로그인 후 출력이 막히지 않게 한다.
+
+빈·공백 Enter는 서버에서 공식 no-input command로 처리한다. get_input 임시 CmdSet에 답변으로 보내거나 최근 명령·Web history에 넣지 않는다. 이미 지난 경계만 반영하므로 연타로 회복이 빨라지지 않는다. 아직 경계를 넘지 않은 조회/실패 입력은 저장 시계를 불필요하게 쓰지 않는다.
+
+자동 전투 라운드·공격·레벨업 저장과 일반 비동기 알림은 prompt를 만들지 않는다. 입력 없는 recovery commit이 실제 HP/정신력 정수값을 바꿀 때만 prompt를 요청한다. fraction·재예약·full/no-change는 출력하지 않는다. 요청은 reactor의 다음 turn으로 합쳐 같은 구간의 전투 메시지 뒤에 출력하고, 중간에 사용자 명령이 시작되면 그 완료 prompt로 합친다. 패배는 공격/구조/손실·전투 종료·의무실 방 출력을 완료한 뒤 최종 HP 1의 prompt를 요청한다. 로그인도 offline 정산·위치·방/환영 출력을 끝낸 뒤 한 번 출력하며 logout/shutdown은 출력하지 않는다. sync/restart의 내부 state 갱신만으로 prompt를 중복 생성하지 않는다.
+
+Telnet은 정상 prompt channel, Web은 pz_log의 kind=prompt와 semantic segments로 같은 formatter를 전송한다. Web의 고정 prompt DOM/CSS와 pz_state.resource_prompt는 제거했다. prompt는 메인 로그에 일반 폰트·왼쪽 정렬·작은 간격으로 남고 기존 near-bottom 자동 scroll/위로 읽는 scroll-lock 및 400개 보관 한도를 따른다. 문자열/ANSI 재파싱으로 색이나 명령을 계산하지 않는다. Web max_mental과 HP/정신력/XP meter 갱신은 유지한다.
 
 ## 보급칩 경제와 전리품 자산
 
@@ -266,7 +278,7 @@ Enemy가 HP/max HP, alive/respawning 상태, respawn_at, claim, claim_last_activ
 
 일반 적의 combat_mode는 claimed다. 첫 교전 탐사자 또는 파티가 점유한다. 같은 파티는 합류할 수 있고 외부 그룹은 서버에서 거절된다. 실제 전투 행동이 점유 활동 시각을 갱신한다. 명령 반복만으로 기한을 늘리지 않는다. 그룹 전원 도망·이탈·접속 종료 시 즉시 점유를 해제하며, 활동이 15초간 없으면 남은 참여를 종료하고 해제한다.
 
-살아 있는 적은 마지막 참가자의 교전 종료부터 15초 유예 후 `8 + max_hp/15`의 분당 회복률로 점진 회복한다. 위협도·기여도·차례 정리와 HP 회복을 분리하며 재교전은 현재 HP를 유지한다. 빈 방은 회복 tick 없이 다음 접근에서 batch 계산하고, 접속 관찰자가 있을 때만 다음 10초 경계를 하나 예약한다. 죽은 적은 회복하지 않고 기존 45초 respawn에서 최대 HP로 돌아온다. 기존 ENEMY_RESET_SECONDS 설정은 ENEMY_RECOVERY_DELAY_SECONDS의 호환 기본값으로 유지한다.
+살아 있는 적은 마지막 참가자의 교전 종료부터 15초 유예 후 `8 + max_hp/15`의 분당 회복률로 점진 회복한다. 위협도·기여도·차례 정리와 HP 회복을 분리하며 재교전은 현재 HP를 유지한다. 빈 방은 회복 tick 없이 다음 접근에서 batch 계산하고, 접속 관찰자가 있을 때만 다음 10초 경계를 하나 예약한다. 죽은 적은 회복하지 않고 기존 45초 respawn에서 최대 HP로 돌아온다. timing SSOT와 smoke의 canonical key는 ENEMY_RECOVERY_DELAY_SECONDS다. PRIMAL_ENEMY_RECOVERY_DELAY_SECONDS override가 우선하고 없으면 기존 PRIMAL_ENEMY_RESET_SECONDS를 fallback으로 읽는다. 기존 ENEMY_RESET_SECONDS import는 호환 alias만 남기며 production 유예 15초를 유지한다.
 
 우두머리는 public으로 여러 솔로/파티가 참여할 수 있다. contribution에는 캐릭터별 damage, last_action_at, group identity를 기록한다. 자기 회복·방어만으로 최초 보상 자격이 생기지는 않는다. 지원/치유 기여 가중치는 아직 구현하지 않았다.
 

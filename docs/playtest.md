@@ -10,11 +10,14 @@
 4. 실제 계정 logout/login으로 의무실의 offline 회복 후 대기실 시작을 확인한다. 기간 중 만료하는 효과는 만료 전만 계산한다. live session at_sync와 서버 restart에서는 기존 위치·단일 timer를 확인하고 offline 캐릭터에 timer가 없어야 한다.
 5. HP full/정신력 부족에서 진료는 거절하고 휴식은 두 자원을 채운다. 붕대·음식·진료와 패배는 정신력을 바꾸지 않으며 full 자원의 credit을 남기지 않는다. 패배의 HP 1·최대 10칩 손실과 의무실 이동은 유지한다.
 6. 적에게 피해를 주고 도망한다. 15초 유예 동안 HP가 같고 이후 경계에서 일부만 회복한다. 재교전은 그 HP이며 빈 방은 tick 없이 다음 접근에서 경과를 계산한다. 죽은 적은 회복하지 않고 기존 45초에 재생성한다.
-7. 최종 collectstatic 후 desktop·1100px·390px에서 HP/정신력/XP meter와 별도 prompt, 현재 숫자의 색, 3×3 compass/SURROUNDINGS 순서를 확인한다. 자연회복 이벤트가 로그에 쌓이거나 overflow/clipping이 없어야 한다. 실제 OS IME와 Telnet font 렌더링은 별도 수동 검사다.
+7. 최종 collectstatic 후 1440px desktop·1100px·390px에서 HP/정신력/XP meter와 메인 scrollback의 prompt, 현재 숫자의 색, 3×3 compass/SURROUNDINGS를 확인한다. 입력창 위 고정 prompt는 없어야 한다. 과거 prompt는 남고 위로 읽는 중 새 prompt가 강제로 아래로 이동시키면 안 된다. overflow/clipping·console 앱 error/warning을 확인한다.
+8. 상태·잘못된 명령·이동·공격·응급처치·진료·휴식의 결과 뒤 prompt가 하나여야 한다. 빈 Enter와 공백 Enter는 서버 최신 값의 prompt만 추가하고 command echo/↑↓ history에는 넣지 않는다. 지난 10초 경계와 Enter 연타를 비교해 중복 회복이 없어야 한다.
+9. 자동 전투 공격 메시지에는 prompt가 붙지 않으며 자연회복으로 실제 정수 자원이 바뀔 때만 추가된다. 같은 이벤트 구간의 전투 메시지가 먼저 나와야 한다. 패배는 구조/손실·의무실 화면 뒤 최종 HP 1 prompt를 하나 출력한다. 새 로그인은 방/환영 출력 뒤 하나, logout은 없음이다.
+10. Telnet 실제 text-session 경로에서 결과→prompt channel 순서·blank·회복·패배·중복을 확인한다. progressive 입력 대기/완료와 blank의 비응답 경로를 확인한다. 실제 OS IME와 Telnet font 렌더링은 별도 수동 검사다.
 
-자동 검사는 world.test_recovery·tests.test_recovery와 의료/전투/성장/이동 suite를 사용한다. Quick은 실제 정신력 경계 회복과 재접속, Full은 production 시체/보호/respawn·적 점진 회복과 restart를 검증한다. 이후 실행 수치는 당시의 과거 기록으로 보존하며 새 결과는 최상단 Task State에 기록한다.
+자동 검사는 world.test_recovery·tests.test_recovery·tests.test_prompt와 의료/전투/성장/이동 suite를 사용한다. 계정 명령(접속자/종료) 뒤에도 context가 정리되고 실제 unpuppet/puppet 재접속에서 prompt가 정상 복원되어야 한다. Quick은 실제 정신력 경계 회복과 재접속, Full은 production 시체/보호/respawn·적 점진 회복과 restart를 검증한다. 이후 실행 수치는 당시의 과거 기록으로 보존하며 새 결과는 최상단 Task State에 기록한다.
 
-## 정신력·회복 검증 기록 (2026-10-03)
+## 정신력·회복 검증 기록 (2026-10-03, 프롬프트 변경 전 과거 기록)
 
 최종 pure 145 + integration 325 = 470개, runner 152.662s 성공. 관련 recovery 14개와 전투·장비·정산·상점·지역·환경 73개를 `--parallel 2 --reverse`로 확인했다. check/node/diff 검사와 정적 파일 수집도 성공했다.
 

@@ -1,8 +1,32 @@
 # Current Task State
 
-확인일: 2026-10-03. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
+확인일: 2026-10-04. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
 
 ## Objective
+
+기존 OPEN [PR #26](https://github.com/wonmin82/primal-zone/pull/26)의 회복 리뷰와 프롬프트 출력 lifecycle을 `codex/mental-recovery`에서 보강했다. 시작 fetch의 로컬·원격·PR HEAD는 `9fd2e1f5c1fb59cb8b3d560d44b36b2b089dba54`, origin/main과 PR base는 `500ad782a8f4c16621728a50d511be1b7d926523`로 일치했으며 작업 트리는 깨끗했다. 최종 검증 후 fetch에서도 기준은 동일했다. 새 PR을 만들거나 merge하지 않는다. 후속 최종 HEAD와 해당 HEAD의 test·smoke CI 링크는 PR Validation에 기록한다. 아래 최초 구현과 이전 PR 검증은 당시 기록으로 보존하며 현재 출력 정책보다 우선하지 않는다.
+
+### 현재 구현과 정책
+
+save_profile에서 prompt를 분리하고 이동 checkpoint는 조용히 저장한다. move_to의 transaction은 목적지 hook 거절도 profile/recovery/location rollback으로 처리하며 도착 화면은 성공 후 출력한다. 만료 effect는 과거 기여 반영 후 제거하고 future effect는 활성으로 취급하지 않으며 필요한 시작 시점만 예약한다. ENEMY_RECOVERY_DELAY_SECONDS를 timing SSOT의 canonical 이름으로 사용하고 구 PRIMAL_ENEMY_RESET_SECONDS fallback/import alias와 production 15초를 보존한다. profile v9·회복률·전투/경제 계약은 유지한다.
+
+실제 Evennia 6.1 pre/post hook과 no-input/no-match/multimatch를 사용해 정상·실패·Exit·engine/account·progressive·묶음 입력의 마지막에 prompt 한 번을 출력한다. MuxAccountCommand가 caller를 Account로 바꿔도 시작 Explorer의 context를 종료하고 마지막 logout 때 중단 context를 제거한다. 빈/공백 Enter는 서버 최신 정상 경계 정산 후 prompt만 출력하며 echo/history/최근 명령/입력 대기 답변에 넣지 않는다. 자동 전투와 일반 비동기 알림은 prompt를 추가하지 않고 실제 정수 recovery만 다음 reactor turn에서 합쳐 출력한다. 패배는 피해·구조/손실·의무실 설명 뒤 HP 1, 로그인은 방/환영 뒤 최종 한 번이며 logout/shutdown은 출력하지 않는다.
+
+Web은 고정 prompt DOM/state/CSS를 제거하고 서버 resource_prompt semantic을 메인 scrollback의 kind=prompt로 표시한다. 현재 숫자만 비율별 색을 적용하고 HP/정신력/XP HUD와 기존 scroll-lock/near-bottom scroll을 유지한다. 상세 정책은 [architecture의 lifecycle](architecture.md#프롬프트-출력-lifecycle), 실제 출력 예는 [text-examples](text-examples.md#자원-prompt)를 따른다.
+
+### 후속 최종 검증 (2026-10-04)
+
+- `.venv\Scripts\python.exe scripts/dev.py check` 성공. 전체 `scripts/dev.py test`는 pure 147개 / 6.156s, integration 337개 / 124.407s, 총 484개 성공이며 integration runner는 141.929s다.
+- 관련 `scripts/dev.py test tests.test_prompt tests.test_recovery tests.test_item_interactions --parallel 2 --reverse`는 42개 / 18.653s·runner 27.749s 성공. 실제 dispatcher·progressive 완료·Account caller 변경·unpuppet/puppet·transport의 프롬프트 순서/중복, silent 이동/rollback, 경계 정산을 검사했다. pure future effect/만료 정리·timing fallback 테스트도 보강했다.
+- 초기 전체 검사에서 command 사본의 객체 identity 기대와 실시간 10초 경계에 걸친 아이템 실패 비교를 발견했다. dispatcher key/실제 func 보존을 확인하고 아이템 suite 시계를 고정해 기존 전체 profile 불변 assertion을 유지했다. 브라우저에서 종료 후 재로그인 prompt 누락을 발견해 실제 Account command의 red 테스트로 재현하고 context 소유자/마지막 logout 정리를 수정한 뒤 위 최종 검사를 통과했다.
+- Quick live smoke 49.295s 성공. 실제 일반/계정/실패/빈 입력 prompt, 종료 명령·재로그인 prompt 복원, 파티/화폐·상점·회복·진행 보존을 확인했다.
+- Full live smoke 335.660s 성공. 첫 combat 2.923s, corpse decay 29.833s, respawn 44.779s, protection expiry 121.368s로 production 30/45/120초를 확인했다. 적 15초 유예/부분 회복 16→17·재교전 HP, 패배/본부 전체/두 임무·보스/실제 Portal+Server restart와 relogin을 통과했다.
+- `node --check game/web/static/webclient/js/primal.js`, game 디렉터리의 `python -m evennia collectstatic --noinput`, `git diff --check` 성공. 최종 static 수집 뒤 JS/CSS 변경은 없다. 새 profile의 상태와 resource_prompt를 직접 생성해 최신 예시와 대조했다.
+- 격리 browser의 1440px desktop·1100px 중간 폭·390px mobile에서 메인 prompt/기존 meter·compass/SURROUNDINGS, 일반/실패/빈 입력·history·묶음 마지막 한 번, 자동 전투 무출력/정수 자연회복, 실제 피해→구조/10칩 손실→의무실→HP 1 prompt, Doctor HP만/Bed 양 자원 회복, Account 접속자 및 종료 후 같은 캐릭터 재로그인 prompt를 확인했다. 위로 읽는 scroll-lock과 새 기록으로 이동도 유지했다. 앱 console error/warning·가로 overflow/clipping은 없다.
+- Quick·Full·browser 전후 플레이 DB size/mtime_ns/SHA256은 733184 / 1790080153765082800 / `b1318296f505b9b7522fcbdedff7642a06cf055e9de72802198c70e6b8a7f700`로 불변이다. 소유한 테스트 서버/탭을 종료·정리했고 runtime/DB/credential/log/screenshot은 Git 제외 work에만 보관했다.
+- 실제 OS IME와 별도 Telnet 클라이언트/font는 미검증이다. Telnet 정상 prompt 채널·ANSI·Web semantic 동등 내용과 출력 순서는 자동 검사했다. 회복 장비/소비품·정신력 소비/치료 기술은 추가하지 않았다. 최신 후속 HEAD의 두 CI가 성공하고 미해결 blocker가 없을 때 merge-ready로 보고하되 병합은 수행하지 않는다.
+
+## PR #26 최초 구현 Objective (과거 기록)
 
 정신력과 10초 주기 자연회복 시스템의 구현·검증·문서 정리를 독립 branch `codex/mental-recovery`에서 완료했다. 시작 fetch의 최신 origin/main은 `500ad782a8f4c16621728a50d511be1b7d926523`이며 작업 트리는 깨끗했다. PR #25는 MERGED이고 아래 경제 PR의 병합 준비/OPEN 표현은 과거 기록이다. 구현 커밋은 `1e87004f10f14acaf392adefd4ea975e15489e4f`다. 사용자의 후속 PR 생성 요청에 따라 같은 branch를 push하고 main 대상 PR과 최종 HEAD의 test·smoke CI를 확인한다. 병합은 요청되지 않았다.
 

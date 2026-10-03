@@ -6,6 +6,21 @@ from django.conf import settings as _settings
 from evennia.utils.utils import class_from_module as _class_from_module
 
 
+def text(session, *args, **kwargs):
+    from evennia.server.inputfuncs import text as default_text
+
+    value = args[0] if args else None
+    puppet = session.puppet
+    if isinstance(value, str) and not value.strip() and hasattr(puppet, "begin_command_output"):
+        # get_input 임시 CmdSet에 공백을 답변으로 넘기지 않고 공식 no-input을 쓴다.
+        from commands.base import NoInput
+
+        puppet.execute_cmd("", session=session, cmdobj=NoInput())
+        session.update_session_counters()
+    else:
+        return default_text(session, *args, **kwargs)
+
+
 def pz_auth(session, payload=None, **kwargs):
     if session.account:
         return

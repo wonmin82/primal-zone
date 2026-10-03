@@ -166,6 +166,8 @@ Syntax/expansion/사전 안전 검사 실패는 전체를 거절하고 어떤 �
 
 ## 검증 위치
 
+현재 출력 lifecycle에서는 묶음과 개인 줄임말의 child dispatch를 하나의 사용자 입력 context로 취급한다. 각 leaf에 prompt를 붙이지 않고 최종 command completion 뒤 하나만 출력한다. progressive 사전 검사와 기존 expansion/삭제 안전 정책은 유지한다. 출력·빈 입력·progressive 완료의 회귀는 `tests.test_prompt`에서 검증한다.
+
 순수 suite는 `world.test_command_shortcuts`, DB/dispatcher suite는 `tests.test_command_shortcuts`다. 기존 `tests.test_integration`/`tests.test_text`와 전체 suite가 후치형·채팅·관리·lock·인증 parser와 기존 gameplay 회귀를 검증한다. Quick live smoke는 실제 서버/WS/scheduler의 기존 전체 경로를 검증한다. 이번 기능 때문에 smoke scenario나 client UI를 확장하지 않는다.
 
 ### 2026-09-29 PR #22 리뷰 반영 검증

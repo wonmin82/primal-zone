@@ -4,6 +4,13 @@ from evennia.commands.cmdparser import cmdparser as default_parser
 
 
 def cmdparser(raw_string, cmdset, caller, match_index=None, session=None, **kwargs):
+    from commands.prompt import with_prompt
+
+    return [(name, args, with_prompt(command), *rest) for name, args, command, *rest in
+            _matches(raw_string, cmdset, caller, match_index, session, **kwargs)]
+
+
+def _matches(raw_string, cmdset, caller, match_index=None, session=None, **kwargs):
     text = raw_string.strip()
     if not text:
         return []

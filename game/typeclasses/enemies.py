@@ -347,14 +347,15 @@ class Enemy(DistantPresenceMixin, DefaultObject):
 
                 target.leave_combat(now=now)
                 destination = get_room("infirmary")
-                if destination is None or not target.move_to(destination, quiet=True):
-                    raise RuntimeError("패배 후 의무실 이동을 완료하지 못했습니다.")
                 rescue = (
                     "탐사대가 지원동 의무실로 구조했습니다.\n"
                     + (f"{format_currency(lost)}을 잃었습니다.\n" if lost else "")
                     + f"응급 처치로 체력 {rules.DEFEAT_RECOVERY_HP}을 회복했습니다. 추가 회복이 필요합니다."
                 )
                 after_change(lambda: target.msg(rescue))
+                if destination is None or not target.move_to(destination, quiet=True, move_type="defeat"):
+                    raise RuntimeError("패배 후 의무실 이동을 완료하지 못했습니다.")
+                after_change(target.request_prompt)
             if rules.boss_telegraph(self.db.enemy_id, self.db.enemy_round):
                 for player in self.active_players():
                     player.msg(

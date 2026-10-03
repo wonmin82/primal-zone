@@ -289,7 +289,8 @@ class GameplayIntegrationTests(WorldCommandTest):
         commands.add(management)
         for args in ("대상", "대상 공격"):
             matches = cmdparser(f"@관리 {args}", commands, self.char1)
-            self.assertIs(matches[0][2], management)
+            self.assertEqual(matches[0][2].key, management.key)
+            self.assertIs(matches[0][2].func.__func__, management.func.__func__)
             self.assertEqual(matches[0][1].strip(), args)
         # 캐릭터가 없는 인증·메뉴용 명령 집합은 기본 파서 그대로 사용한다.
         for commands in (UnloggedinCmdSet(), CmdSet()):

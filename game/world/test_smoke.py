@@ -22,11 +22,19 @@ from scripts import dev, smoke_harness  # noqa: E402
 
 
 class SmokeContractsTests(TestCase):
+    def test_enemy_delay_canonical_setting_precedes_legacy_fallback(self):
+        key = "ENEMY_RECOVERY_DELAY_SECONDS"
+        self.assertEqual(configured_timings(SimpleNamespace(PRIMAL_ENEMY_RESET_SECONDS=3))[key], 3)
+        self.assertEqual(configured_timings(SimpleNamespace(
+            PRIMAL_ENEMY_RESET_SECONDS=3, PRIMAL_ENEMY_RECOVERY_DELAY_SECONDS=7))[key], 7)
+        self.assertEqual(PRODUCTION_TIMING[key], 15)
+        self.assertEqual(QUICK_TIMING[key], 2)
+
     def test_production_defaults_and_full_timing_are_unchanged(self):
         expected = {
             "COMBAT_INTERVAL": 2.5, "CORPSE_TTL_SECONDS": 30, "RESPAWN_DELAY_SECONDS": 15,
             "LOOT_PROTECTION_SECONDS": 120, "CLAIM_TIMEOUT_SECONDS": 15,
-            "PARTICIPATION_TIMEOUT_SECONDS": 15, "ENEMY_RESET_SECONDS": 15,
+            "PARTICIPATION_TIMEOUT_SECONDS": 15, "ENEMY_RECOVERY_DELAY_SECONDS": 15,
         }
         self.assertEqual(PRODUCTION_TIMING, expected)
         self.assertEqual(configured_timings(SimpleNamespace()), expected)

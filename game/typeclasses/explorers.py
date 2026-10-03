@@ -27,6 +27,10 @@ from world.navigation import entry_block
 from world.quests import current_hint
 
 
+class _MoveRejected(Exception):
+    pass
+
+
 class Explorer(DistantPresenceMixin, DefaultCharacter):
     distant_visible = True
 
@@ -97,7 +101,6 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         with transaction.atomic():
             self.db.profile = profile
         after_change(self.push_state)
-        after_change(self.push_prompt)
         after_change(self.schedule_recovery)
 
     def change(self, operation):
@@ -117,7 +120,16 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         recovery.accrue_player(profile, rules.stats(profile), ROOMS.get(zone, {}),
                                ITEMS, time() if now is None else now)
 
-    def reconcile_recovery(self, now=None):
+    def checkpoint_recovery(self):
+        """조건 경계만 저장한다. 이동 전 옛 Room 화면은 전송하지 않는다."""
+        from world.multiplayer import world_change
+
+        with world_change():
+            profile = self.profile()
+            self.accrue_recovery(profile)
+            self.db.profile = profile
+
+    def reconcile_recovery(self, now=None, *, emit_prompt=True):
         from world.multiplayer import world_change
 
         now = time() if now is None else now
@@ -128,9 +140,49 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             self.db.profile = profile
             if changed:
                 after_change(self.push_state)
-                after_change(self.push_prompt)
+                if emit_prompt:
+                    after_change(self.request_prompt)
             after_change(self.schedule_recovery)
         return changed
+
+    def begin_command_output(self):
+        depth = self.ndb.command_output_depth or 0
+        self.ndb.command_output_depth = depth + 1
+        if not depth:
+            self.cancel_pending_prompt()
+            profile = self.profile_snapshot()
+            state = profile.get("recovery")
+            now = time()
+            # 새 경계가 없으면 조회/실패 명령으로 저장 시계를 불필요하게 쓰지 않는다.
+            if (state and now >= state["boundary"] + recovery.RECOVERY_INTERVAL) or (
+                not state and any(profile[key] < rules.stats(profile)["max_" + key]
+                                  for key in recovery.RESOURCES)
+            ):
+                self.reconcile_recovery(now, emit_prompt=False)
+
+    def end_command_output(self):
+        self.ndb.command_output_depth = max(0, (self.ndb.command_output_depth or 0) - 1)
+        if not self.ndb.command_output_depth:
+            self.cancel_pending_prompt()
+            self.push_prompt()
+
+    def request_prompt(self):
+        """같은 reactor 구간의 전투/이동 출력을 마친 뒤 한 번만 전송한다."""
+        from twisted.internet import reactor
+
+        if not self.ndb.command_output_depth and not self.ndb.prompt_task and self.sessions.count():
+            self.ndb.prompt_task = reactor.callLater(0, self.flush_prompt)
+
+    def flush_prompt(self):
+        self.ndb.prompt_task = None
+        if not self.ndb.command_output_depth:
+            self.push_prompt()
+
+    def cancel_pending_prompt(self):
+        task = self.ndb.prompt_task
+        self.ndb.prompt_task = None
+        if task and task.active():
+            task.cancel()
 
     def push_prompt(self):
         if not self.sessions.count():
@@ -140,27 +192,32 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         profile = self.profile_snapshot()
         prompt = ft.resource_prompt(profile, rules.stats(profile))
         for session in self.sessions.all():
-            if session.protocol_key not in ("websocket", "webclient/websocket"):
+            if session.protocol_key in ("websocket", "webclient/websocket"):
+                self.msg(prompt, session=session)
+            else:
                 super().msg(session=session, prompt=(parse_ansi(prompt.ansi()), {}))
 
     def schedule_recovery(self):
         profile = self.profile_snapshot()
         now = time()
-        needed = self.sessions.count() and recovery.needs_tick(
-            profile, rules.stats(profile), ROOMS.get(self.zone, {}), ITEMS, now)
-        if not needed:
+        due = recovery.next_wakeup(profile, rules.stats(profile), ROOMS.get(self.zone, {}), ITEMS, now)
+        if not self.sessions.count() or due is None:
             self.stop_recovery_timer()
-        elif not self.ndb.recovery_task:
-            self.ndb.recovery_task = delay(max(0.05, recovery.next_boundary(now) - now), self.recovery_tick)
+        elif not self.ndb.recovery_task or self.ndb.recovery_due != due:
+            self.stop_recovery_timer()
+            self.ndb.recovery_due = due
+            self.ndb.recovery_task = delay(max(0.05, due - now), self.recovery_tick)
 
     def recovery_tick(self):
         self.ndb.recovery_task = None
+        self.ndb.recovery_due = None
         if self.sessions.count():
             self.reconcile_recovery()
 
     def stop_recovery_timer(self):
         task = self.ndb.recovery_task
         self.ndb.recovery_task = None
+        self.ndb.recovery_due = None
         if task:
             task.remove()
 
@@ -210,7 +267,6 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             "name": self.key,
             "hp": profile["hp"],
             "mental": profile["mental"],
-            "resource_prompt": ft.resource_prompt(profile, values).segments,
             **values,
             "xp": profile["xp"],
             "xp_floor": rules.xp_threshold(values["level"]),
@@ -248,7 +304,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         from world.bootstrap import get_room
 
         # 오프라인 구간은 옛 위치로 계산한 다음 로그인 위치를 바꾼다.
-        self.reconcile_recovery()
+        self.reconcile_recovery(emit_prompt=False)
         self.location = get_room("staging_room")
         super().at_pre_puppet(account, session=session, **kwargs)
 
@@ -262,16 +318,21 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             start = get_room("staging_room")
             if start:
                 self.location = start
-        super().at_post_puppet(**kwargs)
-        self.msg("|g원시구역에 오신 것을 환영합니다.|n '도움말'로 명령을 확인하세요.")
-        self.leave_combat()
-        self.push_state()
-        self.push_prompt()
-        self.schedule_recovery()
+        self.begin_command_output()
+        try:
+            super().at_post_puppet(**kwargs)
+            self.msg("|g원시구역에 오신 것을 환영합니다.|n '도움말'로 명령을 확인하세요.")
+            self.leave_combat()
+            self.push_state()
+            self.schedule_recovery()
+        finally:
+            self.end_command_output()
 
     def at_post_unpuppet(self, account=None, session=None, **kwargs):
         self.ndb.shortcut_delete_all_request = None
         if not self.sessions.count():
+            self.cancel_pending_prompt()
+            self.ndb.command_output_depth = 0
             self.reconcile_lights(time(), turn_off=True)
             self.leave_combat()
             self.change(lambda profile: None)
@@ -290,6 +351,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
                     after_change(lambda: self.msg("광원의 전원이 다 되어 빛이 꺼졌다."))
 
     def at_server_shutdown(self):
+        self.cancel_pending_prompt()
         self.ndb.shortcut_delete_all_request = None
         self.reconcile_lights(time(), turn_off=True)
         self.leave_combat()
@@ -340,8 +402,20 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             return False
         allowed = super().at_pre_move(destination, move_type=move_type, **kwargs)
         if allowed:
-            self.change(lambda profile: None)
+            self.checkpoint_recovery()
         return allowed
+
+    def move_to(self, destination, *args, **kwargs):
+        from world.multiplayer import world_change
+
+        try:
+            with world_change():
+                moved = super().move_to(destination, *args, **kwargs)
+                if not moved:
+                    raise _MoveRejected()
+                return moved
+        except _MoveRejected:
+            return False
 
     def at_post_move(self, source_location, move_type="move", **kwargs):
         self.leave_combat()
@@ -350,13 +424,16 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             if self.zone not in profile["visited"]:
                 profile["visited"].append(self.zone)
             self.save_profile(profile)
-        if move_type == "elevator":
-            from world.multiplayer import after_change
+        # rollback 전에 도착 화면이나 내부 look을 실행하지 않는다.
+        after_change(lambda: self.present_destination(source_location, move_type=move_type, **kwargs))
 
-            # 자동 하차도 같은 transaction이다. rollback 전에 도착 화면을 보내지 않는다.
-            after_change(lambda: super(Explorer, self).at_post_move(source_location, move_type=move_type, **kwargs))
-        else:
-            super().at_post_move(source_location, move_type=move_type, **kwargs)
+    def present_destination(self, source_location, **kwargs):
+        # DefaultCharacter의 내부 look은 별도 사용자 입력이 아니다.
+        self.ndb.command_output_depth = (self.ndb.command_output_depth or 0) + 1
+        try:
+            super().at_post_move(source_location, **kwargs)
+        finally:
+            self.ndb.command_output_depth -= 1
 
     def combat_target(self):
         from world.multiplayer import object_by_id
