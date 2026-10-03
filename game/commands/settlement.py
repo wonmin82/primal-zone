@@ -31,7 +31,7 @@ class Exchange(GameCommand):
     key = "교환"
     aliases = ["exchange"]
     usage = "회수부품 교환 · 회수부품 10개 교환 · 회수부품 모두 교환 · 정산관에게 회수부품 교환"
-    summary = "주변 정산관에게 회수부품을 크레딧으로 정산합니다."
+    summary = "주변 정산관에게 회수부품을 보급칩으로 정산합니다."
 
     def run(self):
         objects = officers(self.caller)

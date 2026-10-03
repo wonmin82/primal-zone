@@ -117,7 +117,7 @@
       row.className = "skill-row";
       title.textContent = skill.name + " Rank " + skill.rank + "/" + skill.max_rank;
       detail.className = "muted";
-      detail.textContent = skill.description + (skill.rank === skill.max_rank ? " · 최고 Rank" : " · 다음: Lv." + skill.required_level + " / " + skill.next_points + "점 / " + skill.next_credits + " 크레딧");
+      detail.textContent = skill.description + (skill.rank === skill.max_rank ? " · 최고 Rank" : " · 다음: Lv." + skill.required_level + " / " + skill.next_points + "점 / " + skill.next_cost);
       const learn = button(skill.name + " 배워", skill.name + " 배워");
       learn.disabled = !available || !skill.can_learn;
       row.append(title, detail, learn); return row;
@@ -132,7 +132,7 @@
     byId("send-command").disabled = false;
     byId("logout").hidden = false;
     const fields = {"player-name": state.name, level: "Lv. " + state.level,
-      credits: state.credits + " 크레딧", "hp-label": state.hp + " / " + state.max_hp,
+      credits: state.currency.formatted, "inventory-balance": state.currency.name + " " + state.currency.formatted, "hp-label": state.hp + " / " + state.max_hp,
       "xp-label": state.level >= 10 ? "최고 레벨" : (state.xp - state.xp_floor) + " / " + (state.xp_next - state.xp_floor),
       attack: state.attack, defense: state.defense, "room-name": state.room,
       "zone-tag": state.safe ? "안전 지대" : "탐사 구역", quest: state.quest, "room-hint": state.hint};
@@ -177,8 +177,8 @@
         all.disabled = !corpse.loot.some((item) => item.can_take); actions.push(all);
       } else { const empty = document.createElement("small"); empty.textContent = corpse.loot_obscured ? "전리품을 식별하기 어려움" : "남은 전리품 없음"; actions.push(empty); }
       for (const item of corpse.loot) {
-        const el = button(item.label + " ×" + item.quantity + " → " + (item.protected ? item.assigned_name : "자유 획득"), item.take_command);
-        el.replaceChildren(semantic("item", item.label), " ×" + item.quantity + " → ", semantic(item.protected ? "player" : "muted", item.protected ? item.assigned_name : "자유 획득"));
+        const el = button(item.display_label + " → " + (item.protected ? item.assigned_name : "자유 획득"), item.take_command);
+        el.replaceChildren(semantic(item.kind === "currency" ? "reward" : "item", item.display_label), " → ", semantic(item.protected ? "player" : "muted", item.protected ? item.assigned_name : "자유 획득"));
         el.disabled = !item.can_take; actions.push(el);
       }
     }
@@ -188,8 +188,8 @@
       actions.push(all);
     }
     for (const source of state.ground_loot) for (const item of source.loot) {
-      const el = button("바닥 · " + item.label + " ×" + item.quantity + " → " + (item.protected ? item.assigned_name : "자유 획득"), item.take_command);
-      el.replaceChildren("바닥 · ", semantic("item", item.label), " ×" + item.quantity + " → ", semantic(item.protected ? "player" : "muted", item.protected ? item.assigned_name : "자유 획득"));
+      const el = button("바닥 · " + item.display_label + " → " + (item.protected ? item.assigned_name : "자유 획득"), item.take_command);
+      el.replaceChildren("바닥 · ", semantic(item.kind === "currency" ? "reward" : "item", item.display_label), " → ", semantic(item.protected ? "player" : "muted", item.protected ? item.assigned_name : "자유 획득"));
       el.disabled = !item.can_take; actions.push(el);
     }
     renderGrowth(state);

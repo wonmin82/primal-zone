@@ -1,6 +1,7 @@
 """선택 번호를 세계 서술과 UI 제어용 표기로 나누어 표현한다."""
 
 from world import text as ft
+from world.loot_assets import asset_text
 from world.targets import labels, ordered
 
 
@@ -91,7 +92,8 @@ def corpse_overview(corpses, caller, now, pool=None):
                 else " (자유 획득)"
             )
             items.append(
-                ft.text(ft.item(entry["item"]), " ", count_word(entry["quantity"]), " 개", rights)
+                ft.text(asset_text(entry) if entry["kind"] == "currency"
+                        else ft.text(ft.item(entry["id"]), " ", count_word(entry["quantity"]), " 개"), rights)
             )
         lines.append(
             ft.text(

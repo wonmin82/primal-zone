@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 from evennia import create_object
 from typeclasses.enemies import room_enemies
 from typeclasses.explorers import Explorer
+from typeclasses.loot import take_loot
 from typeclasses.parties import invite, respond
 from world.rules import RuleError
 
@@ -42,7 +43,9 @@ class RewardTests(WorldCommandTest):
         self.enemy.db.hp = 1
         self.enemy.receive_attack(self.char2, now=102.5, rng=Random(1))
         for player in (self.char1, self.char2):
-            self.assertEqual((player.profile()["xp"], player.profile()["credits"]), (11, 24))
+            self.assertEqual((player.profile()["xp"], player.profile()["credits"]), (11, 20))
+        take_loot(self.char1, now=103)
+        self.assertEqual([p.profile()["credits"] for p in (self.char1, self.char2)], [24, 24])
         self.assertEqual(self.players[2].profile()["xp"], 0)
 
     def test_claim_timeout_and_flee_release(self):
@@ -94,6 +97,9 @@ class RewardTests(WorldCommandTest):
         boss.db.hp = 0
         boss.finish_death(self.char1, now=105, rng=Random(1))
         self.assertEqual([p.profile()["xp"] for p in self.players], [44, 43, 22, 21, 0])
+        self.assertEqual([p.profile()["credits"] for p in self.players], [20] * 5)
+        take_loot(self.players[0], now=106)
+        take_loot(self.players[2], now=106)
         self.assertEqual(sum(p.profile()["credits"] - 20 for p in self.players), 50)
         self.assertTrue(all(p.profile()["quests"]["radio_tower"]["boss_defeated"] for p in self.players[:4]))
         self.assertFalse(self.players[4].profile()["quests"]["radio_tower"]["boss_defeated"])

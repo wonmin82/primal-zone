@@ -272,5 +272,5 @@ class MedicalDefeatTests(WorldCommandTest):
         self.assertTrue(payloads)
         self.assertTrue(all((s["zone"], s["hp"], s["combat_target"]) == ("infirmary", rules.DEFEAT_RECOVERY_HP, None)
                             for s in payloads))
-        self.assertNotIn("0크레딧을 잃", str(output.call_args_list))
+        self.assertNotIn("0칩을 잃", str(output.call_args_list))
         self.char2.push_state.assert_called()

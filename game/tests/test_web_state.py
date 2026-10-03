@@ -52,7 +52,12 @@ class WebStateTests(WorldCommandTest):
         corpse.reconcile(now=130)
         snapshot = multiplayer_state(self.char2, now=221)
         self.assertEqual(snapshot["corpses"], [])
-        self.assertEqual(len(snapshot["ground_loot"]), 2)
+        self.assertEqual(len(snapshot["ground_loot"]), 3)
+        currency = next(entry for loot in snapshot["ground_loot"]
+                        for entry in loot["loot"] if entry["kind"] == "currency")
+        self.assertEqual((currency["id"], currency["quantity"]), ("credits", 8))
+        self.assertTrue(currency["can_take"])
+        self.assertFalse(currency["protected"])
         self.assertTrue(snapshot["ground_loot"][0]["loot"][0]["can_take"])
         self.assertFalse(snapshot["ground_loot"][0]["loot"][0]["protected"])
         json.dumps(snapshot)

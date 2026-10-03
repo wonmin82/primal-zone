@@ -150,7 +150,7 @@ class GameplayIntegrationTests(WorldCommandTest):
     def test_failed_purchase_does_not_change_saved_data(self):
         self.char1.location = self.rooms["weapon_shop"]
         before = deepcopy(self.char1.profile())
-        self.call(gameplay.Buy(), "탐사카빈", "크레딧이 부족합니다.", caller=self.char1)
+        self.call(gameplay.Buy(), "탐사카빈", "보급칩이 부족합니다.", caller=self.char1)
         self.assertEqual(self.char1.profile(), before)
 
     def test_cache_reward_is_personal_and_once_only(self):

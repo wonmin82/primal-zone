@@ -58,7 +58,7 @@ class ShopTests(WorldCommandTest):
                         seller.aliases.all()[0] + "에게 " + ITEMS[item]["name"] + " buy"):
                 before = deepcopy(self.char1.profile())
                 self.assertIn("1개를 받아", self.command(raw))
-                before["credits"] -= SHOP_CATALOGS[shop_id][item]
+                before["credits"] -= ITEMS[item]["value"]
                 before["inventory"][item] = before["inventory"].get(item, 0) + 1
                 self.assertEqual(self.char1.profile(), before)
             self.assertIn(ITEMS[item]["name"], self.command("상품"))
@@ -144,7 +144,7 @@ class ShopTests(WorldCommandTest):
             self.char1.location = seller.location
             actions = multiplayer_state(self.char1)["interactables"][0]["actions"]
             self.assertEqual(actions[0]["command"], seller.key + " 상품")
-            self.assertEqual([a["command"] for a in actions[1:]],
+            self.assertEqual([a["command"] for a in actions if a["command"].endswith(" 구매")],
                              [seller.key + "에게 " + ITEMS[item]["name"] + " 구매" for item in SHOP_CATALOGS[shop_id]])
             self.assertEqual(render(context_for(self.char1)), seller.key + " 상품")
             self.assertIn("1개를 받아", self.command(actions[1]["command"]))

@@ -39,7 +39,7 @@ class Closeout:
             await player.act(name + "에서 붕대 꺼내", lambda s: count_item(s, "bandage") == before)
             await player.act(name + "에 붕대 넣어", lambda s: count_item(s, "bandage") == before - 1)
         await route(player, (("남", "support_1f_w1"), ("서", "support_1f_w2"), ("북", "salvage_office")))
-        await player.expect_text("정산관 환율", "10크레딧")
+        await player.expect_text("정산관 환율", "10칩")
         before = player.state["credits"]
         await player.act("정산관에게 회수부품 7개 교환", lambda s: s["credits"] == before + 70)
         assert count_item(player.state, "scrap") == 3
@@ -60,7 +60,7 @@ class Closeout:
                              self.scenario.timeouts.combat)
         assert outsider.state["hp"] == 1 and outsider.state["credits"] == before - min(before, 10)
         await outsider.act("침대 휴식", lambda s: s["hp"] == s["max_hp"])
-        self.scenario.report("defeat", "actual enemy → infirmary / HP 1 / 최대 10C / Bed full heal")
+        self.scenario.report("defeat", "actual enemy → infirmary / HP 1 / 최대 10칩 / Bed full heal")
         self.scenario.phase = "hq-closeout"
         await player.act("귀환", lambda s: s["zone"] == "support_roof")
         await self.floor(player, "1층", "support_1f_c")

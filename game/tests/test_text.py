@@ -69,7 +69,7 @@ class SemanticTextTests(WorldCommandTest):
                 elif isinstance(obj, SettlementOfficer):
                     self.assertEqual(tokens(output, "command"), ["환율", "교환", "교환", "교환", "교환"])
                 elif isinstance(obj, Shopkeeper):
-                    self.assertEqual(tokens(output, "command"), ["상품", "구매"])
+                    self.assertEqual(tokens(output, "command"), ["상품", "구매", "가치", "판매"])
                 else:
                     self.assertEqual(tokens(output, "command"), list(obj.actions))
                 self.assertIn(obj.key, tokens(output, obj.semantic_role))
@@ -114,9 +114,10 @@ class SemanticTextTests(WorldCommandTest):
         self.assertIn(f"200/{next_xp}", view.experience(profile))
         self.assertIn(str(next_xp - 200), view.experience(profile))
         shop = view.shop("supply", "보급관")
-        for key, price in SHOP_CATALOGS["supply"].items():
+        for key in SHOP_CATALOGS["supply"]:
+            price = ITEMS[key]["value"]
             self.assertIn(ITEMS[key]["name"], tokens(shop, "item"))
-            self.assertIn(f"{price}C", tokens(shop, "reward"))
+            self.assertIn(f"{price}칩", tokens(shop, "reward"))
         self.assertNotIn("교환", shop)
         self.assertNotIn(ITEMS["scrap"]["name"], shop)
 
@@ -176,7 +177,7 @@ class SemanticTextTests(WorldCommandTest):
         for key, data in SKILLS.items():
             next_rank = rules.skill_rank(profile, key) + 1
             self.assertIn(
-                f"다음 Lv{data['requirements'][next_rank]}/{data['point_cost'][next_rank]}점/{data['credit_cost'][next_rank]}C",
+                f"다음 Lv{data['requirements'][next_rank]}/{data['point_cost'][next_rank]}점/{data['credit_cost'][next_rank]}칩",
                 view.skills(profile),
             )
             self.assertIn(data["description"], view.skills(profile))
@@ -226,7 +227,7 @@ class SemanticTextTests(WorldCommandTest):
         defense = sum(ITEMS[i].get("defense", 0) for i in profile["equipment"].values())
         self.assertIn(f"공격 +{attack} · 방어 +{defense}", equip.splitlines()[-1])
         profile["inventory"] = {}
-        self.assertEqual(str(view.inventory(profile)), "[소지품] 비어 있다.")
+        self.assertEqual(str(view.inventory(profile)), "[소지품] 20칩\n\n비어 있다.")
         self.assertEqual(tokens(view.shop("supply", "보급관"), "command"), ["구매"])
         profile["quests"]["radio_tower"].update(started=True, record_read=True)
         quest = view.quest(profile)
@@ -313,7 +314,7 @@ class SemanticTextTests(WorldCommandTest):
             self.assertEqual(tokens(attack, "item"), [ITEMS["machete"]["name"]])
             rewards = [m for m in outputs if tokens(m, "reward")]
             self.assertEqual(len(rewards), 1)
-            self.assertEqual(tokens(rewards[0], "reward"), ["경험치 11", "4크레딧"])
+            self.assertEqual(tokens(rewards[0], "reward"), ["경험치 11"])
             self.assertEqual(self.char1.profile()["xp"], 11)
             corpse = room_loot(self.char1.location)[0]
             output = corpse.return_appearance(self.char1)
@@ -322,7 +323,7 @@ class SemanticTextTests(WorldCommandTest):
             second.reset_mock()
             take_loot(self.char2, now=103)
             outputs = [call.args[0] for call in second.call_args_list if call.args]
-            assigned = next(m for m in outputs if tokens(m, "player"))
+            assigned = next(m for m in outputs if tokens(m, "player") and tokens(m, "item"))
             self.assertEqual(tokens(assigned, "player"), [self.char1.key])
             self.assertEqual(tokens(assigned, "item"), [ITEMS["scrap"]["name"]])
             self.assertEqual(self.char1.profile()["inventory"]["scrap"], 1)

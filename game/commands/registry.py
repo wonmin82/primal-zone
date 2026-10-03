@@ -15,7 +15,7 @@ from commands.character import (
 )
 from commands.combat import Attack, FirstAid, Flee, Guard, Heavy
 from commands.command_shortcuts import Sequence, Shortcuts
-from commands.inventory import Buy, Equip, Equipment, Inventory, Shop, Take, Wield
+from commands.inventory import Buy, Equip, Equipment, Inventory, Sell, Shop, Take, Value, Wield
 from commands.items import (
     Drink,
     Drop,
@@ -92,6 +92,8 @@ COMMANDS = [
     Treat,
     Shop,
     Buy,
+    Value,
+    Sell,
     Exchange,
     Rate,
     Quest,

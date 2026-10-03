@@ -3,6 +3,7 @@
 from world import rules
 from world import text as ft
 from world.content import EQUIPMENT_ACTIONS, ITEMS, SHOP_CATALOGS
+from world.currency import format_currency
 from world.progression import (
     ATTRIBUTES,
     PROFICIENCIES,
@@ -46,7 +47,7 @@ def status(name, profile):
     return ft.compact(
         "상태",
         f"체력 {profile['hp']}/{values['max_hp']} · 공격 {values['attack']} · 방어 {values['defense']}",
-        f"경험치 {xp} · 크레딧 {profile['credits']} · 처치 {profile['kills']}",
+        f"경험치 {xp} · 보급칩 {format_currency(profile['credits'])} · 처치 {profile['kills']}",
         "특성 | "
         + " ".join(
             f"{v['name']}{profile['attributes'][k]['base'] + rules.allocated(profile, k)}"
@@ -112,7 +113,7 @@ def skills(profile):
         rank = rules.skill_rank(profile, key)
         next_rank = rank + 1
         learning = (
-            f"다음 Lv{data['requirements'][next_rank]}/{data['point_cost'][next_rank]}점/{data['credit_cost'][next_rank]}C"
+            f"다음 Lv{data['requirements'][next_rank]}/{data['point_cost'][next_rank]}점/{format_currency(data['credit_cost'][next_rank])}"
             if next_rank <= data["max_rank"]
             else "최고 Rank"
         )
@@ -120,7 +121,7 @@ def skills(profile):
         lines.append(
             f"{data['name']} R{rank}/{data['max_rank']} · {data['description']} · {learning}"
         )
-    lines.append(ft.text("학습: 교관에게 기술이름 ", ft.token("command", "배워"), " · C=크레딧"))
+    lines.append(ft.text("학습: 교관에게 기술이름 ", ft.token("command", "배워"), ""))
     return ft.compact(
         "기술", *lines, summary=f"남은 점수 {rules.point_pools(profile)['skill_points']}"
     )
@@ -148,19 +149,19 @@ def inventory(profile):
         for title, entries in groups.items()
         if entries
     ]
-    return ft.compact("소지품", *lines, summary="" if lines else "비어 있다.")
+    return ft.compact("소지품", "", *(lines or ["비어 있다."]), summary=format_currency(profile["credits"]))
 
 
 def shop(shop_id, seller):
     lines = []
-    for key, price in SHOP_CATALOGS[shop_id].items():
-        parts = [ft.item(key), ft.token("reward", f"{price}C")]
+    for key in SHOP_CATALOGS[shop_id]:
+        parts = [ft.item(key), ft.token("reward", format_currency(rules.purchase_price(key)))]
         lines.append(ft.join(parts, " · "))
     lines.append(
         ft.text(
             "물건이름 ",
             ft.token("command", "구매"),
-            " · C=크레딧 (1개씩)",
+            " (1개씩)",
         )
     )
     return ft.compact(ft.token("npc", seller), *lines)
@@ -215,13 +216,11 @@ def healing(amount):
     return ft.text(ft.item("bandage"), f"를 꺼내 상처를 감았다. 체력이 {amount} 회복되었다.")
 
 
-def reward(xp, credits):
+def reward(xp):
     return ft.text(
         "이번 사냥으로 ",
         ft.token("reward", f"경험치 {xp}"),
-        ", ",
-        ft.token("reward", f"{credits}크레딧"),
-        "을 얻었다.",
+        "을 얻었다. 보급칩은 시체에서 회수할 수 있다.",
     )
 
 

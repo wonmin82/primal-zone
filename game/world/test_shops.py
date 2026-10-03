@@ -5,14 +5,14 @@ from unittest import TestCase
 from unittest.mock import patch
 
 from world import content, rules
-from world.content import SHOP_CATALOGS
+from world.content import ITEMS, SHOP_CATALOGS
 from world.content.integrity import errors, shop_errors
 from world.test_headquarters import content_targets
 
 
 class ShopRulesTests(TestCase):
     def test_catalogs_preserve_all_fourteen_prices_without_legacy_table(self):
-        self.assertEqual(SHOP_CATALOGS, {
+        self.assertEqual({shop: {item: ITEMS[item]["value"] for item in catalog} for shop, catalog in SHOP_CATALOGS.items()}, {
             "supply": {"flashlight": 30, "battery": 6, "bandage": 8, "field_ration": 4, "water": 3},
             "weapon": {"spear": 35, "blade": 60, "jungle_blade": 95, "carbine": 130, "heavy_carbine": 240},
             "armor": {"leather_suit": 35, "tactical_vest": 85, "armor": 65, "heavy_suit": 190},
@@ -35,13 +35,13 @@ class ShopRulesTests(TestCase):
 
     def test_catalog_integrity_rejects_bad_prices_items_duplicates_and_empty_catalog(self):
         for price in (0, -1, True, 8.5, "8"):
-            with patch.dict(SHOP_CATALOGS["supply"], bandage=price):
+            with patch.dict(ITEMS["bandage"], value=price):
                 self.assertTrue(any("가격" in issue for issue in shop_errors()))
-        with patch.dict(SHOP_CATALOGS["supply"], missing=1):
+        with patch.dict(SHOP_CATALOGS, supply=(*SHOP_CATALOGS["supply"], "missing")):
             self.assertTrue(any("아이템 정의" in issue for issue in shop_errors()))
-        with patch.dict(SHOP_CATALOGS["weapon"], bandage=8):
+        with patch.dict(SHOP_CATALOGS, weapon=(*SHOP_CATALOGS["weapon"], "bandage")):
             self.assertTrue(any("중복" in issue for issue in shop_errors()))
-        with patch.dict(SHOP_CATALOGS["supply"], {}, clear=True):
+        with patch.dict(SHOP_CATALOGS, supply=()):
             self.assertTrue(any("비었습니다" in issue for issue in shop_errors()))
         for field, value in (("room", "dock"), ("shop_id", "missing"), ("actions", ["구매"])):
             targets = content_targets()

@@ -5,7 +5,37 @@ from time import time
 from evennia.utils.dbserialize import deserialize
 
 from world import rules
+from world.content.economy import CURRENCY
+from world.currency import spend_currency
 from world.multiplayer import world_change
+
+
+def transfer_currency(caller, amount=None, recipient=None):
+    from typeclasses.explorers import Explorer
+    from typeclasses.loot import create_dropped_loot
+
+    from world.observation import can_perceive, context_for
+
+    with world_change():
+        profile = caller.profile()
+        if not caller.location:
+            raise rules.RuleError("보급칩을 옮길 장소가 없습니다.")
+        other = None
+        if recipient is not None:
+            if (not isinstance(recipient, Explorer) or recipient == caller
+                    or recipient.location != caller.location or not can_perceive(recipient, context_for(caller))):
+                raise rules.RuleError("같은 장소의 다른 탐사자에게만 보급칩을 줄 수 있습니다.")
+            other = recipient.profile()
+            rules.require_peace(other)
+        quantity = spend_currency(profile, amount)
+        caller.save_profile(profile)
+        if recipient is not None:
+            other["credits"] += quantity
+            recipient.save_profile(other)
+        else:
+            create_dropped_loot(caller.location, [{"kind": "currency", "id": CURRENCY["id"],
+                                "quantity": quantity, "eligible_players": [], "remaining_shares": {}, "protection_until": 0}])
+        return quantity
 
 
 def transfer(caller, item_id, *, all_items=False, recipient=None, container=None, withdraw=False):
@@ -13,7 +43,7 @@ def transfer(caller, item_id, *, all_items=False, recipient=None, container=None
     from typeclasses.interactables import Container
     from typeclasses.loot import create_dropped_loot
 
-    from world.lighting import normalize
+    from world.lighting import discard_device_state_if_unowned, normalize
     from world.observation import can_perceive, context_for
 
     with world_change():
@@ -53,7 +83,7 @@ def transfer(caller, item_id, *, all_items=False, recipient=None, container=None
             all_items=all_items,
             equipment=None if withdraw else profile["equipment"],
         )
-        lost_power = item_id in profile.get("light_sources", {}) and not profile["inventory"].get(item_id)
+        lost_power = discard_device_state_if_unowned(profile, item_id)
         normalize(profile, time())
         caller.save_profile(profile)
         if recipient is not None:

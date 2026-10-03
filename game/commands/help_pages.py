@@ -48,6 +48,9 @@ def category_page(category, commands):
                       "진료는 의무관에게 받습니다. 휴식은 의무실 침대에서 이용합니다."])
     elif category == "아이템·보급":
         lines.append(ft.text("대상은 ", ft.token("command", "보기"), "로 확인할 수 있습니다."))
+        lines.extend(["보급칩은 칩 단위로 옮기며, 판매는 장착하지 않은 물건만 취급합니다.",
+                      commands_text(["철수에게 20칩 줘", "20칩 버려", "시체에서 20칩 가져",
+                                     "강철마체테 가치", "강철마체테 판매"])])
     lines.extend(["", ft.text("상세: ", ft.token("command", "명령이름 도움말"))])
     return ft.compact(category, *lines)
 
@@ -57,6 +60,7 @@ def input_page():
                       ft.usage("어린청소룡 공격 · 윤대장 대화", {"공격", "대화"}),
                       "", "선택", "대상 2 · 대상 모두", "",
                       "전리품", commands_text(["시체에서 모두 가져", "모든 시체에서 회수부품 모두 가져"]),
+                      "", "보급칩", commands_text(["철수에게 20칩 줘", "20칩 버려", "시체에서 20칩 가져"]),
                       "", "관계", "플레이어에게 · 보관함에 · 보관함에서", "",
                       "묶음 실행", commands_text(["상태, 장비, 소지품 해"]),
                       "", "개인 설정", commands_text(["줄임말 도움말"]),

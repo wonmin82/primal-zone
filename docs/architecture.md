@@ -1,5 +1,17 @@
 # 원시구역 구조와 설계 결정
 
+## 보급칩 경제와 전리품 자산
+
+`world/content/economy.py`의 CURRENCY는 id=credits·이름=보급칩·단위=칩·별칭·설명의 SSOT다. `world/currency.py`의 format_currency는 127칩을 만들며 profile의 credits 숫자와 version 8을 유지한다. 화폐는 ITEMS나 inventory에 넣지 않는다. Web은 서버의 currency metadata/formatted/전리품 display_label과 take_command를 표시한다. take_target은 칩/칩 2 같은 명령 선택자, display_label은 8칩 같은 표시 문자열이며 화면 문자열을 재해석해 명령을 만들지 않는다.
+
+`world/loot_assets.py`의 읽기 전용 normalize_entry는 legacy {item, quantity}를 {kind: item, id, quantity}로 해석한다. 새 currency entry는 kind=currency·id=credits·quantity·eligible_players·remaining_shares와 공통 reservation/protection_until을 가진다. 초기 PR의 shares는 읽을 때 원래 key를 eligible_players로, 양수 몫을 remaining_shares로 해석한다. 입력을 변경하지 않고 반복 normalize도 안정적이며 새 저장은 분리된 구조를 사용한다. 상세 보기·Web·회수·decay가 이 계층을 공유하며 조회로 DB를 다시 쓰지 않는다.
+
+`rules.reward_allocation(amount, groups)`는 그룹 기여도 비례 → 파티 내부 균등 → deterministic 최대 나머지법으로 총량을 보존한다. XP는 처치 transaction에서 즉시 지급하고 enemy.currency는 그룹별 currency entry로 저장한다. eligible_players는 처치 시점 적격 참여자 snapshot으로 파티 변화·로그아웃과 무관하게 고정된다. remaining_shares는 아직 지급하지 않은 금액만 담는다. 보호 중 루팅 요청자는 protected distribution을 trigger할 자격을 가질 뿐, 자신의 remaining share가 0이라는 이유로 자격을 잃지 않는다. currency_payouts는 remaining_shares만 weight로 부분 지급한 뒤 몫과 quantity를 차감하며 0인 몫은 제거한다. 실제 지급은 session 없이도 persistent Explorer에 저장하며 수령 객체가 없으면 전체 transaction을 rollback한다. 다른 그룹 entry는 남는다. 보호 만료 후에는 남은 금액을 caller에게 지급하며 과거 자격/몫을 적용하지 않는다. 시체 decay는 quantity·eligible_players·remaining_shares·reservation·보호 deadline을 바닥으로 그대로 옮긴다.
+
+currency_request는 기존 TargetSelector에서 금액만 읽는다. 20칩은 양의 정수 금액, 칩 2는 공통 INDEX, 칩 모두는 ALL이다. source/관계 parsing은 기존 helper를 사용하고 여러 시체에는 ALL target을 요구한다. 기본 화폐 대상은 접근 가능한 entry에서 선택하며 기존 item 선택 정책은 바꾸지 않는다. player 간 전달·버리기와 전리품 회수는 world_change 안에서 관련 profile/loot를 함께 변경하고 실패 시 rollback한다. 임무·정산·NPC 판매는 직접 source, 구매·학습·패배는 sink이며 패배 손실은 드롭하지 않는다.
+
+ITEMS[*].value만 상품 가치와 구매가를 소유한다. SHOP_CATALOGS는 item ID tuple, Shopkeeper는 shop_id와 catalog의 취급 사실만 소유한다. purchase_price와 resale_price(value//2, 최소 1)가 가격을 계산한다. 가치/판매는 기존 구매의 seller selection·safe/peace/perception 정책을 재사용한다. 판매는 move_item의 transferable·장착 복사본 reservation을 사용하며 일반 판매에 수량 N개 문법은 추가하지 않는다. Web 기본 판매도 1개이며 판매 가능한 복사본이 2개 이상일 때만 별도 모두 판매와 총액(장착분 제외 수량 × 매입가)을 제공한다. value 없는 임무/resource는 매매하지 않는다.
+
 ## 목표와 구성
 
 사냥·장비 수집·성장을 중심으로 하는 한국어 웹 MUD다. 모든 주요 임무는 혼자 완료할 수 있으며 파티는 선택 사항이다. Python 3.13 / Evennia 6.1.0 / SQLite / HTML·CSS·JavaScript를 사용하고 정확한 버전은 uv.lock으로 고정한다.
@@ -75,7 +87,7 @@ bootstrap은 stable `primal_interactable` tag로 기존 객체를 찾아 DB ID�
 
 `진료`/`의무관 진료`/`의무관에게 진료`와 `휴식`/`침대 휴식`/`침대에서 휴식`은 현재 `room_objects`의 보이는 Doctor/Bed를 공통 selector로 선택한다. bare 입력은 0개면 대상 없음, 1개면 자동 선택, 2개 이상이면 명시적 지정 요구다. 숨은 대상은 개수·오류·selector·hint·Web에 포함하지 않는다. 발견 이후 `perform_action`이 같은 Room·관찰·비전투를 검사하고 각 pure rule이 현재 Room의 safe를 검사한다. 실제 객체를 다른 안전 Room으로 옮겨도 서비스는 객체를 따른다. 전투 중 보이는 대상은 대상 없음 대신 기존 RuleError로 거절한다.
 
-`rules.treat`와 `rules.rest`는 별도 public rule이며 현재는 각각 무료·즉시 full HP다. 내부 유효성 검사만 공유하고 서로 호출하지 않는다. 최대 HP이면 쓰기 없이 거절한다. 붕대 `rules.first_aid`과 독립이며 아이템·크레딧·medicine 숙련·firstaid Rank를 변경하지 않는다. 침대 점유·예약·시간 지연은 없다.
+`rules.treat`와 `rules.rest`는 별도 public rule이며 현재는 각각 무료·즉시 full HP다. 내부 유효성 검사만 공유하고 서로 호출하지 않는다. 최대 HP이면 쓰기 없이 거절한다. 붕대 `rules.first_aid`과 독립이며 아이템·보급칩·medicine 숙련·firstaid Rank를 변경하지 않는다. 침대 점유·예약·시간 지연은 없다.
 
 `enemy_attack`은 피해·defeated 판정만 반환한다. `apply_defeat`가 `lost=min(credits,10)`을 차감하고 `DEFEAT_RECOVERY_HP=1`로 최소 생존 상태를 설정한다. 일반 의료 rule/객체는 호출하지 않는다. Enemy lifecycle은 하나의 `world_change` 안에서 피해·패널티·저장·`leave_combat`·의무실 이동을 처리한다. 패배자만 combatants/threat/contribution과 queued action·guard·타이머를 정리하고 다른 참가자는 유지한다. 이동 False/실패는 예외로 rollback하며 DB profile·FK와 Evennia attribute/location/contents 캐시를 복구한다. 타이머 취소와 구조 안내는 `after_change`로 commit 뒤 실행한다. 기존 `save_profile`의 deferred push가 새 의무실 상태를 패배자에게 보내므로 적 Room의 broadcast에만 의존하지 않는다. visited는 실제 이동 hook으로 의무실 방문을 추가하며 나머지 진행 기록은 보존한다. 출력 문구로 lifecycle을 판정하지 않는다.
 
@@ -85,29 +97,29 @@ bootstrap은 stable `primal_interactable` tag로 기존 객체를 찾아 DB ID�
 
 ## 본부 5단계: 단일 화폐와 회수 자원 정산
 
-Credits는 유일한 구매 currency, scrap은 material/resource다. `profile.inventory["scrap"]`와 개인 storage의 기존 저장 형식을 유지하며 migration·자동 환전은 없다. 적 전리품·이전·보관 정책과 발전기의 부품 3개 소비를 보존한다. `world/content/economy.py`의 `SALVAGE_CREDIT_RATE=10`은 정산율 SSOT다. 기존 장비용 EXCHANGE 정의/export와 구매 flag를 제거하고 `rules.buy(profile, shop_id, item_id)`는 6단계 SHOP_CATALOGS의 명시적 catalog에서 크레딧 가격을 조회한다. 5단계 당시 부두 임시 상점은 6단계에서 실제 Shopkeeper로 대체됐다.
+보급칩은 유일한 구매 currency, scrap은 material/resource다. `profile.inventory["scrap"]`와 개인 storage의 기존 저장 형식을 유지하며 migration·자동 환전은 없다. 적 전리품·이전·보관 정책과 발전기의 부품 3개 소비를 보존한다. `world/content/economy.py`의 `SALVAGE_CREDIT_RATE=10`은 정산율 SSOT다. 기존 장비용 EXCHANGE 정의/export와 구매 flag를 제거하고 `rules.buy(profile, shop_id, item_id)`는 6단계 SHOP_CATALOGS의 품목을 확인하고 ITEMS[item_id].value에서 보급칩 가격을 조회한다. 5단계 당시 부두 임시 상점은 6단계에서 실제 Shopkeeper로 대체됐다.
 
 실제 persistent `SettlementOfficer`의 stable ID는 `salvage_officer`, 표시명은 자원 정산관, alias는 정산관이며 `salvage_office`에 배치한다. 기존 bootstrap의 stable tag 재사용으로 객체 ID·alias·정상 배치를 유지하고 다른 객체·개인 profile·shared inventory를 초기화하지 않는다. integrity는 위치·환율/교환 action 정의·양의 정수 정산율과 기존 본부 구조를 검사한다.
 
 `환율`과 `교환`은 보이는 current-room SettlementOfficer에 위임한다. discovery는 기존 `room_objects`/names/parse_selector/resolve를 사용하며 bare는 0명 거절, 1명 자동 선택, 여러 명 대상 지정 요구다. targeted 입력은 `정산관에게 회수부품 10개 교환`처럼 공통 `에게` relation과 이름/번호를 사용한다. hidden/view lock은 개수·selector·hint·Web에서 제외한다. 이용은 실제 같은 Room·can_perceive·현재 Room safe·비전투 조건이며 특정 Room ID가 권한을 부여하지 않는다. 전투 중 보이는 NPC는 기존 전투 오류를 반환한다.
 
-`world/settlement.py`는 정산 resource와 1/N개/모두 수량만 해석한다. 일반 소지품/보관/전리품 parser의 수량 범위를 확장하지 않는다. `rules.settle_salvage(profile, quantity)`는 비전투·양의 정수·소지품 보유량을 전부 검증한 뒤 consume과 Credits 증가를 수행하고 획득액을 반환한다. 객체가 `caller.change()` 경계 안의 최신 profile에서 모두 수량을 구하므로 실패 시 부분 저장이 없다. 0개 inventory entry는 consume이 제거한다. 저장한 부품·임무용 부품·성장 등은 정산 대상 소지품 수량 이외에 변경하지 않는다.
+`world/settlement.py`는 정산 resource와 1/N개/모두 수량만 해석한다. 일반 소지품/보관/전리품 parser의 수량 범위를 확장하지 않는다. `rules.settle_salvage(profile, quantity)`는 비전투·양의 정수·소지품 보유량을 전부 검증한 뒤 consume과 credits 증가를 수행하고 획득액을 반환한다. 객체가 `caller.change()` 경계 안의 최신 profile에서 모두 수량을 구하므로 실패 시 부분 저장이 없다. 0개 inventory entry는 consume이 제거한다. 저장한 부품·임무용 부품·성장 등은 정산 대상 소지품 수량 이외에 변경하지 않는다.
 
-서버는 실제 visible/available NPC에서 환율 명령과 보유 scrap이 있을 때 대상 지정 모두 정산 명령을 만든다. 기존 interactable actions를 재사용하고 전체 ActionObject action을 개방하지 않는다. Room hint도 실제 target/action의 availability를 따른다. `pz_state.resources.scrap={name,count}`는 같은 profile snapshot의 소지품에서 파생하고 Credits wallet과 구분한다. 별도 balance를 저장하지 않으며 client는 payload와 완성된 command를 렌더링한다. zone ID·NPC 이름·환율·수량으로 action을 추론하지 않는다.
+서버는 실제 visible/available NPC에서 환율 명령과 보유 scrap이 있을 때 대상 지정 모두 정산 명령을 만든다. 기존 interactable actions를 재사용하고 전체 ActionObject action을 개방하지 않는다. Room hint도 실제 target/action의 availability를 따른다. `pz_state.resources.scrap={name,count}`는 같은 profile snapshot의 소지품에서 파생하고 보급칩 wallet과 구분한다. 별도 balance를 저장하지 않으며 client는 payload와 완성된 command를 렌더링한다. zone ID·NPC 이름·환율·수량으로 action을 추론하지 않는다.
 
 ## 본부 6단계: NPC 기반 상점
 
 `Shopkeeper(ActionObject)`는 실제 persistent NPC다. `supply_shopkeeper`(보급관/보급상인)는 `supply_shop`, `weapon_shopkeeper`(무기상/무기 상인)는 `weapon_shop`, `armor_shopkeeper`(방어구상/방어구 상인)는 `armor_shop`에 배치한다. `db.shop_id`의 supply/weapon/armor가 catalog identity이며 Room ID나 NPC 이름에서 추론하지 않는다. bootstrap은 stable tag로 같은 객체를 재사용하고 정의의 위치·alias·shop_id를 정규화한다. 재고 상태·profile migration은 없다.
 
-`world/content/shops.py`의 `SHOP_CATALOGS`가 유일한 판매/가격 SSOT다. 보급품 5종·무기 5종·방어구 4종의 기존 14개 가격을 모두 보존한다. `rules.buy(profile, shop_id, item_id)`는 비전투·유효 catalog·해당 상품·Credits 충분 여부를 전부 검증한 뒤 Credits와 소지품을 함께 변경한다. scrap 정산·임무 소비·전리품·기술 가격·패배 패널티는 변경하지 않는다. 무한 재고로 매번 1개만 판매한다.
+`world/content/shops.py`의 `SHOP_CATALOGS`는 취급 품목만, `ITEMS[*].value`는 가격만 소유한다. 보급품 5종·무기 5종·방어구 4종의 기존 14개 가격을 모두 보존한다. `rules.buy(profile, shop_id, item_id)`는 비전투·유효 catalog·해당 상품·보급칩 충분 여부를 전부 검증한 뒤 credits와 소지품을 함께 변경한다. scrap 정산·임무 소비·전리품·기술 가격·패배 패널티는 변경하지 않는다. 무한 재고로 매번 1개만 판매한다.
 
 `상품`(별칭 없음)과 `구매`는 현재 `room_objects`의 실제 보이는 Shopkeeper를 찾는다. 메뉴의 bare 후보는 모든 판매자, 구매의 bare 후보는 그 물건을 파는 판매자만이다. 0명 거절·1명 선택·여럿 대상 지정 요구이며 targeted 구매는 `무기상에게 강철마체테 구매`처럼 기존 parse_relation/names/selector/resolve를 사용한다. 번호는 기존 공통 정렬의 임시 번호다. 발견 후 같은 Room·safe·비전투를 검사하며 숨은 판매자는 selector·개수·오류·hint·Web에서 제외한다. 서비스는 실제 NPC를 따라 다른 safe Room에서도 동작한다.
 
-메뉴는 실제 NPC 제목과 그 catalog의 Credit 가격만 표시하고 상세 보기는 메뉴/targeted 구매 사용법을 안내한다. 각 시설 hint는 actual stable NPC와 상품 action을 참조하며 availability를 확인한다. 부두의 static 상점 hint·Shop/Buy gate·Web 상점 버튼을 제거했다. 다른 사용처가 없는 `GameCommand.at_dock()`과 global SHOP도 제거했다.
+메뉴는 실제 NPC 제목과 그 catalog의 보급칩 가격만 표시하고 상세 보기는 메뉴/targeted 구매 사용법을 안내한다. 각 시설 hint는 actual stable NPC와 상품 action을 참조하며 availability를 확인한다. 부두의 static 상점 hint·Shop/Buy gate·Web 상점 버튼을 제거했다. 다른 사용처가 없는 `GameCommand.at_dock()`과 global SHOP도 제거했다.
 
-모든 `ActionObject`가 `web_actions(caller, target, observed_at)` capability를 제공한다. 기본 allowlist는 대화/조사/수리/보기와 available 의료 행동을 보존한다. Container는 보기만, Instructor는 기존 대화와 별도 TRAINING UI를 유지한다. SettlementOfficer와 Shopkeeper만 필요한 동적 action을 override한다. `world.state`는 subclass를 구분하지 않고 capability만 호출한다. Shopkeeper는 available일 때 메뉴와 catalog별 targeted 구매의 완성된 label/command를 서버에서 만든다. client는 기존 렌더링을 사용하며 Room·가격·이름으로 구매를 추론하지 않는다.
+모든 `ActionObject`가 `web_actions(caller, target, observed_at)` capability를 제공한다. 기본 allowlist는 대화/조사/수리/보기와 available 의료 행동을 보존한다. Container는 보기만, Instructor는 기존 대화와 별도 TRAINING UI를 유지한다. SettlementOfficer와 Shopkeeper만 필요한 동적 action을 override한다. `world.state`는 subclass를 구분하지 않고 capability만 호출한다. Shopkeeper는 available일 때 상품과 catalog별 targeted 구매·가치·비착용 물품 판매의 완성된 label/command를 서버에서 만든다. client는 기존 렌더링을 사용하며 Room·가격·이름으로 구매를 추론하지 않는다.
 
-Integrity는 세 판매자 배치·catalog ID/행동, catalog 비어 있지 않음·상품 존재·양의 정수 가격·중복 금지·기존 14개 합집합을 검사한다. smoke의 구매는 옥상→승강기 3층→동·북 무기점에서 실제 Credits 차감/장비 증가를 확인하고 재로그인 시 대기실 위치와 구매한 장비·Credits의 보존을 비교한다. 7단계 closeout의 Full은 본부 전체 서비스와 두 임무/보스 최종 보고 및 실제 Portal+Server 재시작을 연결 검증한다.
+Integrity는 세 판매자 배치·catalog ID/행동, catalog 비어 있지 않음·상품 존재·양의 정수 가격·중복 금지·기존 14개 합집합을 검사한다. smoke의 구매는 옥상→승강기 3층→동·북 무기점에서 실제 보급칩 차감/장비 증가를 확인하고 재로그인 시 대기실 위치와 구매한 장비·보급칩의 보존을 비교한다. 7단계 closeout의 Full은 본부 전체 서비스와 두 임무/보스 최종 보고 및 실제 Portal+Server 재시작을 연결 검증한다.
 
 ## 공통 대상 선택
 
@@ -121,7 +133,7 @@ DEFAULT는 구조적으로 행동을 지원하는 첫 대상을 선택한다. IN
 
 `world.state.loot_controls()`는 웹 상태와 Corpse/DroppedLoot 상세 보기의 지정명·회수 명령을 함께 생성한다. 시체는 현재 보이는 방 전체 Corpse pool, 바닥 물건은 같은 아이템의 객체/entry 순서를 기존 helper로 계산한다. 상세 보기에는 단독으로 실행할 수 없는 `가져` 대신 `시체 2에서 모두 가져`, `회수부품 2 가져` 같은 명령을 안내한다. 시체가 하나면 번호를 생략하고, 빈 시체에는 회수 안내를 표시하지 않는다. 이 helper는 표시만 담당하며 번호를 저장하거나 권한·수량 규칙을 다시 구현하지 않는다. 실제 실행은 현재 방 상태에서 기존 resolver와 전리품 규칙을 사용한다.
 
-전리품 요청은 `LootRequest(source, target)`로 정규화한다. `모두 가져`는 가상 target `전리품`의 ALL이다. source가 없으면 DroppedLoot를, DEFAULT source면 시체 하나만 처리한다. source ALL에는 target ALL이 필수다. target DEFAULT/INDEX는 선택 entry에서 한 개를, ALL은 일치하는 entry의 전체 quantity를 처리한다. entry 순서는 객체 ID와 객체 내부의 저장 entry 순서이며, 번호를 별도 저장하지 않는다. 회수 전 같은 timestamp로 lifecycle을 정리한 뒤 world_change에서 선택·수량 차감·배정자 저장을 원자적으로 처리한다. 보호된 entry는 ALL에서 건너뛰며 하나라도 지급되면 성공이다. 수령 권한은 기존 recipient_for를 사용한다.
+전리품 요청은 `LootRequest(source, target)`로 정규화한다. `모두 가져`는 가상 target `전리품`의 ALL이다. source가 없으면 DroppedLoot를, DEFAULT source면 시체 하나만 처리한다. source ALL에는 target ALL이 필수다. target DEFAULT/INDEX는 선택 entry에서 한 개를, ALL은 일치하는 entry의 전체 quantity를 처리한다. entry 순서는 객체 ID와 객체 내부의 저장 entry 순서이며, 번호를 별도 저장하지 않는다. 회수 전 같은 timestamp로 lifecycle을 정리한 뒤 world_change에서 선택·수량 차감·배정자 저장을 원자적으로 처리한다. 보호된 entry는 ALL에서 건너뛰며 하나라도 지급되면 성공이다. can_take_entry가 회수 자격을, recipient_for_item이 item 순번 배정 대상을, currency_payouts가 잔여 금액 배분을 판단한다.
 
 ## 성장의 다섯 계층
 
@@ -131,7 +143,7 @@ DEFAULT는 구조적으로 행동을 지원하는 첫 대상을 선택한다. IN
 | Attribute | 현재 선택한 신체·정신 빌드 | 특성 포인트 배분, 재분배 |
 | Proficiency | 실제로 해 온 행동의 장기 경험 | 유효한 개인 행동, 재훈련으로 반환하지 않음 |
 | Skill | 선택해서 사용하는 전투 능력의 강도 | 교관 학습과 Rank 투자, 기술 재분배 |
-| Equipment | 교체 가능한 외부 전투 보정 | 기존 드롭·크레딧 구매·착용 |
+| Equipment | 교체 가능한 외부 전투 보정 | 기존 드롭·보급칩 구매·착용 |
 
 `attributes`는 각 ID별 `{base: 10, allocated: 0}`이다. 기본 10은 기존 전투 수치의 기준점이며 추가 보너스를 주지 않는다. 현재 값은 base + allocated다. 특성 포인트 총량은 `레벨 × 2 + 2`이며 Lv.1에서 4점, Lv.10에서 22점이다. 미사용 포인트는 총량에서 투자량 합계를 뺀 값으로 계산하므로 별도 가변 카운터의 중복 지급이 없다.
 
@@ -156,12 +168,12 @@ DEFAULT는 구조적으로 행동을 지원하는 첫 대상을 선택한다. IN
 
 `skills`는 heavy/guard/firstaid의 Rank다. 새 캐릭터와 기존 캐릭터 모두 강타·방어·응급처치 무료 Rank 1을 갖는다. 기본 공격은 학습하지 않는다. 정의에는 id/name/description/max_rank/requirements/point_cost/credit_cost/cooldown/action_type/related_proficiency를 명시한다. 현재 기술은 최대 Rank 3이다.
 
-| 다음 Rank | 요구 레벨 | 기술점수 | 크레딧 |
+| 다음 Rank | 요구 레벨 | 기술점수 | 보급칩 |
 | --- | --- | --- | --- |
 | 2 | 1 | 1 | 4 |
 | 3 | 3 | 2 | 8 |
 
-기술점수 총량은 `레벨 + 1`이다. 사용량은 무료 Rank를 제외한 각 Rank별 point_cost의 합계로 계산한다. 두 자원 모두 **총 획득 = 현재 투자 + 미사용** 관계를 유지한다. 포인트·레벨·크레딧·최대 Rank를 전부 검사한 뒤 한 번만 저장한다.
+기술점수 총량은 `레벨 + 1`이다. 사용량은 무료 Rank를 제외한 각 Rank별 point_cost의 합계로 계산한다. 두 자원 모두 **총 획득 = 현재 투자 + 미사용** 관계를 유지한다. 포인트·레벨·보급칩·최대 Rank를 전부 검사한 뒤 한 번만 저장한다.
 
 강타 피해 배율은 Rank 1/2/3에서 1.8/2.0/2.2이고 재사용 대기는 7.5초다. 방어는 적 피해를 `2 + Rank`로 정수 나눗셈한 뒤 방어 숙련 보정을 뺀다. 붕대 회복은 `35 + 지혜 투자×2 + (응급처치 기술 Rank-1)×5 + 의술 숙련 Rank//2`이며 실제 부족한 HP까지만 회복한다. `firstaid`의 사용자 이름은 응급처치이며 `related_proficiency=medicine`(의술)이다. 기술 Rank의 +5 보정과 숙련 Rank 2마다 +1 보정은 서로 다른 성장축이다. 전투 중 응급처치는 다음 기본 공격을 대체한다. Skill은 기존 두 타이머와 전투 상태 머신 위에 수치 계층만 더한다.
 
@@ -169,7 +181,7 @@ DEFAULT는 구조적으로 행동을 지원하는 첫 대상을 선택한다. IN
 
 지원동 2층 훈련실의 영속 NPC **탐사대 훈련관**은 기존 전투 기록을 분석하고 신체·전술 훈련 계획을 다시 짠다. `힘 1 배분`, `강타 배워`, `특성 재분배`, `기술 재분배`, `전체 재훈련`을 제공한다. 현재 방의 관찰 가능한 실제 교관, 현재 Room 정의의 safe 속성, combat_target이 없는 상태를 서버에서 검사한다. 훈련관이 없거나 보이지 않으면 웹과 명령 모두 이용 불가이며, 다른 안전 Room으로 옮겨도 같은 정책을 따른다. 웹 버튼도 같은 텍스트 명령만 보낸다.
 
-현재 콘텐츠에서는 재훈련 비용을 항상 무료로 정했다. 특성 재분배는 allocated만 0으로, 기술 재분배는 무료 Rank 1로 되돌린다. 무료 Rank는 투자분에 포함되지 않으며 학습에 쓴 크레딧은 반환하지 않는다. 전체 재훈련은 복사본에서 두 풀을 동시에 계산하고 하나의 world_change/DB 트랜잭션으로 저장한다. 저장 실패 시 부분 상태가 남지 않는다.
+현재 콘텐츠에서는 재훈련 비용을 항상 무료로 정했다. 특성 재분배는 allocated만 0으로, 기술 재분배는 무료 Rank 1로 되돌린다. 무료 Rank는 투자분에 포함되지 않으며 학습에 쓴 보급칩은 반환하지 않는다. 전체 재훈련은 복사본에서 두 풀을 동시에 계산하고 하나의 world_change/DB 트랜잭션으로 저장한다. 저장 실패 시 부분 상태가 남지 않는다.
 
 Level·XP·Proficiency·Inventory·Equipment·Quest·Kills·Visited·Party를 유지한다. next_attack_at·heavy_ready_at·guard_until·queued_action·player_round를 초기화하지 않고 Enemy에도 영향을 주지 않는다. 체질 배분/재분배 시 `HP = min(기존 HP, 새 최대 HP)`를 적용한다. 최대 HP를 올려도 즉시 회복되지 않고 내릴 때만 clamp하므로 반복 재훈련으로 무료 회복할 수 없다. 숙련은 빌드 선택이 아니라 실제 경험이므로 반환하거나 재배분하지 않는다.
 
@@ -189,7 +201,7 @@ parser는 마지막 token으로 행동만 찾는다. Command는 인자 문법·�
 
 방향 정의의 `shortcut`에서 8방향 초성 mapping을 파생한다. `commands/aliases.py`는 정보 단축어와 합성한 `SHORTCUTS`를 제공하며 `단축어` 조회도 같은 mapping에서 semantic command/direction token을 만든다. 개인 설정은 `줄임말`이며 `치료/힐/heal`은 future-reserved SSOT에 있고 active 명령은 없다. 응급처치의 skill ID/action_type/queued action/전투 결과는 `firstaid`, medicine 저장 ID의 표시명은 의술이다. 붕대와 음식의 numeric `heal` 필드는 일반 회복량으로 유지한다.
 
-의료는 분야 전체, 의술은 proficiency, 응급처치는 붕대 기술, 진료(treat)는 Doctor 서비스, 휴식(rest)은 Bed 서비스, 회복은 HP 증가 결과를 뜻한다. 진료·휴식은 무료·즉시 최대 HP이며 붕대·크레딧·의술 XP·응급처치 Rank와 무관하다. `rules.treat()`와 `rules.rest()` 내부 이름은 유지한다. 향후 치료 기술은 `치료`(힐/heal, 예정 ID heal)로 정신력을 소비해 자신 또는 다른 플레이어를 치료하도록 설계할 예정이다. 단독 입력은 자신, `플레이어이름 치료/힐/heal`은 타인을 대상으로 하는 UX 후보이며 평상시·전투 중 사용을 예정한다. 현재 정신력·Heal command·대상 회복 rule·queue·Rank·Web 버튼은 구현하지 않았으며 도움말의 활성 명령에도 넣지 않는다. 표시명 변경으로 persistent medicine XP/Rank와 profile version 8은 바뀌지 않는다.
+의료는 분야 전체, 의술은 proficiency, 응급처치는 붕대 기술, 진료(treat)는 Doctor 서비스, 휴식(rest)은 Bed 서비스, 회복은 HP 증가 결과를 뜻한다. 진료·휴식은 무료·즉시 최대 HP이며 붕대·보급칩·의술 XP·응급처치 Rank와 무관하다. `rules.treat()`와 `rules.rest()` 내부 이름은 유지한다. 향후 치료 기술은 `치료`(힐/heal, 예정 ID heal)로 정신력을 소비해 자신 또는 다른 플레이어를 치료하도록 설계할 예정이다. 단독 입력은 자신, `플레이어이름 치료/힐/heal`은 타인을 대상으로 하는 UX 후보이며 평상시·전투 중 사용을 예정한다. 현재 정신력·Heal command·대상 회복 rule·queue·Rank·Web 버튼은 구현하지 않았으며 도움말의 활성 명령에도 넣지 않는다. 표시명 변경으로 persistent medicine XP/Rank와 profile version 8은 바뀌지 않는다.
 
 `commands/help_pages.py`의 명시적 여섯 분류 순서·query·대표 명령과 각 command의 help-only `category`가 root/분류/detail을 구성한다. 입력할 수 없는 '8방향 이동'은 text role이다. query는 casefold → 글로벌 단축어 → 실제 command key/alias → 방향/영문 alias → category/topic 순서로 판정한다. 파티 detail이 category보다 우선하며 parser 상세는 `입력 도움말`로 분리했다. 승강기 내부 명령은 registry에 넣지 않고 이동 분류에서 현재 stop SSOT로 안내한다.
 
@@ -225,7 +237,7 @@ Enemy가 HP/max HP, alive/respawning 상태, respawn_at, claim, claim_last_activ
 
 위협도는 실제 깎은 HP만큼 증가한다. 적은 같은 방·접속 중·해당 적을 공격 중인 탐사자 중 위협도가 가장 높은 사람을 선택하고 동률은 캐릭터 ID 순서로 해결한다. 강타는 7.5초 재사용 대기시간, 회복은 다음 개인 공격을 대체하며, 방어는 개인 공격을 유지하고 다음 공격 간격 동안 받는 피해를 줄인다.
 
-보스의 예고/돌진은 공유 enemy_round를 따른다. 능선 보스는 2·5차례에 예고하고 3·6차례에 돌진하며 밀림 보스는 3·7차례에 예고하고 4·8차례에 돌진한다. 주기는 Enemy 정의의 `special_period`를 사용한다. 도망·패배·접속 종료·장소 이탈 시 전투 소속과 위협도·기여도를 정리한다. 일반 이동은 전투 중 거부하며, 강제 이동도 이동 후 정리한다. 패배 시 장비·경험치·소지품·진행은 보존하고 최대 10크레딧을 잃으며 의무실에서 체력 1로 의식을 되찾는다. 일반 치료·휴식은 이후 플레이어가 직접 사용한다.
+보스의 예고/돌진은 공유 enemy_round를 따른다. 능선 보스는 2·5차례에 예고하고 3·6차례에 돌진하며 밀림 보스는 3·7차례에 예고하고 4·8차례에 돌진한다. 주기는 Enemy 정의의 `special_period`를 사용한다. 도망·패배·접속 종료·장소 이탈 시 전투 소속과 위협도·기여도를 정리한다. 일반 이동은 전투 중 거부하며, 강제 이동도 이동 후 정리한다. 패배 시 장비·경험치·소지품·진행은 보존하고 최대 10칩을 잃으며 의무실에서 체력 1로 의식을 되찾는다. 일반 치료·휴식은 이후 플레이어가 직접 사용한다.
 
 ## 점유와 보상 자격
 
@@ -237,15 +249,15 @@ Enemy가 HP/max HP, alive/respawning 상태, respawn_at, claim, claim_last_activ
 
 처치 시 실제 피해 기여가 있고, 같은 방에서 접속한 채 교전 중이며, 최근 15초 내 행동한 탐사자만 적격이다. 파티에 있다는 이유로 원격·AFK·미참여 멤버에게 지급하지 않는다. 도망 후 재참여하면 이전 기여는 이어받지 않는다.
 
-경험치·크레딧은 적격 그룹의 피해 합계 비중으로 나누고, 파티 안에서는 적격 멤버끼리 균등 분배한다. 일반 적은 점유 그룹만 존재하므로 그 그룹이 전체 풀을 받는다. 각 단계에서 최대 나머지법으로 정수 총량을 보존하며, 같은 나머지는 그룹 키/캐릭터 ID 오름차순으로 결정한다. 보스 처치 플래그도 적격 탐사자 각각에게만 적용한다. 막타와 회수 명령자는 보상 자격을 독점하지 않는다.
+경험치·보급칩은 적격 그룹의 피해 합계 비중으로 나누고, 파티 안에서는 적격 멤버끼리 균등 분배한다. 일반 적은 점유 그룹만 존재하므로 그 그룹이 전체 풀을 받는다. 각 단계에서 최대 나머지법으로 정수 총량을 보존하며, 같은 나머지는 그룹 키/캐릭터 ID 오름차순으로 결정한다. 보스 처치 플래그도 적격 탐사자 각각에게만 적용한다. 막타와 회수 명령자는 보상 자격을 독점하지 않는다.
 
 ## 시체·아이템 배정·바닥 전리품
 
-사망 전이는 HP 감소, alive→respawning, 경험치·크레딧·임무 보상, 드롭 추첨 한 번과 Corpse 한 개 생성을 같은 트랜잭션으로 처리한다. state와 HP 조건을 다시 검사하여 중복 호출을 무시한다. DB 실패 시 Evennia의 Attribute/identity/방 내용 캐시도 복구하고 화면 전송·예약 작업은 성공 후 처리한다.
+사망 전이는 HP 감소, alive→respawning, 경험치·임무 보상과 시체 화폐 snapshot, 드롭 추첨 한 번과 Corpse 한 개 생성을 같은 트랜잭션으로 처리한다. state와 HP 조건을 다시 검사하여 중복 호출을 무시한다. DB 실패 시 Evennia의 Attribute/identity/방 내용 캐시도 복구하고 화면 전송·예약 작업은 성공 후 처리한다.
 
-Corpse는 실제 방 객체이며 source spawn/enemy, created_at, decay_at과 loot entries를 저장한다. 회수부품 1개와 기존 확률 장비 드롭은 처치 시 한 번 결정된다. 경험치·크레딧은 즉시 지급하지만 아이템은 소지품에 자동 지급하지 않는다.
+Corpse는 실제 방 객체이며 source spawn/enemy, created_at, decay_at과 loot entries를 저장한다. 회수부품 1개와 기존 확률 장비 드롭은 처치 시 한 번 결정된다. 경험치만 즉시 지급하고 보급칩·아이템은 소지품에 자동 지급하지 않는다. 보급칩은 그룹별 currency entry와 eligible_players/remaining_shares로 시체에 남는다.
 
-공용 보스도 시체는 하나다. 각 아이템은 정렬된 보상 그룹의 누적 피해 비중 구간에, 전체 드롭 개수로 나눈 등간격 중점을 대응시켜 그룹을 결정한다. 예를 들어 50:50 두 그룹에 두 아이템이면 각각 하나씩 배정된다. 아이템 수가 적으면 기여 비중이 낮은 그룹은 아이템을 못 받을 수 있다. 경험치·크레딧 비례 배분과는 별개이며 첫 회수자가 전체 드롭을 갖지 않는다.
+공용 보스도 시체는 하나다. 각 아이템은 정렬된 보상 그룹의 누적 피해 비중 구간에, 전체 드롭 개수로 나눈 등간격 중점을 대응시켜 그룹을 결정한다. 예를 들어 50:50 두 그룹에 두 아이템이면 각각 하나씩 배정된다. 아이템 수가 적으면 기여 비중이 낮은 그룹은 아이템을 못 받을 수 있다. 경험치·보급칩 비례 배분과는 별개이며 첫 회수자가 전체 드롭을 갖지 않는다.
 
 선정된 파티의 실제 참여자를 가입 순서로 정렬하고 Party.round_robin_cursor를 적용한다. 아이템 한 개마다 순번을 증가시킨다. 현재 지원 모드는 round_robin뿐이며 `순번 파티분배`로 설정한다. free_for_all·need_greed·leader 방식과 관련 UI는 구현하지 않았다.
 
@@ -318,7 +330,7 @@ Room `requires.message`는 이동 실패 안내, optional `requires.observe_mess
 
 ### Compact 정보 조회
 
-`compact(title, *lines, summary=...)`는 기존 Text 조각을 보존하면서 제목과 요약을 한 줄에 놓고 첫 내용까지 빈 줄을 추가하지 않는다. 기존 `sheet`는 Room·대상 보기 등에 남긴다. 상태는 전투 수치·특성·장비 요약, 능력은 기본값과 투자값, 장비는 슬롯별 보정으로 역할을 나눈다. 소지품은 비어 있지 않은 분류마다 한 행을 만들고, 기술은 SKILLS의 설명과 다음 조건을 그대로 한 항목에 표시한다. R은 Rank, C는 크레딧이며 비용 화면에 단위 안내를 둔다. 임무는 완료 수/전체 단계와 ASCII `+`(완료), `>`(현재), `-`(대기)로 구분한다.
+`compact(title, *lines, summary=...)`는 기존 Text 조각을 보존하면서 제목과 요약을 한 줄에 놓고 첫 내용까지 빈 줄을 추가하지 않는다. 기존 `sheet`는 Room·대상 보기 등에 남긴다. 상태는 전투 수치·특성·장비 요약, 능력은 기본값과 투자값, 장비는 슬롯별 보정으로 역할을 나눈다. 소지품은 비어 있지 않은 분류마다 한 행을 만들고, 기술은 SKILLS의 설명과 다음 조건을 그대로 한 항목에 표시한다. R은 Rank이며 모든 화폐 비용은 공통 formatter로 칩 단위를 표시한다. 임무는 완료 수/전체 단계와 ASCII `+`(완료), `>`(현재), `-`(대기)로 구분한다.
 
 기본 도움말은 registry 순서와 category를 사용한 명령 지도다. `명령이름 도움말`은 같은 metadata의 summary/usage/aliases를 표시하며 등록 별칭과 공용 단축어로도 조회할 수 있다. 상세 조회에서 단축어를 해석하는 것은 도움말 대상 검색이며 이동이나 게임 입력 parser는 바꾸지 않는다. `능력 도움말`은 ATTRIBUTES의 설명을 추가로 표시하고 기존 웹 성장 패널 tooltip도 유지한다.
 
@@ -330,7 +342,7 @@ Room `requires.message`는 이동 실패 안내, optional `requires.observe_mess
 
 대상 보기와 `pz_state.inventory[].equip_action`도 이 슬롯 대응을 사용한다. 웹은 전달된 행동을 기존 텍스트 명령 버튼으로 전송하며 장비 이름 목록을 따로 관리하지 않는다. `stats()`와 장비 화면은 양쪽 슬롯의 공격·방어를 모두 합산하므로 사냥창의 방어와 경량전술조끼의 공격도 적용된다.
 
-장비 수치·크레딧 구매·드롭 경로는 [README 장비 표](../README.md#장비와-획득-경로)를 따른다. 두 번째 지역도 기존 장비를 활용하며 새 무기·방어구를 추가하지 않는다. 기존 장비 ID와 획득 경로를 유지한다.
+장비 수치·보급칩 구매·드롭 경로는 [README 장비 표](../README.md#장비와-획득-경로)를 따른다. 두 번째 지역도 기존 장비를 활용하며 새 무기·방어구를 추가하지 않는다. 기존 장비 ID와 획득 경로를 유지한다.
 
 ## 아이템 이전·소비·보관
 
@@ -348,7 +360,7 @@ equipment 슬롯은 `None`을 정상 값으로 허용한다. 해제/벗어는 �
 
 ## Region·임무·Gate 확장
 
-`world/content/starter.py`에는 기존 8개 Room/4종 Enemy의 stable ID를 보존한다. `deep_jungle.py`에는 7개 Room/4종 Enemy를 정의한다. `items.py`는 공통 아이템, `shops.py`는 세 상점 catalog와 가격을 담고 `content/__init__.py`가 기존 `from world.content import ROOMS, ENEMIES, ITEMS` 경로를 유지한다. `REGIONS[region].rooms`는 각 지역 파일의 Room key에서 파생되므로 Room↔Region 소속을 두 곳에 입력하지 않는다. `ROOM_REGION`은 이 정의에서 파생된다. ID 충돌·참조 누락·출구 역방향·spawn 충돌은 `content.integrity.errors()`로 검사한다.
+`world/content/starter.py`에는 기존 8개 Room/4종 Enemy의 stable ID를 보존한다. `deep_jungle.py`에는 7개 Room/4종 Enemy를 정의한다. `items.py`는 공통 아이템, `shops.py`는 세 상점의 item ID catalog만 담고 가격은 `items.py`의 value가 소유하며 `content/__init__.py`가 기존 `from world.content import ROOMS, ENEMIES, ITEMS` 경로를 유지한다. `REGIONS[region].rooms`는 각 지역 파일의 Room key에서 파생되므로 Room↔Region 소속을 두 곳에 입력하지 않는다. `ROOM_REGION`은 이 정의에서 파생된다. ID 충돌·참조 누락·출구 역방향·spawn 충돌은 `content.integrity.errors()`로 검사한다.
 
 첫 지역 `dock`~`ridge`의 Room ID, `zone:enemy` spawn ID, 기존 아이템 ID를 바꾸지 않았다. `ridge` 북쪽에 밀림 입구를 연결했다. Spawn을 다른 Room으로 옮길 때는 새 Room의 `spawn_ids[enemy_id]`에 이전 stable tag를 명시하면 동일한 Enemy 객체와 HP를 유지한다. Room의 `requires`는 도착 시 필요한 임무 ID·진행 필드·거절 문구를 선언한다. `Explorer.at_pre_move()`는 이 데이터만 해석하며 지역 이름을 하드코딩하지 않는다. 통신탑은 발전기 복구, 밀림 입구는 첫 임무 보고, 연구구역 외곽은 밀림의 두 표식·신호전지를 확인한 신호 장치 가동을 요구한다. `exits`는 기존 `방향 → Room ID` 형태를 유지해 방향도·웹 버튼·서버 이동이 같은 정의를 읽는다.
 
@@ -402,7 +414,7 @@ Light Source는 strength/range/power_type을, Power Source는 type/capacity_seco
 
 v6부터 사용하는 `light_sources[item_id]`에는 on, power_source, charge_seconds, started_at을 저장한다. v1~v5 migration은 기존 inventory/equipment/storage/quest/growth/combat을 보존하고 빈 light_sources만 보완한다. 켠 동안의 잔량은 `charge_seconds - (now - started_at)`으로 투영한다. tick마다 차감·저장하지 않고 소진 때 한 번 off/0/전원 없음으로 확정한다. 꺼짐·마지막 session 종료·정상 서버 종료에는 잔량을 확정하며 오프라인 동안 사용하지 않는다. 강제 종료로 마지막 종료 hook이 실행되지 않으면 재시작에서 off로 정규화하며 종료 전 정확한 잔량은 보장하지 않는다.
 
-전원 삽입은 inventory 차감과 장치 상태 설정을 world_change transaction에 함께 저장한다. 잔량이 남은 전원은 교체를 거절하고 부분 충전 아이템 회수는 제공하지 않는다. stack 모델에서 마지막 광원을 이전하면 내부 전원은 폐기하고 안내한다. 여분 복사본만 이전할 때는 개인 active 상태를 보존한다. 전원/광원 일반 아이템의 이동 및 기존 장착·임무 아이템 보호는 공통 transfer 규칙을 유지한다.
+전원 삽입은 inventory 차감과 장치 상태 설정을 world_change transaction에 함께 저장한다. 잔량이 남은 전원은 교체를 거절하고 부분 충전 아이템 회수는 제공하지 않는다. stack 모델에서 마지막 광원을 이전하면 내부 전원은 폐기하고 안내한다. lighting.discard_device_state_if_unowned는 일반 전달·버리기·컨테이너 보관·판매가 마지막 복사본을 잃을 때 light_sources를 제거하는 공통 소유권 규칙이다. 판매 후 재구매해도 과거 전원/잔량은 부활하지 않는다. 여분 복사본만 이전할 때는 개인 active 상태를 보존한다. 전원/광원 일반 아이템의 이동 및 기존 장착·임무 아이템 보호는 공통 transfer 규칙을 유지한다.
 
 공용 시설은 WorldLifecycle의 별도 `db.facilities = {"version": 1, "states": {"outpost_power": bool}}`에 저장하며 개인 generator_fixed에서 추론하지 않는다. `content/facilities.py`의 FACILITIES는 ID/초기값, Room `facility_lights`는 조명 연결, 저장 state는 현재 on/off를 소유한다. FACILITY_STATE_VERSION과 순수 new/normalize helper는 legacy bare dict의 True를 보존하고 None/빈 값에 기본값을 보완한다. 지원하지 않는 미래 버전은 오류로 중단하며 덮어쓰지 않는다. light_for 조회는 정규화 사본만 읽고 lifecycle/mutation transaction에서만 변환을 저장한다. 조명은 양수 strength와 always_on/power 중 정확히 하나를 선언한다.
 

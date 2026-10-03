@@ -11,12 +11,28 @@
 5. 세 판매자에게 `상품`/`무기상 상품` 및 구매를 실행한다. 상점/메뉴/shop은 command가 아니다. 다른 본부 서비스와 가격·정산율을 확인한다.
 6. 도움말 root의 여섯 분류, 이동/전투/아이템/성장/교류/편의 도움말, 소·ㅂㄷ 도움말, 파티 명령 detail, 입력 도움말을 확인한다. 8방향 이동은 command 색을 사용하지 않는다.
 7. v7 fixture에서 heal Rank/예약 action과 old command 정의를 저장한 뒤 v8을 로드한다. 새 예약 이름 충돌은 _개인[번호]로 보존하고 nested 참조도 연결되어야 한다. 소/ㅂㄷ/치료/힐/heal 신규 이름은 거절하며 가는 개인 이름으로 등록 가능하다. v7의 힐 정의와 exact nested 참조는 힐_개인[번호]로 보존하되 채팅·대상 문자열은 유지한다. 기존 줄임말/묶음/전체 삭제의 직접 2단계 계약도 확인한다.
-8. 밀림 또는 3층에서 로그아웃/로그인하면 대기실에서 시작하고 HP/XP/Credits/소지품/성장/임무/방문/줄임말이 유지되어야 한다. live-session reload 복원은 기존 위치를 보존한다.
+8. 밀림 또는 3층에서 로그아웃/로그인하면 대기실에서 시작하고 HP/XP/보급칩/소지품/성장/임무/방문/줄임말이 유지되어야 한다. live-session reload 복원은 기존 위치를 보존한다.
 9. 최종 collectstatic 이후 desktop·중간 breakpoint·390px browser에서 FIELD GUIDE 소지품, 응급처치/도망, inventory 붕대 사용, 상품/진료, 승강기 자동 하차/내려 버튼을 실행한다. compass와 SURROUNDINGS 순서, console error/warning·가로 overflow·한글 clipping을 확인한다. OS IME는 별도 실제 입력 검증이다.
 
 자동 검사는 `world.test_vocabulary`·`tests.test_vocabulary`와 기존 parser/줄임말/의료/상점/승강기/본부 suite, 전체 check/test, Quick live smoke를 사용한다. Full은 production timer와 restart/progression의 수동 검증이며 이번 변경의 실제 실행 여부는 PR 검증 기록을 따른다.
 
 능력·경험치·Web 성장 화면의 숙련은 의술(medicine), 기술은 응급처치(firstaid)로 구분한다. 실제 붕대 회복에서만 의술 XP가 증가하며 진료·휴식에서는 증가하지 않아야 한다. 치료/힐/heal은 현재 command·도움말 목록·Web 버튼에 없어야 한다. profile version은 8이고 저장된 medicine XP/Rank는 동일해야 한다.
+
+## 현재 절차: 보급칩 경제
+
+1. 상태·소지품에서 칩 잔액을 확인한다. 빈 inventory도 잔액이 표시되고 칩 보기에는 보급국 설명이 나온다.
+2. 같은 방의 일반 Player 두 명으로 1칩/20칩/전액 전달, 부분/전액 버리기, 칩 2 가져와 전액 회수를 실행한다. 0·음수·소수·초과 금액·전투·자기 자신·숨은/원격 대상은 실패하며 상태가 보존되어야 한다.
+3. 일반 적을 처치한다. XP·kill은 즉시 증가하지만 잔액은 그대로이고 시체에는 정확한 칩이 남아야 한다. 시체에서 칩 모두 가져 후에만 잔액이 늘어난다.
+4. 파티/공용 보스에서 각 그룹 몫과 참여자 snapshot을 확인한다. 한 명의 회수로 각 참여자가 분배받고 부분 회수 후 남은 몫의 합계가 quantity와 같아야 한다. 가입/탈퇴/리더 변경/해체로 옛 몫이 바뀌면 안 된다.
+5. 시체 30초 → ground와 보호 120초를 실제 Full에서 확인한다. 남은 quantity/권리는 유지되고 outsider는 만료 전 차단, 만료 후 자유 획득한다. 기존 item 순번·광원·번호 선택도 함께 본다.
+6. 무기상 상품·강철마체테 가치·무기상에게 강철마체테 판매를 실행한다. 60칩 구매가/30칩 매입가이며 장착한 복사본은 남긴다. 붕대 모두 판매, 잘못된 상인·가격 없는 물품·임무 물품의 거절과 불변을 확인한다.
+7. desktop/390px에서 상태·소지품 잔액, 상품 가격, 가치/판매 action, 시체/ground 화폐·기존 item·take button을 실행한다. 파티 지급 후 양쪽 state, 재로그인 잔액, console error/warning·가로 overflow를 확인한다.
+
+후속 리뷰 검증에서는 4명에게 8칩(각 2칩)을 배정한 뒤 7칩 회수로 남은 몫이 한 명의 1칩뿐이어도 원래 참여자가 마지막 분배를 trigger하는지 확인한다. outsider는 보호 중 거절되고 offline 수령자는 DB에 지급되며, 수령 객체 누락 시 entry/모든 잔액이 그대로여야 한다. decay 전후 자격·잔여 몫·기한을 비교하고 expiry 후 outsider 자유 획득도 확인한다. 초기 shares currency와 legacy item 조회가 저장을 바꾸지 않는지 확인한다.
+
+Web에서는 붕대 3개로 기본 판매 4칩/1개와 모두 판매 총 12칩을 구분하고, 강철마체테 3개 중 1개 착용이면 모두 판매 총액이 60칩이며 착용분이 남는지 본다. 마지막 손전등 판매 후 light_sources가 사라지고 재구매 시 전원이 없는지, 여분을 팔 때는 상태가 남는지도 확인한다. 시체/바닥 버튼은 8칩으로 표시하고 칩 8칩처럼 선택자와 금액을 중복하지 않으며 칩/칩 2 명령은 유지해야 한다.
+
+관련 자동 검사는 world.test_economy/tests.test_economy와 기존 reward/loot/targets/shop/regions/text suite다. Quick은 처치 즉시 미지급·2칩 부분 분배·보호/decay·만료 후 회수·가치/판매·재접속을 연결하며 Full은 같은 흐름과 production timing/restart/progression을 검사한다.
 
 ## 과거 단계별 검증 기록과 당시 절차
 

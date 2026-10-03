@@ -26,6 +26,13 @@ def projected(profile, identity, now):
     return state
 
 
+def discard_device_state_if_unowned(profile, identity):
+    """마지막 복사본의 소유권 상실을 확정한다. 시간 투영이나 다른 장치는 건드리지 않는다."""
+    if profile["inventory"].get(identity, 0):
+        return False
+    return profile.get("light_sources", {}).pop(identity, None) is not None
+
+
 def normalize(profile, now, *, turn_off=False):
     """잔량이 변했다는 이유로 매 tick 저장하지 않는다. 소진/소유권/꺼짐만 확정한다."""
     changed = False
@@ -34,8 +41,7 @@ def normalize(profile, now, *, turn_off=False):
         if turn_off and current["on"]:
             current.update(on=False, started_at=None)
         if not profile["inventory"].get(identity, 0):
-            del profile["light_sources"][identity]
-            changed = True
+            changed |= discard_device_state_if_unowned(profile, identity)
         elif (saved.get("on") and not current["on"]) or (
             saved.get("power_source") and not current["power_source"]
         ):

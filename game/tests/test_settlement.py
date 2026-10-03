@@ -10,7 +10,7 @@ from typeclasses.explorers import Explorer
 from typeclasses.interactables import INTERACTABLES, SettlementOfficer
 from world import rules
 from world.bootstrap import build_world, stale_definitions
-from world.content import SALVAGE_CREDIT_RATE, SHOP_CATALOGS
+from world.content import ITEMS, SALVAGE_CREDIT_RATE
 from world.content.integrity import errors
 from world.observation import context_for
 from world.room_hints import render
@@ -55,7 +55,7 @@ class SettlementCommandsTests(SettlementFixture, WorldCommandTest):
             with self.subTest(command=raw):
                 self.prepare()
                 before = deepcopy(self.char1.profile())
-                self.assertIn(f"{quantity * SALVAGE_CREDIT_RATE}크레딧", self.command(raw))
+                self.assertIn(f"{quantity * SALVAGE_CREDIT_RATE}칩", self.command(raw))
                 before["credits"] += quantity * SALVAGE_CREDIT_RATE
                 if quantity == 7:
                     del before["inventory"]["scrap"]
@@ -65,7 +65,7 @@ class SettlementCommandsTests(SettlementFixture, WorldCommandTest):
         for raw in ("환율", "정산관 환율", "자원 정산관 환율", "정산관 rate"):
             before = deepcopy(self.char1.profile())
             with patch.object(self.char1, "save_profile") as save:
-                self.assertIn(f"{SALVAGE_CREDIT_RATE}크레딧", self.command(raw))
+                self.assertIn(f"{SALVAGE_CREDIT_RATE}칩", self.command(raw))
                 save.assert_not_called()
             self.assertEqual(self.char1.profile(), before)
 
@@ -75,7 +75,7 @@ class SettlementCommandsTests(SettlementFixture, WorldCommandTest):
                     "회수부품 999개 교환", "회수부품 모두 1개 교환", "붕대 교환",
                     "강철마체테 교환", "강화 조끼 교환"):
             before = deepcopy(self.char1.profile())
-            self.assertNotIn("크레딧을 받았다", self.command(raw))
+            self.assertNotIn("칩을 받았다", self.command(raw))
             self.assertEqual(self.char1.profile(), before)
         self.char1.change(lambda p: p["inventory"].pop("scrap", None))
         before = deepcopy(self.char1.profile())
@@ -110,7 +110,7 @@ class SettlementCommandsTests(SettlementFixture, WorldCommandTest):
         self.officer.locks.add("view:false()")
         before = deepcopy(self.char1.profile())
         for raw in ("환율", "회수부품 교환", "정산관 환율", "정산관에게 회수부품 교환"):
-            self.assertNotIn("크레딧을 받았다", self.command(raw))
+            self.assertNotIn("칩을 받았다", self.command(raw))
             self.assertEqual(self.char1.profile(), before)
         self.assertEqual(multiplayer_state(self.char1)["interactables"], [])
         self.assertEqual(render(context_for(self.char1)), "")
@@ -189,10 +189,10 @@ class SettlementWorldTests(SettlementFixture, WorldCommandTest):
         for raw in ("서", "서", "북"):
             self.command(raw)
         self.assertEqual(self.char1.zone, "salvage_office")
-        self.assertIn(f"{SALVAGE_CREDIT_RATE}크레딧", self.command("정산관 환율"))
+        self.assertIn(f"{SALVAGE_CREDIT_RATE}칩", self.command("정산관 환율"))
         self.command("회수부품 6개 교환")
         self.assertNotIn("scrap", self.char1.profile()["inventory"])
-        self.assertEqual(self.char1.profile()["credits"], SHOP_CATALOGS["weapon"]["blade"])
+        self.assertEqual(self.char1.profile()["credits"], ITEMS["blade"]["value"])
         for raw in ("남", "동", "동", "승강기", "3층", "동", "북"):
             self.command(raw)
         self.assertEqual(self.char1.zone, "weapon_shop")

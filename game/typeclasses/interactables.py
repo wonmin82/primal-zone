@@ -4,6 +4,7 @@ from evennia.objects.objects import DefaultObject
 from world import rules
 from world import text as ft
 from world.content import ENEMIES, ITEMS, ROOMS, SALVAGE_CREDIT_RATE, SHOP_CATALOGS
+from world.currency import format_currency
 from world.distant_presentation import DistantPresence, DistantPresenceMixin
 from world.progression import ATTRIBUTES, SKILLS
 
@@ -85,7 +86,7 @@ class Commander(ActionObject):
                 "\n통신탑에서 구조 신호가 퍼져 나간다.\n보고를 마치고 ",
                 ft.token("reward", f"경험치 {after['xp'] - before['xp']}"),
                 ", ",
-                ft.token("reward", f"{after['credits'] - before['credits']}크레딧"),
+                ft.token("reward", format_currency(after["credits"] - before["credits"])),
                 ", ",
                 ft.item("bandage"),
                 f" {after['inventory'].get('bandage', 0) - before['inventory'].get('bandage', 0)}개를 받았다.",
@@ -239,7 +240,7 @@ class Instructor(ActionObject):
             caller.msg(
                 ft.text(
                     ft.token("npc", self.key),
-                    "\n\n  전투 기록을 분석하고 훈련 계획을 다시 짜 드리지요.\n  재훈련은 무료입니다. 기본 Rank 1은 유지하며 학습 크레딧은 반환하지 않습니다.\n\n",
+                    "\n\n  전투 기록을 분석하고 훈련 계획을 다시 짜 드리지요.\n  재훈련은 무료입니다. 기본 Rank 1은 유지하며 학습 보급칩은 반환하지 않습니다.\n\n",
                     ft.actions(self.actions),
                 )
             )
@@ -296,7 +297,7 @@ class SettlementOfficer(ActionObject):
     semantic_role = "npc"
     detectability = "conspicuous"
     presence = "탐사에서 회수한 물자를 확인하며 정산을 준비하고 있다."
-    description = "회수부품을 크레딧으로 정산하는 담당자다."
+    description = "회수부품을 보급칩으로 정산하는 담당자다."
     actions = ("환율", "교환")
 
     available = _service_available
@@ -326,7 +327,7 @@ class SettlementOfficer(ActionObject):
         if not ROOMS.get(caller.zone, {}).get("safe", False):
             raise rules.RuleError("안전한 곳에서만 자원을 정산할 수 있습니다.")
         if action == "환율":
-            caller.msg(ft.text(ft.item("scrap"), f" 1개 → {SALVAGE_CREDIT_RATE}크레딧"))
+            caller.msg(ft.text(ft.item("scrap"), f" 1개 → {format_currency(SALVAGE_CREDIT_RATE)}"))
             return
 
         def settle(profile):
@@ -336,15 +337,15 @@ class SettlementOfficer(ActionObject):
             return quantity, rules.settle_salvage(profile, quantity)
 
         quantity, earned = caller.change(settle)
-        caller.msg(ft.text(ft.item("scrap"), f" {quantity}개를 정산했다. {earned}크레딧을 받았다."))
+        caller.msg(ft.text(ft.item("scrap"), f" {quantity}개를 정산했다. {format_currency(earned)}을 받았다."))
 
 
 class Shopkeeper(ActionObject):
     semantic_role = "npc"
     detectability = "conspicuous"
     presence = "판매대에서 탐사 장비와 보급품을 정리하고 있다."
-    description = "탐사자를 위한 물품을 크레딧으로 판매하는 상인이다."
-    actions = ("대화", "상품", "구매")
+    description = "탐사자를 위한 물품을 보급칩으로 판매하는 상인이다."
+    actions = ("대화", "상품", "구매", "가치", "판매")
 
     def available(self, caller, observed_at=None):
         return _service_available(self, caller, observed_at) and self.db.shop_id in SHOP_CATALOGS
@@ -352,12 +353,25 @@ class Shopkeeper(ActionObject):
     def web_actions(self, caller, target, observed_at=None):
         if not self.available(caller, observed_at):
             return []
-        return [
+        profile = caller.profile_snapshot()
+        actions = [
             {"label": "상품", "command": target + " 상품"},
-            *[{"label": f"{ITEMS[item]['name']} · {price}C 구매",
+            *[{"label": f"{ITEMS[item]['name']} · {format_currency(rules.purchase_price(item))} 구매",
                "command": f"{target}에게 {ITEMS[item]['name']} 구매"}
-              for item, price in SHOP_CATALOGS[self.db.shop_id].items()],
+              for item in SHOP_CATALOGS[self.db.shop_id]],
+            *[{"label": ITEMS[item]["name"] + " 가치", "command": f"{target}에게 {ITEMS[item]['name']} 가치"}
+              for item in SHOP_CATALOGS[self.db.shop_id]],
         ]
+        for item in SHOP_CATALOGS[self.db.shop_id]:
+            quantity = profile["inventory"].get(item, 0) - sum(item == identity for identity in profile["equipment"].values())
+            if not ITEMS[item]["transferable"] or quantity <= 0:
+                continue
+            name, price = ITEMS[item]["name"], rules.resale_price(item)
+            actions.append({"label": f"{name} · {format_currency(price)} 판매", "command": f"{target}에게 {name} 판매"})
+            if quantity >= 2:
+                actions.append({"label": f"{name} 모두 판매 · 총 {format_currency(quantity * price)}",
+                                "command": f"{target}에게 {name} 모두 판매"})
+        return actions
 
     def return_appearance(self, looker, **kwargs):
         from world.targets import labels, room_objects
@@ -366,7 +380,7 @@ class Shopkeeper(ActionObject):
         if self.available(looker):
             target = labels(room_objects(looker))[self.id]
             usage = ft.join([ft.usage(command, set(self.actions)) for command in (
-                f"{target} 상품", f"{target}에게 물건이름 구매",
+                f"{target} 상품", f"{target}에게 물건이름 구매", f"{target}에게 물건이름 가치", f"{target}에게 물건이름 판매",
             )], " · ")
         return ft.sheet(ft.token("npc", self.key), self.description, "", usage)
 
@@ -382,8 +396,19 @@ class Shopkeeper(ActionObject):
         elif action == "구매":
             caller.change(lambda profile: rules.buy(profile, self.db.shop_id, args))
             caller.msg(ft.text(ft.item(args), " 1개를 받아 소지품에 넣었다."))
+        elif action == "가치":
+            if args not in SHOP_CATALOGS[self.db.shop_id]:
+                raise rules.RuleError("취급하지 않는 물건입니다.")
+            caller.msg(ft.text(ft.token("npc", self.key), "은 ", ft.item(args), "의 가치를 ",
+                               ft.token("reward", format_currency(rules.purchase_price(args))), "으로 평가한다.\n매입가는 ",
+                               ft.token("reward", format_currency(rules.resale_price(args))), "이다."))
+        elif action == "판매":
+            item, all_items = args
+            quantity, proceeds = caller.change(lambda profile: rules.sell(profile, self.db.shop_id, item, all_items=all_items))
+            caller.msg(ft.text(ft.token("npc", self.key), "이 ", ft.item(item), f" {quantity}개를 ",
+                               ft.token("reward", format_currency(proceeds)), "에 매입했다."))
         else:
-            caller.msg(ft.text(ft.token("npc", self.key), "\n\n필요한 물품은 판매 목록을 살펴보세요. 크레딧으로 하나씩 구매할 수 있습니다."))
+            caller.msg(ft.text(ft.token("npc", self.key), "\n\n필요한 물품은 판매 목록을 살펴보세요. 보급칩으로 하나씩 구매할 수 있습니다."))
 
 
 class Pathfinder(ActionObject):
@@ -404,7 +429,7 @@ class Pathfinder(ActionObject):
             body = ft.text(
                 ft.token("success", "밀림의 탐사를 마쳤다."), " 보고를 마치고 ",
                 ft.token("reward", f"경험치 {after['xp'] - before['xp']}"), ", ",
-                ft.token("reward", f"{after['credits'] - before['credits']}크레딧"),
+                ft.token("reward", format_currency(after["credits"] - before["credits"])),
                 ", ", ft.item("bandage"), " 3개를 받았다.",
             )
         else:

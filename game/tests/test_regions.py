@@ -289,7 +289,7 @@ class RegionTests(WorldCommandTest):
         boss.finish_death(self.char1, now=105, rng=Random(1))
         self.assertEqual([p.profile()["xp"] for p in (self.char1, self.char2, third)], [93, 31, 31])
         self.assertEqual(
-            sum(p.profile()["credits"] - 20 for p in (self.char1, self.char2, third)), 58
+            sum(p.profile()["credits"] - 20 for p in (self.char1, self.char2, third)), 0
         )
         self.assertTrue(
             all(
@@ -299,7 +299,7 @@ class RegionTests(WorldCommandTest):
         )
         self.assertEqual(len(room_loot(self.rooms["jungle_nest"])), 1)
         entries = room_loot(self.rooms["jungle_nest"])[0].db.entries
-        self.assertEqual(len(entries), 2)
+        self.assertEqual(len(entries), 4)
         self.assertEqual(
             {entry["reserved_player"] for entry in entries if entry["reserved_player"]},
             {self.char1.id},
@@ -309,6 +309,11 @@ class RegionTests(WorldCommandTest):
         )
         boss.finish_death(self.char1, now=105, rng=Random(1))
         self.assertEqual(len(room_loot(self.rooms["jungle_nest"])), 1)
+        from typeclasses.loot import take_loot
+
+        take_loot(self.char1, now=106)
+        take_loot(self.char2, now=106)
+        self.assertEqual(sum(p.profile()["credits"] - 20 for p in (self.char1, self.char2, third)), 58)
         self.char1.location = self.rooms["jungle_edge"]
         self.char1.execute_cmd("선발대 길잡이 대화")
         self.assertTrue(self.char1.profile()["quests"]["deep_jungle"]["claimed"])

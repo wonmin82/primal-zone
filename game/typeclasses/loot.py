@@ -10,7 +10,10 @@ from evennia.utils.dbserialize import deserialize
 from world import rules
 from world import text as ft
 from world.content import ENEMIES, ITEMS, find_id
+from world.content.economy import CURRENCY
+from world.currency import currency_request, format_currency
 from world.distant_presentation import DistantPresenceMixin
+from world.loot_assets import asset_name, asset_text, currency_payouts, normalize_entry
 from world.multiplayer import (
     CORPSE_TTL_SECONDS,
     LOOT_PROTECTION_SECONDS,
@@ -55,7 +58,8 @@ def build_entries(enemy, groups, now, rng=None):
             assigned = members[0]
         entries.append(
             {
-                "item": item,
+                "kind": "item",
+                "id": item,
                 "quantity": 1,
                 "reserved_party": party.id if party else None,
                 "reserved_player": identity if kind == "player" else None,
@@ -63,12 +67,28 @@ def build_entries(enemy, groups, now, rng=None):
                 "protection_until": now + LOOT_PROTECTION_SECONDS,
             }
         )
+    allocation = rules.reward_allocation(definition["currency"], groups)
+    for group, members in sorted(groups.items()):
+        shares = {identity: allocation[identity] for identity in members if allocation[identity] > 0}
+        quantity = sum(shares.values())
+        if not quantity:
+            continue
+        kind, identity = group.split(":")
+        entries.append({
+            "kind": "currency", "id": CURRENCY["id"], "quantity": quantity,
+            "eligible_players": sorted(members), "remaining_shares": shares,
+            "reserved_party": int(identity) if kind == "party" else None,
+            "reserved_player": int(identity) if kind == "player" else None,
+            "assigned_player": None, "protection_until": now + LOOT_PROTECTION_SECONDS,
+        })
     return entries
 
 
-def recipient_for(entry, caller, now):
+def recipient_for_item(entry, caller, now):
+    """item 순번 배정의 지급 대상. currency의 트리거 권한과 구분한다."""
     from typeclasses.parties import party_for
 
+    entry = normalize_entry(entry)
     if now >= entry["protection_until"]:
         return caller
     party = party_for(caller)
@@ -76,6 +96,13 @@ def recipient_for(entry, caller, now):
         party and party.id == entry["reserved_party"]
     )
     return object_by_id(entry["assigned_player"]) if allowed else None
+
+
+def can_take_entry(entry, caller, now):
+    entry = normalize_entry(entry)
+    if entry["kind"] == "currency":
+        return now >= entry["protection_until"] or caller.id in entry["eligible_players"]
+    return recipient_for_item(entry, caller, now) is not None
 
 
 def room_loot(room, corpse=True):
@@ -91,14 +118,15 @@ def room_loot(room, corpse=True):
 
 def create_dropped_loot(room, entries, source_spawn=None):
     """직접 버리기와 시체 decay가 같은 바닥 물건 표현을 사용한다."""
-    dropped = create_object(DroppedLoot, key=ITEMS[entries[0]["item"]]["name"], location=room)
+    entries = [normalize_entry(entry) for entry in entries]
+    dropped = create_object(DroppedLoot, key=asset_name(entries[0]), location=room)
     dropped.db.entries = entries
     dropped.db.source_spawn = source_spawn
     return dropped
 
 
 def take_loot(caller, item=None, corpse=True, now=None, *, request=None):
-    """선택 범위/수량만 확장한다. 지급 권한은 recipient_for 한 곳에서 판단한다."""
+    """선택과 트리거 권한을 검증한 뒤 item 배정 또는 currency 잔여 몫을 지급한다."""
     from world.lifecycle import reconcile_room
     from world.observation import can_inspect_loot, can_perceive, context_for
     from world.target_presentation import count_word
@@ -112,70 +140,99 @@ def take_loot(caller, item=None, corpse=True, now=None, *, request=None):
     corpse = request.source is not None
     if request.source and request.source.mode == Mode.ALL and request.target.mode != Mode.ALL:
         raise rules.RuleError("여러 시체에서 가져올 대상에도 '모두'를 붙이세요.")
-    item = None if request.target.name == "전리품" else find_id(ITEMS, request.target.name)
-    if item is None and request.target.name != "전리품":
+    currency = currency_request(request.target)
+    item = None if request.target.name == "전리품" or currency else find_id(ITEMS, request.target.name)
+    if item is None and request.target.name != "전리품" and not currency:
         raise rules.RuleError("가져올 아이템 이름을 확인하세요.")
-    # 만료 처리는 회수 실패와 별개로 확정한다. 회수 중에는 yield하지 않는다.
+    # 만료는 회수와 별개로 확정한다. 실제 지급은 한 transaction에서 처리한다.
     reconcile_room(caller.location, now)
     with world_change():
+        if currency:
+            rules.require_peace(caller.profile())
         context = context_for(caller, observed_at=now)
         if not can_inspect_loot(context):
             raise rules.RuleError("지금은 작은 전리품을 식별할 수 없습니다. 광원을 사용하세요.")
         sources = [obj for obj in room_loot(caller.location, corpse) if can_perceive(obj, context)]
         if corpse:
             sources = select(sources, request.source)
+        entries_by_source = {source.id: [normalize_entry(e) for e in source.db.entries] for source in sources}
         candidates = [
             (source, index)
             for source in sources
-            for index, entry in enumerate(source.db.entries)
-            if item is None or entry["item"] == item
+            for index, entry in enumerate(entries_by_source[source.id])
+            if ((currency and entry["kind"] == "currency" and can_take_entry(entry, caller, now))
+                or (not currency and (item is None or entry["kind"] == "item" and entry["id"] == item)))
         ]
-        chosen = select(candidates, request.target)
-        chosen = {(source.id, index) for source, index in chosen}
+        chosen = {(source.id, index) for source, index in select(candidates, request.target)}
         received = []
+        recovered_currency = 0
         for source in sources:
-            entries = deserialize(source.db.entries)
+            if not any(identity == source.id for identity, _ in chosen):
+                continue
             remaining = []
-            for index, entry in enumerate(entries):
-                target = recipient_for(entry, caller, now)
-                if not target or (source.id, index) not in chosen:
+            changed = False
+            for index, entry in enumerate(entries_by_source[source.id]):
+                if (source.id, index) not in chosen or not can_take_entry(entry, caller, now):
                     remaining.append(entry)
                     continue
-                quantity = entry["quantity"] if request.target.mode == Mode.ALL else 1
-                profile = target.profile()
-                rules.add_item(profile, entry["item"], quantity)
-                target.save_profile(profile)
-                received.append((target, entry["item"], quantity))
+                changed = True
+                quantity = (entry["quantity"] if request.target.mode == Mode.ALL
+                            else currency[0] if currency else 1)
+                if quantity > entry["quantity"]:
+                    raise rules.RuleError("선택한 전리품의 보급칩이 부족합니다.")
+                if entry["kind"] == "currency":
+                    rules.require_peace(caller.profile())
+                    protected = now < entry["protection_until"]
+                    shares = entry["remaining_shares"] if protected else {}
+                    payouts = currency_payouts(entry, quantity, caller.id, now)
+                    for identity, amount in payouts.items():
+                        if not amount:
+                            continue
+                        recipient = object_by_id(identity)
+                        if recipient is None:
+                            raise rules.RuleError("보급칩을 받을 탐사자를 확인할 수 없습니다.")
+                        profile = recipient.profile()
+                        profile["credits"] += amount
+                        recipient.save_profile(profile)
+                        received.append((recipient, CURRENCY["id"], amount))
+                    entry["remaining_shares"] = {identity: amount - payouts.get(identity, 0)
+                                       for identity, amount in shares.items() if amount > payouts.get(identity, 0)}
+                    recovered_currency += quantity
+                else:
+                    target = recipient_for_item(entry, caller, now)
+                    profile = target.profile()
+                    rules.add_item(profile, entry["id"], quantity)
+                    target.save_profile(profile)
+                    received.append((target, entry["id"], quantity))
                 if entry["quantity"] > quantity:
                     remaining.append({**entry, "quantity": entry["quantity"] - quantity})
-            source.db.entries = remaining
-            if not corpse and not remaining:
+            if changed:
+                source.db.entries = remaining
+            if changed and not corpse and not remaining:
                 source.delete()
-    if not received:
-        raise rules.RuleError("가져갈 물건이 없거나 다른 탐사자의 보호된 전리품입니다.")
+        if not received:
+            raise rules.RuleError("가져갈 물건이 없거나 다른 탐사자의 보호된 전리품입니다.")
     totals = {}
     for target, identity, quantity in received:
         totals[(target, identity)] = totals.get((target, identity), 0) + quantity
-    own = [
-        ft.text(ft.item(identity), " ", count_word(quantity), " 개")
-        for (target, identity), quantity in totals.items()
-        if target == caller
-    ]
+    own = [ft.text(ft.item(identity), " ", count_word(quantity), " 개")
+           for (target, identity), quantity in totals.items() if target == caller and identity != CURRENCY["id"]]
     if own:
-        items = ft.join(own, "와 ")
-        caller.msg(ft.text("시체를 뒤져 " if corpse else "바닥에서 ", items, "를 챙겼다."))
-    for (target, item_id), quantity in totals.items():
+        caller.msg(ft.text("시체를 뒤져 " if corpse else "바닥에서 ", ft.join(own, "와 "), "를 챙겼다."))
+    if recovered_currency:
+        caller.msg(ft.text("시체에서 " if corpse else "바닥에서 ", ft.token("reward", format_currency(recovered_currency)), "을 회수했다."))
+        caller.msg(ft.join([ft.text(ft.token("player", target.key), " ", ft.token("reward", format_currency(amount)))
+                           for (target, identity), amount in totals.items() if identity == CURRENCY["id"]], " · "))
+    for (target, identity), quantity in totals.items():
         if target != caller:
-            message = ft.text(
-                ft.item(item_id),
-                " ",
-                count_word(quantity),
-                " 개는 이번 순번인 ",
-                ft.token("player", target.key),
-                "에게 돌아갔다.",
-            )
-            caller.msg(message)
+            if identity == CURRENCY["id"]:
+                message = ft.text("전리품 분배로 ", ft.token("reward", format_currency(quantity)), "을 받았다.")
+            else:
+                message = ft.text(ft.item(identity), " ", count_word(quantity), " 개는 이번 순번인 ",
+                                  ft.token("player", target.key), "에게 돌아갔다.")
+                caller.msg(message)
             target.msg(message)
+            target.push_state()
     for obj in caller.location.contents:
         if hasattr(obj, "push_state"):
             obj.push_state()
@@ -210,8 +267,7 @@ class Corpse(DistantPresenceMixin, DefaultObject):
             )
             lines.append(
                 ft.text(
-                    ft.item(entry["item"]),
-                    f" ×{entry['quantity']}",
+                    asset_text(entry),
                     rights,
                     " (회수 가능)" if entry["can_take"] else " (보호 중)",
                 )
@@ -291,8 +347,7 @@ class DroppedLoot(DistantPresenceMixin, DefaultObject):
             )
             lines.append(
                 ft.text(
-                    ft.item(entry["item"]),
-                    f" ×{entry['quantity']}",
+                    asset_text(entry),
                     rights,
                     " (회수 가능)" if entry["can_take"] else " (보호 중)",
                 )
