@@ -290,7 +290,7 @@ class Bed(ActionObject):
 
     def act(self, caller, action, args):
         caller.change(lambda profile: rules.rest(profile, safe=ROOMS.get(caller.zone, {}).get("safe", False)))
-        caller.msg("침대에서 휴식하며 체력을 모두 회복했습니다.")
+        caller.msg("침대에서 휴식하며 체력과 정신력을 모두 회복했습니다.")
 
 
 class SettlementOfficer(ActionObject):

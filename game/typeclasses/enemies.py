@@ -6,7 +6,7 @@ from evennia.objects.objects import DefaultObject
 from evennia.utils import delay
 from evennia.utils.dbserialize import deserialize
 from world import presentation as view
-from world import rules
+from world import recovery, rules
 from world import text as ft
 from world.content import ENEMIES
 from world.currency import format_currency
@@ -15,7 +15,7 @@ from world.multiplayer import (
     CLAIM_TIMEOUT_SECONDS,
     COMBAT_INTERVAL,
     CORPSE_TTL_SECONDS,
-    ENEMY_RESET_SECONDS,
+    ENEMY_RECOVERY_DELAY_SECONDS,
     PARTICIPATION_TIMEOUT_SECONDS,
     RESPAWN_DELAY_SECONDS,
     after_change,
@@ -137,6 +137,7 @@ class Enemy(DistantPresenceMixin, DefaultObject):
             if ENEMIES[self.db.enemy_id]["combat_mode"] == "claimed" and not self.db.claim:
                 self.db.claim = self.group_for(player)
             if player.id not in self.db.combatants:
+                player.accrue_recovery(profile, now)
                 self.db.combatants = [*self.db.combatants, player.id]
                 profile.update(
                     combat_target=self.id,
@@ -144,6 +145,7 @@ class Enemy(DistantPresenceMixin, DefaultObject):
                     next_attack_at=max(profile["next_attack_at"], now + COMBAT_INTERVAL),
                 )
                 player.save_profile(profile)
+                self.db.recovery_ready_at = None
                 if not self.db.next_attack_at:
                     self.db.next_attack_at = now + COMBAT_INTERVAL
             if len(self.db.combatants) == 1 and not self.db.claim_last_activity:
@@ -152,7 +154,8 @@ class Enemy(DistantPresenceMixin, DefaultObject):
         player.schedule_combat()
         self.schedule_combat()
 
-    def remove_combatant(self, player):
+    def remove_combatant(self, player, now=None):
+        now = time() if now is None else now
         self.db.combatants = [identity for identity in self.db.combatants if identity != player.id]
         threat = deserialize(self.db.threat)
         threat.pop(player.id, None)
@@ -161,6 +164,11 @@ class Enemy(DistantPresenceMixin, DefaultObject):
         contribution.pop(player.id, None)
         self.db.contribution = contribution
         if not self.db.combatants:
+            self.db.recovery_ready_at = now + ENEMY_RECOVERY_DELAY_SECONDS
+            state = deserialize(self.db.recovery) or recovery.initialize(now)
+            # 재교전 중의 시간은 회복량에 더하지 않고 앞 구간의 소수 기여는 보존한다.
+            recovery.accrue(state, now, {})
+            self.db.recovery = state
             self.db.claim = None
             self.db.claim_last_activity = 0
             after_change(self.stop_combat_timer)
@@ -171,7 +179,7 @@ class Enemy(DistantPresenceMixin, DefaultObject):
         with world_change():
             if self.db.claim and now - self.db.claim_last_activity >= CLAIM_TIMEOUT_SECONDS:
                 for player in self.active_players():
-                    player.leave_combat()
+                    player.leave_combat(now=now)
                 self.db.claim = None
                 self.db.claim_last_activity = 0
             active = self.active_players()
@@ -180,27 +188,44 @@ class Enemy(DistantPresenceMixin, DefaultObject):
                 if identity not in active_ids:
                     player = object_by_id(identity)
                     if player and player.profile().get("combat_target") == self.id:
-                        player.leave_combat()
+                        player.leave_combat(now=now)
                     elif player:
-                        self.remove_combatant(player)
+                        self.remove_combatant(player, now=now)
                     else:
                         self.db.combatants = [key for key in self.db.combatants if key != identity]
             if not self.db.combatants:
                 self.db.claim = None
                 self.db.claim_last_activity = 0
                 self.db.threat = {}
+                if self.db.state == "alive" and self.db.last_activity and self.db.recovery is None:
+                    self.db.recovery = recovery.initialize(self.db.last_activity)
+                    self.db.recovery_ready_at = self.db.last_activity + ENEMY_RECOVERY_DELAY_SECONDS
             if (
                 not self.db.combatants
                 and self.db.last_activity
-                and now >= self.db.last_activity + ENEMY_RESET_SECONDS
+                and now >= (self.db.recovery_ready_at or self.db.last_activity + ENEMY_RECOVERY_DELAY_SECONDS)
             ):
                 if self.db.state == "alive":
-                    self.db.hp = self.db.max_hp
                     self.db.enemy_round = 0
                     self.db.next_attack_at = 0
                     self.db.threat = {}
                     self.db.contribution = {}
                     self.db.last_activity = 0
+            if self.db.state == "alive" and not self.db.combatants and 0 < self.db.hp < self.db.max_hp:
+                state = deserialize(self.db.recovery)
+                ready_at = self.db.recovery_ready_at
+                if state is None:
+                    start = self.db.last_activity or now
+                    state = recovery.initialize(start)
+                    ready_at = start + ENEMY_RECOVERY_DELAY_SECONDS
+                    self.db.recovery_ready_at = ready_at
+                recovery.accrue(state, now, {}, [{"started_at": ready_at or now,
+                    "expires_at": max(now, ready_at or now) + 1,
+                    "hp_per_minute": recovery.enemy_rate(self.db.max_hp)}])
+                resources = {"hp": self.db.hp, "mental": 0, "recovery": state}
+                recovery.commit(resources, {"max_hp": self.db.max_hp, "max_mental": 0})
+                self.db.hp = resources["hp"]
+                self.db.recovery = state
             if self.db.state == "respawning" and self.db.respawn_at <= now:
                 self.db.state = "alive"
                 self.db.hp = self.db.max_hp
@@ -210,6 +235,8 @@ class Enemy(DistantPresenceMixin, DefaultObject):
                 self.db.last_activity = 0
                 self.db.contribution = {}
                 self.db.threat = {}
+                self.db.recovery = None
+                self.db.recovery_ready_at = None
         after_change(self.schedule_lifecycle)
 
     def receive_attack(self, player, now=None, rng=None):
@@ -222,6 +249,7 @@ class Enemy(DistantPresenceMixin, DefaultObject):
             profile = player.profile()
             if now < profile["next_attack_at"]:
                 return
+            player.accrue_recovery(profile, now)
             damage, outcome = rules.player_attack(
                 profile, self.db.enemy_id, now, COMBAT_INTERVAL, rng
             )
@@ -273,6 +301,7 @@ class Enemy(DistantPresenceMixin, DefaultObject):
         ).items():
             player = object_by_id(identity)
             profile = player.profile()
+            player.accrue_recovery(profile, now)
             rules.gain_xp(profile, xp)
             profile["kills"] += 1
             if definition.get("boss_quest"):
@@ -282,7 +311,7 @@ class Enemy(DistantPresenceMixin, DefaultObject):
             after_change(lambda player=player, message=message: player.msg(message))
         Corpse.from_enemy(self, groups, now, rng)
         for player in self.active_players():
-            player.leave_combat()
+            player.leave_combat(now=now)
         after_change(self.stop_combat_timer)
         after_change(self.schedule_lifecycle)
 
@@ -297,6 +326,7 @@ class Enemy(DistantPresenceMixin, DefaultObject):
             self.db.enemy_round += 1
             self.db.next_attack_at = now + COMBAT_INTERVAL
             result_profile = target.profile()
+            target.accrue_recovery(result_profile, now)
             result = rules.enemy_attack(
                 result_profile, self.db.enemy_id, self.db.enemy_round, now, rng
             )
@@ -315,7 +345,7 @@ class Enemy(DistantPresenceMixin, DefaultObject):
             if result["defeated"]:
                 from world.bootstrap import get_room
 
-                target.leave_combat()
+                target.leave_combat(now=now)
                 destination = get_room("infirmary")
                 if destination is None or not target.move_to(destination, quiet=True):
                     raise RuntimeError("패배 후 의무실 이동을 완료하지 못했습니다.")
@@ -360,11 +390,16 @@ class Enemy(DistantPresenceMixin, DefaultObject):
         deadline = (
             self.db.respawn_at
             if self.db.state == "respawning"
-            else self.db.last_activity + ENEMY_RESET_SECONDS
-            if not self.db.combatants and self.db.last_activity
+            else recovery.next_boundary(max(time(), self.db.recovery_ready_at or time()))
+            if not self.db.combatants and self.db.state == "alive" and 0 < self.db.hp < self.db.max_hp
+            and self.location and any(getattr(obj, "push_state", None) and obj.sessions.count()
+                                      for obj in self.location.contents)
             else None
         )
-        if deadline and not self.ndb.lifecycle_task:
+        if not deadline and self.ndb.lifecycle_task:
+            self.ndb.lifecycle_task.remove()
+            self.ndb.lifecycle_task = None
+        elif deadline and not self.ndb.lifecycle_task:
             self.ndb.lifecycle_task = delay(max(0.05, deadline - time()), self.lifecycle_tick)
 
     def lifecycle_tick(self):

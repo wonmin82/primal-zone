@@ -11,6 +11,7 @@ class SharedCombatTests(WorldCommandTest):
     character_typeclass = Explorer
 
     def setUp(self):
+        self.enterContext(patch("typeclasses.explorers.time", return_value=100))
         super().setUp()
         self.rooms = self.world_rooms()
         for player in (self.char1, self.char2):
@@ -55,16 +56,20 @@ class SharedCombatTests(WorldCommandTest):
         self.assertTrue(self.char1.combat_snapshot()["telegraph"])
         self.assertTrue(self.char2.combat_snapshot()["telegraph"])
 
-    def test_flee_disconnect_and_idle_reset(self):
+    def test_flee_disconnect_and_idle_recovery(self):
         self.join()
         self.enemy.receive_attack(self.char1, now=102.5, rng=Random(1))
-        self.char1.leave_combat()
+        damaged = self.enemy.db.hp
+        self.char1.leave_combat(now=103)
         self.assertNotIn(self.char1.id, self.enemy.db.combatants)
         self.assertNotIn(self.char1.id, self.enemy.db.threat)
         self.char2.location = self.rooms["dock"]
         self.enemy.reconcile(now=118)
         self.assertIsNone(self.char2.profile()["combat_target"])
-        self.assertEqual(self.enemy.db.hp, self.enemy.db.max_hp)
+        self.assertEqual(self.enemy.db.hp, damaged)
+        self.enemy.reconcile(now=140)
+        self.assertGreater(self.enemy.db.hp, damaged)
+        self.assertLess(self.enemy.db.hp, self.enemy.db.max_hp)
 
     def test_legacy_profile_migration_preserves_personal_progress(self):
         profile = self.char1.profile()

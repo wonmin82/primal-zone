@@ -154,8 +154,12 @@ class Harness:
             await asyncio.to_thread(self.stop)
             self.processes.clear()
             self.handles.clear()
+            # 실행 중 checkpoint와 종료 사이에도 정상 전투 라운드가 진행될 수 있다.
+            # 실제 프로세스 종료 시점의 DB를 재시작 보존 검사의 기준으로 삼는다.
+            stopped = await asyncio.to_thread(self.checkpoint)
             self.start()
             await self.ready()
+            return stopped
         finally:
             self.restarting = False
 

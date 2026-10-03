@@ -167,6 +167,11 @@ class SmokeRestartTests(TestCase):
         harness.env = {"PRIMAL_SMOKE_MODE": "full"}
         harness.ports = {"ws": 12345}
         events = []
+        stopped = {"players": {"fixture": {"profile": {"xp": 12}}}}
+
+        def checkpoint():
+            events.append("checkpoint")
+            return stopped
 
         async def ready():
             self.assertTrue(harness.restarting)
@@ -174,9 +179,11 @@ class SmokeRestartTests(TestCase):
 
         with patch.object(harness, "stop", side_effect=lambda: events.append("stop")), patch.object(
             harness, "start", side_effect=lambda: events.append("start")
-        ), patch.object(harness, "ready", side_effect=ready), patch.object(harness, "prepare") as prepare:
-            asyncio.run(harness.restart())
-        self.assertEqual(events, ["stop", "start", "ready"])
+        ), patch.object(harness, "ready", side_effect=ready), patch.object(
+            harness, "checkpoint", side_effect=checkpoint
+        ), patch.object(harness, "prepare") as prepare:
+            self.assertEqual(asyncio.run(harness.restart()), stopped)
+        self.assertEqual(events, ["stop", "checkpoint", "start", "ready"])
         self.assertEqual(harness.run_dir, Path("same-isolated-db"))
         self.assertEqual(harness.ports, {"ws": 12345})
         self.assertEqual(harness.env, {"PRIMAL_SMOKE_MODE": "full"})
@@ -185,7 +192,9 @@ class SmokeRestartTests(TestCase):
 
     def test_restart_failure_restores_premature_exit_monitoring(self):
         harness = smoke_harness.Harness("full")
-        with patch.object(harness, "stop"), patch.object(harness, "start", side_effect=RuntimeError("start failed")):
+        with patch.object(harness, "stop"), patch.object(harness, "checkpoint", return_value={}), patch.object(
+            harness, "start", side_effect=RuntimeError("start failed")
+        ):
             with self.assertRaisesRegex(RuntimeError, "start failed"):
                 asyncio.run(harness.restart())
         self.assertFalse(harness.restarting)

@@ -13,6 +13,8 @@ class GameCommand(Command):
     def func(self):
         try:
             self.run()
+            if hasattr(self.caller, "push_prompt"):
+                self.caller.push_prompt()
             from typeclasses.explorers import Explorer
 
             for player in Explorer.objects.all():

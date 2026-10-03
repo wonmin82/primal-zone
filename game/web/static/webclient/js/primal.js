@@ -8,7 +8,7 @@
     const entry = document.createElement("article");
     entry.className = "log-entry " + kind;
     if (segments) {
-      const roles = new Set(["text", "muted", "title", "hostile", "npc", "player", "object", "remains", "item", "command", "direction", "reward", "warning", "success", "error"]);
+      const roles = new Set(["text", "muted", "title", "hostile", "npc", "player", "object", "remains", "item", "command", "direction", "reward", "warning", "success", "error", "critical"]);
       for (const part of segments) {
         if (!part || typeof part.text !== "string") continue;
         const span = document.createElement("span");
@@ -145,6 +145,9 @@
     const observation = state.observation;
     if (observation) byId("environment-status").textContent += " · 현재 시야 " + observation.effective_visibility.name + (observation.light_source?.active ? " · 손전등 켜짐" : "");
     byId("hp").max = state.max_hp; byId("hp").value = state.hp;
+    byId("mental-label").textContent = state.mental + " / " + state.max_mental;
+    byId("mental").max = state.max_mental; byId("mental").value = state.mental;
+    byId("resource-prompt").replaceChildren(...(state.resource_prompt || []).map((part) => semantic(part.role, part.text)));
     byId("xp").max = state.xp_next - state.xp_floor;
     byId("xp").value = state.level >= 10 ? byId("xp").max : state.xp - state.xp_floor;
     renderExits(state.exits);
@@ -260,7 +263,9 @@
       try { frame = JSON.parse(event.data); } catch { return; }
       if (!Array.isArray(frame)) return;
       const [kind, args] = frame;
-      if (kind === "text" || kind === "prompt") {
+      if (kind === "prompt") {
+        byId("resource-prompt").textContent = plainText(args?.[0] ?? "");
+      } else if (kind === "text") {
         const text = plainText(args?.[0] ?? "");
         if (text.trim()) append(text);
       } else if (kind === "pz_log" && Array.isArray(args?.[0]?.segments)) {

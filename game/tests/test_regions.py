@@ -22,6 +22,7 @@ class RegionTests(WorldCommandTest):
     character_typeclass = Explorer
 
     def setUp(self):
+        self.enterContext(patch("typeclasses.explorers.time", return_value=100))
         super().setUp()
         self.rooms = self.world_rooms()
         for player in (self.char1, self.char2):

@@ -19,6 +19,7 @@ ANSI = {
     "warning": "|y",
     "success": "|g",
     "error": "|r",
+    "critical": "|r|h",
 }
 
 
@@ -61,6 +62,18 @@ def join(parts, separator="\n"):
             result.append(separator)
         result.append(part)
     return text(*result)
+
+
+def resource_value(current, maximum):
+    ratio = current * 100 / maximum if maximum else 0
+    role = "critical" if current == 0 else "success" if ratio >= 67 else "warning" if ratio >= 34 else "error"
+    return token(role, current)
+
+
+def resource_prompt(profile, values):
+    return text("[ ", resource_value(profile["hp"], values["max_hp"]),
+                f"/{values['max_hp']} · ", resource_value(profile["mental"], values["max_mental"]),
+                f"/{values['max_mental']} ] >", kind="prompt")
 
 
 def particle(value, pair="이/가"):

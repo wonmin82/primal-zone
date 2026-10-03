@@ -13,6 +13,7 @@ from websockets.asyncio.client import connect
 
 sys.path.insert(0, str(ROOT / "game"))
 from server.conf.smoke_support import smoke_timings  # noqa: E402
+from world.recovery import RECOVERY_INTERVAL  # noqa: E402
 
 AUTH_TIMEOUT = 15
 STATE_TIMEOUT = 10
@@ -114,7 +115,7 @@ class Client:
         return {"player": self.name, "revision": self.revision,
                 "received": self.received, "error": str(self.error) if self.error else None,
                 "state": {key: self.state.get(key) for key in
-                          ("zone", "hp", "xp", "credits", "combat_target")} if self.state else None}
+                          ("zone", "hp", "mental", "xp", "credits", "combat_target")} if self.state else None}
 
     async def close(self):
         self.closing = True
@@ -162,6 +163,7 @@ class Scenario:
                 await player.open()
                 assert player.state["zone"] == "staging_room"
                 assert player.state["party"] is None and player.state["combat_target"] is None
+                assert player.state["max_mental"] == 40 and 10 <= player.state["mental"] <= 40
             self.report("auth", "fixture login / 출정 대기실")
             for player in self.players:
                 await route(player, (("남", "hq_concourse"), ("서", "dock")))
@@ -249,11 +251,20 @@ class Scenario:
             self.report("shop", "옥상 귀환 / 승강기 / 가치·구매·판매 / 재구매")
             self.phase = "persistence"
             saved = {key: first.state[key] for key in
-                     ("name", "hp", "xp", "credits", "inventory", "quest")}
+                     ("name", "xp", "credits", "inventory", "quest")}
+            saved_resources = {key: first.state[key] for key in ("hp", "mental")}
             await first.close()
             await first.open()
             assert first.state["zone"] == "staging_room"
             assert saved == {key: first.state[key] for key in saved}
+            assert all(value <= first.state[key] <= first.state["max_" + key]
+                       for key, value in saved_resources.items())
+            # 빠른 CI에서는 전체 흐름이 첫 지급 전에 끝날 수 있다. 부분 경계의
+            # 소수 기여까지 쌓여 정수가 지급되는 실제 상태를 두 경계 안에서 기다린다.
+            await first.until(lambda state: state["mental"] > 10,
+                              RECOVERY_INTERVAL * 2 + STATE_TIMEOUT)
+            assert first.state["mental"] > 10
+            self.report("recovery", "10초 경계의 실제 정신력 회복 / 재로그인 회복·진행 보존")
             self.report("persistence", "disconnect / fixture relogin / 대기실 시작 및 진행 상태 보존")
             if self.harness.mode == "full":
                 from smoke_closeout import Closeout

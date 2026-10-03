@@ -18,7 +18,7 @@ class VocabularyTests(TestCase):
         self.assertEqual(SKILLS["firstaid"]["name"], "응급처치")
         self.assertEqual(SKILLS["firstaid"]["related_proficiency"], "medicine")
         profile = rules.new_profile()
-        self.assertEqual(profile["version"], 8)
+        self.assertEqual(profile["version"], rules.PROFILE_VERSION)
         self.assertIn("의술 R0", presentation.abilities(profile))
         self.assertIn("의술 R0 XP0", presentation.experience(profile))
         self.assertIn("응급처치 R1/3", presentation.skills(profile))
@@ -60,12 +60,14 @@ class VocabularyTests(TestCase):
     def test_v7_migration_preserves_gameplay_and_firstaid_rank_and_queue(self):
         old = rules.new_profile()
         old.update(version=7, xp=123, credits=95, hp=31, combat_target=345, queued_action="heal", next_attack_at=456)
+        old.pop("mental")  # v7에는 아직 정신력 자원이 없다.
+        old.pop("recovery_effects")
         old["skills"]["heal"] = old["skills"].pop("firstaid") + 2
         old["command_shortcuts"] = {"점검": ["상태", "장비", "가"], "인사": ["회복 말", "'상점, 치료"],
                                     "쇼핑": ["무기상 메뉴", "붕대 구매", "의무관에게 치료", "가방", "heal", "내리기"]}
         before = deepcopy(old)
         migrated = rules.migrate_profile(old)
-        self.assertEqual(migrated["version"], 8)
+        self.assertEqual(migrated["version"], rules.PROFILE_VERSION)
         self.assertEqual(migrated["skills"]["firstaid"], 3)
         self.assertNotIn("heal", migrated["skills"])
         self.assertEqual(migrated["queued_action"], "firstaid")

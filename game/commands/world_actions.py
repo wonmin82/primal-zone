@@ -24,7 +24,7 @@ class Rest(GameCommand):
     category = "전투·회복"
     input_style = "target"
     usage = "휴식 · 침대 휴식 · 침대에서 휴식"
-    summary = "주변 침대에서 무료로 체력을 모두 회복합니다."
+    summary = "주변 침대에서 무료로 체력과 정신력을 모두 회복합니다."
     key = "휴식"
     aliases = ["rest"]
 

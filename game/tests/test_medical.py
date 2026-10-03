@@ -25,6 +25,7 @@ class MedicalCommandsTests(WorldCommandTest):
     character_typeclass = Explorer
 
     def setUp(self):
+        self.enterContext(patch("typeclasses.explorers.time", return_value=100))
         super().setUp()
         self.rooms = self.world_rooms()
         self.doctor = search_tag("doctor", category="primal_interactable")[0]
@@ -49,7 +50,7 @@ class MedicalCommandsTests(WorldCommandTest):
                 before = deepcopy(self.char1.profile())
                 other = "rest" if "진료" in raw or "treat" in raw else "treat"
                 with patch.object(rules, other) as separate, patch.object(rules, "first_aid") as bandage:
-                    self.assertIn("체력을 모두 회복", self.command(raw))
+                    self.assertIn("체력을 모두 회복" if other == "rest" else "체력과 정신력을 모두 회복", self.command(raw))
                     separate.assert_not_called()
                     bandage.assert_not_called()
                 before["hp"] = rules.stats(before)["max_hp"]
@@ -60,7 +61,8 @@ class MedicalCommandsTests(WorldCommandTest):
             self.char1.change(lambda p: p.update(combat_target=target))
             before = deepcopy(self.char1.profile())
             for raw in ("진료", "침대 휴식"):
-                self.assertIn("전투 중입니다" if target else "이미 체력이 가득", self.command(raw))
+                expected = "전투 중입니다" if target else "이미 체력이 가득" if raw == "진료" else "이미 체력과 정신력이 가득"
+                self.assertIn(expected, self.command(raw))
                 self.assertEqual(self.char1.profile(), before)
             if target:
                 self.assertTrue(all(not obj["actions"] for obj in multiplayer_state(self.char1)["interactables"]))
@@ -187,6 +189,7 @@ class MedicalDefeatTests(WorldCommandTest):
     character_typeclass = Explorer
 
     def setUp(self):
+        self.enterContext(patch("typeclasses.explorers.time", return_value=100))
         super().setUp()
         self.rooms = self.world_rooms()
         for player in (self.char1, self.char2):
@@ -220,6 +223,7 @@ class MedicalDefeatTests(WorldCommandTest):
         self.assertEqual(self.char1.home, self.rooms["dock"])
         before.update(hp=rules.DEFEAT_RECOVERY_HP, credits=40, combat_target=None, queued_action="attack", guard_until=0)
         before["visited"].append("infirmary")
+        before["recovery"]["updated_at"] = 102.5
         self.assertEqual(self.char1.profile(), before)
         task.remove.assert_called_once()
         self.assertIsNone(self.char1.ndb.combat_task)
