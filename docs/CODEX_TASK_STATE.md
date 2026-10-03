@@ -4,7 +4,9 @@
 
 ## Objective
 
-현재 작업은 OPEN [PR #25](https://github.com/wonmin82/primal-zone/pull/25)의 경제 후속 리뷰 네 항목 수정이다. 기존 `codex/supply-chip-economy`에서 계속 작업한다. 시작 fetch에서 로컬/원격/PR HEAD는 `1eb292d79be42a9f22c35c19a068c3250e43615b`, origin/main과 PR base는 `0229a2275f33436a74f75274c94e464c8077b3a2`로 일치했고 작업 트리는 깨끗했다. 최종 fetch에서도 main은 동일해 rebase가 필요하지 않다. 새 PR을 만들거나 merge하지 않는다.
+보급칩 경제와 [PR #25](https://github.com/wonmin82/primal-zone/pull/25)의 후속 리뷰 네 항목 구현·검증을 완료했다. 사용자의 병합·소스 브랜치 삭제 요청에 따라 최종 인계 문서를 정리한다. 병합 준비 fetch에서 로컬/원격/PR 구현 HEAD는 `f81eb3a51a0cf6d65c6d3f89ee4fc09c001d4195`, origin/main과 PR base는 `0229a2275f33436a74f75274c94e464c8077b3a2`로 일치하고 작업 트리는 깨끗했다. 최신 main을 이미 포함하므로 rebase 재작성은 필요하지 않다. 아래 과거 OPEN·병합 금지 설명은 당시 작업 범위이며 현재 승인 범위보다 우선하지 않는다.
+
+이 문서는 병합 전 최종 인계다. 문서 후속 HEAD의 test·smoke와 병합 후 main의 CI를 각각 확인하며, 실제 최종 HEAD·병합 커밋·브랜치 정리 결과는 PR과 GitHub Actions에서 확인한다. 구현 완료 이후의 신규 기능은 별도 요청으로 진행한다.
 
 ### PR #25 후속 리뷰 구현과 검증 (2026-10-03)
 
@@ -14,7 +16,7 @@ Web 기본 판매는 1개이며 판매 가능한 비착용 복사본이 2개 이
 
 computer-use skill로 별도 DB/일반 fixture의 desktop 1440px·mobile 390px을 확인했다. 붕대 3개 기본 판매로 1개/4칩, 남은 2개 모두 판매로 8칩이 지급됐다. 강철마체테 3개/착용 1개에서는 모두 판매 60칩 후 착용 1개가 남았다. 두 참여자 화폐 fixture(각 4칩)에서 7칩 회수 후 자기 몫 0인 요청자의 1칩 버튼은 활성 상태였으며 다른 참여자에게만 마지막 1칩을 지급하고 양쪽 화면을 갱신했다. 시체/ground의 8칩 표시와 20칩 버리기, 칩 1/칩 2 버튼의 정확한 selector/회수, 기존 3×3 compass와 SURROUNDINGS 순서·가로 overflow/clipping 없음을 확인했다. 앱 소스 오류/경고는 관찰되지 않았고 두 Chrome 탭에서 각각 외부 listener/message-channel 계열 오류 3건을 별도 기록한다. node --check와 격리 game의 python -m evennia collectstatic --noinput 성공, CSS/JS cache query는 supply-chip-review다. browser viewport/탭과 소유한 서버/격리 DB는 정리했으며 screenshot/log·최초 실패 진단은 Git 제외 work에만 있다. 실제 OS IME는 미검증이다.
 
-최종 후속 commit/headSha와 test·smoke CI 결과는 PR Validation의 후속 검증 항목에서 대조한다. 초기 PR shares에서 이미 삭제된 참여자 key는 원본 정보가 없어 자격을 복원할 수 없고, 남아 있는 key로만 호환 해석한다. 최초 구현 검증과 이전 PR 기록은 아래에 보존한다.
+후속 구현 HEAD `f81eb3a51a0cf6d65c6d3f89ee4fc09c001d4195`와 [Game checks run 37077328246](https://github.com/wonmin82/primal-zone/actions/runs/37077328246)의 headSha를 직접 대조해 test·smoke 모두 success를 확인했다. 이번 병합 준비 변경은 인계 Markdown뿐이며 실행 코드·테스트·정적 파일은 동일하므로 위 로컬 검증을 반복하지 않고 문서/링크/차이와 git diff --check를 확인한다. 문서까지 포함한 최종 HEAD의 CI는 별도로 대조한다. 초기 PR shares에서 이미 삭제된 참여자 key는 원본 정보가 없어 자격을 복원할 수 없고, 남아 있는 key로만 호환 해석한다. 최초 구현 검증과 이전 PR 기록은 아래에 보존한다.
 
 ### 최초 경제 구현 시작 기준 (과거 기록)
 
@@ -259,6 +261,10 @@ Live Full에서는 보관상자/개인 보관함에 넣기·꺼내기와 일부 
 
 ## Current Repository State
 
+현재 기준은 맨 위 Objective와 PR #25 후속 구현·검증 기록이다. 선행 PR #22~#24는 MERGED이며 경제 작업 브랜치는 `codex/supply-chip-economy`다. 구현 HEAD와 성공 CI는 위에 고정해 기록하고, 최종 문서 HEAD 및 병합 상태는 PR #25의 실제 원격 상태를 따른다. 아래 과거 브랜치/OPEN 기록을 현재 상태로 해석하지 않는다.
+
+### PR #22 리뷰 시점 저장소 상태 (과거 기록)
+
 현재 branch는 `codex/personal-command-shortcuts`, 시작 main은 `a748d284d42935ce42ca151cf9e8c36c6942b731`이다. PR #13~#21 MERGED이며 본부 계획은 closeout 완료다. [PR #22](https://github.com/wonmin82/primal-zone/pull/22)은 OPEN·비Draft이며 최초 구현 커밋은 `ce3dfe8fad5ce2f91d99f927c40cf08d158bd952`, 이번 리뷰 시작 HEAD는 `7cb85ad37ac5fb5516769acd1db03a855aeba87c`다. 위 리뷰 보강을 후속 commit으로 같은 PR에 push하며 문서까지 포함한 최종 HEAD의 test/smoke CI를 workflow headSha와 직접 대조해 PR Validation에 기록한다. 과거 HEAD의 CI를 이번 최종 결과로 대신하지 않으며 PR을 merge하지 않는다.
 
 ### 7단계 PR 생성 직후 저장소 상태 (과거 기록)
@@ -376,7 +382,7 @@ Live Full에서는 보관상자/개인 보관함에 넣기·꺼내기와 일부 
 
 ## Partially Implemented / In Progress
 
-본부 1~7단계와 P0는 병합·closeout 완료다. 현재 개인 줄임말/묶음 기능의 구현·자동/Quick 검증·문서화를 완료하고 PR #22를 생성했다. 최신 HEAD CI·검토 상태는 GitHub와 Current Repository State를 대조하며 merge는 이번 승인 범위가 아니다. 과거 본부 PR OPEN 기록을 현재 상태로 해석하지 않는다.
+본부 1~7단계와 P0·8방향·명령 체계 선행 작업은 병합 완료다. 보급칩 경제와 네 후속 리뷰 수정의 구현·회귀검증도 완료했으며 미완료 기능을 이번 병합에 포함하지 않는다. 은행/거래창/재고/가격 변동 등의 의도적 비범위와 실제 OS IME 미검증, 구형 shares의 소실된 자격 복원 한계는 그대로 남는다.
 
 ## Validation
 
@@ -418,7 +424,7 @@ Live Full에서는 보관상자/개인 보관함에 넣기·꺼내기와 일부 
 
 ## Recommended Next Step
 
-본부 재설계 1~7단계와 PR #22 개인 줄임말/묶음은 병합 완료다. 이번 8방향 이동/고정 방향 인터페이스 PR을 검토하고 병합은 별도 요청에서 진행한다. 이후 새로운 기능 작업은 별도 요구사항을 확정한 뒤 최신 main의 독립 브랜치에서 시작한다. [command-shortcuts.md](command-shortcuts.md)의 향후 후보와 기존 최적화 후보는 자동 구현 요청이나 확정 roadmap이 아니다.
+PR #25의 최종 문서 HEAD와 병합 후 main의 test·smoke를 대조하고, 병합 포함 여부를 확인한 뒤 요청된 소스 브랜치를 정리한다. 이후 새로운 기능 작업은 별도 요구사항을 확정한 뒤 최신 main의 독립 브랜치에서 시작한다. [command-shortcuts.md](command-shortcuts.md)의 향후 후보와 기존 최적화 후보는 자동 구현 요청이나 확정 roadmap이 아니다.
 
 ## Important Files
 
@@ -438,7 +444,7 @@ Live Full에서는 보관상자/개인 보관함에 넣기·꺼내기와 일부 
 | `game/world/facility_state.py`, `game/world/facilities.py` | pure 시설 version/정규화, shared transaction·조명 lookup·가동 event |
 | `game/world/room_hints.py` | 선언 순서 target/text 조합과 현재 perception |
 | `game/world/targets.py`, `game/world/target_presentation.py`, `game/world/distant_presentation.py`, `game/world/navigation.py` | selector/parser/정렬, local 번호·loot 표시, distant contract, pure entry 판정 |
-| `game/world/rules.py`, `game/world/item_transfers.py`, `game/world/multiplayer.py`, `game/world/state.py` | profile v7/pure 규칙, 이전 transaction, 공유 atomic/callback, 웹 대상/전리품 state |
+| `game/world/rules.py`, `game/world/item_transfers.py`, `game/world/multiplayer.py`, `game/world/state.py` | profile v8/pure 규칙, 이전 transaction, 공유 atomic/callback, 웹 대상/전리품 state |
 | `docs/command-shortcuts.md`, `game/commands/shortcuts.py`, `game/commands/command_shortcuts.py`, `game/server/conf/cmdparser.py` | 줄임말/묶음 설계·안전 계약, 순수 확장/한도, 설정·확인·순차 dispatch, read-only exact fallback |
 | `game/world/test_command_shortcuts.py`, `game/tests/test_command_shortcuts.py` | 문법/그래프/확인/migration pure 검사와 실제 DB/dispatcher/precedence/confirmation 격리 회귀 |
 | `game/world/lifecycle.py`, `game/world/bootstrap.py`, `game/typeclasses/scripts.py` | tick/restart 소유권, idempotent 월드 구성, persistent WorldLifecycle |
