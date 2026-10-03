@@ -20,6 +20,10 @@
 - Quick·Full·browser의 play DB size/mtime_ns/SHA256 불변: 733184 / 1790080153765082800 / `b1318296f505b9b7522fcbdedff7642a06cf055e9de72802198c70e6b8a7f700`. 성공 임시 서버는 종료·정리했고 실패 진단은 gitignored work 아래에 보존했다. runtime/DB/credential/screenshot은 소스에 포함하지 않는다.
 - 구현 완료 당시 최종 fetch에서도 origin/main은 시작 SHA와 같았고 로컬 커밋까지 진행했다. 후속 PR 준비 fetch에서도 main과 실행 코드는 동일했다. 변경은 이 인계 문서뿐이므로 위 로컬 성공 근거를 재사용하며 실제 PR URL·최종 HEAD·새 CI 결과는 PR 본문과 GitHub Actions에서 확인한다.
 
+### PR #26 CI 후속 검증
+
+[PR #26](https://github.com/wonmin82/primal-zone/pull/26)을 생성했다. 초기 문서 HEAD `477bb6f762905447592b48a13f7c97233118a2a0`의 test CI는 성공했지만 Linux Quick 흐름이 첫 회복 지급 전에 끝나 정신력 증가 assertion이 실패했다. smoke에서 실제 정신력이 증가한 state를 두 경계와 통신 여유(최대 30초) 안에 기다리도록 보강했다. 고정 sleep이나 회복 규칙·production 타이머 변경은 없다. 후속 `world.test_smoke` 10개(7.901s, runner 11.677s), check, Quick 60.222s와 play DB fingerprint 불변을 확인했다. 전체 게임 테스트·Full·browser는 게임/정적 코드가 같아 위 성공 근거를 재사용한다. 후속 최종 HEAD의 test·smoke CI와 SHA는 PR Validation에 기록한다.
+
 ### 다음 작업
 
 새 PR에서 현재 구현을 리뷰한다. 실제 회복 장비·시간제 회복 소비품·정신력 소비/치료 기술은 별도 요청에서 다룬다. PR은 검토를 위해 OPEN 상태로 남기며 병합하지 않는다.
