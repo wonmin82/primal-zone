@@ -4,7 +4,7 @@
 
 ## Objective
 
-정신력과 10초 주기 자연회복 시스템의 구현·검증·문서 정리를 독립 branch `codex/mental-recovery`에서 완료했다. 시작 fetch의 최신 origin/main은 `500ad782a8f4c16621728a50d511be1b7d926523`이며 작업 트리는 깨끗했다. PR #25는 MERGED이고 아래 경제 PR의 병합 준비/OPEN 표현은 과거 기록이다. 이번 요청은 구현·검증·문서·커밋이며 push/새 PR 생성·병합은 요청되지 않았다.
+정신력과 10초 주기 자연회복 시스템의 구현·검증·문서 정리를 독립 branch `codex/mental-recovery`에서 완료했다. 시작 fetch의 최신 origin/main은 `500ad782a8f4c16621728a50d511be1b7d926523`이며 작업 트리는 깨끗했다. PR #25는 MERGED이고 아래 경제 PR의 병합 준비/OPEN 표현은 과거 기록이다. 구현 커밋은 `1e87004f10f14acaf392adefd4ea975e15489e4f`다. 사용자의 후속 PR 생성 요청에 따라 같은 branch를 push하고 main 대상 PR과 최종 HEAD의 test·smoke CI를 확인한다. 병합은 요청되지 않았다.
 
 현재 정신력과 최대치·v9 migration, DB 없는 accrue/commit 계산, Room/equipment/timed effect source, offline 옛 위치 batch, 살아 있는 session reload 보존, 플레이어 단일 경계 예약과 적 15초 유예/점진·lazy 회복을 구현했다. 진료는 HP만, 휴식은 HP·정신력을 채우며 firstaid/의술·기존 경제를 보존한다. Web 정신력 meter와 로그와 분리된 prompt를 추가했다. 회복 장비/소모품·정신력 소비/치료 기술은 범위 밖이다.
 
@@ -18,11 +18,11 @@
 - 초기 Full은 자연회복으로 저체력 fixture가 적을 처치해 패배 검사에 실패했다. 정상 Lv1 fixture와 실제 갈퀴사냥룡 교전으로 수정했다. 두 번째 Full의 restart 비교는 실행 중 snapshot과 종료 사이의 라운드를 포함하지 않아 실패했고, 종료 시점 snapshot으로 경합을 제거했다. production 수치와 진행 보존 assertion은 바꾸지 않고 최종 Full을 통과했다.
 - 격리 browser에서 1440px desktop·1100px 중간 폭·390px mobile, HP/정신력/XP 분리·prompt·자연회복 중 로그 개수 불변·SURROUNDINGS/compass 유지·지혜 투자·의무관 진료의 정신력 비회복·HP full/정신력 부족 상태의 침대 버튼을 확인했다. 앱 console error/warning과 가로 overflow 없음. 실제 OS IME와 별도 Telnet 클라이언트/font는 미검증이며 입력 composition 코드는 변경하지 않았다. Telnet prompt 채널/ANSI/현재 숫자만 semantic 색 적용은 자동 검사했다.
 - Quick·Full·browser의 play DB size/mtime_ns/SHA256 불변: 733184 / 1790080153765082800 / `b1318296f505b9b7522fcbdedff7642a06cf055e9de72802198c70e6b8a7f700`. 성공 임시 서버는 종료·정리했고 실패 진단은 gitignored work 아래에 보존했다. runtime/DB/credential/screenshot은 소스에 포함하지 않는다.
-- 최종 fetch에서도 origin/main은 시작 SHA와 같았다. 이번 작업은 로컬 커밋까지이며 push·새 PR·병합·CI 실행은 하지 않는다.
+- 구현 완료 당시 최종 fetch에서도 origin/main은 시작 SHA와 같았고 로컬 커밋까지 진행했다. 후속 PR 준비 fetch에서도 main과 실행 코드는 동일했다. 변경은 이 인계 문서뿐이므로 위 로컬 성공 근거를 재사용하며 실제 PR URL·최종 HEAD·새 CI 결과는 PR 본문과 GitHub Actions에서 확인한다.
 
 ### 다음 작업
 
-현재 구현을 기준으로 리뷰한다. 실제 회복 장비·시간제 회복 소비품·정신력 소비/치료 기술은 별도 요청에서 다룬다. 새 PR 생성은 사용자가 요청한 뒤 진행한다.
+새 PR에서 현재 구현을 리뷰한다. 실제 회복 장비·시간제 회복 소비품·정신력 소비/치료 기술은 별도 요청에서 다룬다. PR은 검토를 위해 OPEN 상태로 남기며 병합하지 않는다.
 
 ## 이전 PR #25 병합 준비 Objective (과거 기록)
 
