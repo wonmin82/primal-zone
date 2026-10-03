@@ -1,8 +1,31 @@
 # 원시구역 구조와 설계 결정
 
+## 정신력과 주기 회복
+
+`world/rules.py`가 현재 `mental`과 최대치 `40 + (level−1)×5 + allocated_wisdom×4`를 소유한다. 레벨 상승은 최대치 증가분만큼 현재 값을 올리고, 지혜 배분은 현재 값을 유지하며 재분배는 새 최대치로 clamp한다. 지혜의 기존 붕대 +2 효과와 firstaid/medicine ID·보급칩 경제는 유지한다. 정신력 0 패널티와 정신력 소비 기술은 없다.
+
+`world/recovery.py`는 DB 없는 공통 계산 계층이다. profile.recovery의 updated_at/boundary는 고정 Unix 시각의 10초 경계를 추적한다. ready는 마지막 경계 이전의 미지급 기여, credit은 경계 이후 시간의 기여다. accrue는 소수 기여만 더하며 자원을 지급하지 않고, commit은 ready의 정수 부분만 지급한다. 소수와 마지막 10초 미만 구간은 보존하며 full 자원의 두 bucket은 버려 미래 피해를 미리 회복하지 못하게 한다.
+
+| source | HP/분 | 정신력/분 | 전투 중 |
+| --- | --- | --- | --- |
+| 기본 | 2 + max_hp/60 | 4 + max_mental/20 | HP 제외, 정신력 유지 |
+| Room.recovery | hp_per_minute | mental_per_minute | 둘 다 제외 |
+| 장착 ITEMS.recovery_bonus | hp_per_minute | mental_per_minute | 둘 다 유지 |
+| recovery_effects | hp_per_minute | mental_per_minute | 둘 다 유지 |
+
+Room/Item metadata는 누락 시 0이며 integrity가 유한한 0 이상의 수만 허용한다. 초기 장소는 의무실 6/2, 본부 중앙홀 2/2, 폐쇄된 관리동 2/1, 옥상 9개 Room 0/2다. 출정 대기실에는 보너스가 없다. 장비는 소지품이 아닌 equipment의 모든 장착 값을 집계하고 현재 실제 회복 장비나 새 슬롯은 만들지 않는다. recovery_effects는 started_at/expires_at와 선택 회복률을 저장하며 시작·만료 시각으로 구간을 나눈다. 새 소비품·범용 buff API는 없다.
+
+Explorer.change와 전투의 직접 저장 경계는 변경 전 accrue를 수행한다. 공통 이동 hook은 이전 Room을 계산하므로 Exit·귀환·승강기·패배 이동이 같은 규칙을 쓴다. world_change의 profile/location rollback을 유지한다. 현재 자원은 주기 commit 또는 기존 명시적 회복/피해에서만 바뀐다. 접속 중 실제 회복할 자원이 있을 때 다음 경계 하나만 예약하며 full 또는 전투 중 HP만 부족하고 bonus가 없으면 예약하지 않는다.
+
+마지막 unpuppet에서 전투를 끝내고 경과를 checkpoint한다. Evennia 6.1은 location을 비우고 db.prelogout_location에 옛 Room을 남기므로 offline batch는 그 Room을 사용한다. 새 puppet은 offline의 경계 통과분을 지급한 뒤 staging_room으로 이동한다. 살아 있는 session의 at_sync는 위치를 유지하고 restart reconcile은 접속자만 회복 저장·재예약한다. offline 캐릭터마다 timer를 만들거나 restart에서 모든 profile을 회복 저장하지 않는다.
+
+적은 같은 credit/commit 계산을 사용하되 HP만 회복한다. 교전 종료의 15초 유예, alive·비교전·0<HP<max 조건과 `8+max_hp/15`를 적용한다. 빈 방은 접근 때 batch 계산하고 관찰 중만 다음 경계를 예약한다. 재교전 구간은 기여 0으로 시간만 진행하고 앞 소수 기여는 보존한다. 위협·점유·차례 정리는 회복과 분리되며 사망/45초 respawn은 기존 정책을 유지한다.
+
+`world.text.resource_prompt`는 `[ 60/60 · 40/40 ] >`를 만들고 현재 숫자만 67% 이상 success·34% 이상 warning·양수 error·0 critical 역할로 표시한다. Explorer는 Telnet의 prompt 채널과 Web pz_state.resource_prompt를 전송한다. Web은 서버의 max_mental을 사용하며 자연회복을 로그로 출력하지 않는다. 정신력 meter를 체력과 경험치 사이에 배치하고 mobile에서도 각 meter 행을 분리한다.
+
 ## 보급칩 경제와 전리품 자산
 
-`world/content/economy.py`의 CURRENCY는 id=credits·이름=보급칩·단위=칩·별칭·설명의 SSOT다. `world/currency.py`의 format_currency는 127칩을 만들며 profile의 credits 숫자와 version 8을 유지한다. 화폐는 ITEMS나 inventory에 넣지 않는다. Web은 서버의 currency metadata/formatted/전리품 display_label과 take_command를 표시한다. take_target은 칩/칩 2 같은 명령 선택자, display_label은 8칩 같은 표시 문자열이며 화면 문자열을 재해석해 명령을 만들지 않는다.
+`world/content/economy.py`의 CURRENCY는 id=credits·이름=보급칩·단위=칩·별칭·설명의 SSOT다. `world/currency.py`의 format_currency는 127칩을 만들며 profile의 credits 숫자를 유지한다. 최신 profile version은 정신력 추가에 따른 9다. 화폐는 ITEMS나 inventory에 넣지 않는다. Web은 서버의 currency metadata/formatted/전리품 display_label과 take_command를 표시한다. take_target은 칩/칩 2 같은 명령 선택자, display_label은 8칩 같은 표시 문자열이며 화면 문자열을 재해석해 명령을 만들지 않는다.
 
 `world/loot_assets.py`의 읽기 전용 normalize_entry는 legacy {item, quantity}를 {kind: item, id, quantity}로 해석한다. 새 currency entry는 kind=currency·id=credits·quantity·eligible_players·remaining_shares와 공통 reservation/protection_until을 가진다. 초기 PR의 shares는 읽을 때 원래 key를 eligible_players로, 양수 몫을 remaining_shares로 해석한다. 입력을 변경하지 않고 반복 normalize도 안정적이며 새 저장은 분리된 구조를 사용한다. 상세 보기·Web·회수·decay가 이 계층을 공유하며 조회로 DB를 다시 쓰지 않는다.
 
@@ -87,7 +110,7 @@ bootstrap은 stable `primal_interactable` tag로 기존 객체를 찾아 DB ID�
 
 `진료`/`의무관 진료`/`의무관에게 진료`와 `휴식`/`침대 휴식`/`침대에서 휴식`은 현재 `room_objects`의 보이는 Doctor/Bed를 공통 selector로 선택한다. bare 입력은 0개면 대상 없음, 1개면 자동 선택, 2개 이상이면 명시적 지정 요구다. 숨은 대상은 개수·오류·selector·hint·Web에 포함하지 않는다. 발견 이후 `perform_action`이 같은 Room·관찰·비전투를 검사하고 각 pure rule이 현재 Room의 safe를 검사한다. 실제 객체를 다른 안전 Room으로 옮겨도 서비스는 객체를 따른다. 전투 중 보이는 대상은 대상 없음 대신 기존 RuleError로 거절한다.
 
-`rules.treat`와 `rules.rest`는 별도 public rule이며 현재는 각각 무료·즉시 full HP다. 내부 유효성 검사만 공유하고 서로 호출하지 않는다. 최대 HP이면 쓰기 없이 거절한다. 붕대 `rules.first_aid`과 독립이며 아이템·보급칩·medicine 숙련·firstaid Rank를 변경하지 않는다. 침대 점유·예약·시간 지연은 없다.
+`rules.treat`와 `rules.rest`는 별도 public rule이며 무료·즉시 회복이다. 진료는 HP만 full로 만들고 HP가 가득하면 거절한다. 휴식은 HP와 mental을 모두 full로 만들며 둘 다 가득할 때만 거절한다. 붕대 `rules.first_aid`과 독립이며 아이템·보급칩·medicine 숙련·firstaid Rank를 변경하지 않는다. 침대 점유·예약·시간 지연은 없다. 가득 찬 자원의 recovery credit은 제거한다.
 
 `enemy_attack`은 피해·defeated 판정만 반환한다. `apply_defeat`가 `lost=min(credits,10)`을 차감하고 `DEFEAT_RECOVERY_HP=1`로 최소 생존 상태를 설정한다. 일반 의료 rule/객체는 호출하지 않는다. Enemy lifecycle은 하나의 `world_change` 안에서 피해·패널티·저장·`leave_combat`·의무실 이동을 처리한다. 패배자만 combatants/threat/contribution과 queued action·guard·타이머를 정리하고 다른 참가자는 유지한다. 이동 False/실패는 예외로 rollback하며 DB profile·FK와 Evennia attribute/location/contents 캐시를 복구한다. 타이머 취소와 구조 안내는 `after_change`로 commit 뒤 실행한다. 기존 `save_profile`의 deferred push가 새 의무실 상태를 패배자에게 보내므로 적 Room의 broadcast에만 의존하지 않는다. visited는 실제 이동 hook으로 의무실 방문을 추가하며 나머지 진행 기록은 보존한다. 출력 문구로 lifecycle을 판정하지 않는다.
 
@@ -201,7 +224,7 @@ parser는 마지막 token으로 행동만 찾는다. Command는 인자 문법·�
 
 방향 정의의 `shortcut`에서 8방향 초성 mapping을 파생한다. `commands/aliases.py`는 정보 단축어와 합성한 `SHORTCUTS`를 제공하며 `단축어` 조회도 같은 mapping에서 semantic command/direction token을 만든다. 개인 설정은 `줄임말`이며 `치료/힐/heal`은 future-reserved SSOT에 있고 active 명령은 없다. 응급처치의 skill ID/action_type/queued action/전투 결과는 `firstaid`, medicine 저장 ID의 표시명은 의술이다. 붕대와 음식의 numeric `heal` 필드는 일반 회복량으로 유지한다.
 
-의료는 분야 전체, 의술은 proficiency, 응급처치는 붕대 기술, 진료(treat)는 Doctor 서비스, 휴식(rest)은 Bed 서비스, 회복은 HP 증가 결과를 뜻한다. 진료·휴식은 무료·즉시 최대 HP이며 붕대·보급칩·의술 XP·응급처치 Rank와 무관하다. `rules.treat()`와 `rules.rest()` 내부 이름은 유지한다. 향후 치료 기술은 `치료`(힐/heal, 예정 ID heal)로 정신력을 소비해 자신 또는 다른 플레이어를 치료하도록 설계할 예정이다. 단독 입력은 자신, `플레이어이름 치료/힐/heal`은 타인을 대상으로 하는 UX 후보이며 평상시·전투 중 사용을 예정한다. 현재 정신력·Heal command·대상 회복 rule·queue·Rank·Web 버튼은 구현하지 않았으며 도움말의 활성 명령에도 넣지 않는다. 표시명 변경으로 persistent medicine XP/Rank와 profile version 8은 바뀌지 않는다.
+의료는 분야 전체, 의술은 proficiency, 응급처치는 붕대 기술, 진료(treat)는 Doctor 서비스, 휴식(rest)은 Bed 서비스, 회복은 HP 증가 결과를 뜻한다. 진료는 HP만, 휴식은 HP와 정신력을 무료로 즉시 가득 채우며 붕대·보급칩·의술 XP·응급처치 Rank와 무관하다. `rules.treat()`와 `rules.rest()` 내부 이름은 유지한다. 향후 치료 기술은 `치료`(힐/heal, 예정 ID heal)로 정신력을 소비해 자신 또는 다른 플레이어를 치료하도록 설계할 예정이다. 단독 입력은 자신, `플레이어이름 치료/힐/heal`은 타인을 대상으로 하는 UX 후보이며 평상시·전투 중 사용을 예정한다. 정신력 자원은 구현했지만 Heal command·대상 회복 rule·queue·Rank·Web 버튼은 구현하지 않았으며 도움말의 활성 명령에도 넣지 않는다. 의술 표시명 변경은 persistent medicine XP/Rank를 바꾸지 않으며 정신력 도입으로 profile은 v9가 됐다.
 
 `commands/help_pages.py`의 명시적 여섯 분류 순서·query·대표 명령과 각 command의 help-only `category`가 root/분류/detail을 구성한다. 입력할 수 없는 '8방향 이동'은 text role이다. query는 casefold → 글로벌 단축어 → 실제 command key/alias → 방향/영문 alias → category/topic 순서로 판정한다. 파티 detail이 category보다 우선하며 parser 상세는 `입력 도움말`로 분리했다. 승강기 내부 명령은 registry에 넣지 않고 이동 분류에서 현재 stop SSOT로 안내한다.
 
@@ -243,7 +266,7 @@ Enemy가 HP/max HP, alive/respawning 상태, respawn_at, claim, claim_last_activ
 
 일반 적의 combat_mode는 claimed다. 첫 교전 탐사자 또는 파티가 점유한다. 같은 파티는 합류할 수 있고 외부 그룹은 서버에서 거절된다. 실제 전투 행동이 점유 활동 시각을 갱신한다. 명령 반복만으로 기한을 늘리지 않는다. 그룹 전원 도망·이탈·접속 종료 시 즉시 점유를 해제하며, 활동이 15초간 없으면 남은 참여를 종료하고 해제한다.
 
-살아 있는 적은 참가자가 없고 마지막 활동부터 15초가 지나면 최대 HP로 회복하고 위협도·기여도·차례를 초기화한다. 도망 직후 재공격하면 아직 남은 HP로 싸울 수 있다. 기존처럼 도망가 즉시 적 HP를 초기화하지 않는다. 공용 보스도 전원이 이탈한 뒤 같은 유휴 회복 정책을 따른다.
+살아 있는 적은 마지막 참가자의 교전 종료부터 15초 유예 후 `8 + max_hp/15`의 분당 회복률로 점진 회복한다. 위협도·기여도·차례 정리와 HP 회복을 분리하며 재교전은 현재 HP를 유지한다. 빈 방은 회복 tick 없이 다음 접근에서 batch 계산하고, 접속 관찰자가 있을 때만 다음 10초 경계를 하나 예약한다. 죽은 적은 회복하지 않고 기존 45초 respawn에서 최대 HP로 돌아온다. 기존 ENEMY_RESET_SECONDS 설정은 ENEMY_RECOVERY_DELAY_SECONDS의 호환 기본값으로 유지한다.
 
 우두머리는 public으로 여러 솔로/파티가 참여할 수 있다. contribution에는 캐릭터별 damage, last_action_at, group identity를 기록한다. 자기 회복·방어만으로 최초 보상 자격이 생기지는 않는다. 지원/치유 기여 가중치는 아직 구현하지 않았다.
 
@@ -273,7 +296,7 @@ Corpse는 실제 방 객체이며 source spawn/enemy, created_at, decay_at과 lo
 
 ## 기존 데이터와 운영 범위
 
-profile의 최신 버전은 8이다. v1/v2의 개인 encounter 제거·전투 입력 필드·성장 기본값 변환을 거친 뒤, v1~v3의 첫 임무 boolean을 `quests.radio_tower`의 진행 필드로 옮긴다. `cache_claimed`는 `discoveries.supply_cache`로 옮긴다. v1~v4에는 개인 보관 `storage={}`의 기본값을 추가한다. XP, HP, credits, inventory, equipment(명시적 None 포함), kills, 완료 여부와 visited 및 개인 전투 상태를 유지한다. 이미 받은 보상은 재지급하지 않는다. v1~v5에는 개인 광원 `light_sources={}`, v1~v6에는 개인 줄임말 `command_shortcuts={}`를 보완하고 반복 로드·저장은 초기화하지 않는다.
+profile의 최신 버전은 9다. v1/v2의 개인 encounter 제거·전투 입력 필드·성장 기본값 변환을 거친 뒤, v1~v3의 첫 임무 boolean을 `quests.radio_tower`의 진행 필드로 옮긴다. `cache_claimed`는 `discoveries.supply_cache`로 옮긴다. v1~v4에는 개인 보관 `storage={}`의 기본값을 추가한다. XP, HP, credits, inventory, equipment(명시적 None 포함), kills, 완료 여부와 visited 및 개인 전투 상태를 유지한다. 이미 받은 보상은 재지급하지 않는다. v1~v5에는 개인 광원 `light_sources={}`, v1~v6에는 개인 줄임말 `command_shortcuts={}`를 보완한다. v8 이하에는 현재 최대 정신력과 빈 recovery_effects를 추가하며 timestamp는 첫 mutable accrue에서 초기화한다. migration은 시간을 조회하지 않고 profile_snapshot은 사본만 변환한다.
 
 변환은 기존 프로필의 복사본에서 첫 임무·보급 boolean을 새 구조로 옮기고 오래된 key를 제거한다. 기존 플레이어는 현재 레벨에 해당하는 포인트를 즉시 사용할 수 있고, 무료 기본 기술 Rank 1과 미투자 특성은 기존 전투 성능을 유지한다. Party·Enemy·Corpse·DroppedLoot는 profile 밖에 있으므로 migration이 수정하지 않는다. 기존 DB의 로드 시 점진적으로 변환하며 DB 삭제·교체는 필요 없다. 위의 서버 재시작/재접속 전투 정리 정책과 migration 자체의 보존 정책은 별개다.
 

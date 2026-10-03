@@ -25,6 +25,17 @@ def positive_number(value):
     return isinstance(value, Real) and not isinstance(value, bool) and isfinite(value) and value > 0
 
 
+def recovery_errors(identity, definition, field):
+    data = definition.get(field, {})
+    if not isinstance(data, dict) or any(
+        key not in ("hp_per_minute", "mental_per_minute") or isinstance(value, bool)
+        or not isinstance(value, Real) or not isfinite(value) or value < 0
+        for key, value in data.items()
+    ):
+        return [f"{identity}: {field} 회복량은 유한한 0 이상의 수여야 합니다."]
+    return []
+
+
 def headquarters_errors():
     """본부의 고정 방향 동선과 시설 위치를 검사한다. 승강기는 별도 이동이다."""
     expected = {
@@ -178,6 +189,7 @@ def errors(interactables):
             issues.append(f"{region_id}: 진입 Room이 Region에 없습니다.")
     spawns = []
     for zone, room in ROOMS.items():
+        issues.extend(recovery_errors(zone, room, "recovery"))
         for light in room.get("facility_lights", []):
             always_on = light.get("always_on") is True
             powered = light.get("power") in FACILITIES
@@ -247,6 +259,7 @@ def errors(interactables):
         if data.get("boss_quest") and data["boss_quest"] not in QUESTS:
             issues.append(f"{enemy}: 임무 정의가 없습니다.")
     for key, data in ITEMS.items():
+        issues.extend(recovery_errors(key, data, "recovery_bonus"))
         source = data.get("power_source")
         if source and (not isinstance(source.get("type"), str) or not source["type"].strip() or not positive_number(source.get("capacity_seconds"))):
             issues.append(f"{key}: 전원 정의가 유효하지 않습니다.")

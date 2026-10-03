@@ -51,13 +51,18 @@ class RewardTests(WorldCommandTest):
     def test_claim_timeout_and_flee_release(self):
         self.enemy.engage(self.char1, now=100)
         self.enemy.receive_attack(self.char1, now=102.5, rng=Random(1))
+        damaged_hp = self.enemy.db.hp
         self.enemy.reconcile(now=117.5)
         self.assertIsNone(self.enemy.db.claim)
         self.assertIsNone(self.char1.profile()["combat_target"])
-        self.assertEqual(self.enemy.db.hp, 24)
+        self.assertEqual(self.enemy.db.hp, damaged_hp)
         self.enemy.engage(self.char2, now=118)
-        self.char2.leave_combat()
+        self.assertEqual(self.enemy.db.hp, damaged_hp)
+        self.char2.leave_combat(now=118)
         self.assertIsNone(self.enemy.db.claim)
+        self.enemy.reconcile(now=140)
+        self.assertGreater(self.enemy.db.hp, damaged_hp)
+        self.assertLess(self.enemy.db.hp, self.enemy.db.max_hp)
 
     def test_inactive_party_member_has_no_reward(self):
         self.party(self.char1, self.char2)

@@ -8,7 +8,7 @@ from django.db import transaction
 from evennia.objects.objects import DefaultCharacter
 from evennia.utils import delay
 from evennia.utils.dbserialize import deserialize
-from world import rules
+from world import recovery, rules
 from world import text as ft
 from world.content import (
     EQUIPMENT_ACTIONS,
@@ -93,18 +93,76 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         return rules.migrate_profile(saved) if saved is not None else rules.new_profile()
 
     def save_profile(self, profile):
+        recovery.clamp(profile, rules.stats(profile))
         with transaction.atomic():
             self.db.profile = profile
         after_change(self.push_state)
+        after_change(self.push_prompt)
+        after_change(self.schedule_recovery)
 
     def change(self, operation):
         from world.multiplayer import world_change
 
         with world_change():
             profile = self.profile()
+            self.accrue_recovery(profile)
             result = operation(profile)
             self.save_profile(profile)
             return result
+
+    def accrue_recovery(self, profile, now=None):
+        # DefaultCharacter는 마지막 unpuppet에서 location을 비우고 옛 방을 저장한다.
+        room = self.location or self.db.prelogout_location
+        zone = room.db.zone_id if room else None
+        recovery.accrue_player(profile, rules.stats(profile), ROOMS.get(zone, {}),
+                               ITEMS, time() if now is None else now)
+
+    def reconcile_recovery(self, now=None):
+        from world.multiplayer import world_change
+
+        now = time() if now is None else now
+        with world_change():
+            profile = self.profile()
+            self.accrue_recovery(profile, now)
+            changed = recovery.commit(profile, rules.stats(profile))
+            self.db.profile = profile
+            if changed:
+                after_change(self.push_state)
+                after_change(self.push_prompt)
+            after_change(self.schedule_recovery)
+        return changed
+
+    def push_prompt(self):
+        if not self.sessions.count():
+            return
+        from evennia.utils.ansi import parse_ansi
+
+        profile = self.profile_snapshot()
+        prompt = ft.resource_prompt(profile, rules.stats(profile))
+        for session in self.sessions.all():
+            if session.protocol_key not in ("websocket", "webclient/websocket"):
+                super().msg(session=session, prompt=(parse_ansi(prompt.ansi()), {}))
+
+    def schedule_recovery(self):
+        profile = self.profile_snapshot()
+        now = time()
+        needed = self.sessions.count() and recovery.needs_tick(
+            profile, rules.stats(profile), ROOMS.get(self.zone, {}), ITEMS, now)
+        if not needed:
+            self.stop_recovery_timer()
+        elif not self.ndb.recovery_task:
+            self.ndb.recovery_task = delay(max(0.05, recovery.next_boundary(now) - now), self.recovery_tick)
+
+    def recovery_tick(self):
+        self.ndb.recovery_task = None
+        if self.sessions.count():
+            self.reconcile_recovery()
+
+    def stop_recovery_timer(self):
+        task = self.ndb.recovery_task
+        self.ndb.recovery_task = None
+        if task:
+            task.remove()
 
     @property
     def zone(self):
@@ -151,6 +209,8 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             "training_available": bool(instructor),
             "name": self.key,
             "hp": profile["hp"],
+            "mental": profile["mental"],
+            "resource_prompt": ft.resource_prompt(profile, values).segments,
             **values,
             "xp": profile["xp"],
             "xp_floor": rules.xp_threshold(values["level"]),
@@ -187,6 +247,8 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         # live-session reload 복원은 puppet hook 없이 기존 Object를 연결한다.
         from world.bootstrap import get_room
 
+        # 오프라인 구간은 옛 위치로 계산한 다음 로그인 위치를 바꾼다.
+        self.reconcile_recovery()
         self.location = get_room("staging_room")
         super().at_pre_puppet(account, session=session, **kwargs)
 
@@ -204,12 +266,16 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         self.msg("|g원시구역에 오신 것을 환영합니다.|n '도움말'로 명령을 확인하세요.")
         self.leave_combat()
         self.push_state()
+        self.push_prompt()
+        self.schedule_recovery()
 
     def at_post_unpuppet(self, account=None, session=None, **kwargs):
         self.ndb.shortcut_delete_all_request = None
         if not self.sessions.count():
             self.reconcile_lights(time(), turn_off=True)
             self.leave_combat()
+            self.change(lambda profile: None)
+            self.stop_recovery_timer()
         super().at_post_unpuppet(account=account, session=session, **kwargs)
 
     def reconcile_lights(self, observed_at, *, turn_off=False):
@@ -226,6 +292,10 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
     def at_server_shutdown(self):
         self.ndb.shortcut_delete_all_request = None
         self.reconcile_lights(time(), turn_off=True)
+        self.leave_combat()
+        if self.sessions.count():
+            self.change(lambda profile: None)
+        self.stop_recovery_timer()
         super().at_server_shutdown()
 
     def announce_move_from(self, destination, msg=None, mapping=None, move_type="move", **kwargs):
@@ -268,7 +338,10 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         if requirement:
             self.msg(requirement["message"])
             return False
-        return super().at_pre_move(destination, move_type=move_type, **kwargs)
+        allowed = super().at_pre_move(destination, move_type=move_type, **kwargs)
+        if allowed:
+            self.change(lambda profile: None)
+        return allowed
 
     def at_post_move(self, source_location, move_type="move", **kwargs):
         self.leave_combat()
@@ -328,16 +401,17 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         )
         self.push_state()
 
-    def leave_combat(self):
+    def leave_combat(self, now=None):
         from world.multiplayer import world_change
 
         with world_change():
             enemy = self.combat_target()
             if enemy:
-                enemy.remove_combatant(self)
+                enemy.remove_combatant(self, now=now)
             after_change(self.stop_combat_timer)
             profile = self.profile()
             if profile.get("combat_target"):
+                self.accrue_recovery(profile, now)
                 profile.update(combat_target=None, queued_action="attack", guard_until=0)
                 self.save_profile(profile)
 

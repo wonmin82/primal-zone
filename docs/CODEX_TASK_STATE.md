@@ -4,6 +4,28 @@
 
 ## Objective
 
+정신력과 10초 주기 자연회복 시스템의 구현·검증·문서 정리를 독립 branch `codex/mental-recovery`에서 완료했다. 시작 fetch의 최신 origin/main은 `500ad782a8f4c16621728a50d511be1b7d926523`이며 작업 트리는 깨끗했다. PR #25는 MERGED이고 아래 경제 PR의 병합 준비/OPEN 표현은 과거 기록이다. 이번 요청은 구현·검증·문서·커밋이며 push/새 PR 생성·병합은 요청되지 않았다.
+
+현재 정신력과 최대치·v9 migration, DB 없는 accrue/commit 계산, Room/equipment/timed effect source, offline 옛 위치 batch, 살아 있는 session reload 보존, 플레이어 단일 경계 예약과 적 15초 유예/점진·lazy 회복을 구현했다. 진료는 HP만, 휴식은 HP·정신력을 채우며 firstaid/의술·기존 경제를 보존한다. Web 정신력 meter와 로그와 분리된 prompt를 추가했다. 회복 장비/소모품·정신력 소비/치료 기술은 범위 밖이다.
+
+### 완료 검증 (2026-10-03)
+
+- 최종 `.venv\Scripts\python.exe scripts/dev.py test`: pure 145개(3.441s), integration 325개(141.898s), 합계 470개 성공, integration runner 152.662s. 신규 recovery pure 12개·integration 14개이며 기존 migration·경제·전투·장비·의료 assertion을 유지했다.
+- 관련 `tests.test_recovery --parallel 2 --reverse`: 14개 성공(7.245s, runner 16.981s). 전투·장비·아이템 이동·정산·상점·지역·환경의 관련 reverse/parallel 검사 73개 성공(57.460s, runner 67.083s), restart harness 검사 10개 성공.
+- `scripts/dev.py check`, `node --check game/web/static/webclient/js/primal.js`, `git diff --check` 성공. 최종 정적 파일의 collectstatic 성공(213개 최신 유지), 실제 새 profile의 상태·능력·경험치·기술·소지품·장비·능 도움말·prompt를 문서 예시와 대조했다.
+- Quick live smoke 53.424s 성공: 실제 10초 경계 정신력 증가, 시체 화폐·보호·respawn·구매/판매·재로그인 진행 보존. 이후 Full 전용 fixture/restart snapshot·테스트 기대·0 prompt ANSI 강조 보정은 Quick의 검증 경로에 영향을 주지 않아 기존 성공 근거를 재사용했다.
+- Full live smoke 361.952s 성공: 첫 라운드, 시체 decay 29.542s/respawn 44.506s/보호 종료 120.250s, 적 15초 유예 후 부분 회복 18→20(29.623s), 재교전 HP 보존, 실제 패배/진료/휴식·본부 전체·두 임무/보스·Portal+Server restart/relogin. 실행 중 snapshot 이후의 정상 전투까지 보존하려고 프로세스 종료 DB snapshot과 restart 결과를 비교한다.
+- 초기 Full은 자연회복으로 저체력 fixture가 적을 처치해 패배 검사에 실패했다. 정상 Lv1 fixture와 실제 갈퀴사냥룡 교전으로 수정했다. 두 번째 Full의 restart 비교는 실행 중 snapshot과 종료 사이의 라운드를 포함하지 않아 실패했고, 종료 시점 snapshot으로 경합을 제거했다. production 수치와 진행 보존 assertion은 바꾸지 않고 최종 Full을 통과했다.
+- 격리 browser에서 1440px desktop·1100px 중간 폭·390px mobile, HP/정신력/XP 분리·prompt·자연회복 중 로그 개수 불변·SURROUNDINGS/compass 유지·지혜 투자·의무관 진료의 정신력 비회복·HP full/정신력 부족 상태의 침대 버튼을 확인했다. 앱 console error/warning과 가로 overflow 없음. 실제 OS IME와 별도 Telnet 클라이언트/font는 미검증이며 입력 composition 코드는 변경하지 않았다. Telnet prompt 채널/ANSI/현재 숫자만 semantic 색 적용은 자동 검사했다.
+- Quick·Full·browser의 play DB size/mtime_ns/SHA256 불변: 733184 / 1790080153765082800 / `b1318296f505b9b7522fcbdedff7642a06cf055e9de72802198c70e6b8a7f700`. 성공 임시 서버는 종료·정리했고 실패 진단은 gitignored work 아래에 보존했다. runtime/DB/credential/screenshot은 소스에 포함하지 않는다.
+- 최종 fetch에서도 origin/main은 시작 SHA와 같았다. 이번 작업은 로컬 커밋까지이며 push·새 PR·병합·CI 실행은 하지 않는다.
+
+### 다음 작업
+
+현재 구현을 기준으로 리뷰한다. 실제 회복 장비·시간제 회복 소비품·정신력 소비/치료 기술은 별도 요청에서 다룬다. 새 PR 생성은 사용자가 요청한 뒤 진행한다.
+
+## 이전 PR #25 병합 준비 Objective (과거 기록)
+
 보급칩 경제와 [PR #25](https://github.com/wonmin82/primal-zone/pull/25)의 후속 리뷰 네 항목 구현·검증을 완료했다. 사용자의 병합·소스 브랜치 삭제 요청에 따라 최종 인계 문서를 정리한다. 병합 준비 fetch에서 로컬/원격/PR 구현 HEAD는 `f81eb3a51a0cf6d65c6d3f89ee4fc09c001d4195`, origin/main과 PR base는 `0229a2275f33436a74f75274c94e464c8077b3a2`로 일치하고 작업 트리는 깨끗했다. 최신 main을 이미 포함하므로 rebase 재작성은 필요하지 않다. 아래 과거 OPEN·병합 금지 설명은 당시 작업 범위이며 현재 승인 범위보다 우선하지 않는다.
 
 이 문서는 병합 전 최종 인계다. 문서 후속 HEAD의 test·smoke와 병합 후 main의 CI를 각각 확인하며, 실제 최종 HEAD·병합 커밋·브랜치 정리 결과는 PR과 GitHub Actions에서 확인한다. 구현 완료 이후의 신규 기능은 별도 요청으로 진행한다.

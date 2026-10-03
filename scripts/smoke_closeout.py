@@ -28,6 +28,7 @@ class Closeout:
                            self.scenario.timeouts.combat)
 
     async def run(self):
+        await self.enemy_recovery()
         self.scenario.phase = "hq-closeout"
         player = self.first
         await self.dock(player)
@@ -54,13 +55,14 @@ class Closeout:
         await player.act("의무관 진료", lambda s: s["hp"] == s["max_hp"])
         self.scenario.phase = "defeat"
         outsider = self.outsider
+        await route(outsider, (("북", "trail"),))
         before = outsider.state["credits"]
-        await outsider.act("어린청소룡 공격", lambda s: s["combat_target"] is not None)
+        await outsider.act("갈퀴사냥룡 공격", lambda s: s["combat_target"] is not None)
         await outsider.until(lambda s: s["zone"] == "infirmary" and s["combat_target"] is None,
                              self.scenario.timeouts.combat)
         assert outsider.state["hp"] == 1 and outsider.state["credits"] == before - min(before, 10)
-        await outsider.act("침대 휴식", lambda s: s["hp"] == s["max_hp"])
-        self.scenario.report("defeat", "actual enemy → infirmary / HP 1 / 최대 10칩 / Bed full heal")
+        await outsider.act("침대 휴식", lambda s: s["hp"] == s["max_hp"] and s["mental"] == s["max_mental"])
+        self.scenario.report("defeat", "actual enemy → infirmary / HP 1 / 최대 10칩 / Bed HP·정신력 full")
         self.scenario.phase = "hq-closeout"
         await player.act("귀환", lambda s: s["zone"] == "support_roof")
         await self.floor(player, "1층", "support_1f_c")
@@ -79,6 +81,26 @@ class Closeout:
         self.scenario.report("hq", "보관/정산/훈련/Doctor/Bed/귀환/승강기/3종 상점 실제 연결")
         await self.progression()
         await self.restart()
+
+    async def enemy_recovery(self):
+        self.scenario.phase = "enemy-recovery"
+        player = self.second
+        enemy = player.state["enemies"][0]
+        before_round = player.state["player_round"]
+        await player.act("어린청소룡 공격", lambda s: s["combat_target"] is not None)
+        await player.until(lambda s: s["player_round"] > before_round, self.scenario.timeouts.combat)
+        await player.act("도망", lambda s: s["combat_target"] is None)
+        damaged = next(e for e in player.state["enemies"] if e["id"] == enemy["id"])["hp"]
+        started = monotonic()
+        await player.until(lambda s: any(e["id"] == enemy["id"] and e["hp"] > damaged
+                                        for e in s["enemies"]), 35)
+        restored = next(e for e in player.state["enemies"] if e["id"] == enemy["id"])["hp"]
+        elapsed = monotonic() - started
+        assert elapsed >= 15 - 1.5 and damaged < restored < enemy["max_hp"]
+        await player.act("어린청소룡 공격", lambda s: s["combat_target"] is not None)
+        assert next(e for e in player.state["enemies"] if e["id"] == enemy["id"])["hp"] == restored
+        await player.act("도망", lambda s: s["combat_target"] is None)
+        self.scenario.report("enemy-recovery", f"15초 유예 / 점진 회복 {damaged}→{restored} / 재교전 HP 보존 ({elapsed:.3f}s)")
 
     async def progression(self):
         self.scenario.phase = "progression"
@@ -124,20 +146,22 @@ class Closeout:
         before = await asyncio.to_thread(self.scenario.harness.checkpoint)
         assert before["players"][self.second.name]["profile"]["combat_target"] is not None
         assert before["facilities"]["states"]["outpost_power"] and before["loot"]
-        await self.scenario.harness.restart()
+        stopped = await self.scenario.harness.restart()
         await asyncio.gather(*(client.close() for client in self.scenario.players))
         for client in self.scenario.players:
             await client.open()
         after = await asyncio.to_thread(self.scenario.harness.checkpoint)
         preserved = ("xp", "credits", "inventory", "equipment", "storage", "attributes", "skills",
                      "proficiencies", "quests", "discoveries", "visited")
-        for name, saved in before["players"].items():
+        for name, saved in stopped["players"].items():
             restored = after["players"][name]
             assert saved["id"] == restored["id"] and restored["zone"] == "staging_room"
             assert restored["home"] == "dock" and restored["profile"]["combat_target"] is None
             assert {key: saved["profile"][key] for key in preserved} == {
-                key: restored["profile"][key] for key in preserved}
-        assert after["players"][player.name]["profile"]["hp"] == before["players"][player.name]["profile"]["hp"]
+                key: restored["profile"][key] for key in preserved}, name
+        for name, saved in stopped["players"].items():
+            for key in ("hp", "mental"):
+                assert after["players"][name]["profile"][key] >= saved["profile"][key]
         assert before["box"] == after["box"] and before["facilities"] == after["facilities"]
         assert before["clock"] == after["clock"] and before["elevator"] == after["elevator"] == "3f"
         assert not after["stale"] and all(not e["combatants"] and not e["claim"] for e in after["enemies"].values())

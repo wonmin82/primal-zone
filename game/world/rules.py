@@ -3,6 +3,7 @@
 from copy import deepcopy
 from random import Random
 
+from world import recovery
 from world.content import (
     ENEMIES,
     EQUIPMENT_ACTIONS,
@@ -23,7 +24,7 @@ from world.progression import (
 from world.quests import progress_defaults
 
 MAX_LEVEL = 10
-PROFILE_VERSION = 8
+PROFILE_VERSION = 9
 DEFEAT_RECOVERY_HP = 1
 
 
@@ -37,6 +38,8 @@ def new_profile():
         **growth_defaults(),
         "xp": 0,
         "hp": 60,
+        "mental": 40,
+        "recovery_effects": [],
         "credits": 20,
         "inventory": {"machete": 1, "vest": 1, "bandage": 3},
         "equipment": {"weapon": "machete", "armor": "vest"},
@@ -70,6 +73,7 @@ def stats(profile):
     return {
         "level": level,
         "max_hp": 60 + (level - 1) * 10 + allocated(profile, "constitution") * 4,
+        "max_mental": 40 + (level - 1) * 5 + allocated(profile, "wisdom") * 4,
         "attack": (
             7
             + (level - 1) * 2
@@ -103,6 +107,8 @@ def gain_xp(profile, amount):
     profile["xp"] += amount
     after = stats(profile)
     profile["hp"] = min(after["max_hp"], profile["hp"] + after["max_hp"] - before["max_hp"])
+    profile["mental"] = min(after["max_mental"], profile["mental"] + after["max_mental"] - before["max_mental"])
+    recovery.clamp(profile, after)
     return after["level"] - before["level"]
 
 
@@ -232,6 +238,7 @@ def eat_or_drink(profile, item_id, action):
     consume(profile, item_id)
     restored = min(missing, definition["heal"])
     profile["hp"] += restored
+    recovery.clamp(profile, stats(profile))
     return restored
 
 
@@ -248,6 +255,7 @@ def first_aid(profile, training_cap=SAFE_FIRSTAID_TRAINING_CAP):
         maximum - profile["hp"],
     )
     profile["hp"] += amount
+    recovery.clamp(profile, stats(profile))
     train_proficiency(profile, "medicine", amount, training_cap)
     return amount
 
@@ -343,13 +351,22 @@ def treat(profile, *, safe=False):
     maximum = _medical_maximum(profile, safe)
     restored = maximum - profile["hp"]
     profile["hp"] = maximum
+    recovery.clamp(profile, stats(profile))
     return restored
 
 
 def rest(profile, *, safe=False):
-    maximum = _medical_maximum(profile, safe)
+    require_peace(profile)
+    if not safe:
+        raise RuleError("안전한 곳에서만 의료 서비스를 이용할 수 있습니다.")
+    values = stats(profile)
+    maximum = values["max_hp"]
+    if profile["hp"] >= maximum and profile["mental"] >= values["max_mental"]:
+        raise RuleError("이미 체력과 정신력이 가득합니다.")
     restored = maximum - profile["hp"]
     profile["hp"] = maximum
+    profile["mental"] = values["max_mental"]
+    recovery.clamp(profile, values)
     return restored
 
 
@@ -468,6 +485,9 @@ def migrate_profile(profile):
         result.setdefault("light_sources", {})
         result.setdefault("command_shortcuts", {})
         result["version"] = PROFILE_VERSION
+    if version < 9:
+        result["mental"] = stats(result)["max_mental"]
+        result.setdefault("recovery_effects", [])
     return result
 
 
@@ -528,6 +548,8 @@ def allocate_attribute(profile, attribute, amount=1, *, safe=False):
         raise RuleError("특성 포인트가 부족합니다.")
     profile["attributes"][attribute]["allocated"] += amount
     profile["hp"] = min(profile["hp"], stats(profile)["max_hp"])
+    profile["mental"] = min(profile["mental"], stats(profile)["max_mental"])
+    recovery.clamp(profile, stats(profile))
 
 
 def learn_skill(profile, skill, *, safe=False):
@@ -559,6 +581,8 @@ def retrain(profile, scope, *, safe=False):
     if scope in ("skills", "all"):
         draft["skills"] = growth_defaults()["skills"]
     draft["hp"] = min(profile["hp"], stats(draft)["max_hp"])
+    draft["mental"] = min(profile["mental"], stats(draft)["max_mental"])
+    recovery.clamp(draft, stats(draft))
     profile.clear()
     profile.update(draft)
 

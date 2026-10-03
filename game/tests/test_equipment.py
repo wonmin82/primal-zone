@@ -21,6 +21,7 @@ class EquipmentTests(WorldCommandTest):
     character_typeclass = Explorer
 
     def setUp(self):
+        self.enterContext(patch("typeclasses.explorers.time", return_value=100))
         super().setUp()
         self.rooms = self.world_rooms()
         self.char1.location = self.rooms["dock"]

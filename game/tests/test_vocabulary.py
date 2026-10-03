@@ -120,6 +120,7 @@ class VocabularyTests(WorldCommandTest):
         self.assertNotIn("가", tokens(page, "command"))
 
     def test_real_new_puppet_and_live_session_reload_have_distinct_location_policy(self):
+        self.enterContext(patch("typeclasses.explorers.time", return_value=100))
         self.account.unpuppet_object(self.session)
         self.account.puppet_object(self.session, self.char1)
         self.assertEqual(self.char1.zone, "staging_room")
@@ -138,7 +139,7 @@ class VocabularyTests(WorldCommandTest):
         self.assertEqual(self.char1.profile_snapshot(), before)
         self.assertEqual(self.char1.home, self.rooms["dock"])
 
-    def test_v7_snapshot_migration_is_read_only_and_saved_profile_is_v8(self):
+    def test_v7_snapshot_migration_is_read_only_and_saved_profile_is_latest(self):
         old = self.char1.profile_snapshot()
         old.update(version=7, queued_action="heal", command_shortcuts={"소": ["가방"], "연결": ["소"]})
         old["skills"]["heal"] = old["skills"].pop("firstaid")

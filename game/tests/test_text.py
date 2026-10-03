@@ -186,7 +186,7 @@ class SemanticTextTests(WorldCommandTest):
             f"남은 점수 {rules.point_pools(profile)['skill_points']}", view.skills(profile)
         )
         for output, limit in (
-            (status, 5),
+            (status, 6),  # 정신력 행을 포함하는 상태와 공격/방어의 분리
             (abilities, 6),
             (view.experience(profile), 2),
             (view.skills(profile), len(SKILLS) + 2),
