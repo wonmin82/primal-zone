@@ -8,7 +8,7 @@ more details):
 
 1. A user enters an url in their browser (or clicks a button). This leads to
    the browser sending a _HTTP request_ to the server, with a specific type
-   (GET,POST etc) and url-path (like for `https://localhost:4001/`, the part of
+   (GET,POST etc) and url-path (like for `http://localhost:8701/`, the part of
    the url we need to consider is `/`).
 2. Evennia (through Django) will make use of the regular expressions registered
    in the `urls.py` file.  This acts as a rerouter to _views_, which are

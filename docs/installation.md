@@ -17,7 +17,7 @@
 
 Evennia 등 Python 의존성은 `uv.lock`에 맞춰 자동으로 설치됩니다. Node.js와 npm은 로컬 설치에 필요하지 않습니다. GitHub Actions의 Node.js는 CI에서 사용하는 Action의 실행 환경입니다.
 
-현재는 설치한 PC에서 접속하는 로컬 실행을 기준으로 합니다. 외부 공개 서버 배포는 별도 구성이 필요합니다.
+설치한 PC와 LAN에서 접속할 수 있는 기본 실행을 제공합니다. 외부 공개 서버 운영에 필요한 인증서·프록시 등은 별도 구성이 필요합니다.
 
 ## 1. Git과 uv 설치
 
@@ -91,21 +91,44 @@ uv run python scripts/dev.py setup
 uv run python scripts/dev.py start
 ```
 
-첫 시작은 초기 준비 때문에 시간이 걸릴 수 있습니다. 시작 완료 후 [로컬 게임 화면](http://127.0.0.1:4001/webclient/)을 엽니다.
+첫 시작은 초기 준비 때문에 시간이 걸릴 수 있습니다. 시작 완료 후 [로컬 게임 화면](http://127.0.0.1:8701/webclient/)을 엽니다.
 
 1. 탐사자 이름과 비밀번호를 입력합니다.
 2. **새 탐사자 만들기**를 선택합니다.
-3. 탐사대 부두와 캐릭터 상태가 표시되면 접속 완료입니다.
+3. 출정 대기실과 캐릭터 상태가 표시되면 접속 완료입니다.
 4. `도움말`을 입력하거나 주변 행동 버튼으로 탐사를 시작합니다.
 
 이미 만든 계정은 **접속하기**로 들어갑니다. 첫 사냥 명령은 [README의 첫 사냥 안내](../README.md#첫-사냥)를 참고합니다.
 
 | 용도 | 기본 주소 |
 | --- | --- |
-| 게임 웹 화면 | `http://127.0.0.1:4001/webclient/` |
-| WebSocket 연결 | `ws://127.0.0.1:4002` |
+| 게임 웹 화면 | `http://127.0.0.1:8701/webclient/` |
+| WebSocket 연결 | `ws://127.0.0.1:8702` |
 
-브라우저는 WebSocket에 자동으로 연결하므로 게임 웹 화면만 열면 됩니다. 기본 설정은 `127.0.0.1`에 바인딩되므로 같은 PC에서만 접속할 수 있습니다.
+브라우저는 WebSocket에 자동으로 연결하므로 게임 웹 화면만 열면 됩니다. LAN 접속은 `http://<서버의 LAN-IP>:8701/webclient/`를 엽니다. WebSocket은 해당 hostname의 8702 포트를 사용합니다.
+
+### 네트워크와 자동 생성 키
+
+| 서비스 | 기본 포트 | 기본 bind |
+| --- | --- | --- |
+| Telnet | TCP 8700 | IPv4 `0.0.0.0` |
+| Web | TCP 8701 | IPv4 `0.0.0.0` |
+| WebSocket | TCP 8702 | IPv4 `0.0.0.0` |
+| Telnet SSL | TCP 8703 | IPv4 `0.0.0.0` |
+| SSH | TCP 8704 | IPv4 `0.0.0.0` |
+
+`0.0.0.0`은 모든 IPv4 인터페이스를 뜻하며 접속할 HTTP Host 값이 아닙니다. `ALLOWED_HOSTS = ["*"]`는 LAN IP와 hostname을 허용합니다. OS 방화벽이 허용하면 LAN의 다른 장치가 접속할 수 있고, NAT/포트포워딩을 따로 구성하면 외부 네트워크에도 노출될 수 있습니다. TCP 8700 Telnet은 평문이며 Web의 HTTP/WS도 TLS를 제공하지 않습니다. 외부 운영용 HTTPS/WSS·공인 인증서는 별도로 구성합니다. 프로젝트는 방화벽이나 공유기를 변경하지 않습니다.
+
+Evennia 6.1의 SSL·SSH 서비스에 필요한 Twisted `conch`/`tls` 선택 의존성(PyOpenSSL·cryptography·bcrypt·service-identity 등)은 `uv.lock`으로 설치합니다. 최초 **Portal cold start**에서 Evennia가 기존 issuer 설정으로 self-signed SSL 인증서와 SSH host key를 생성합니다. 인증서 신뢰 설정은 사용하는 클라이언트의 정책을 따릅니다.
+
+- SSL: `game/server/ssl.key`, `game/server/ssl-public.key`, `game/server/ssl.cert`
+- SSH: `game/server/ssh-private.key`, `game/server/ssh-public.key`
+
+다섯 파일은 명시적으로 Git에서 제외됩니다. 개인 키 내용은 로그·문서·커밋에 넣지 않고, 이미 생성된 키는 재시작 시 재사용합니다. 설정을 바꾼 뒤 Server reload만 하면 Portal listener는 바뀌지 않으므로 `scripts/dev.py stop` 후 `start`로 다시 시작합니다. 다른 서버가 같은 포트를 사용 중이면 먼저 해당 서버를 확인합니다.
+
+기존 4000번대의 로컬 앱 포트 충돌을 피하기 위해 접속 포트를 네 자리 연속 대역 8700~8704로 옮겼습니다. 내부 HTTP는 8705, AMP는 8706이며 loopback 연결을 유지합니다. 2026-10-04 확인한 [IANA 등록표](https://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.csv)에서 8700~8709는 미할당입니다. 임의의 다른 프로그램과 영구적으로 충돌하지 않는 포트는 없으므로 기동 전 실제 점유 상태를 확인합니다. OS 동적 포트 범위·방화벽은 변경하지 않습니다.
+
+PC 안에서만 실행하려면 Git 제외 `game/server/conf/secret_settings.py`에서 필요한 서비스의 `*_INTERFACES`를 `["127.0.0.1"]`, `WEBSOCKET_CLIENT_INTERFACE`를 `"127.0.0.1"`, `ALLOWED_HOSTS`를 `["localhost", "127.0.0.1", "[::1]"]`로 override할 수 있습니다. 서비스를 사용하지 않으면 해당 `*_ENABLED`를 `False`로 override합니다. AMP와 내부 Web 연결은 공개 접속 포트와 별개이며 loopback 연결을 유지합니다.
 
 서버를 종료할 때는 다음 명령을 사용합니다.
 

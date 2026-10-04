@@ -63,7 +63,10 @@ class ServiceRelocationTests(WorldCommandTest):
         self.assertEqual(box.db.items, {"bandage": 1})
 
     def test_dock_has_no_storage_or_training_targets_and_failures_preserve_profile(self):
+        # 이 검사는 서비스 실패의 불변성을 본다. 실제 10초 회복 경계와 분리한다.
+        self.enterContext(patch("typeclasses.explorers.time", return_value=100))
         self.char1.location = self.rooms["dock"]
+        self.char1.reconcile_recovery(emit_prompt=False)
         before = deepcopy(self.char1.profile())
         for raw in ("보관상자에 붕대 넣어", "보관상자에서 붕대 꺼내",
                     "개인 보관함에 붕대 넣어", "개인 보관함에서 붕대 꺼내",

@@ -21,7 +21,19 @@
 
 Web 입력 행 자동 회귀는 `node --test scripts/tests/test_web_prompt.cjs`로 실행한다. 별도 JS framework 없이 실제 client와 DOM/WS 경계를 검사하며 `tests.test_web_prompt`로 전체 suite에도 포함된다. Node.js가 없으면 그 검사는 skip이므로 실제 실행 여부를 결과에 기록한다.
 
-## PR #26 최종 검증 기준 (2026-10-04)
+## 네트워크 접속 기본값 검증
+
+`tests.test_network_settings`는 다섯 서비스의 활성화·IPv4 bind·포트와 LAN IP/hostname의 HTTP Host 허용 및 자동 생성 키의 Git 제외를 검사한다. 실제 listener 검사는 설정 assertion과 별도로 수행한다.
+
+1. 격리 DB/fixture와 새 `game/server/`에서 Portal과 Server를 cold start한다. 기존 플레이 DB를 초기화하지 않는다. 기본 TCP 8700~8704가 다른 서버에 점유돼 있으면 소유자를 확인하고 정상 종료 후 검사한다.
+2. Windows `Get-NetTCPConnection -State Listen`으로 다섯 접속 포트의 `LocalAddress`가 `0.0.0.0`인지 확인한다. AMP/내부 HTTP 포트는 게임 접속 listener와 구분한다.
+3. `http://127.0.0.1:8701/webclient/`와 loopback이 아닌 실제 LAN IPv4 주소의 같은 페이지를 각각 열어 HTTP 200·DisallowedHost 없음·로그인·게임 진입을 확인한다. WebSocket은 해당 접속 hostname의 8702 포트여야 하며 브라우저 console connection error가 없어야 한다.
+4. Telnet greeting·SSL handshake·SSH banner를 확인하고 SSL self-signed key/cert와 SSH host key의 최초 생성을 파일 존재 여부로 검사한다. 키 내용은 출력하지 않는다. Git status/check-ignore/ls-files로 다섯 파일이 무추적·제외되는지 확인한다.
+5. 테스트 프로세스를 종료하고 플레이 DB의 검증 전후 fingerprint를 비교한다. 다른 LAN 장치/외부 NAT 접속과 외부 클라이언트별 인증서 신뢰·SSH 인증은 실제 수행 여부를 따로 기록한다. 방화벽/공유기 설정을 검사 중 변경하지 않는다.
+
+설정과 노출 정책은 [설치 안내](installation.md#네트워크와-자동-생성-키)가 기준이다. Quick/Full smoke는 loopback과 임의 포트의 격리 정책을 유지한다.
+
+## PR #26 최종 검증 기준 (2026-10-04, 과거 기록)
 
 실행 코드 기준은 `cf6dada2d35c79c01a5cc72e263b807e04639074`다. 문서 마감은 Markdown만 변경하므로 아래 결과를 재사용하며 새로 실행한 검사처럼 표현하지 않는다. 이후 코드가 바뀌면 실제 영향에 맞춰 재검증한다.
 

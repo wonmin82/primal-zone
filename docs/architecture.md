@@ -320,7 +320,7 @@ profile의 최신 버전은 9다. v1/v2의 개인 encounter 제거·전투 입�
 
 원자성 보장은 단일 Evennia 게임 서버 프로세스와 그 DB를 전제로 한다. 현재 잠금은 프로세스 내부 RLock이며 다중 게임 서버가 같은 월드를 동시에 쓰는 구조는 지원하지 않는다. PostgreSQL 설정 연결점은 있으나 이번 검증은 SQLite 기준이다. 수평 확장 전 DB 수준 락과 트랜잭션 경계·캐시 정책을 다시 설계해야 한다.
 
-127.0.0.1 바인딩, HTTP 4001 / WebSocket 4002로 로컬 실행한다. 외부 배포 전 HTTPS/WSS, 프록시, 백업·복구·부하와 운영 권한을 검증한다. 정적 파일은 직접 제공하고 Neo둥근모 Code 글꼴도 공식 배포본·라이선스를 저장소에 포함한다. 추가 빌드/npm/CDN 의존성은 없다.
+프로젝트 기본 Portal 서비스는 Telnet 8700·Web 8701·WebSocket 8702·Telnet SSL 8703·SSH 8704를 모두 IPv4 `0.0.0.0`에 bind한다. `ALLOWED_HOSTS = ["*"]`로 LAN IP/hostname의 HTTP Host를 허용하며 WebSocket URL은 접속 hostname에서 결정한다. 내부 Web 8705·AMP 8706은 loopback 연결이며 인증·가입·protocol 정책은 유지한다. SSL/SSH 선택 의존성은 Twisted `conch`/`tls` extras를 lockfile로 설치하고 최초 생성 key/cert는 명시적으로 Git에서 제외한다. Telnet은 평문이며 방화벽과 NAT 구성에 따라 LAN/외부에 노출될 수 있다. 외부 운영용 HTTPS/WSS·프록시·백업·모니터링은 별도 구성이다. 포트·키·cold start와 override 절차는 [설치 안내](installation.md#네트워크와-자동-생성-키)가 기준이다. 격리 Quick/Full smoke는 계속 loopback 인터페이스와 임의 포트를 사용한다. 정적 파일과 Neo둥근모 Code 글꼴·라이선스는 직접 제공하며 추가 빌드/npm/CDN 의존성은 없다.
 
 ### 현재 위치 방향 표시
 
