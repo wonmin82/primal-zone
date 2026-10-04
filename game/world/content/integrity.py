@@ -70,6 +70,9 @@ def headquarters_errors():
     for facility, corridor in facilities:
         expected[facility] = {"남": corridor}
         expected[corridor]["북"] = facility
+    for facility, corridor in (("tactics_room", "support_2f_w2"), ("training_office", "support_2f_c"), ("shooting_range", "support_2f_e2")):
+        expected[facility] = {"북": corridor}
+        expected[corridor]["남"] = facility
     issues = []
     for zone in ROOF_ROOMS:
         room = ROOMS.get(zone, {})
@@ -158,11 +161,24 @@ def shop_errors():
 
 def errors(interactables):
     issues = headquarters_errors() + elevator_errors() + shop_errors()
+    from world.progression import ATTRIBUTES, SKILLS
+
+    for identity, definition in interactables.items():
+        kind = definition.get("typeclass")
+        if kind not in ("SkillTrainer", "AttributeTrainer", "TrainingManager"):
+            continue
+        for field in ("presence", "description", "dialogue"):
+            if not isinstance(definition.get(field), str) or not definition[field].strip():
+                issues.append(f"{identity}: 성장 교관의 {field}는 비어 있지 않은 문자열이어야 합니다.")
+        if kind == "SkillTrainer" and definition.get("skill_id") not in SKILLS:
+            issues.append(f"{identity}: 담당 기술이 유효하지 않습니다.")
+        if kind == "AttributeTrainer" and definition.get("attribute_id") not in ATTRIBUTES:
+            issues.append(f"{identity}: 담당 특성이 유효하지 않습니다.")
     if type(SALVAGE_CREDIT_RATE) is not int or SALVAGE_CREDIT_RATE <= 0:
         issues.append("회수부품 정산율은 양의 정수여야 합니다.")
     for identity, room in (
         ("shared_container", "storage_room"), ("personal_locker", "storage_room"),
-        ("instructor", "training_room"),
+        ("instructor", "training_office"),
         ("doctor", "infirmary"), ("infirmary_bed", "infirmary"),
         ("salvage_officer", "salvage_office"),
         ("supply_shopkeeper", "supply_shop"), ("weapon_shopkeeper", "weapon_shop"),

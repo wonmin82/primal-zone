@@ -86,7 +86,7 @@ class CommandShortcutRulesTests(TestCase):
         before = deepcopy(old)
         migrated = rules.migrate_profile(old)
         self.assertEqual(migrated, {**old, "version": rules.PROFILE_VERSION, "command_shortcuts": {},
-                                    "mental": rules.stats(old)["max_mental"], "recovery_effects": []})
+                                    "mental": rules.stats(old)["max_mental"], "recovery_effects": [], "skills": rules.growth_defaults()["skills"]})
         self.assertEqual(rules.migrate_profile(migrated), migrated)
         self.assertEqual(old, before)
         for version in range(1, 7):

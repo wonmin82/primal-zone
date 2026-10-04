@@ -244,7 +244,7 @@ def attribute_summary(profile):
 class Abilities(GameCommand):
     key = "능력"
     category = "성장"
-    summary = "기본 특성과 투자 포인트, 실제 행동으로 쌓은 숙련을 확인합니다."
+    summary = "네 특성의 현재 값과 남은 투자 포인트를 확인합니다."
 
     def run(self):
         self.caller.msg(view.abilities(self.caller.profile()))
@@ -253,7 +253,7 @@ class Abilities(GameCommand):
 class Skills(GameCommand):
     key = "기술"
     category = "성장"
-    summary = "기술 Rank와 다음 학습 조건·비용을 확인합니다."
+    summary = "8개 기술의 Rank와 남은 기술 훈련을 확인합니다."
 
     def run(self):
         self.caller.msg(view.skills(self.caller.profile()))
@@ -262,7 +262,7 @@ class Skills(GameCommand):
 class Experience(GameCommand):
     key = "경험치"
     category = "성장"
-    summary = "캐릭터와 숙련 경험치를 확인합니다."
+    summary = "현재 레벨의 경험치 진행과 다음 레벨의 훈련·특성 획득량을 확인합니다."
 
     def run(self):
         self.caller.msg(view.experience(self.caller.profile()))

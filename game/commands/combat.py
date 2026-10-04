@@ -1,6 +1,5 @@
 """combat 영역의 명시적 게임 명령."""
 
-from world import presentation as view
 from world import rules
 from world import text as ft
 from world.targets import names, parse_selector, resolve, room_objects
@@ -53,31 +52,68 @@ class Heavy(GameCommand):
         self.caller.msg(ft.text("다음 차례에 ", ft.token("command", self.key), " 행동을 준비한다."))
 
 
-class Guard(Heavy):
+class Shooting(Heavy):
     category = "전투·회복"
-    usage = "방어"
-    summary = "다음 차례에 방어를 예약합니다."
-    key = "방어"
-    aliases = ["guard"]
-    action = "guard"
+    usage = "사격"
+    summary = "총기로 다음 자동 공격을 강화합니다."
+    key = "사격"
+    aliases = ["shooting"]
+    action = "shooting"
 
 
-class FirstAid(GameCommand):
+class Insight(Heavy):
+    key = "간파"
+    aliases = ["insight"]
+    usage = "간파"
+    summary = "공격 한 차례를 포기하고 현재 상대의 빈틈을 분석합니다."
+    action = "insight"
+
+
+class Suppress(Heavy):
+    key = "견제"
+    aliases = ["suppress"]
+    usage = "견제"
+    summary = "다음 공격으로 상대의 이후 공격력을 낮춥니다."
+    action = "suppress"
+
+
+class Heal(GameCommand):
     category = "전투·회복"
-    usage = "응급처치"
-    summary = "붕대로 회복합니다. 전투 중에는 다음 기본 공격을 대신합니다."
-    key = "응급처치"
-    aliases = ["붕대", "firstaid"]
+    usage = "치료 · 철수 치료"
+    summary = "정신력으로 자신 또는 같은 방의 파티원을 치료합니다. 전투 중에는 다음 공격을 대신합니다."
+    input_style = "target"
+    key = "치료"
+    aliases = ["힐", "heal"]
+    action = "heal"
 
     def run(self):
-        if self.caller.profile().get("combat_target"):
-            self.caller.change(lambda profile: rules.queue_action(profile, "firstaid"))
-            self.caller.msg(
-                ft.text("다음 차례에는 공격 대신 ", ft.item("bandage"), "를 사용할 준비를 한다.")
-            )
-        else:
-            amount = self.caller.change(rules.first_aid)
-            self.caller.msg(view.healing(amount))
+        from world.skill_services import use_support
+
+        use_support(self.caller, self.action, self.args)
+
+
+class Breathe(Heal):
+    key = "호흡"
+    aliases = ["breathing"]
+    usage = "호흡"
+    summary = "정신력을 회복합니다. 전투 중에는 공격 한 차례를 사용합니다."
+    action = "breathing"
+    input_style = "bare"
+
+
+class Use(Heal):
+    key = "사용"
+    aliases = []
+    usage = "붕대 사용"
+    summary = "붕대 하나로 HP를 회복합니다. 전투 중에는 다음 공격을 대신하며 정신력은 소비하지 않습니다."
+    action = "bandage"
+
+    def run(self):
+        if self.args.strip() not in ("붕대", "bandage"):
+            raise rules.RuleError(self.usage)
+        from world.skill_services import use_support
+
+        use_support(self.caller, self.action)
 
 
 class Flee(GameCommand):

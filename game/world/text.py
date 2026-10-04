@@ -78,6 +78,9 @@ def resource_prompt(profile, values):
 
 def particle(value, pair="이/가"):
     last = str(value)[-1:] or " "
+    # Resource amounts and attribute values are read as Sino-Korean numbers.
+    if last in "0123456789":
+        last = "영일이삼사오육칠팔구"[int(last)]
     consonant = 0xAC00 <= ord(last) <= 0xD7A3 and (ord(last) - 0xAC00) % 28 != 0
     if pair == "으로/로" and consonant and (ord(last) - 0xAC00) % 28 == 8:
         consonant = False

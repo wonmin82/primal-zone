@@ -9,7 +9,7 @@ from commands.aliases import INFORMATION_SHORTCUTS, SHORTCUTS
 # 표시 순서, 접근 query, 대표 명령을 함께 관리한다. 전체 소속은 class.category다.
 HELP_CATEGORIES = {
     "이동·탐사": {"query": "이동", "examples": ("보기", "지도", "임무")},
-    "전투·회복": {"query": "전투", "examples": ("공격", "강타", "방어", "응급처치", "도망")},
+    "전투·회복": {"query": "전투", "examples": ("공격", "강타", "사격", "치료", "도망")},
     "아이템·보급": {"query": "아이템", "examples": ("소지품", "장비", "가져", "상품")},
     "성장": {"query": "성장", "examples": ("상태", "능력", "경험치", "기술")},
     "파티·교류": {"query": "교류", "examples": ("파티", "파티초대", "말")},
@@ -44,7 +44,7 @@ def category_page(category, commands):
                       "", commands_text(["승강기", *[stop["label"] for stop in ELEVATOR_STOPS.values()], "내려"]),
                       "층을 선택하면 도착 후 바로 내립니다. 다른 승객은 승강기에 남습니다."])
     elif category == "전투·회복":
-        lines.extend(["", "응급처치는 소지한 붕대 하나를 사용합니다.",
+        lines.extend(["", "치료는 정신력을, 붕대 사용은 소지한 붕대 하나를 사용합니다. 방어는 패시브 기술입니다.",
                       "진료는 의무관에게 받습니다. 휴식은 의무실 침대에서 이용합니다."])
     elif category == "아이템·보급":
         lines.append(ft.text("대상은 ", ft.token("command", "보기"), "로 확인할 수 있습니다."))

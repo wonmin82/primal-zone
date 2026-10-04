@@ -2,7 +2,6 @@
 
 ENEMIES = {
     "scavenger": {
-        "training_cap": 2,
         "name": "어린청소룡",
         "description": "작은 몸집의 육식 공룡이다. 날카로운 이빨을 드러내며 주변을 경계한다.",
         "presence": "풀 사이를 빠르게 오가며 주변을 살피고 있다.",
@@ -17,7 +16,6 @@ ENEMIES = {
         "chance": 0.25,
     },
     "hunter": {
-        "training_cap": 4,
         "name": "갈퀴사냥룡",
         "description": "굽은 발톱을 가진 사냥룡이다. 낮게 엎드린 자세로 먹잇감의 움직임을 살핀다.",
         "presence": "몸을 낮춘 채 사냥감을 찾아 주변을 맴돌고 있다.",
@@ -32,7 +30,6 @@ ENEMIES = {
         "chance": 0.25,
     },
     "sentinel": {
-        "training_cap": 7,
         "name": "고장난경비기",
         "description": "외장이 부서진 경비 기계다. 감지기가 움직일 때마다 금속 마찰음이 들린다.",
         "presence": "금속 마찰음을 내며 감지기를 돌리고 있다.",
@@ -47,7 +44,6 @@ ENEMIES = {
         "chance": 0.15,
     },
     "alpha": {
-        "training_cap": 10,
         "name": "능선의우두머리",
         "detectability": "conspicuous",
         "description": "능선을 차지한 거대한 포식자다. 돌진하기 전 몸을 낮추는 습성이 있다.",
@@ -143,7 +139,7 @@ ROOMS = {
         "light_profile": "natural",
         "enemies": ["alpha"],
         "desc": "통신탑을 둘러싼 덩굴이 능선을 뒤덮고 있다. 녹슨 철골 사이로 바람이 낮은 소리를 낸다.",
-        "hints": [{"text": "우두머리가 몸을 낮추면 다음 공격을 방어하자."}],
+        "hints": [{"text": "우두머리가 몸을 낮추면 견제로 공격력을 낮추고 치료와 붕대를 준비하자."}],
         "exits": {"남": "marsh", "북": "jungle_edge"},
         "requires": {
             "quest": "radio_tower",

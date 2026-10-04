@@ -89,7 +89,7 @@ class TargetIntegrationTests(WorldCommandTest):
             self.enterContext(patch.object(player.sessions, "count", return_value=1))
         for module in ("enemies", "explorers", "loot"):
             self.enterContext(patch(f"typeclasses.{module}.delay"))
-        for module in ("commands.character", "typeclasses.zone_rooms", "world.lifecycle", "typeclasses.loot", "typeclasses.enemies"):
+        for module in ("commands.character", "typeclasses.zone_rooms", "world.lifecycle", "typeclasses.loot", "typeclasses.enemies", "typeclasses.explorers"):
             self.enterContext(patch(f"{module}.time", return_value=100))
 
     def duplicate_enemies(self):

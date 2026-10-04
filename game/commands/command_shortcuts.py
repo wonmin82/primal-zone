@@ -24,6 +24,7 @@ def reserved_names(cmdset):
     """잠긴 실제 명령도 예약한다. 다른 층/장소의 정적 이동 명령도 등록을 막는다."""
     from django.conf import settings
     from world.content import DIRECTION_ALIASES, ROOMS
+    from world.progression import SKILLS
 
     from commands.aliases import SHORTCUTS
     from commands.default_cmdsets import UnloggedinCmdSet
@@ -32,6 +33,7 @@ def reserved_names(cmdset):
     from commands.vocabulary import FUTURE_RESERVED_COMMAND_NAMES
 
     names = set(SHORTCUTS) | set(FUTURE_RESERVED_COMMAND_NAMES)
+    names.update(data["name"] for data in SKILLS.values())
     for commands in (cmdset, UnloggedinCmdSet(), ElevatorInsideCmdSet(), ElevatorLandingCmdSet()):
         names.update(commands.get_all_cmd_keys_and_aliases())
     for cls in COMMANDS:

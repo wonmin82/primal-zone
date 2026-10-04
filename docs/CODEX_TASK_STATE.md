@@ -4,6 +4,56 @@
 
 ## Objective
 
+### PR #28 문서 마감·병합 및 브랜치 정리 (2026-10-04)
+
+레벨·특성·여덟 기술, 전문 교관, profile v10 migration과 최종 견제/정신력 안내 구현을 완료했다. 사용자의 병합·소스 브랜치 삭제 요청에 따라 문서를 마감한다. 아래 OPEN 유지·merge 금지 문장은 당시 개발 단계의 과거 기록이다. 병합 완료 여부·merge commit·최종 문서 HEAD의 CI와 브랜치 정리 결과는 [PR #28](https://github.com/wonmin82/primal-zone/pull/28)의 실제 원격 상태와 Validation이 기준이다.
+
+- 시작 로컬·원격·PR 구현 HEAD는 `a00165ca7c957af10b316648a67c0f52d7583ee1`, fetch 후 main은 `133b271b61ec0bfcb1799dd7226f9ed75da8be2c`다. 작업 트리는 깨끗했고 main 대비 behind0/ahead4였다. 이미 최신 main을 포함해 rebase와 이력 재작성은 필요 없다.
+- 구현 HEAD의 [Game checks 37203749674](https://github.com/wonmin82/primal-zone/actions/runs/37203749674)는 headSha 일치·test/smoke success다. 충돌 없는 비Draft PR이며 미해결 리뷰 대화는 없다. 문서 마감 커밋의 CI와 병합된 main의 CI도 각각 해당 SHA로 확인하고 PR Validation에 별도로 기록한다.
+- 이전 구현 검증은 2026-10-04의 동일 실행 코드 기준이다. 관련29개·확대92개·전체525개, check, Quick51.749s·Full411.025s가 성공했다. 문서와 수치 SSOT·출력 예를 최종 대조하고 `git diff --check`로 문서 변경을 검사한다. 이후 diff는 Markdown뿐이므로 로컬 전체 테스트·smoke·정적 수집·브라우저는 반복하지 않는다.
+- 성장 공식·견제 cap·boss/quest 책임·정신력 비용·NPC 훈련·migration은 [progression.md](progression.md), [architecture.md](architecture.md), [README](../README.md)와 일치한다. 미검증 수동 범위는 실제 OS IME·외부 Telnet client·다인 브라우저 동시 조작이며 기존 기록을 유지한다. DB·비밀 설정·runtime은 이번 문서 커밋에 포함하지 않는다.
+- 최신 PR HEAD의 필수 CI가 성공한 후 merge commit 방식으로 병합한다. 소스 HEAD가 main에 포함됨을 확인한 다음 원격/로컬 `codex/long-term-progression`을 삭제하고 로컬 main은 fast-forward로 갱신한다. 보호 규칙을 우회하지 않는다.
+
+### PR #28 public 견제 상한·정신력 안내 후속 (과거 기록: 2026-10-04)
+
+[PR #28](https://github.com/wonmin82/primal-zone/pull/28)의 기존 `codex/long-term-progression`에서 이어간다. 시작 로컬·원격·PR HEAD는 `0ed37cab989c0f878fe181e5c390e8ad23c9faf5`, origin/main은 `133b271b61ec0bfcb1799dd7226f9ed75da8be2c`다. 작업 트리는 깨끗했고 main 대비 behind0/ahead3이었다. 새 branch/PR을 만들지 않고 PR을 OPEN으로 유지하며 merge하지 않는다. 아래 이전 실행은 과거 검증이다.
+
+- public 전투에서 여러 파티가 참여하므로 source 수는 제한하지 않고 최종 감소율만 MAX Rank 네 효과 기준으로 cap한다. SSOT는 `progression.suppression_cap`이며 일반56.953279%·보스32.9198049375%다. 1~4명 수치, 모든 source의 저장·Rank 비교·cooldown·attack 소비와 교전 종료 cleanup은 유지한다.
+- 개별 보스 저항과 최종 cap은 `boss` flag를 사용한다. `boss_quest`는 quest 진행/콘텐츠 검증에서만 유지한다. Enemy 수치·public 참여·reward group·migration을 바꾸지 않는다.
+- 정신력 부족 안내에 기술명과 현재 레벨의 실제 비용을 넣는다. 검증 순서와 자원·예약·cooldown·대상 상태의 실패 원자성은 유지한다. 실제 Lv.133 메시지 다섯 개를 생성해 text-examples와 대조했다.
+- 수정 전 새 테스트로 세 문제를 재현했다. 보완 후 관련29개/22.548s, 확대 회귀92개/26.236s가 성공했다. 최종 전체 test는 순수166개/1.972s·통합359개/139.982s, 총525개 성공이며 runner149.903s다. check와 diff 검사는 성공했다. 기존 source/lifetime/cooldown/교관/migration 회귀를 유지하고 상한·boss flag·비용/우선순위·전투 안팎 동료 치료의 상태 불변을 추가했다.
+- 실제 public Enemy에서 두 파티8명의 효과를 모두 유지하고 reward group 둘·참여자8명 및 attack event 후 모든 횟수 감소를 확인했다. 순수 검사는 R10 일반/보스1~8명과 약한 source5명의 상한 미도달 곱산을 확인한다.
+- Quick smoke51.749s·Full smoke411.025s 성공. Full은 production 시체29.798s·respawn44.755s·보호121.503s, 두 보스/임무·NPC 훈련·실제 Portal/Server restart와 진행 보존을 확인했다. 플레이 DB fingerprint는 불변이며 실행 소유 프로세스와 임시 디렉터리를 정리했다.
+- 이번 후속은 Python gameplay/테스트와 Markdown만 변경하므로 Web static·cache·node·collectstatic·브라우저 레이아웃은 반복하지 않는다. Web state 회귀는 관련/전체 자동 검사에 포함한다. 이전 화면 검증은 아래 당시 기준으로 보존하며 이번에 새로 실행한 것으로 표현하지 않는다. 최종 HEAD와 해당 HEAD의 CI는 PR Validation에 기록한다.
+
+### PR #28 source 중첩·교관 후속 수정 (과거 기록: 2026-10-04)
+
+[PR #28](https://github.com/wonmin82/primal-zone/pull/28)의 기존 `codex/long-term-progression`에서 시작했다. 시작 로컬·원격·PR HEAD는 `b00d7658a1a9a3441076c56755990dcad9161eea`, 최신 main은 `133b271b61ec0bfcb1799dd7226f9ed75da8be2c`로 일치했다. 새 branch/PR을 만들지 않고 기존 PR을 OPEN으로 유지한다. 아래 최초 구현 결과는 과거 검증이며 이번 gameplay 변경의 성공 근거로 재사용하지 않는다.
+
+- 견제는 `suppressions[str(player.id)]`로 source마다 하나씩 저장한다. 자신의 Rank만 applied/refreshed/upgraded/preserved를 판단하고 다른 효과는 보존한다. 감소율은 곱산하며 보스는 각 효과를 절반으로 계산한다. R10 네 명 보스 결과는 공식상32.92%로 요청 예시32.96%를 정정했다.
+- 적 attack event마다 모든 효과를 한 번 소비하고 마지막 combatant 이탈·claim timeout·이동·사망·respawn에서 제거한다. HP 회복 수명과 분리한다. source 없는 옛 suppression은 제거하고 반복 bootstrap에서 현재 새 효과·Enemy/교관 ID·profile v10과 공유 상태를 보존한다.
+- 간파/견제는10초 absolute cooldown이다. profile reload·실제 계정 logout/login·live session 복원·서버 종료·기술 재분배·전체 재훈련 이후 deadline 보존을 검증한다. 재분배는 해당 scope와 초기화 후 실제 available 총량만 안내하고 자원을 무료 회복하지 않는다.
+- 공통 SkillTrainer8명·AttributeTrainer4명·TrainingManager를 유지하며 presence/description/dialogue를 NPC별 데이터로 구성했다. 보기는 담당 훈련과 사용법만, 현재 수치는 능력/기술이 담당한다. 전문 교관은 재훈련을 안내하지 않는다. 실제 provider Web controls는 유지한다.
+- 관련 reverse/parallel81개와 실패 영역을 보완한32개가 성공했다. 최종 전체 `scripts/dev.py test`는 순수163개/2.280s·통합357개/203.781s, 총520개 성공이며 runner215.544s다. 최초 전체에서 옛 fixture 메타데이터와 단일 교관 대화/appearance/무쿨타임 기대가 실패해 실제 신규 계약으로 보완했다. `scripts/dev.py check`와 `git diff --check` 성공.
+- Quick smoke 단독 재실행52.141s, Full smoke410.732s 성공. Full은 production 시체29.875s·respawn44.705s·보호120.816s, 부분 분배·적 점진 회복·패배·본부·두 임무/보스·NPC 훈련·실제 Portal/Server restart와 진행 보존을 확인했다. 전체 병렬 검사와 동시 실행한 첫 Quick은 짧은 시체 수명의 부분 화폐 회수 단계에서 timeout이 발생했다. 실패 로그/DB는 Git 제외로 보존하고 같은 gameplay 코드의 단독 재실행은 모든 계약을 통과했다. 성공한 Full은 테스트 프로세스와 임시 디렉터리를 정리했고 플레이 DB fingerprint는 불변이다.
+- Node syntax 검사와 실제 client9개 성공. game에서 정적 파일 수집0개 복사/213개 유지. static 변경이 없어 cache version은 바꾸지 않았다. 격리 Chrome1440/390px에서 교관 보기·개별 대화·NPC 버튼 훈련·scope별 재분배 및 실제 견제 성공 출력을 확인했다. NPC provider 명령, compass/SURROUNDINGS, 가로 overflow 없음·console error/warning 없음이 유지된다. 검증 후 전용 서버/탭을 정리했고 플레이 DB fingerprint는 불변이다.
+- 남은 수동 범위: 실제 OS IME·외부 Telnet client/font·다인 견제 중첩의 동시 브라우저 조작. 중첩/cleanup/cooldown과 Web state/provider는 자동 통합 검사로 확인했다. 현재 엔진에 실제 miss/AoE 콘텐츠가 없어 attack-event 단위 helper 계약으로 검증했다. 최종 HEAD와 해당 HEAD의 test/smoke CI URL은 PR Validation에 기록한다.
+
+최신 origin/main `133b271b61ec0bfcb1799dd7226f9ed75da8be2c`(PR #27 MERGED)에서 `codex/long-term-progression`을 시작했다. 레벨·특성·여덟 기술로 성장 체계를 교체하고 숙련·액티브 방어·응급처치 기술을 제거했다. profile v10은 진행을 보존하며 기술 재투자와 특성 정규화를 제공한다. 수치 SSOT는 world/progression.py, 설계는 [progression.md](progression.md)다. 새 PR은 검토를 위해 OPEN으로 유지하며 merge하지 않는다. 최종 HEAD·PR URL·해당 HEAD의 CI run/job 결과는 새 PR의 Validation이 기준이다.
+
+### 장기 성장 구현·검증 (2026-10-04)
+
+- 여덟 기본 기술의 추가 Rank 합132에서 현재 cap133을 도출한다. Lv.126 특성80점/Lv.133 훈련132회, 정신력331+지혜80=411, HP519+체질80=599를 순수 테스트로 확인했다. 호흡 R10·최대411은 내림 적용57이며 예시의58과 구분한다. 기술 훈련은 가변 잔액을 저장하지 않고 레벨·현재 Rank에서 도출한다.
+- 세 지원동2층 시설과 SkillTrainer8명·AttributeTrainer4명·TrainingManager를 구성했다. Room은 성장 서비스를 제공하지 않으며 담당 NPC 생략·명시 입력과 Web controls가 같은 validation을 사용한다. bootstrap은 기존 관리관 객체 ID와 플레이 진행을 보존한다.
+- profile v10은 옛 기술을 R1로 환원해 획득 훈련을 반환하고 특성을 +20·레벨 예산에 정규화한다. proficiency/guard는 제거하고 XP·장비·소지품·임무·발견·방문·보관·광원·파티를 보존한다. 개인 줄임말의 제거된 행동과 충돌 이름·exact 중첩 참조를 변환하며 절대 cooldown과 snapshot 비변경·idempotency를 검사했다.
+- `.venv\Scripts\python.exe scripts/dev.py check` 성공. 최종 전체 `scripts/dev.py test`는 pure161개/2.146s와 integration349개/128.821s, 합계510개 성공이며 integration runner138.328s다. 첫 최종 실행의 대상 선택 불변 테스트가 실시간10초 회복 경계를 지나 실패해 테스트 시각을 고정하고 전체 profile 비교를 유지했다. `test tests.test_targets --parallel 2 --reverse`22개/14.618s·runner23.392s를 먼저 재검증한 뒤 위 전체 성공을 확인했다. 성장·전투·치료·저장·회복·상점·대상·문자 출력 회귀를 포함한다.
+- Quick smoke62.888s, Full smoke408.256s 성공. Full은 production 시체29.864s·respawn44.790s·보호121.726s와 적 점진 회복, 실제 패배/의료, 본부, 두 임무·보스, Portal/Server restart·재접속·상태 보존을 검증했다. 최초 Full은 옛 과도한 체질 fixture를 새 cap에 맞춘 상태에서 준비 부족으로 보스전이 실패했다. 적 수치를 바꾸지 않고 실제 사냥으로 Lv.4를 획득하고 보급·체질 훈련·침대 회복 및 견제/붕대를 사용하도록 smoke를 보완해 최종 통과했다. 이후 변경은 테스트·문서·수치 조사 표기뿐이며 smoke의 gameplay 계산은 동일하다.
+- `node --check game/web/static/webclient/js/primal.js`와 Node 표준 runner의 실제 client 회귀9개, game의 `python -m evennia collectstatic --noinput`(2개 복사/211개 유지), `git diff --check` 성공. 실제 새 profile의 능력·경험치·기술·능력 도움말과 30-cell 방향도 출력을 생성해 text-examples와 대조했다. 수집 후 JS/CSS 변경은 없고 template 마지막 수정은 들여쓰기만 정리했다.
+- 격리 browser1440/1100/390px에서 여덟 기술·네 특성, 담당 NPC context/direct command/growth panel, 무료 훈련·전체 재훈련, 의무실 치료·호흡·HP full 붕대 거절, 사격장과 전술훈련실의 담당 controls를 확인했다. 3×3 compass와 SURROUNDINGS 첫 순서, 가로 overflow 없음이 유지된다. Chrome 확장의 async message-channel 오류3건은 앱 오류와 구분했다. 테스트 서버·탭을 정리했고 플레이 DB size/mtime/hash는 불변이다. runtime/DB/credential/log/screenshot은 Git 제외다.
+- 남은 수동 범위: 실제 OS IME와 별도 Telnet client/font. Telnet prompt/ANSI/Web semantic과 명령 dispatcher는 자동 검사했다. 현재 엔진은 확정 단일 대상 공격이므로 miss/AoE는 실제 콘텐츠가 아니라 attack-event 단위 helper 계약으로 검증한다. Master/상급 기술·Lv.133 이후·반복 다중 훈련 UX는 의도적 후속 범위다. 최종 fetch에서도 main은 시작 SHA와 같아 rebase가 필요하지 않았다.
+
+## PR #27 네트워크 서비스 기본값 (과거 기록)
+
 최신 `origin/main`의 `cb219c09cb183d82f2d421451610df6a41d9be4c`(PR #26 MERGED)에서 `codex/network-service-defaults`를 만들고 네트워크 접속 서비스 기본값을 정리한다. Telnet 8700·Web 8701·WebSocket 8702·Telnet SSL 8703·SSH 8704를 IPv4 `0.0.0.0`으로 공개하고 `ALLOWED_HOSTS = ["*"]`로 LAN IP/hostname 접속을 허용한다. 새 PR을 생성하되 merge하지 않는다. 이전 PR #26의 OPEN/병합 승인 표현은 아래 과거 기록이다.
 
 - 최초 격리 Portal 기동은 PyOpenSSL 누락으로 실패했다. 기존 Twisted 24.11.0에 `conch`/`tls` extras를 추가해 PyOpenSSL·bcrypt·service-identity·appdirs를 lockfile에 포함했다. cryptography는 기존 버전을 유지했고 pyasn1은 현재 Twisted 경로에서 필요하지 않았다.

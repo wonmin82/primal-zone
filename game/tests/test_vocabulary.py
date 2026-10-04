@@ -42,27 +42,33 @@ class VocabularyTests(WorldCommandTest):
         self.assertEqual(len(set(outputs)), 1)
         self.assertIn("소지품", outputs[0])
         self.char1.location = self.rooms["weapon_shop"]
-        for old in ("상점", "메뉴", "shop", "도주", "회복", "응급치료", "heal", "치료", "힐", "내리기"):
+        for old in ("상점", "메뉴", "shop", "도주", "회복", "응급치료", "firstaid", "붕대", "방어", "guard", "내리기"):
             before = self.char1.profile_snapshot()
             self.assertIn("명령을 확인", self.raw(old), old)
             self.assertEqual(self.char1.profile_snapshot(), before)
         for command in ("상품", "무기상 상품"):
             self.assertIn("강철마체테", self.raw(command))
 
-    def test_firstaid_aliases_use_bandage_and_treat_aliases_use_doctor(self):
-        for command in ("응급처치", "붕대", "firstaid"):
-            self.char1.change(lambda p: (p.update(hp=20), p["inventory"].update(bandage=1)))
+    def test_healing_aliases_bandage_and_medical_services(self):
+        for command in ('치료', '힐', 'heal'):
+            self.char1.change(lambda p: p.update(hp=20, mental=40, skill_ready_at={}))
+            before = self.char1.profile_snapshot()
             self.raw(command)
-            self.assertGreater(self.char1.profile_snapshot()["hp"], 20)
-            self.assertEqual(self.char1.profile_snapshot()["inventory"].get("bandage", 0), 0)
-        self.char1.location = self.rooms["infirmary"]
-        for command in ("진료", "의무관 진료", "의무관에게 진료", "treat", "휴식", "침대 휴식", "침대에서 휴식", "rest"):
+            after = self.char1.profile_snapshot()
+            self.assertGreater(after['hp'], 20)
+            self.assertEqual(after['mental'], 30)
+            self.assertEqual(after['inventory'], before['inventory'])
+        self.char1.change(lambda p: p.update(hp=20))
+        self.raw('붕대 사용')
+        self.assertEqual(self.char1.profile_snapshot()['inventory']['bandage'], 2)
+        self.char1.location = self.rooms['infirmary']
+        for command in ('진료', '의무관 진료', '의무관에게 진료', 'treat', '휴식', '침대 휴식', '침대에서 휴식', 'rest'):
             self.char1.change(lambda p: p.update(hp=1))
             before = self.char1.profile_snapshot()
             output = self.raw(command)
-            self.assertIn("진료를 받고" if command in ("진료", "의무관 진료", "의무관에게 진료", "treat") else "휴식하며", output)
-            self.assertGreater(self.char1.profile_snapshot()["hp"], 1)
-            for field in ("credits", "inventory", "proficiencies", "skills"):
+            self.assertIn('진료를 받고' if command in ('진료', '의무관 진료', '의무관에게 진료', 'treat') else '휴식하며', output)
+            self.assertGreater(self.char1.profile_snapshot()['hp'], 1)
+            for field in ('credits', 'inventory', 'skills'):
                 self.assertEqual(self.char1.profile_snapshot()[field], before[field])
 
     def test_jamo_direction_shortcuts_traverse_roof_round_trips(self):
@@ -82,13 +88,12 @@ class VocabularyTests(WorldCommandTest):
         self.assertEqual(self.char1.profile_snapshot()["command_shortcuts"], {"가": ["상태"]})
         self.assertIn("체력", self.raw("가"))
 
-    def test_medical_help_keeps_future_healing_inactive(self):
-        for query in ("응급처치", "진료", "휴식"):
-            self.assertIn("사용법", self.raw(query + " 도움말"))
+    def test_healing_is_active_and_defense_is_passive(self):
+        for query in ('치료', '힐', 'heal', '진료', '휴식', '사용'):
+            self.assertIn('사용법', self.raw(query + ' 도움말'))
         registered = {name for cls in COMMANDS for name in (cls.key, *cls.aliases)}
-        self.assertTrue({"치료", "힐", "heal"}.isdisjoint(registered))
-        for query in ("치료", "힐", "heal"):
-            self.assertIsNone(help_page(query, COMMANDS))
+        self.assertTrue({'치료', '힐', 'heal'}.issubset(registered))
+        self.assertTrue({'방어', 'guard', '응급처치', 'firstaid'}.isdisjoint(registered))
 
     def test_help_taxonomy_routes_semantics_and_shortcut_ssot(self):
         commands = [cls for cls in COMMANDS if getattr(cls, "input_style", None)]
@@ -142,7 +147,7 @@ class VocabularyTests(WorldCommandTest):
     def test_v7_snapshot_migration_is_read_only_and_saved_profile_is_latest(self):
         old = self.char1.profile_snapshot()
         old.update(version=7, queued_action="heal", command_shortcuts={"소": ["가방"], "연결": ["소"]})
-        old["skills"]["heal"] = old["skills"].pop("firstaid")
+        old["skills"] = {"heavy": 1, "guard": 1, "heal": 1}
         self.char1.db.profile = old
         with patch.object(self.char1, "save_profile") as save:
             snapshot = self.char1.profile_snapshot()

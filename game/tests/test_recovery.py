@@ -103,10 +103,10 @@ class RecoveryTests(WorldCommandTest):
         self.char1.db.profile = p
         before = deepcopy(deserialize(self.char1.db.profile))
         snapshot = self.char1.profile_snapshot()
-        self.assertEqual((snapshot["version"], snapshot["mental"]), (9, 60))
+        self.assertEqual((snapshot["version"], snapshot["mental"]), (rules.PROFILE_VERSION, 60))
         self.assertNotIn("recovery", snapshot)
         self.assertEqual(deserialize(self.char1.db.profile), before)
-        self.assertEqual(self.char1.profile()["version"], 9)
+        self.assertEqual(self.char1.profile()["version"], rules.PROFILE_VERSION)
         self.assertEqual(deserialize(self.char1.db.profile)["mental"], 60)
 
     def test_real_account_logout_login_and_reload_recovery(self):

@@ -1,17 +1,27 @@
 # 원시구역 테스트 안내
 
+## 현재 절차: PR #28 견제와 교관
+
+1. 격리 캐릭터 두 명으로 같은 적에게 견제를 적용한다. 문자열 source ID별 효과가 공존하고 각자 자신의 Rank만 교체/갱신/보존하는지 확인한다. R10 두 명34.39%, 네 명56.95%, 보스 네 명32.92%는 순수 helper로 검사한다. public 적에 두 파티8명이 참여해도 source를 모두 유지하며 최종 감소율만 네 명 기준으로 제한한다. cap 상태에서도 모든 효과를 소비한다. boss=True/quest 없음과 boss=False/quest 존재 fixture는 각각 보스/일반 수치를 사용해야 한다.
+2. 적 attack event에서 모든 횟수가 각각1 줄고0은 제거되는지 확인한다. telegraph는 추가 소비하지 않는다. 도망·마지막 참가자 이탈·claim timeout·Enemy 이동·사망·respawn 후 효과가 없어야 하며 HP 유예 중에도 재교전에 남아서는 안 된다.
+3. 간파/견제 실행 후10초 전 재예약을 거절한다. 실제 계정 재로그인·session 복원·서버 종료 경로·기술 재분배·전체 재훈련 이후에도 absolute deadline을 유지한다.
+   정신력 부족 시 다섯 기술의 이름과 실제 레벨 비용을 안내하고 전체 profile과 대상 상태가 불변인지 확인한다. cooldown 중이면 기존처럼 cooldown 안내가 먼저다. 동료 치료는 전투 안팎 모두 실패 시 양쪽 자원·예약·cooldown·대상 HP가 불변이어야 한다.
+4. 특성/기술/전체 초기화는 해당 scope만 바꾸고 결과 숫자는 실제 available 총량과 같아야 한다. HP/정신력 무료 회복과 cooldown 초기화는 없어야 한다.
+5. SkillTrainer8명·AttributeTrainer4명의 보기에서 역할·담당 입력만 확인한다. 현재 Rank/특성/남은 예산/상세 효과는 없고 각 NPC의 대화가 서로 달라야 한다. 훈련관리관만 세 재분배를 안내한다. Web NPC context와 growth panel은 기존 provider 명령을 계속 제공해야 하며 Room-owned 성장 action은 없어야 한다.
+6. bootstrap 반복으로 Enemy/교관 ID와 profile v10·공유 loot/파티를 보존한다. source 없는 옛 suppression은 제거하되 현재 교전의 새 suppressions는 유지한다. 최종 check/test·Quick/Full smoke와 Node client 검사 및 수집 후 대표 desktop/mobile 화면을 확인한다. 실행 결과는 Task State와 PR의 해당 HEAD Validation에 기록한다.
+
 ## 현재 절차: 정신력과 주기 회복
 
 격리 DB의 테스트 캐릭터로 확인한다. 일반 플레이 DB를 초기화하거나 fixture 상태로 덮어쓰지 않는다.
 
-1. 새 profile은 v9·정신력 40/40이며 Lv5/지혜 0은 60, Lv10/지혜 5는 105다. v8 이하 fixture는 기존 진행을 유지하고 현재 최대 정신력으로 migration한다. profile_snapshot만으로 저장·시계 초기화가 발생하지 않아야 한다.
+1. 새 profile은 v10·정신력 40/40이며 Lv5/지혜 0은 60, Lv10/지혜 5는 105다. v8 이하 fixture는 기존 진행을 유지하고 현재 최대 정신력으로 migration한다. profile_snapshot만으로 저장·시계 초기화가 발생하지 않아야 한다.
 2. 부족한 HP/정신력으로 9초를 보내고 이동·장비 변경·전투를 시작한다. 현재 수치는 그대로이고 다음 고정 10초 경계에서만 정수 기여가 지급돼야 한다. 짧게 여러 번 계산한 결과와 offline batch를 비교한다.
 3. 비전투 HP는 2+max_hp/60, 정신력은 4+max_mental/20의 분당 기본률이다. 의무실 6/2·중앙홀 2/2·관리동 2/1·옥상 0/2를 더하고 staging에는 추가하지 않는다. 전투에서는 장소 보너스와 기본 HP만 제외한다.
 4. 실제 계정 logout/login으로 의무실의 offline 회복 후 대기실 시작을 확인한다. 기간 중 만료하는 효과는 만료 전만 계산한다. live session at_sync와 서버 restart에서는 기존 위치·단일 timer를 확인하고 offline 캐릭터에 timer가 없어야 한다.
 5. HP full/정신력 부족에서 진료는 거절하고 휴식은 두 자원을 채운다. 붕대·음식·진료와 패배는 정신력을 바꾸지 않으며 full 자원의 credit을 남기지 않는다. 패배의 HP 1·최대 10칩 손실과 의무실 이동은 유지한다.
 6. 적에게 피해를 주고 도망한다. 15초 유예 동안 HP가 같고 이후 경계에서 일부만 회복한다. 재교전은 그 HP이며 빈 방은 tick 없이 다음 접근에서 경과를 계산한다. 죽은 적은 회복하지 않고 기존 45초에 재생성한다.
 7. 최종 collectstatic 후 1440px desktop·1100px·390px에서 HP/정신력/XP meter와 메인 scrollback의 prompt, 현재 숫자의 색, 3×3 compass/SURROUNDINGS를 확인한다. 입력창 위 고정 prompt는 없어야 한다. 과거 prompt는 남고 위로 읽는 중 새 prompt가 강제로 아래로 이동시키면 안 된다. overflow/clipping·console 앱 error/warning을 확인한다.
-8. 상태·잘못된 명령·이동·공격·응급처치·진료·휴식의 결과 뒤 prompt가 하나여야 한다. 빈 Enter와 공백 Enter는 서버 최신 값의 prompt만 추가하고 command echo/↑↓ history에는 넣지 않는다. 지난 10초 경계와 Enter 연타를 비교해 중복 회복이 없어야 한다.
+8. 상태·잘못된 명령·이동·공격·치료·진료·휴식의 결과 뒤 prompt가 하나여야 한다. 빈 Enter와 공백 Enter는 서버 최신 값의 prompt만 추가하고 command echo/↑↓ history에는 넣지 않는다. 지난 10초 경계와 Enter 연타를 비교해 중복 회복이 없어야 한다.
 9. 자동 전투 공격 메시지에는 prompt가 붙지 않으며 자연회복으로 실제 정수 자원이 바뀔 때만 추가된다. 같은 이벤트 구간의 전투 메시지가 먼저 나와야 한다. 패배는 구조/손실·의무실 화면 뒤 최종 HP 1 prompt를 하나 출력한다. 새 로그인은 방/환영 출력 뒤 하나, logout은 없음이다.
 10. Telnet 실제 text-session 경로에서 결과→prompt channel 순서·blank·회복·패배·중복을 확인한다. progressive 입력 대기/완료와 blank의 비응답 경로를 확인한다. 실제 OS IME와 Telnet font 렌더링은 별도 수동 검사다.
 11. 일반 명령·실패·채팅·접속자와 compass/quick/context 버튼을 실행해 `[ 자원 ] > 명령` 한 행인지 확인한다. 별도 `› 명령` 행이 없어야 한다. 자동 적 공격 뒤 상태를 입력하면 과거 prompt와 공격 메시지를 보존하고 최신 서버 값의 입력 행을 끝에 추가해야 한다. 자연회복 prompt 뒤에는 가장 최신 행에 붙는다.
@@ -58,16 +68,16 @@ Quick 53.424s와 Full 361.952s가 성공했다. Full은 시체 29.542s·respawn 
 1. 격리 DB의 일반 계정으로 로그인하고 출정 대기실을 확인한다. 소지품/가방/가진거/i/인벤토리/소가 같은 출력인지 확인한다. `단축어`의 이동 8개·정보 5개를 조회한다.
 2. `귀환` 후 옥상의 북부터 시계방향 `ㅂ/ㅂㄷ/ㄷ/ㄴㄷ/ㄴ/ㄴㅅ/ㅅ/ㅂㅅ`와 반대 방향을 왕복한다. 영문 alias와 방향 보기, 고정 3×3 compass의 8↔1 전환도 비교한다.
 3. 두 플레이어가 `승강기`에 탑승한다. A의 `2층` 이후 A만 2층 중앙, B는 승강기 내부여야 한다. B가 `내려`를 입력해 하차한다. 같은 층 선택도 자동 하차하며 내리기는 unknown이다.
-4. 의무실에서 `응급처치`/붕대/firstaid로 소지 붕대를 사용한다. `의무관 진료`/`의무관에게 진료`/treat는 Doctor, 휴식/rest는 Bed 서비스인지 비교한다. 전투에서 도망/flee를 사용한다. 회복/응급치료/heal·도주·치료·힐은 명령으로 동작하지 않아야 한다.
+4. 의무실에서 치료/힐/heal은 정신력을 사용하는 플레이어 기술, 붕대 사용은 HP20 소모품인지 확인한다. 의무관 진료/treat와 침대 휴식/rest는 시설 서비스다. 회복/응급치료/firstaid·도주·액티브 방어는 명령으로 동작하지 않아야 한다.
 5. 세 판매자에게 `상품`/`무기상 상품` 및 구매를 실행한다. 상점/메뉴/shop은 command가 아니다. 다른 본부 서비스와 가격·정산율을 확인한다.
 6. 도움말 root의 여섯 분류, 이동/전투/아이템/성장/교류/편의 도움말, 소·ㅂㄷ 도움말, 파티 명령 detail, 입력 도움말을 확인한다. 8방향 이동은 command 색을 사용하지 않는다.
-7. v7 fixture에서 heal Rank/예약 action과 old command 정의를 저장한 뒤 최신 v9를 로드한다. 새 예약 이름 충돌은 _개인[번호]로 보존하고 nested 참조도 연결되어야 한다. 소/ㅂㄷ/치료/힐/heal 신규 이름은 거절하며 가는 개인 이름으로 등록 가능하다. v7의 힐 정의와 exact nested 참조는 힐_개인[번호]로 보존하되 채팅·대상 문자열은 유지한다. 기존 줄임말/묶음/전체 삭제의 직접 2단계 계약도 확인한다.
+7. v7 fixture에서 heal Rank/예약 action과 old command 정의를 저장한 뒤 최신 v10을 로드한다. 새 예약 이름 충돌은 _개인[번호]로 보존하고 nested 참조도 연결되어야 한다. 소/ㅂㄷ/치료/힐/heal 신규 이름은 거절하며 가는 개인 이름으로 등록 가능하다. v7의 힐 정의와 exact nested 참조는 힐_개인[번호]로 보존하되 채팅·대상 문자열은 유지한다. 기존 줄임말/묶음/전체 삭제의 직접 2단계 계약도 확인한다.
 8. 밀림 또는 3층에서 로그아웃/로그인하면 대기실에서 시작하고 XP/보급칩/소지품/성장/임무/방문/줄임말이 유지되고 HP/정신력은 offline 회복만큼 증가할 수 있다. live-session reload 복원은 기존 위치를 보존한다.
-9. 최종 collectstatic 이후 desktop·중간 breakpoint·390px browser에서 FIELD GUIDE 소지품, 응급처치/도망, inventory 붕대 사용, 상품/진료, 승강기 자동 하차/내려 버튼을 실행한다. compass와 SURROUNDINGS 순서, console error/warning·가로 overflow·한글 clipping을 확인한다. OS IME는 별도 실제 입력 검증이다.
+9. 최종 collectstatic 이후 desktop·중간 breakpoint·390px browser에서 FIELD GUIDE 소지품, 치료/도망, inventory 붕대 사용, 상품/진료, 승강기 자동 하차/내려 버튼을 실행한다. compass와 SURROUNDINGS 순서, console error/warning·가로 overflow·한글 clipping을 확인한다. OS IME는 별도 실제 입력 검증이다.
 
 자동 검사는 `world.test_vocabulary`·`tests.test_vocabulary`와 기존 parser/줄임말/의료/상점/승강기/본부 suite, 전체 check/test, Quick live smoke를 사용한다. Full은 production timer와 restart/progression의 수동 검증이며 이번 변경의 실제 실행 여부는 PR 검증 기록을 따른다.
 
-능력·경험치·Web 성장 화면의 숙련은 의술(medicine), 기술은 응급처치(firstaid)로 구분한다. 실제 붕대 회복에서만 의술 XP가 증가하며 진료·휴식에서는 증가하지 않아야 한다. 치료/힐/heal은 현재 command·도움말 목록·Web 버튼에 없어야 한다. profile version은 9이고 저장된 medicine XP/Rank는 동일해야 한다.
+능력·경험치·Web 성장 화면에 숙련 XP/Rank가 없어야 한다. 현재 profile은 v10이며 여덟 기술은 모두 R1로 시작한다. 치료/힐/heal은 정신력 기술이고 붕대 사용은 독립 소모품이다. v7→v8의 과거 어휘 변환 이후에도 v10의 기술 환원·특성 예산 정규화가 적용되며 기존 탐사·장비·개인 줄임말 데이터는 보존되어야 한다.
 
 ## 현재 절차: 보급칩 경제
 
@@ -84,6 +94,16 @@ Quick 53.424s와 Full 361.952s가 성공했다. Full은 시체 29.542s·respawn 
 Web에서는 붕대 3개로 기본 판매 4칩/1개와 모두 판매 총 12칩을 구분하고, 강철마체테 3개 중 1개 착용이면 모두 판매 총액이 60칩이며 착용분이 남는지 본다. 마지막 손전등 판매 후 light_sources가 사라지고 재구매 시 전원이 없는지, 여분을 팔 때는 상태가 남는지도 확인한다. 시체/바닥 버튼은 8칩으로 표시하고 칩 8칩처럼 선택자와 금액을 중복하지 않으며 칩/칩 2 명령은 유지해야 한다.
 
 관련 자동 검사는 world.test_economy/tests.test_economy와 기존 reward/loot/targets/shop/regions/text suite다. Quick은 처치 즉시 미지급·2칩 부분 분배·보호/decay·만료 후 회수·가치/판매·재접속을 연결하며 Full은 같은 흐름과 production timing/restart/progression을 검사한다.
+
+## 장기 성장 현재 검증 절차
+
+- 훈련실에서 Lv.1의 힘 4 배분은 성공, 추가 배분·강타 배워는 예산 부족으로 실패한다. Lv.2 이후 강타 배워와 타격교관에게 강타 배워는 같은 NPC validation을 사용한다.
+- 의무실의 치료·체질, 전술훈련실의 견제·호흡·지혜, 사격장의 사격·간파·민첩을 확인한다. 훈련관리실의 세 재훈련은 무료이고 현재 자원·cooldown은 초기화하지 않는다.
+- 능력/기술/경험치에 숙련 UI가 없고 Lv.126 특성 80점, Lv.133 추가 훈련 132회·정신력 기본 331/지혜 MAX 411을 확인한다.
+- 비총기 강타·총기 사격 제한, 간파 뒤 치료/호흡으로 유지 및 공격 적중으로 소모, 견제 공유 상태·보스 절반·attack event당 한 번 소비를 검증한다.
+- 치료/힐/heal은 활성 명령이다. 붕대 사용은 HP 20·정신력 소비 없음이며 가득 차면 소비하지 않는다. 전투 지원 행동은 다음 공격 한 번을 대신한다.
+- 기존 v9 캐릭터는 v10에서 기술 R1·레벨만큼 재투자 가능한 훈련, cap/예산 내 특성, 기존 진행 보존을 확인한다. 재실행·read-only snapshot과 개인 줄임말 collision/nested 참조도 검사한다.
+- Web desktop/mobile의 실제 NPC action과 성장 패널 버튼은 텍스트와 같은 명령을 사용한다. room-owned 성장 action·액티브 방어·숙련·응급처치 기술 버튼은 없어야 한다. 실제 OS 한글 IME는 별도 수동 확인한다.
 
 ## 과거 단계별 검증 기록과 당시 절차
 

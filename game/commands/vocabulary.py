@@ -1,7 +1,7 @@
-"""예약 어휘와 저장된 명령의 v8 변환. DB와 Evennia에 의존하지 않는다."""
+"""예약 어휘와 저장된 명령의 v8/v10 변환. DB와 Evennia에 의존하지 않는다."""
 
-FUTURE_RESERVED_COMMAND_NAMES = frozenset({"치료", "힐", "heal"})
-NEW_RESERVED_NAMES = frozenset({"소지품", "소", "ㅂㄷ", "ㄴㄷ", "ㄴㅅ", "ㅂㅅ", "상품", "도망", "응급처치", "진료", "내려", "단축어", "firstaid", "가진거"}) | FUTURE_RESERVED_COMMAND_NAMES
+FUTURE_RESERVED_COMMAND_NAMES = frozenset()
+NEW_RESERVED_NAMES = frozenset({"소지품", "소", "ㅂㄷ", "ㄴㄷ", "ㄴㅅ", "ㅂㅅ", "상품", "도망", "응급처치", "진료", "내려", "단축어", "firstaid", "가진거", "치료", "힐", "heal"})
 
 # 저장된 v7 입력만 해석한다. 새 runtime alias를 제공하는 표가 아니다.
 LEGACY_COMMANDS = {
@@ -56,3 +56,35 @@ def migrate_shortcuts(shortcuts):
 
     return {renamed.get(name, name): [command(value) for value in values]
             for name, values in shortcuts.items()}
+
+
+def migrate_progression_shortcuts(shortcuts):
+    """v10의 새 명령과 충돌하는 개인 정의를 보존하고 제거된 action만 변환한다."""
+    from commands.shortcuts import MAX_NAME_CHARACTERS
+
+    reserved = {"사격", "shooting", "간파", "insight", "견제", "suppress", "호흡", "breathing", "사용"}
+    occupied, renamed = set(shortcuts), {}
+    for name in sorted(shortcuts):
+        if name.casefold() not in reserved:
+            continue
+        index = 1
+        while True:
+            suffix = "_개인" + (str(index) if index > 1 else "")
+            candidate = name[:MAX_NAME_CHARACTERS - len(suffix)] + suffix
+            if candidate not in occupied:
+                break
+            index += 1
+        occupied.add(candidate)
+        renamed[name] = candidate
+
+    def command(value):
+        stripped = value.strip()
+        if stripped in renamed:
+            return renamed[stripped]
+        if stripped.casefold() in {"붕대", "응급처치", "firstaid"}:
+            return "붕대 사용"
+        if stripped.casefold() in {"방어", "guard"}:
+            return "견제"
+        return value
+
+    return {renamed.get(name, name): [command(value) for value in values] for name, values in shortcuts.items()}

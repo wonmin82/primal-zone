@@ -85,12 +85,12 @@ class ItemInteractionRulesTests(TestCase):
                 profile = rules.new_profile()
                 rules.buy(profile, "supply", identity)
                 profile["hp"] = 20
-                before = deepcopy(profile["proficiencies"])
+                before = deepcopy(profile["skills"])
                 self.assertEqual(rules.eat_or_drink(profile, identity, action), ITEMS[identity]["heal"])
                 self.assertEqual(profile["hp"], 20 + ITEMS[identity]["heal"])
-                self.assertEqual(profile["proficiencies"], before)
+                self.assertEqual(profile["skills"], before)
                 self.assertNotIn(identity, profile["inventory"])
-                self.assertLess(ITEMS[identity]["heal"] / ITEMS[identity]["value"], ITEMS["bandage"]["heal"] / ITEMS["bandage"]["value"])
+                self.assertEqual(ITEMS["bandage"]["heal"], 20)
         for identity, action, hp, combat in (
             ("field_ration", "마셔", 20, None), ("water", "먹어", 20, None),
             ("bandage", "먹어", 20, None), ("water", "마셔", 60, None),
@@ -277,11 +277,11 @@ class RuleTests(TestCase):
     def test_heal_is_capped_and_consumes_one_bandage(self):
         profile = rules.new_profile()
         profile["hp"] -= 4
-        self.assertEqual(rules.first_aid(profile), 4)
+        self.assertEqual(rules.use_bandage(profile), 4)
         self.assertEqual(profile["hp"], 60)
         self.assertEqual(profile["inventory"]["bandage"], 2)
         with self.assertRaises(rules.RuleError):
-            rules.first_aid(profile)
+            rules.use_bandage(profile)
         self.assertEqual(profile["inventory"]["bandage"], 2)
 
     def test_action_spam_and_heavy_cooldown(self):
@@ -295,22 +295,22 @@ class RuleTests(TestCase):
             rules.queue_action(profile, "heavy", now=102.5)
         rules.queue_action(profile, "heavy", now=107.5)
 
-    def test_guard_reduces_shared_boss_charge(self):
-        plain, guarded = rules.new_profile(), rules.new_profile()
-        guarded["guard_until"] = 101
-        a = rules.enemy_attack(plain, "alpha", 3, 100, Random(2))
-        b = rules.enemy_attack(guarded, "alpha", 3, 100, Random(2))
-        self.assertTrue(a["charged"])
-        self.assertLess(b["damage"], a["damage"])
+    def test_passive_defense_reduces_boss_charge(self):
+        plain, trained = rules.new_profile(), rules.new_profile()
+        trained['skills']['defense'] = 20
+        a = rules.enemy_attack(plain, 'alpha', 3, 100, Random(2))
+        b = rules.enemy_attack(trained, 'alpha', 3, 100, Random(2))
+        self.assertTrue(a['charged'])
+        self.assertLess(b['damage'], a['damage'])
 
     def test_combat_heal_replaces_attack(self):
         profile = rules.new_profile()
         profile.update(hp=30, combat_target=1)
-        rules.queue_action(profile, "firstaid", now=100)
+        rules.queue_action(profile, "bandage", now=100)
         damage, _ = rules.player_attack(profile, "scavenger", 100, 2.5, Random(1))
         self.assertEqual(damage, 0)
         self.assertEqual(profile["inventory"]["bandage"], 2)
-        self.assertEqual(profile["hp"], 60)
+        self.assertEqual(profile["hp"], 50)
 
     def test_defeat_is_structured_and_preserves_growth(self):
         profile = rules.new_profile()
@@ -321,11 +321,11 @@ class RuleTests(TestCase):
         self.assertEqual(rules.apply_defeat(profile), 3)
         self.assertEqual((profile["credits"], profile["xp"], profile["hp"]), (0, 20, rules.DEFEAT_RECOVERY_HP))
 
-    def test_multiple_level_gains_cap_at_ten(self):
+    def test_multiple_level_gains_cap_at_curriculum_completion(self):
         profile = rules.new_profile()
-        self.assertEqual(rules.gain_xp(profile, 100000), 9)
-        self.assertEqual(rules.level_of(profile), 10)
-        self.assertEqual(profile["hp"], rules.stats(profile)["max_hp"])
+        self.assertEqual(rules.gain_xp(profile, rules.xp_threshold(133) + 10000), 132)
+        self.assertEqual(rules.level_of(profile), 133)
+        self.assertEqual(profile['hp'], rules.stats(profile)['max_hp'])
 
     def test_generator_requires_clue_and_consumes_materials_once(self):
         profile = rules.new_profile()
@@ -362,9 +362,9 @@ class RuleTests(TestCase):
                 self.assertIn(target, ROOMS)
                 pending.append(target)
         prepared = {zone for zone in ROOMS if zone.startswith(("support_2f_", "support_3f_"))}
-        prepared.update({"infirmary", "training_room", "armor_shop", "weapon_shop", "support_elevator"})
+        prepared.update({"infirmary", "training_room", "armor_shop", "weapon_shop", "support_elevator", "tactics_room", "training_office", "shooting_range"})
         prepared.update(ROOF_ROOMS)
-        self.assertEqual(len(prepared), 24)
+        self.assertEqual(len(prepared), 27)
         self.assertEqual(visited, set(ROOMS) - prepared)
 
     def test_prepared_solo_player_can_beat_boss_across_rng_seeds(self):
@@ -375,21 +375,27 @@ class RuleTests(TestCase):
                 rules.add_item(profile, item)
                 rules.equip(profile, item)
             profile["combat_target"] = 1
+            suppressions = {}
             rng, hp = Random(seed), ENEMIES["alpha"]["hp"]
             defeated = False
             for turn in range(1, 51):
                 now = turn * 2.5
-                if turn % 3 == 0:
-                    rules.queue_action(profile, "guard", now)
+                if turn % 3 == 0 and profile["mental"] >= 6 and now >= profile["skill_ready_at"].get("suppress", 0):
+                    rules.queue_action(profile, "suppress", now)
                 elif profile["hp"] < 45 and profile["inventory"].get("bandage"):
-                    rules.queue_action(profile, "firstaid", now)
-                elif now >= profile["heavy_ready_at"]:
-                    rules.queue_action(profile, "heavy", now)
-                damage, _ = rules.player_attack(profile, "alpha", now, 2.5, rng)
+                    rules.queue_action(profile, "bandage", now)
+                elif now >= profile["skill_ready_at"].get("shooting", 0) and profile["mental"] >= 6:
+                    rules.queue_action(profile, "shooting", now)
+                damage, outcome = rules.player_attack(profile, "alpha", now, 2.5, rng)
+                from world import progression as pg
+                if "suppression" in outcome:
+                    suppressions, _ = pg.apply_suppression(suppressions, "solo", outcome["suppression"]["rank"], True)
+                reduction = pg.combined_suppression(suppressions, boss=True)
+                suppressions = pg.consume_suppressions(suppressions)
                 hp -= damage
                 if hp <= 0:
                     break
-                defeated = rules.enemy_attack(profile, "alpha", turn, now, rng)["defeated"]
+                defeated = rules.enemy_attack(profile, "alpha", turn, now, rng, reduction)["defeated"]
                 if defeated:
                     break
             self.assertFalse(defeated, f"Solo boss failed with seed {seed}")
@@ -404,20 +410,26 @@ class RuleTests(TestCase):
                 rules.add_item(profile, item)
                 rules.equip(profile, item)
             profile["combat_target"] = 1
+            suppressions = {}
             rng, hp = Random(seed), ENEMIES["jungle_apex"]["hp"]
             for turn in range(1, 51):
                 now = turn * 2.5
-                if rules.boss_telegraph("jungle_apex", turn - 1):
-                    rules.queue_action(profile, "guard", now)
+                if rules.boss_telegraph("jungle_apex", turn - 1) and profile["mental"] >= 6 and now >= profile["skill_ready_at"].get("suppress", 0):
+                    rules.queue_action(profile, "suppress", now)
                 elif profile["hp"] < 55 and profile["inventory"].get("bandage"):
-                    rules.queue_action(profile, "firstaid", now)
-                elif now >= profile["heavy_ready_at"]:
-                    rules.queue_action(profile, "heavy", now)
-                damage, _ = rules.player_attack(profile, "jungle_apex", now, 2.5, rng)
+                    rules.queue_action(profile, "bandage", now)
+                elif now >= profile["skill_ready_at"].get("shooting", 0) and profile["mental"] >= 6:
+                    rules.queue_action(profile, "shooting", now)
+                damage, outcome = rules.player_attack(profile, "jungle_apex", now, 2.5, rng)
+                from world import progression as pg
+                if "suppression" in outcome:
+                    suppressions, _ = pg.apply_suppression(suppressions, "solo", outcome["suppression"]["rank"], True)
+                reduction = pg.combined_suppression(suppressions, boss=True)
+                suppressions = pg.consume_suppressions(suppressions)
                 hp -= damage
                 if hp <= 0:
                     break
-                if rules.enemy_attack(profile, "jungle_apex", turn, now, rng)["defeated"]:
+                if rules.enemy_attack(profile, "jungle_apex", turn, now, rng, reduction)["defeated"]:
                     break
             self.assertLessEqual(hp, 0, f"Solo jungle boss failed with seed {seed}")
 
@@ -520,7 +532,7 @@ class GrowthRuleTests(TestCase):
             before = deepcopy(old)
             migrated = rules.migrate_profile(old)
             for key, value in before.items():
-                if key not in ("version", "record_read", "cache_claimed"):
+                if key not in ("version", "record_read", "cache_claimed", "guard_until", "queued_action", "skill_ready_at"):
                     self.assertEqual(migrated[key], value)
             self.assertTrue(migrated["quests"]["radio_tower"]["record_read"])
             self.assertTrue(migrated["discoveries"]["supply_cache"])
@@ -553,21 +565,12 @@ class GrowthRuleTests(TestCase):
     def test_skill_costs_limits_and_failure_atomicity(self):
         profile = rules.new_profile()
         profile.update(xp=140, credits=100)
-        rules.learn_skill(profile, "heavy", safe=True)
-        self.assertEqual((profile["skills"]["heavy"], profile["credits"]), (2, 96))
-        rules.learn_skill(profile, "heavy", safe=True)
-        self.assertEqual((profile["skills"]["heavy"], profile["credits"]), (3, 88))
-        for skill, credits in (("heavy", 88), ("guard", 0)):
-            profile["credits"] = credits
-            before = deepcopy(profile)
-            with self.assertRaises(rules.RuleError):
-                rules.learn_skill(profile, skill, safe=True)
-            self.assertEqual(profile, before)
-        profile["credits"] = 100
-        rules.learn_skill(profile, "guard", safe=True)
+        for _ in range(2):
+            rules.learn_skill(profile, 'heavy', safe=True)
+        self.assertEqual((profile['skills']['heavy'], profile['credits']), (3, 100))
         before = deepcopy(profile)
         with self.assertRaises(rules.RuleError):
-            rules.learn_skill(profile, "firstaid", safe=True)
+            rules.learn_skill(profile, 'defense', safe=True)
         self.assertEqual(profile, before)
 
     def test_retraining_preserves_history_and_separate_pools(self):
@@ -578,12 +581,11 @@ class GrowthRuleTests(TestCase):
             hp=47,
             heavy_ready_at=100,
             next_attack_at=90,
-            guard_until=80,
-            queued_action="guard",
+            queued_action="suppress",
             visited=["dock", "grass"],
         )
         profile["quests"]["radio_tower"]["started"] = True
-        profile["proficiencies"]["weapon"]["xp"] = 45
+        profile["skill_ready_at"]["breathing"] = 123
         baseline = deepcopy(profile)
         for scope in ("attributes", "skills", "all"):
             for _ in range(4):
@@ -622,57 +624,39 @@ class GrowthRuleTests(TestCase):
                     operation()
                 self.assertEqual(profile, before)
 
-    def test_proficiency_effects_caps_and_failed_healing(self):
+    def test_combat_and_bandages_do_not_train_skills_implicitly(self):
         profile = rules.new_profile()
-        for _ in range(250):
-            rules.train_proficiency(profile, "weapon", 0, 10)
-        self.assertEqual(profile["proficiencies"]["weapon"]["xp"], 0)
-        for _ in range(250):
-            rules.train_proficiency(profile, "weapon", 1, 2)
-        self.assertEqual(rules.proficiency_rank(profile, "weapon"), 2)
         before = deepcopy(profile)
         with self.assertRaises(rules.RuleError):
-            rules.first_aid(profile)
+            rules.use_bandage(profile)
         self.assertEqual(profile, before)
-        profile["hp"] = 30
-        rules.first_aid(profile)
-        self.assertEqual(profile["proficiencies"]["medicine"]["xp"], 1)
-        profile["combat_target"] = 1
-        rules.queue_action(profile, "guard", now=100)
-        self.assertEqual(profile["proficiencies"]["defense"]["xp"], 0)
-        profile["guard_until"] = 110
-        rules.enemy_attack(profile, "alpha", 1, 105, Random(1))
-        self.assertEqual(profile["proficiencies"]["defense"]["xp"], 1)
+        profile['hp'] = 30
+        rules.use_bandage(profile)
+        profile['combat_target'] = 1
+        rules.enemy_attack(profile, 'alpha', 1, 105, Random(1))
+        self.assertNotIn('proficiencies', profile)
+        self.assertEqual(profile['skills'], before['skills'])
 
     def test_each_attribute_and_skill_rank_changes_effect(self):
         profile = rules.new_profile()
-        profile.update(xp=rules.xp_threshold(10), credits=100)
+        profile['xp'] = rules.xp_threshold(20)
         base = rules.stats(profile)
-        rules.allocate_attribute(profile, "strength", 2, safe=True)
-        rules.allocate_attribute(profile, "agility", 3, safe=True)
-        rules.allocate_attribute(profile, "wisdom", 2, safe=True)
-        self.assertEqual(rules.stats(profile)["attack"], base["attack"] + 1)
-        self.assertEqual(rules.stats(profile)["defense"], base["defense"] + 1)
-        profile["hp"] = 1
-        self.assertEqual(rules.first_aid(profile), 39)
-        rules.learn_skill(profile, "firstaid", safe=True)
-        profile["hp"] = 1
-        self.assertEqual(rules.first_aid(profile), 44)
-        normal = deepcopy(profile)
-        improved = deepcopy(profile)
-        rules.learn_skill(improved, "heavy", safe=True)
+        rules.allocate_attribute(profile, 'strength', 2, safe=True)
+        rules.allocate_attribute(profile, 'agility', 3, safe=True)
+        rules.allocate_attribute(profile, 'wisdom', 2, safe=True)
+        self.assertEqual(rules.stats(profile)['attack'], base['attack'] + 1)
+        self.assertEqual(rules.stats(profile)['defense'], base['defense'] + 1)
+        profile['hp'] = 1
+        healing = rules.support_action(profile, 'heal', 100)['amount']
+        rules.learn_skill(profile, 'heal', safe=True)
+        profile['hp'] = 1
+        self.assertGreater(rules.support_action(profile, 'heal', 110)['amount'], healing)
+        normal, improved = deepcopy(profile), deepcopy(profile)
+        for _ in range(10):
+            rules.learn_skill(improved, 'heavy', safe=True)
         for data in (normal, improved):
-            data.update(combat_target=1, queued_action="heavy")
-        a, _ = rules.player_attack(normal, "alpha", 100, 2.5, Random(1))
-        b, _ = rules.player_attack(improved, "alpha", 100, 2.5, Random(1))
-        self.assertGreater(b, a)
-        improved["combat_target"] = None
-        rules.learn_skill(improved, "guard", safe=True)
-        for data in (normal, improved):
-            data.update(hp=100, guard_until=110)
-        a = rules.enemy_attack(normal, "alpha", 3, 105, Random(1))
-        b = rules.enemy_attack(improved, "alpha", 3, 105, Random(1))
-        self.assertLess(b["damage"], a["damage"])
+            data.update(combat_target=1, queued_action='heavy')
+        self.assertGreater(rules.player_attack(improved, 'alpha', 120, 2.5, Random(1))[0], rules.player_attack(normal, 'alpha', 120, 2.5, Random(1))[0])
 
     def test_invalid_allocations_and_rank_requirement_are_lossless(self):
         profile = rules.new_profile()
@@ -681,7 +665,6 @@ class GrowthRuleTests(TestCase):
             with self.assertRaises(rules.RuleError):
                 rules.allocate_attribute(profile, "strength", amount, safe=True)
             self.assertEqual(profile, before)
-        rules.learn_skill(profile, "heavy", safe=True)
         before = deepcopy(profile)
         with self.assertRaises(rules.RuleError):
             rules.learn_skill(profile, "heavy", safe=True)

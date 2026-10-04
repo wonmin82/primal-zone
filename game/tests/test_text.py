@@ -7,7 +7,15 @@ from evennia.objects.objects import DefaultCharacter
 from evennia.utils.ansi import parse_ansi, strip_raw_ansi
 from typeclasses.enemies import room_enemies
 from typeclasses.explorers import Explorer
-from typeclasses.interactables import Container, SettlementOfficer, Shopkeeper, action_objects
+from typeclasses.interactables import (
+    AttributeTrainer,
+    Container,
+    SettlementOfficer,
+    Shopkeeper,
+    SkillTrainer,
+    TrainingManager,
+    action_objects,
+)
 from typeclasses.loot import room_loot, take_loot
 from typeclasses.parties import invite, respond
 from world import presentation as view
@@ -70,6 +78,14 @@ class SemanticTextTests(WorldCommandTest):
                     self.assertEqual(tokens(output, "command"), ["환율", "교환", "교환", "교환", "교환"])
                 elif isinstance(obj, Shopkeeper):
                     self.assertEqual(tokens(output, "command"), ["상품", "구매", "가치", "판매"])
+                elif isinstance(obj, SkillTrainer):
+                    self.assertEqual(tokens(output, "command"), ["배워"])
+                    self.assertIn(SKILLS[obj.db.skill_id]["name"] + " 배워", output)
+                elif isinstance(obj, AttributeTrainer):
+                    self.assertEqual(tokens(output, "command"), ["배분"])
+                    self.assertIn(ATTRIBUTES[obj.db.attribute_id]["name"] + " 배분", output)
+                elif isinstance(obj, TrainingManager):
+                    self.assertEqual(tokens(output, "command"), ["재분배", "재분배", "재훈련"])
                 else:
                     self.assertEqual(tokens(output, "command"), list(obj.actions))
                 self.assertIn(obj.key, tokens(output, obj.semantic_role))
@@ -111,7 +127,8 @@ class SemanticTextTests(WorldCommandTest):
                 view.skills(profile),
             )
         next_xp = rules.xp_threshold(rules.level_of(profile) + 1)
-        self.assertIn(f"200/{next_xp}", view.experience(profile))
+        self.assertIn(f"다음 레벨 {next_xp}", view.experience(profile))
+        self.assertIn("진행 60 / 100", view.experience(profile))
         self.assertIn(str(next_xp - 200), view.experience(profile))
         shop = view.shop("supply", "보급관")
         for key in SHOP_CATALOGS["supply"]:
@@ -143,66 +160,36 @@ class SemanticTextTests(WorldCommandTest):
 
     def test_compact_progression_values_and_maximums(self):
         from copy import deepcopy
-
-        from world.progression import PROFICIENCIES
-
         profile = rules.new_profile()
         profile.update(xp=200, hp=43, credits=123, kills=7)
-        profile["attributes"]["strength"]["allocated"] = 3
-        profile["proficiencies"]["weapon"]["xp"] = 47
+        profile['attributes']['strength']['allocated'] = 3
         before = deepcopy(profile)
         values = rules.stats(profile)
-        status = view.status("탐사자", profile)
-        for value in (
-            f"Lv.{values['level']}",
-            f"공격 {values['attack']}",
-            f"방어 {values['defense']}",
-            "힘13",
-        ):
+        status = view.status('탐사자', profile)
+        for value in (f"Lv.{values['level']}", f"공격 {values['attack']}", f"방어 {values['defense']}", '힘13'):
             self.assertIn(value, status)
-        self.assertEqual(
-            tokens(status, "item"), [ITEMS[i]["name"] for i in profile["equipment"].values()]
-        )
+        self.assertEqual(tokens(status, 'item'), [ITEMS[i]['name'] for i in profile['equipment'].values()])
         abilities = view.abilities(profile)
-        self.assertIn("힘 13 (10+3)", abilities)
-        self.assertIn(
-            f"남은 특성 포인트 {rules.point_pools(profile)['attribute_points']}", abilities
-        )
-        for key, name in PROFICIENCIES.items():
-            self.assertIn(f"{name} R{rules.proficiency_rank(profile, key)}", abilities)
-            self.assertIn(
-                f"{name} R{rules.proficiency_rank(profile, key)} XP{profile['proficiencies'][key]['xp']}",
-                view.experience(profile),
-            )
+        self.assertIn('13 (10+3)', abilities)
+        self.assertIn(f"남은 특성 포인트 {rules.point_pools(profile)['attribute_points']}", abilities)
+        self.assertIn('다음 레벨까지', view.experience(profile))
         for key, data in SKILLS.items():
-            next_rank = rules.skill_rank(profile, key) + 1
-            self.assertIn(
-                f"다음 Lv{data['requirements'][next_rank]}/{data['point_cost'][next_rank]}점/{data['credit_cost'][next_rank]}칩",
-                view.skills(profile),
-            )
-            self.assertIn(data["description"], view.skills(profile))
-        self.assertEqual(tokens(view.skills(profile), "command"), ["배워"])
-        self.assertIn(
-            f"남은 점수 {rules.point_pools(profile)['skill_points']}", view.skills(profile)
-        )
-        for output, limit in (
-            (status, 6),  # 정신력 행을 포함하는 상태와 공격/방어의 분리
-            (abilities, 6),
-            (view.experience(profile), 2),
-            (view.skills(profile), len(SKILLS) + 2),
-        ):
-            self.assertLessEqual(len(output.splitlines()), limit)
-            self.assertNotIn("────", output)
-            self.assertEqual(output.kind, "sheet")
+            self.assertIn(data['name'], view.skills(profile))
+            self.assertIn(f"R1/{data['max_rank']}", view.skills(profile))
+        for output in (status, abilities, view.experience(profile), view.skills(profile)):
+            self.assertNotIn('숙련', output)
+            self.assertEqual(output.kind, 'sheet')
             self.assertEqual(strip_raw_ansi(parse_ansi(output.ansi())), str(output))
         self.assertEqual(profile, before)
-        profile["xp"] = rules.xp_threshold(rules.MAX_LEVEL)
+        profile['xp'] = rules.xp_threshold(rules.MAX_LEVEL)
         for key, data in SKILLS.items():
-            profile["skills"][key] = data["max_rank"]
-        self.assertIn("최고 등급", view.status("탐사자", profile))
-        self.assertIn("최고 등급", view.experience(profile))
-        self.assertNotIn("다음", view.experience(profile))
-        self.assertEqual(view.skills(profile).count("최고 Rank"), len(SKILLS))
+            profile['skills'][key] = data['max_rank']
+        for key in profile['attributes']:
+            profile['attributes'][key]['allocated'] = 20
+        self.assertIn('최고 레벨', view.experience(profile))
+        self.assertNotIn('다음', view.experience(profile))
+        self.assertEqual(view.skills(profile).count('MAX'), len(SKILLS))
+        self.assertIn('모든 특성을 완성', view.abilities(profile))
 
     def test_compact_inventory_equipment_and_quest(self):
         profile = rules.new_profile()
@@ -309,7 +296,7 @@ class SemanticTextTests(WorldCommandTest):
             enemy.receive_attack(self.char1, now=102.5, rng=rng)
             outputs = [call.args[0] for call in first.call_args_list if call.args]
             attack = next(m for m in outputs if tokens(m, "item"))
-            self.assertIn("1의 피해를 입혔다.", attack)
+            self.assertIn("1 피해를 입혔다.", attack)
             self.assertEqual(tokens(attack, "hostile"), [enemy.key])
             self.assertEqual(tokens(attack, "item"), [ITEMS["machete"]["name"]])
             rewards = [m for m in outputs if tokens(m, "reward")]

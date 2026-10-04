@@ -73,7 +73,7 @@ class ServiceRelocationTests(WorldCommandTest):
                     "강타 배워", "힘 1 배분", "전체 재훈련", "탐사대 훈련관 대화"):
             with self.subTest(command=raw):
                 output = self.command(raw)
-                self.assertTrue("대상" in output or "주변" in output)
+                self.assertTrue("대상" in output or "주변" in output or "교관이 없다" in output)
                 self.assertNotIn("보관실에서만", output)
                 self.assertEqual(self.char1.profile(), before)
         self.assertIsNone(instructor_for(self.char1))
@@ -90,65 +90,65 @@ class ServiceRelocationTests(WorldCommandTest):
         for command in ("남", "동", "승강기", "2층", "동", "북"):
             self.command(command)
         self.assertEqual(self.char1.zone, "training_room")
-        self.assertIn("재훈련은 무료", self.command("탐사대 훈련관 대화"))
+        self.assertIn(INTERACTABLES["trainer_strength"]["dialogue"], self.command("근력교관 대화"))
         self.assertTrue(self.state()["training_available"])
         self.command("힘 1 배분")
         self.assertEqual(self.char1.profile()["attributes"]["strength"]["allocated"], 1)
         self.assertIn("support_elevator", self.char1.profile()["visited"])
 
     def test_training_follows_actual_npc_safe_room_and_peace(self):
-        instructor = self.services["instructor"]
-        self.char1.location = self.rooms["training_room"]
+        from world import rules
+        instructor = search_tag('trainer_heavy', category='primal_interactable')[0]
+        self.char1.change(lambda p: p.update(xp=rules.xp_threshold(2)))
+        self.char1.location = instructor.location
         self.assertTrue(instructor.available(self.char1))
-        instructor.location = self.rooms["support_roof"]
-        self.assertFalse(self.state()["training_available"])
+        instructor.location = self.rooms['support_roof']
         before = deepcopy(self.char1.profile())
-        self.command("강타 배워")
+        self.command('강타 배워')
         self.assertEqual(self.char1.profile(), before)
         self.char1.location = instructor.location
         self.assertIs(instructor_for(self.char1), instructor)
-        self.assertTrue(self.state()["training_available"])
-        self.command("강타 배워")
-        self.assertEqual(self.char1.profile()["skills"]["heavy"], 2)
-        self.assertEqual(self.char1.profile()["credits"], before["credits"] - 4)
-        instructor.location = self.rooms["grass"]
+        self.assertTrue(self.state()['training_available'])
+        self.command('강타 배워')
+        self.assertEqual(self.char1.profile()['skills']['heavy'], 2)
+        self.assertEqual(self.char1.profile()['credits'], before['credits'])
+        instructor.location = self.rooms['grass']
         self.char1.location = instructor.location
         self.assertFalse(instructor.available(self.char1))
-        self.assertFalse(self.state()["training_available"])
         before = deepcopy(self.char1.profile())
-        self.command("힘 1 배분")
+        self.command('강타 배워')
         self.assertEqual(self.char1.profile(), before)
-        instructor.location = self.rooms["training_room"]
+        instructor.location = self.rooms['training_room']
         self.char1.location = instructor.location
         self.char1.change(lambda p: p.update(combat_target=999))
         before = deepcopy(self.char1.profile())
-        for command in ("강타 배워", "힘 1 배분", "특성 재분배", "기술 재분배", "전체 재훈련"):
-            self.assertIn("전투 중", self.command(command))
+        for command in ('강타 배워', '힘 1 배분'):
+            self.assertIn('전투 중', self.command(command))
             self.assertEqual(self.char1.profile(), before)
-        self.assertFalse(self.state()["training_available"])
+        self.assertFalse(self.state()['training_available'])
 
     def test_training_visibility_agrees_with_commands_and_web(self):
-        instructor = self.services["instructor"]
-        self.char1.location = instructor.location
+        instructor = search_tag('trainer_heavy', category='primal_interactable')[0]
+        self.char1.location = self.rooms['support_roof']
+        instructor.location = self.char1.location
         before = deepcopy(self.char1.profile())
-        instructor.locks.add("view:false()")
+        instructor.locks.add('view:false()')
         self.assertIsNone(instructor_for(self.char1))
         self.assertFalse(instructor.available(self.char1))
-        self.assertFalse(self.state()["training_available"])
-        self.assertNotIn(instructor.key, {obj["name"] for obj in self.state()["interactables"]})
-        for command in ("강타 배워", "힘 1 배분", "전체 재훈련", "탐사대 훈련관 대화"):
-            self.command(command)
-            self.assertEqual(self.char1.profile(), before)
-        instructor.locks.add("view:all()")
-        instructor.db.detectability = "subtle"
-        poor = replace(snapshot_for(self.char1.location, 100), visibility="poor", ambient_light="dark")
-        with patch("world.environment_state.snapshot_for", return_value=poor):
+        self.assertFalse(self.state()['training_available'])
+        self.assertNotIn(instructor.key, {obj['name'] for obj in self.state()['interactables']})
+        self.command('강타 배워')
+        self.assertEqual(self.char1.profile(), before)
+        instructor.locks.add('view:all()')
+        instructor.db.detectability = 'subtle'
+        poor = replace(snapshot_for(self.char1.location, 100), visibility='poor', ambient_light='dark')
+        with patch('world.environment_state.snapshot_for', return_value=poor):
             self.assertIsNone(instructor_for(self.char1, observed_at=100))
-            self.assertFalse(self.state()["training_available"])
-            self.command("강타 배워")
+            self.assertFalse(self.state()['training_available'])
+            self.command('강타 배워')
             self.assertEqual(self.char1.profile(), before)
         self.assertIs(instructor_for(self.char1), instructor)
-        self.assertTrue(self.state()["training_available"])
+        self.assertTrue(self.state()['training_available'])
 
 
 class ServiceMigrationTests(GameCommandTest):

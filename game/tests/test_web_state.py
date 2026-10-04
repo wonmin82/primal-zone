@@ -75,7 +75,9 @@ class WebStateTests(WorldCommandTest):
         self.assertTrue(state["training_available"])
         self.assertEqual(state["growth"]["attribute_points"], 2)
         self.assertEqual((state["hp"], state["max_hp"]), (60, 68))
-        self.assertTrue(state["growth"]["skills"][0]["can_learn"])
+        self.assertFalse(state["growth"]["skills"][0]["can_learn"])
+        self.assertNotIn("proficiencies", state["growth"])
+        self.assertIn("strength", state["training_controls"])
         json.dumps(state)
         self.char1.location = self.rooms["grass"]
         with patch.object(self.char1, "msg") as message:

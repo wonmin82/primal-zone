@@ -149,8 +149,8 @@ class ShopTests(WorldCommandTest):
                              [seller.key + "에게 " + ITEMS[item]["name"] + " 구매" for item in SHOP_CATALOGS[shop_id]])
             self.assertEqual(render(context_for(self.char1)), seller.key + " 상품")
             self.assertIn("1개를 받아", self.command(actions[1]["command"]))
-        for zone, expected in (("storage_room", {"보기"}), ("training_room", {"대화"}),
-                               ("infirmary", {"진료", "휴식"}), ("salvage_office", {"환율"}),
+        for zone, expected in (("storage_room", {"보기"}), ("training_room", {"힘 +1 배분"}),
+                               ("infirmary", {"진료", "휴식", "체질 +1 배분"}), ("salvage_office", {"환율"}),
                                ("dock", {"대화"}), ("office", {"조사"}), ("generator", {"수리"})):
             self.char1.location = self.rooms[zone]
             self.assertEqual({a["label"] for obj in multiplayer_state(self.char1)["interactables"] for a in obj["actions"]}, expected)

@@ -39,7 +39,7 @@ class MedicalRulesTests(TestCase):
             profile = rules.new_profile()
             profile.update(hp=5, credits=0)
             before = deepcopy(profile)
-            with patch.object(rules, other) as separate, patch.object(rules, "first_aid") as bandage:
+            with patch.object(rules, other) as separate, patch.object(rules, "use_bandage") as bandage:
                 self.assertEqual(operation(profile, safe=True), 55)
                 separate.assert_not_called()
                 bandage.assert_not_called()
