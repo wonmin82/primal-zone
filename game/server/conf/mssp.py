@@ -18,6 +18,8 @@ needed on the Evennia side.
 
 """
 
+from django.conf import settings
+
 MSSPTable = {
     # The NAME field is automatically set from settings.SERVERNAME. To override,
     # uncomment the line below.
@@ -25,7 +27,7 @@ MSSPTable = {
     # Generic
     "CRAWL DELAY": "-1",  # limit how often crawler may update the listing. -1 for no limit
     "HOSTNAME": "",  # telnet hostname
-    "PORT": ["4000"],  # telnet port - most important port should be *last* in list!
+    "PORT": [str(port) for port in settings.TELNET_PORTS],
     "CODEBASE": "Evennia",
     "CONTACT": "",  # email for contacting the mud
     "CREATED": "",  # year MUD was created

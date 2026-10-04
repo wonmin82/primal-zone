@@ -15,5 +15,10 @@ game/server/*.pid
 game/server/*.restart
 game/server/*.amp
 game/server/*.sock
+game/server/ssl.key
+game/server/ssl-public.key
+game/server/ssl.cert
+game/server/ssh-private.key
+game/server/ssh-public.key
 *.egg-info/
 work/

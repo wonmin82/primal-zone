@@ -38,7 +38,7 @@ uv run python scripts/dev.py setup
 uv run python scripts/dev.py start
 ```
 
-[로컬 게임 화면](http://127.0.0.1:4001/webclient/)을 열고, 이름과 비밀번호를 정한 뒤 **새 탐사자 만들기**를 선택한다.
+[로컬 게임 화면](http://127.0.0.1:8701/webclient/)을 열고, 이름과 비밀번호를 정한 뒤 **새 탐사자 만들기**를 선택한다.
 첫 서버 시작은 초기 설정 때문에 약간 기다려야 할 수 있다.
 
 이미 가상환경이 구성된 Windows에서는 uv 대신 다음처럼 실행할 수 있다:
@@ -47,7 +47,20 @@ uv run python scripts/dev.py start
 .\.venv\Scripts\python.exe scripts/dev.py start
 ```
 
-접속 포트는 HTTP 4001, WebSocket 4002이며 기본값으로 이 PC에서만 접속할 수 있다.
+프로젝트 기본 접속 서비스는 모두 **IPv4 `0.0.0.0`**(PC의 모든 IPv4 인터페이스)에서 listen한다.
+
+| 서비스 | 포트 | 기본 interface |
+| --- | --- | --- |
+| Telnet | TCP 8700 | `0.0.0.0` |
+| Web | TCP 8701 | `0.0.0.0` |
+| WebSocket | TCP 8702 | `0.0.0.0` |
+| Telnet SSL | TCP 8703 | `0.0.0.0` |
+| SSH | TCP 8704 | `0.0.0.0` |
+
+같은 PC에서는 위 로컬 주소를, LAN에서는 `http://<서버의 LAN-IP>:8701/webclient/`를 사용한다. WebSocket은 현재 접속 hostname의 8702 포트에 자동 연결하며 IP를 고정하지 않는다. `ALLOWED_HOSTS = ["*"]`로 IP/hostname의 HTTP Host를 허용한다. `0.0.0.0`은 bind 주소이며 브라우저에 입력할 접속 주소가 아니다.
+
+OS 방화벽이 허용하면 같은 LAN의 다른 장치에서도 접근할 수 있고 NAT/포트포워딩을 별도로 설정하면 외부 네트워크에도 노출될 수 있다. **8700 Telnet은 평문 프로토콜**이다. 최초 SSL/SSH 시작 시 생성되는 key/cert와 self-signed 인증서 정책, 로컬 전용 override는 [설치 안내](docs/installation.md#네트워크와-자동-생성-키)를 따른다. 방화벽·공유기 설정과 인증 정책은 서버 시작 명령이 변경하지 않는다.
+
 setup은 비밀번호 접속이 비활성화된 로컬 admin 계정을 준비한다.
 관리 기능이 필요할 때만 'uv run python scripts/dev.py admin-password'로 직접 비밀번호를 설정한다.
 게임 테스트는 별도의 일반 탐사자 계정으로 진행한다.

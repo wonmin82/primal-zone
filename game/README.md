@@ -23,11 +23,9 @@ To start the server, stand in this directory and run
 
     evennia start
 
-This will start the server, logging output to the console. Make
-sure to create a superuser when asked. By default you can now connect
-to your new game using a MUD client on `localhost`, port `4000`.  You can
-also log into the web client by pointing a browser to
-`http://localhost:4001`.
+프로젝트의 실제 설치·실행 절차는 [루트 README](../README.md#실행)를 따른다.
+기본 Telnet은 TCP 8700, 게임 Web 화면은 `http://localhost:8701/webclient/`다.
+접속 서비스는 모든 IPv4 인터페이스에 bind하므로 LAN 접근과 키 관리 정책도 해당 안내를 확인한다.
 
 # Getting started
 

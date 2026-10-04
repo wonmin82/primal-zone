@@ -3,7 +3,10 @@ name = "primal-zone"
 version = "0.1.0"
 description = "원시구역 — 혼자서도 즐기는 한국어 성장형 MUD"
 requires-python = ">=3.13,<3.14"
-dependencies = ["evennia==6.1.0"]
+dependencies = [
+    "evennia==6.1.0",
+    "twisted[conch,tls]==24.11.0",
+]
 
 [dependency-groups]
 dev = [

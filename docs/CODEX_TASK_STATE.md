@@ -4,6 +4,19 @@
 
 ## Objective
 
+최신 `origin/main`의 `cb219c09cb183d82f2d421451610df6a41d9be4c`(PR #26 MERGED)에서 `codex/network-service-defaults`를 만들고 네트워크 접속 서비스 기본값을 정리한다. Telnet 8700·Web 8701·WebSocket 8702·Telnet SSL 8703·SSH 8704를 IPv4 `0.0.0.0`으로 공개하고 `ALLOWED_HOSTS = ["*"]`로 LAN IP/hostname 접속을 허용한다. 새 PR을 생성하되 merge하지 않는다. 이전 PR #26의 OPEN/병합 승인 표현은 아래 과거 기록이다.
+
+- 최초 격리 Portal 기동은 PyOpenSSL 누락으로 실패했다. 기존 Twisted 24.11.0에 `conch`/`tls` extras를 추가해 PyOpenSSL·bcrypt·service-identity·appdirs를 lockfile에 포함했다. cryptography는 기존 버전을 유지했고 pyasn1은 현재 Twisted 경로에서 필요하지 않았다.
+- SSL/SSH 자동 생성 key/cert 다섯 파일은 명시적으로 Git 제외한다. 키 내용은 출력하지 않는다. smoke는 loopback/임의 포트/격리 DB 정책을 유지한다.
+- 사용자의 후속 요청에 따라 네 자리 연속 대역 8700~8706을 사용한다. 8700~8709는 확인 시점 IANA 미할당이며 OS의 예약·점유와 실제 bind를 확인했다. 기존 4004는 iCloud 사진 앱이 예약해 기동에 실패했지만 앱을 종료하거나 OS 설정을 바꾸지 않았다. 내부 HTTP 8705·AMP 8706은 loopback이며 MSSP 포트는 settings에서 파생한다.
+- 전체 `scripts/dev.py check` 성공. 전체 test는 pure 147개 / 2.044s + integration 342개 / 140.946s = 489개, runner 152.221s 성공. 최초 실행에서 기존 본부 서비스 불변성 검사가 실제 10초 회복 경계를 지나 실패해 시각을 고정하고 profile 전체 비교를 유지했다. gameplay 코드는 변경하지 않았다. 전체 성공 이후 최종 포트 숫자만 8700번대로 옮겼으므로 전체 검사는 반복하지 않고 `tests.test_network_settings tests.test_hq_services --parallel 2 --reverse` 9개 / 15.163s·runner 26.080s 및 check를 재검증했다.
+- Quick smoke 68.059s 성공. 임의 포트·loopback의 격리 smoke 설정은 이후 포트 변경의 영향을 받지 않으므로 재실행하지 않았다. Full은 전투/회복·시체 timing 변경이 없어 미실행이다.
+- 최종 포트의 격리 Portal+Server cold start에서 OS listener `0.0.0.0:8700~8704`, 내부 `127.0.0.1:8705~8706`을 확인했다. 127.0.0.1과 실제 LAN IPv4의 Web HTTP 200 및 WebSocket fixture 로그인·상태 명령이 성공했고 localhost/LAN browser의 게임 진입과 console error/warning 없음도 확인했다. WebSocket URL은 접속 hostname과 서버 제공 8702를 사용하며 JS 변경은 없다.
+- Telnet greeting, SSL TLSv1.3 handshake, SSH-2.0 banner 및 다섯 key/cert의 최초 자동 생성을 확인했다. git check-ignore에서 명시적인 다섯 패턴이 적용되고 ls-files에서 무추적임을 확인했다. 모든 runtime/credential/key/log/screenshot은 Git 제외 work 안에만 보관했고 검증 전후 플레이 DB fingerprint는 불변이다. 테스트 탭과 실행이 소유한 프로세스는 종료했다.
+- 미검증: 별도 LAN 장치와 외부 NAT 접속, 외부 Telnet SSL 클라이언트의 인증서 신뢰 설정 및 SSH 실제 인증/게임 입력. Twisted 24.11의 SSH 기동에 TripleDES deprecation warning이 있지만 listener/banner는 정상이다. JS/CSS/static 변경이 없어 node/collectstatic 반복은 생략했다. 최종 HEAD와 test·smoke CI는 새 PR Validation에 기록한다.
+
+## PR #26 병합 문서 closeout (과거 기록)
+
 [PR #26](https://github.com/wonmin82/primal-zone/pull/26)의 정신력·주기 회복·prompt lifecycle과 Web 입력 행 기능 구현 및 검증을 마감했다. 기능 설계는 architecture, 사용법은 README, 실제 출력 예와 재검증 절차는 text-examples/playtest가 기준이다. 사용자의 2026-10-04 병합·소스 브랜치 삭제 요청에 따라 문서를 최종 정리한다. 아래 OPEN·병합 미요청 표현은 당시 작업 범위의 과거 기록이며 현재 병합 승인보다 우선하지 않는다.
 
 ### 병합 closeout 기준
