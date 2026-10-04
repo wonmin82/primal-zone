@@ -4,6 +4,21 @@
 
 ## Objective
 
+최신 origin/main `133b271b61ec0bfcb1799dd7226f9ed75da8be2c`(PR #27 MERGED)에서 `codex/long-term-progression`을 시작했다. 레벨·특성·여덟 기술로 성장 체계를 교체하고 숙련·액티브 방어·응급처치 기술을 제거했다. profile v10은 진행을 보존하며 기술 재투자와 특성 정규화를 제공한다. 수치 SSOT는 world/progression.py, 설계는 [progression.md](progression.md)다. 새 PR은 검토를 위해 OPEN으로 유지하며 merge하지 않는다. 최종 HEAD·PR URL·해당 HEAD의 CI run/job 결과는 새 PR의 Validation이 기준이다.
+
+### 장기 성장 구현·검증 (2026-10-04)
+
+- 여덟 기본 기술의 추가 Rank 합132에서 현재 cap133을 도출한다. Lv.126 특성80점/Lv.133 훈련132회, 정신력331+지혜80=411, HP519+체질80=599를 순수 테스트로 확인했다. 호흡 R10·최대411은 내림 적용57이며 예시의58과 구분한다. 기술 훈련은 가변 잔액을 저장하지 않고 레벨·현재 Rank에서 도출한다.
+- 세 지원동2층 시설과 SkillTrainer8명·AttributeTrainer4명·TrainingManager를 구성했다. Room은 성장 서비스를 제공하지 않으며 담당 NPC 생략·명시 입력과 Web controls가 같은 validation을 사용한다. bootstrap은 기존 관리관 객체 ID와 플레이 진행을 보존한다.
+- profile v10은 옛 기술을 R1로 환원해 획득 훈련을 반환하고 특성을 +20·레벨 예산에 정규화한다. proficiency/guard는 제거하고 XP·장비·소지품·임무·발견·방문·보관·광원·파티를 보존한다. 개인 줄임말의 제거된 행동과 충돌 이름·exact 중첩 참조를 변환하며 절대 cooldown과 snapshot 비변경·idempotency를 검사했다.
+- `.venv\Scripts\python.exe scripts/dev.py check` 성공. 최종 전체 `scripts/dev.py test`는 pure161개/2.146s와 integration349개/128.821s, 합계510개 성공이며 integration runner138.328s다. 첫 최종 실행의 대상 선택 불변 테스트가 실시간10초 회복 경계를 지나 실패해 테스트 시각을 고정하고 전체 profile 비교를 유지했다. `test tests.test_targets --parallel 2 --reverse`22개/14.618s·runner23.392s를 먼저 재검증한 뒤 위 전체 성공을 확인했다. 성장·전투·치료·저장·회복·상점·대상·문자 출력 회귀를 포함한다.
+- Quick smoke62.888s, Full smoke408.256s 성공. Full은 production 시체29.864s·respawn44.790s·보호121.726s와 적 점진 회복, 실제 패배/의료, 본부, 두 임무·보스, Portal/Server restart·재접속·상태 보존을 검증했다. 최초 Full은 옛 과도한 체질 fixture를 새 cap에 맞춘 상태에서 준비 부족으로 보스전이 실패했다. 적 수치를 바꾸지 않고 실제 사냥으로 Lv.4를 획득하고 보급·체질 훈련·침대 회복 및 견제/붕대를 사용하도록 smoke를 보완해 최종 통과했다. 이후 변경은 테스트·문서·수치 조사 표기뿐이며 smoke의 gameplay 계산은 동일하다.
+- `node --check game/web/static/webclient/js/primal.js`와 Node 표준 runner의 실제 client 회귀9개, game의 `python -m evennia collectstatic --noinput`(2개 복사/211개 유지), `git diff --check` 성공. 실제 새 profile의 능력·경험치·기술·능력 도움말과 30-cell 방향도 출력을 생성해 text-examples와 대조했다. 수집 후 JS/CSS 변경은 없고 template 마지막 수정은 들여쓰기만 정리했다.
+- 격리 browser1440/1100/390px에서 여덟 기술·네 특성, 담당 NPC context/direct command/growth panel, 무료 훈련·전체 재훈련, 의무실 치료·호흡·HP full 붕대 거절, 사격장과 전술훈련실의 담당 controls를 확인했다. 3×3 compass와 SURROUNDINGS 첫 순서, 가로 overflow 없음이 유지된다. Chrome 확장의 async message-channel 오류3건은 앱 오류와 구분했다. 테스트 서버·탭을 정리했고 플레이 DB size/mtime/hash는 불변이다. runtime/DB/credential/log/screenshot은 Git 제외다.
+- 남은 수동 범위: 실제 OS IME와 별도 Telnet client/font. Telnet prompt/ANSI/Web semantic과 명령 dispatcher는 자동 검사했다. 현재 엔진은 확정 단일 대상 공격이므로 miss/AoE는 실제 콘텐츠가 아니라 attack-event 단위 helper 계약으로 검증한다. Master/상급 기술·Lv.133 이후·반복 다중 훈련 UX는 의도적 후속 범위다. 최종 fetch에서도 main은 시작 SHA와 같아 rebase가 필요하지 않았다.
+
+## PR #27 네트워크 서비스 기본값 (과거 기록)
+
 최신 `origin/main`의 `cb219c09cb183d82f2d421451610df6a41d9be4c`(PR #26 MERGED)에서 `codex/network-service-defaults`를 만들고 네트워크 접속 서비스 기본값을 정리한다. Telnet 8700·Web 8701·WebSocket 8702·Telnet SSL 8703·SSH 8704를 IPv4 `0.0.0.0`으로 공개하고 `ALLOWED_HOSTS = ["*"]`로 LAN IP/hostname 접속을 허용한다. 새 PR을 생성하되 merge하지 않는다. 이전 PR #26의 OPEN/병합 승인 표현은 아래 과거 기록이다.
 
 - 최초 격리 Portal 기동은 PyOpenSSL 누락으로 실패했다. 기존 Twisted 24.11.0에 `conch`/`tls` extras를 추가해 PyOpenSSL·bcrypt·service-identity·appdirs를 lockfile에 포함했다. cryptography는 기존 버전을 유지했고 pyasn1은 현재 Twisted 경로에서 필요하지 않았다.
