@@ -1,6 +1,6 @@
 """장기 성장과 기술 수치의 단일 정의. 저장·네트워크에 의존하지 않는다."""
 
-from math import ceil
+from math import ceil, prod
 
 ATTRIBUTE_CAP = 20
 ATTRIBUTES = {
@@ -55,7 +55,7 @@ def cooldown(skill, rank):
         return 7.5 if rank <= 7 else 7.0 if rank <= 14 else 6.5
     if skill == "breathing":
         return 30 if rank <= 3 else 27 if rank <= 6 else 24 if rank <= 9 else 20
-    return {"shooting": 5, "heal": 10}.get(skill, 0)
+    return {"shooting": 5, "heal": 10, "insight": 10, "suppress": 10}.get(skill, 0)
 
 
 def attack_multiplier(rank):
@@ -87,16 +87,33 @@ def suppression_effect(rank, boss=False):
     return {"rank": rank, "reduction": (0.10 + (rank - 1) * 0.01) * (0.5 if boss else 1), "attacks": 1 + (rank - 1) // 3}
 
 
-def refresh_suppression(current, rank, boss=False):
-    return suppression_effect(rank, boss) if not current or current.get("rank", 0) <= rank else dict(current)
-
-
-def consume_suppression(current):
-    """One call per enemy attack event, including a miss or a multi-target attack."""
+def apply_suppression(effects, source_id, rank, boss=False):
+    """Replace only this source's effect; IDs remain strings across serialization."""
+    updated = {str(source): dict(effect) for source, effect in (effects or {}).items()}
+    source = str(source_id)
+    current = updated.get(source)
     if not current:
-        return 0, None
-    remaining = {**current, "attacks": current["attacks"] - 1}
-    return current["reduction"], remaining if remaining["attacks"] > 0 else None
+        status = "applied"
+        updated[source] = suppression_effect(rank, boss)
+    elif rank > current["rank"]:
+        status = "upgraded"
+        updated[source] = suppression_effect(rank, boss)
+    elif rank == current["rank"]:
+        status = "refreshed"
+        updated[source] = {**current, "attacks": suppression_effect(rank, boss)["attacks"]}
+    else:
+        status = "preserved"
+    return updated, status
+
+
+def combined_suppression(effects):
+    return 1 - prod(1 - effect["reduction"] for effect in (effects or {}).values() if effect["attacks"] > 0)
+
+
+def consume_suppressions(effects):
+    """Call once per attack event, never once per hit or AoE recipient."""
+    return {str(source): {**effect, "attacks": effect["attacks"] - 1}
+            for source, effect in (effects or {}).items() if effect["attacks"] > 1}
 
 
 def healing_amount(maximum, rank, wisdom):

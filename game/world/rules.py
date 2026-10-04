@@ -5,6 +5,7 @@ from random import Random
 
 from world import progression as pg
 from world import recovery
+from world import text as ft
 from world.content import (
     ENEMIES,
     EQUIPMENT_ACTIONS,
@@ -252,7 +253,8 @@ def validate_skill_action(profile, action, now, target_profile=None):
     if action == "heavy":
         ready = max(ready, profile.get("heavy_ready_at", 0))
     if now < ready:
-        raise RuleError(f"{SKILLS[action]['name']}을 다시 사용하려면 {pg.remaining_seconds(ready, now)}초 더 기다려야 한다.")
+        name = SKILLS[action]["name"]
+        raise RuleError(f"{name}{ft.particle(name, '을/를')} 다시 사용하려면 {pg.remaining_seconds(ready, now)}초 더 기다려야 한다.")
     if profile["mental"] < pg.mental_cost(action, level_of(profile)):
         raise RuleError("정신력이 부족하다.")
     target = profile if target_profile is None else target_profile
@@ -622,6 +624,8 @@ def retrain(profile, scope, *, safe=False):
     recovery.clamp(draft, stats(draft))
     profile.clear()
     profile.update(draft)
+    pools = point_pools(profile)
+    return {"scope": scope, "attribute_points": pools["attribute_points"], "skill_training": pools["skill_points"]}
 
 
 def commander_talk(profile):

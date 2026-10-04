@@ -109,7 +109,7 @@ class GrowthIntegrationTests(WorldCommandTest):
         self.char1.location = self.rooms['training_office']
         manager = search_tag('instructor', category='primal_interactable')[0]
         self.assertIsInstance(manager, TrainingManager)
-        self.assertIn('재훈련 완료', self.command('훈련관리관에게 기술 재분배'))
+        self.assertIn('모든 기술을 R1로 초기화', self.command('훈련관리관에게 기술 재분배'))
         self.assertEqual(self.char1.profile()['skills']['heavy'], 1)
         self.assertEqual(self.char1.profile()['attributes']['strength']['allocated'], 3)
         before = deepcopy(self.char1.profile())
@@ -178,12 +178,14 @@ class GrowthIntegrationTests(WorldCommandTest):
             enemy.engage(player, now=100)
         self.char1.change(lambda p: (p['skills'].update(suppress=7), p.update(queued_action='suppress')))
         enemy.receive_attack(self.char1, 102.5, Random(1))
-        self.assertEqual(enemy.db.suppression['attacks'], 3)
+        self.assertEqual(enemy.db.suppressions[str(self.char1.id)]['attacks'], 3)
         self.char2.change(lambda p: p.update(queued_action='suppress'))
         enemy.receive_attack(self.char2, 102.5, Random(1))
-        self.assertEqual(enemy.db.suppression['rank'], 7)
+        self.assertEqual(enemy.db.suppressions[str(self.char1.id)]['rank'], 7)
+        self.assertEqual(enemy.db.suppressions[str(self.char2.id)]['rank'], 1)
         enemy.enemy_tick(now=102.5, rng=Random(1))
-        self.assertEqual(enemy.db.suppression['attacks'], 2)
+        self.assertEqual(enemy.db.suppressions[str(self.char1.id)]['attacks'], 2)
+        self.assertNotIn(str(self.char2.id), enemy.db.suppressions)
         self.char1.change(lambda p: p.update(queued_action='insight'))
         enemy.receive_attack(self.char1, 105, Random(1))
         self.assertEqual(self.char1.profile()['insight']['target'], enemy.id)
@@ -292,10 +294,10 @@ class GrowthIntegrationTests(WorldCommandTest):
         enemy = room_enemies(self.rooms['ridge'])[0]
         self.char1.location = enemy.location
         enemy.engage(self.char1, now=100)
-        enemy.db.suppression = {'rank': 7, 'reduction': .08, 'attacks': 3}
+        enemy.db.suppressions = {str(self.char1.id): {'rank': 7, 'reduction': .08, 'attacks': 3}}
         enemy.db.enemy_round = 1
         enemy.enemy_tick(now=102.5, rng=Random(1))
-        self.assertEqual(enemy.db.suppression['attacks'], 2)
+        self.assertEqual(enemy.db.suppressions[str(self.char1.id)]['attacks'], 2)
 
 
     def test_shortcuts_are_whole_input_only_and_engine_remains_default(self):

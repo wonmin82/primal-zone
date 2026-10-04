@@ -7,7 +7,15 @@ from evennia.objects.objects import DefaultCharacter
 from evennia.utils.ansi import parse_ansi, strip_raw_ansi
 from typeclasses.enemies import room_enemies
 from typeclasses.explorers import Explorer
-from typeclasses.interactables import Container, SettlementOfficer, Shopkeeper, action_objects
+from typeclasses.interactables import (
+    AttributeTrainer,
+    Container,
+    SettlementOfficer,
+    Shopkeeper,
+    SkillTrainer,
+    TrainingManager,
+    action_objects,
+)
 from typeclasses.loot import room_loot, take_loot
 from typeclasses.parties import invite, respond
 from world import presentation as view
@@ -70,6 +78,14 @@ class SemanticTextTests(WorldCommandTest):
                     self.assertEqual(tokens(output, "command"), ["환율", "교환", "교환", "교환", "교환"])
                 elif isinstance(obj, Shopkeeper):
                     self.assertEqual(tokens(output, "command"), ["상품", "구매", "가치", "판매"])
+                elif isinstance(obj, SkillTrainer):
+                    self.assertEqual(tokens(output, "command"), ["배워"])
+                    self.assertIn(SKILLS[obj.db.skill_id]["name"] + " 배워", output)
+                elif isinstance(obj, AttributeTrainer):
+                    self.assertEqual(tokens(output, "command"), ["배분"])
+                    self.assertIn(ATTRIBUTES[obj.db.attribute_id]["name"] + " 배분", output)
+                elif isinstance(obj, TrainingManager):
+                    self.assertEqual(tokens(output, "command"), ["재분배", "재분배", "재훈련"])
                 else:
                     self.assertEqual(tokens(output, "command"), list(obj.actions))
                 self.assertIn(obj.key, tokens(output, obj.semantic_role))

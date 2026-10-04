@@ -74,10 +74,18 @@ class Enemy(DistantPresenceMixin, DefaultObject):
         self.db.enemy_round = 0
         self.db.next_attack_at = 0
         self.db.last_activity = 0
+        self.db.suppressions = {}
 
     def at_post_move(self, source_location, **kwargs):
         super().at_post_move(source_location, **kwargs)
-        if self.db.combatants:
+        if self.db.enemy_id is None:
+            return
+        with world_change():
+            for identity in list(self.db.combatants or []):
+                player = object_by_id(identity)
+                if player and player.profile().get("combat_target") == self.id:
+                    player.leave_combat()
+            self.db.suppressions = {}
             self.reconcile()
 
     def active_players(self):
@@ -169,6 +177,7 @@ class Enemy(DistantPresenceMixin, DefaultObject):
         contribution.pop(player.id, None)
         self.db.contribution = contribution
         if not self.db.combatants:
+            self.db.suppressions = {}
             self.db.recovery_ready_at = now + ENEMY_RECOVERY_DELAY_SECONDS
             state = deserialize(self.db.recovery) or recovery.initialize(now)
             # 재교전 중의 시간은 회복량에 더하지 않고 앞 구간의 소수 기여는 보존한다.
@@ -182,6 +191,8 @@ class Enemy(DistantPresenceMixin, DefaultObject):
     def reconcile(self, now=None):
         now = time() if now is None else now
         with world_change():
+            # The old unowned effect cannot be assigned to a source safely.
+            self.attributes.remove("suppression")
             if self.db.claim and now - self.db.claim_last_activity >= CLAIM_TIMEOUT_SECONDS:
                 for player in self.active_players():
                     player.leave_combat(now=now)
@@ -199,6 +210,7 @@ class Enemy(DistantPresenceMixin, DefaultObject):
                     else:
                         self.db.combatants = [key for key in self.db.combatants if key != identity]
             if not self.db.combatants:
+                self.db.suppressions = {}
                 self.db.claim = None
                 self.db.claim_last_activity = 0
                 self.db.threat = {}
@@ -232,6 +244,7 @@ class Enemy(DistantPresenceMixin, DefaultObject):
                 self.db.hp = resources["hp"]
                 self.db.recovery = state
             if self.db.state == "respawning" and self.db.respawn_at <= now:
+                self.db.suppressions = {}
                 self.db.state = "alive"
                 self.db.hp = self.db.max_hp
                 self.db.respawn_at = None
@@ -284,13 +297,15 @@ class Enemy(DistantPresenceMixin, DefaultObject):
             damage = min(self.db.hp, damage)
             self.db.hp -= damage
             if "suppression" in outcome:
-                from world.progression import refresh_suppression
+                from world.progression import apply_suppression
 
-                self.db.suppression = refresh_suppression(
-                    deserialize(self.db.suppression), outcome["suppression"]["rank"],
+                effects, status = apply_suppression(
+                    deserialize(self.db.suppressions), player.id, outcome["suppression"]["rank"],
                     bool(ENEMIES[self.db.enemy_id].get("boss_quest")),
                 )
-                outcome["suppression"] = deserialize(self.db.suppression)
+                self.db.suppressions = effects
+                outcome["suppression"] = effects[str(player.id)]
+                outcome["suppression_status"] = status
             self.db.last_activity = now
             self.db.claim_last_activity = now
             threat = deserialize(self.db.threat)
@@ -327,7 +342,7 @@ class Enemy(DistantPresenceMixin, DefaultObject):
         for participant in self.active_players():
             after_change(lambda participant=participant: participant.msg(fallen))
         self.db.state = "respawning"
-        self.db.suppression = None
+        self.db.suppressions = {}
         self.db.respawn_at = now + CORPSE_TTL_SECONDS + RESPAWN_DELAY_SECONDS
         definition = ENEMIES[self.db.enemy_id]
         for identity, xp in rules.reward_allocation(
@@ -361,10 +376,11 @@ class Enemy(DistantPresenceMixin, DefaultObject):
             self.db.next_attack_at = now + COMBAT_INTERVAL
             result_profile = target.profile()
             target.accrue_recovery(result_profile, now)
-            from world.progression import consume_suppression
+            from world.progression import combined_suppression, consume_suppressions
 
-            reduction, remaining = consume_suppression(deserialize(self.db.suppression))
-            self.db.suppression = remaining
+            effects = deserialize(self.db.suppressions)
+            reduction = combined_suppression(effects)
+            self.db.suppressions = consume_suppressions(effects)
             result = rules.enemy_attack(
                 result_profile, self.db.enemy_id, self.db.enemy_round, now, rng, reduction
             )

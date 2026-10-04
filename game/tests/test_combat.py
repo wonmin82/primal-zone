@@ -110,7 +110,7 @@ class SharedCombatTests(WorldCommandTest):
                 break
             now = 100 + turn * 2.5
             profile = self.char1.profile()
-            if self.enemy.db.enemy_round % 3 == 2 and profile["mental"] >= 6:
+            if self.enemy.db.enemy_round % 3 == 2 and profile["mental"] >= 6 and now >= profile["skill_ready_at"].get("suppress", 0):
                 rules.queue_action(profile, "suppress", now)
             elif profile["hp"] < 45 and profile["inventory"].get("bandage"):
                 rules.queue_action(profile, "bandage", now)

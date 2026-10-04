@@ -161,6 +161,19 @@ def shop_errors():
 
 def errors(interactables):
     issues = headquarters_errors() + elevator_errors() + shop_errors()
+    from world.progression import ATTRIBUTES, SKILLS
+
+    for identity, definition in interactables.items():
+        kind = definition.get("typeclass")
+        if kind not in ("SkillTrainer", "AttributeTrainer", "TrainingManager"):
+            continue
+        for field in ("presence", "description", "dialogue"):
+            if not isinstance(definition.get(field), str) or not definition[field].strip():
+                issues.append(f"{identity}: 성장 교관의 {field}는 비어 있지 않은 문자열이어야 합니다.")
+        if kind == "SkillTrainer" and definition.get("skill_id") not in SKILLS:
+            issues.append(f"{identity}: 담당 기술이 유효하지 않습니다.")
+        if kind == "AttributeTrainer" and definition.get("attribute_id") not in ATTRIBUTES:
+            issues.append(f"{identity}: 담당 특성이 유효하지 않습니다.")
     if type(SALVAGE_CREDIT_RATE) is not int or SALVAGE_CREDIT_RATE <= 0:
         issues.append("회수부품 정산율은 양의 정수여야 합니다.")
     for identity, room in (

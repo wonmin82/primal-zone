@@ -1,5 +1,14 @@
 # 원시구역 테스트 안내
 
+## 현재 절차: PR #28 견제와 교관
+
+1. 격리 캐릭터 두 명으로 같은 적에게 견제를 적용한다. 문자열 source ID별 효과가 공존하고 각자 자신의 Rank만 교체/갱신/보존하는지 확인한다. R10 두 명34.39%, 네 명56.95%, 보스 네 명32.92%는 순수 helper로 검사한다.
+2. 적 attack event에서 모든 횟수가 각각1 줄고0은 제거되는지 확인한다. telegraph는 추가 소비하지 않는다. 도망·마지막 참가자 이탈·claim timeout·Enemy 이동·사망·respawn 후 효과가 없어야 하며 HP 유예 중에도 재교전에 남아서는 안 된다.
+3. 간파/견제 실행 후10초 전 재예약을 거절한다. 실제 계정 재로그인·session 복원·서버 종료 경로·기술 재분배·전체 재훈련 이후에도 absolute deadline을 유지한다.
+4. 특성/기술/전체 초기화는 해당 scope만 바꾸고 결과 숫자는 실제 available 총량과 같아야 한다. HP/정신력 무료 회복과 cooldown 초기화는 없어야 한다.
+5. SkillTrainer8명·AttributeTrainer4명의 보기에서 역할·담당 입력만 확인한다. 현재 Rank/특성/남은 예산/상세 효과는 없고 각 NPC의 대화가 서로 달라야 한다. 훈련관리관만 세 재분배를 안내한다. Web NPC context와 growth panel은 기존 provider 명령을 계속 제공해야 하며 Room-owned 성장 action은 없어야 한다.
+6. bootstrap 반복으로 Enemy/교관 ID와 profile v10·공유 loot/파티를 보존한다. source 없는 옛 suppression은 제거하되 현재 교전의 새 suppressions는 유지한다. 최종 check/test·Quick/Full smoke와 Node client 검사 및 수집 후 대표 desktop/mobile 화면을 확인한다. 실행 결과는 Task State와 PR의 해당 HEAD Validation에 기록한다.
+
 ## 현재 절차: 정신력과 주기 회복
 
 격리 DB의 테스트 캐릭터로 확인한다. 일반 플레이 DB를 초기화하거나 fixture 상태로 덮어쓰지 않는다.

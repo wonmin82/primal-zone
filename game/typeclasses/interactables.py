@@ -228,19 +228,34 @@ class GrowthTrainer(ActionObject):
     detectability = "conspicuous"
     distant_visible = True
     semantic_role = "npc"
-    presence = "탐사자의 훈련을 지도하고 있다."
-    description = "담당 분야의 훈련을 돕는 탐사대 교관이다."
     available = _service_available
+
+    @property
+    def presence(self):
+        return self.db.presence or "탐사자의 훈련을 지도하고 있다."
+
+    @property
+    def description(self):
+        return self.db.description or "담당 분야의 훈련을 돕는 탐사대 교관이다."
+
+    def return_appearance(self, looker, **kwargs):
+        offer, commands = self.training_offer()
+        return ft.sheet(ft.token("npc", self.key), self.description, "", offer, "",
+                        ft.join([ft.usage(command, set(self.actions) | {"재훈련"}) for command in commands], "\n"))
 
     def act(self, caller, action, args):
         if action == "대화":
-            caller.msg(ft.text(ft.token("npc", self.key), "에게서 담당 분야를 훈련받을 수 있다. 훈련과 재훈련은 무료다."))
+            caller.msg(ft.text(ft.token("npc", self.key), "\n\n", self.db.dialogue or "훈련에는 비용이 들지 않는다."))
         else:
             self.train(caller, action, args)
 
 
 class SkillTrainer(GrowthTrainer):
     actions = ("대화", "배워")
+
+    def training_offer(self):
+        name = SKILLS[self.db.skill_id]["name"]
+        return f"이 교관에게서 {name}{ft.particle(name, '을/를')} 배울 수 있다.", (name + " 배워",)
 
     def train(self, caller, action, skill):
         if action != "배워" or skill != self.db.skill_id:
@@ -259,6 +274,10 @@ class SkillTrainer(GrowthTrainer):
 
 class AttributeTrainer(GrowthTrainer):
     actions = ("대화", "배분")
+
+    def training_offer(self):
+        name = ATTRIBUTES[self.db.attribute_id]["name"]
+        return f"이 교관에게서 {name}{ft.particle(name, '을/를')} 배분할 수 있다.", (name + " 배분",)
 
     def train(self, caller, action, args):
         attribute, amount = args
@@ -281,9 +300,18 @@ class AttributeTrainer(GrowthTrainer):
 class TrainingManager(GrowthTrainer):
     actions = ("대화", "재분배")
 
+    def training_offer(self):
+        return "이 관리관에게서 특성이나 기술 투자를 다시 정리할 수 있다.", ("특성 재분배", "기술 재분배", "전체 재훈련")
+
     def train(self, caller, action, scope):
-        caller.change(lambda profile: rules.retrain(profile, scope, safe=self.available(caller)))
-        caller.msg("재훈련 완료. 투자한 특성 포인트와 기술 훈련을 반환했다. 탐사 기록은 유지된다.")
+        result = caller.change(lambda profile: rules.retrain(profile, scope, safe=self.available(caller)))
+        attributes, skills = result["attribute_points"], result["skill_training"]
+        message = {
+            "attributes": f"특성 투자를 초기화해 특성 포인트 {attributes}점",
+            "skills": f"모든 기술을 R1로 초기화해 기술 훈련 {skills}회",
+            "all": f"특성과 기술을 모두 초기화해 특성 포인트 {attributes}점과 기술 훈련 {skills}회",
+        }[result["scope"]]
+        caller.msg(f"{self.key}{ft.particle(self.key)} {message}{ft.particle(message, '을/를')} 다시 사용할 수 있게 했다.")
 
     def web_actions(self, caller, target, observed_at=None):
         if not self.available(caller, observed_at):
@@ -592,6 +620,24 @@ for attribute, room, name in (
     ("constitution", "infirmary", "체력교관"), ("wisdom", "tactics_room", "분석교관"),
 ):
     INTERACTABLES["trainer_" + attribute] = {"room": room, "typeclass": "AttributeTrainer", "name": name, "aliases": [], "attribute_id": attribute}
+
+
+for identity, presence, description, dialogue in (
+    ("trainer_attack", "훈련생의 자세를 바로잡으며 기본 동작을 반복시키고 있다.", "기본 공격과 실전 동작을 다듬는 전투 훈련을 담당한다.", "서두르지 말고 발부터 안정시키세요. 익숙한 동작을 정확히 반복하는 것이 실전의 시작입니다."),
+    ("trainer_defense", "보호판을 두드리며 충격을 흘리는 자세를 보여 주고 있다.", "피해를 흘리고 충격을 줄이는 방호 훈련을 담당한다.", "충격을 정면으로 버티려고만 하지 마세요. 몸의 각도와 발의 위치가 버틸 힘을 만들어 줍니다."),
+    ("trainer_heavy", "무게추를 옮기며 짧게 힘을 모으는 동작을 보여 주고 있다.", "순간적으로 힘을 집중하는 전투 훈련을 담당하는 교관이다.", "세게 휘두르는 것과 강하게 때리는 건 다릅니다. 힘을 모으는 순간이 짧을수록 빈틈도 줄어듭니다."),
+    ("trainer_heal", "처치 모형 곁에서 부상 대응 절차를 지도하고 있다.", "전투 중 부상을 살피고 치료하는 훈련을 담당한다.", "상처가 깊어지기 전에 동료의 상태를 살피세요. 무리한 공격보다 제때의 치료가 탐사대를 지켜 줍니다."),
+    ("trainer_shooting", "사격선에서 총기 자세와 표적을 번갈아 확인하고 있다.", "안전한 총기 취급과 정확한 사격 동작을 지도한다.", "방아쇠를 당기기 전에 자세와 사선을 확인하세요. 흔들리지 않는 한 발이 급한 여러 발보다 낫습니다."),
+    ("trainer_insight", "표적에 표시된 취약 지점을 짚으며 움직임을 설명하고 있다.", "상대의 움직임과 취약 지점을 읽는 전투 분석을 지도한다.", "공격을 잠시 멈추고 상대의 버릇을 보세요. 작은 빈틈을 읽으면 다음 공격의 기회를 더 잘 살릴 수 있습니다."),
+    ("trainer_suppress", "모형 사이를 움직이며 상대를 압박하는 동작을 설명하고 있다.", "상대의 공격 흐름을 끊고 압박하는 전술 훈련을 담당한다.", "견제는 상대의 다음 행동을 어렵게 만드는 일입니다. 동료와 압박을 나누되 자신의 빈틈도 살피세요."),
+    ("trainer_breathing", "조용히 호흡을 맞추며 훈련생의 긴장을 풀어 주고 있다.", "전투 중 호흡과 정신 집중을 유지하는 훈련을 담당한다.", "정신력이 바닥난 뒤에 숨을 고르려 하면 늦습니다. 공격할 순간과 호흡을 가다듬을 순간을 구분하세요."),
+    ("trainer_strength", "들어 올린 중량을 천천히 내려놓으며 자세를 보여 주고 있다.", "근력과 힘 전달을 효율적으로 사용하는 훈련을 담당한다.", "무게를 버티는 힘과 전달하는 힘을 함께 기르세요. 기본 자세를 지켜야 몸을 다치지 않습니다."),
+    ("trainer_agility", "표적 사이에 놓인 발판을 빠르게 오가고 있다.", "균형을 잡고 빠르게 움직이는 기동 훈련을 담당한다.", "빠른 발보다 먼저 필요한 건 다음 발을 둘 자리입니다. 시선을 들고 균형을 유지하세요."),
+    ("trainer_constitution", "훈련생의 호흡과 회복 상태를 살피고 있다.", "긴 탐사를 버틸 체력과 몸의 안정성을 기르는 훈련을 담당한다.", "지치기 전에 자신의 몸을 알아야 합니다. 꾸준한 훈련과 충분한 휴식이 긴 탐사를 버티게 해 줍니다."),
+    ("trainer_wisdom", "지형 모형에 표시를 옮기며 주변 상황을 설명하고 있다.", "위험한 상황에서 주변 정보를 빠르게 정리하고 올바른 판단을 내리는 훈련을 담당한다.", "눈앞의 움직임만 쫓지 마세요. 상대와 주변 상황을 함께 읽어야 다음 행동을 먼저 준비할 수 있습니다."),
+    ("instructor", "탐사자의 훈련 기록을 펼쳐 놓고 다음 계획을 정리하고 있다.", "탐사자들의 훈련 기록과 성장 계획을 관리한다.", "투자 방향을 다시 정하고 싶다면 찾아오세요. 특성 재분배, 기술 재분배와 전체 재훈련에는 비용이 들지 않습니다."),
+):
+    INTERACTABLES[identity].update(presence=presence, description=description, dialogue=dialogue)
 
 
 for definition in INTERACTABLES.values():

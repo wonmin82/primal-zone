@@ -57,6 +57,9 @@ def _build_world():
                 enemy.db.hp = min(enemy.db.hp, definition["hp"])
                 if not enemy.db.combatants and enemy.location != room:
                     enemy.location = room
+            enemy.attributes.remove("suppression")
+            if enemy.db.suppressions is None or not enemy.db.combatants:
+                enemy.db.suppressions = {}
     # 이전 본부 배치의 두 관리 출구를 새 방향으로 재사용한다. 다른 stale 객체는 보존한다.
     for zone, old_direction, new_direction, target in (
         ("hq_concourse", "동", "남", "support_1f_c"),
@@ -118,7 +121,7 @@ def _build_world():
         expected_type = f"typeclasses.interactables.{data['typeclass']}"
         if obj.typeclass_path != expected_type:
             obj.swap_typeclass(expected_type, clean_attributes=False, run_start_hooks="at_object_creation")
-        for field in ("shop_id", "skill_id", "attribute_id"):
+        for field in ("shop_id", "skill_id", "attribute_id", "presence", "description", "dialogue"):
             if field in data:
                 obj.attributes.add(field, data[field])
     return rooms

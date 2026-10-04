@@ -4,6 +4,19 @@
 
 ## Objective
 
+### PR #28 최종 리뷰 후속 수정 (2026-10-04)
+
+[PR #28](https://github.com/wonmin82/primal-zone/pull/28)의 기존 `codex/long-term-progression`에서 시작했다. 시작 로컬·원격·PR HEAD는 `b00d7658a1a9a3441076c56755990dcad9161eea`, 최신 main은 `133b271b61ec0bfcb1799dd7226f9ed75da8be2c`로 일치했다. 새 branch/PR을 만들지 않고 기존 PR을 OPEN으로 유지한다. 아래 최초 구현 결과는 과거 검증이며 이번 gameplay 변경의 성공 근거로 재사용하지 않는다.
+
+- 견제는 `suppressions[str(player.id)]`로 source마다 하나씩 저장한다. 자신의 Rank만 applied/refreshed/upgraded/preserved를 판단하고 다른 효과는 보존한다. 감소율은 곱산하며 보스는 각 효과를 절반으로 계산한다. R10 네 명 보스 결과는 공식상32.92%로 요청 예시32.96%를 정정했다.
+- 적 attack event마다 모든 효과를 한 번 소비하고 마지막 combatant 이탈·claim timeout·이동·사망·respawn에서 제거한다. HP 회복 수명과 분리한다. source 없는 옛 suppression은 제거하고 반복 bootstrap에서 현재 새 효과·Enemy/교관 ID·profile v10과 공유 상태를 보존한다.
+- 간파/견제는10초 absolute cooldown이다. profile reload·실제 계정 logout/login·live session 복원·서버 종료·기술 재분배·전체 재훈련 이후 deadline 보존을 검증한다. 재분배는 해당 scope와 초기화 후 실제 available 총량만 안내하고 자원을 무료 회복하지 않는다.
+- 공통 SkillTrainer8명·AttributeTrainer4명·TrainingManager를 유지하며 presence/description/dialogue를 NPC별 데이터로 구성했다. 보기는 담당 훈련과 사용법만, 현재 수치는 능력/기술이 담당한다. 전문 교관은 재훈련을 안내하지 않는다. 실제 provider Web controls는 유지한다.
+- 관련 reverse/parallel81개와 실패 영역을 보완한32개가 성공했다. 최종 전체 `scripts/dev.py test`는 순수163개/2.280s·통합357개/203.781s, 총520개 성공이며 runner215.544s다. 최초 전체에서 옛 fixture 메타데이터와 단일 교관 대화/appearance/무쿨타임 기대가 실패해 실제 신규 계약으로 보완했다. `scripts/dev.py check`와 `git diff --check` 성공.
+- Quick smoke 단독 재실행52.141s, Full smoke410.732s 성공. Full은 production 시체29.875s·respawn44.705s·보호120.816s, 부분 분배·적 점진 회복·패배·본부·두 임무/보스·NPC 훈련·실제 Portal/Server restart와 진행 보존을 확인했다. 전체 병렬 검사와 동시 실행한 첫 Quick은 짧은 시체 수명의 부분 화폐 회수 단계에서 timeout이 발생했다. 실패 로그/DB는 Git 제외로 보존하고 같은 gameplay 코드의 단독 재실행은 모든 계약을 통과했다. 성공한 Full은 테스트 프로세스와 임시 디렉터리를 정리했고 플레이 DB fingerprint는 불변이다.
+- Node syntax 검사와 실제 client9개 성공. game에서 정적 파일 수집0개 복사/213개 유지. static 변경이 없어 cache version은 바꾸지 않았다. 격리 Chrome1440/390px에서 교관 보기·개별 대화·NPC 버튼 훈련·scope별 재분배 및 실제 견제 성공 출력을 확인했다. NPC provider 명령, compass/SURROUNDINGS, 가로 overflow 없음·console error/warning 없음이 유지된다. 검증 후 전용 서버/탭을 정리했고 플레이 DB fingerprint는 불변이다.
+- 남은 수동 범위: 실제 OS IME·외부 Telnet client/font·다인 견제 중첩의 동시 브라우저 조작. 중첩/cleanup/cooldown과 Web state/provider는 자동 통합 검사로 확인했다. 현재 엔진에 실제 miss/AoE 콘텐츠가 없어 attack-event 단위 helper 계약으로 검증했다. 최종 HEAD와 해당 HEAD의 test/smoke CI URL은 PR Validation에 기록한다.
+
 최신 origin/main `133b271b61ec0bfcb1799dd7226f9ed75da8be2c`(PR #27 MERGED)에서 `codex/long-term-progression`을 시작했다. 레벨·특성·여덟 기술로 성장 체계를 교체하고 숙련·액티브 방어·응급처치 기술을 제거했다. profile v10은 진행을 보존하며 기술 재투자와 특성 정규화를 제공한다. 수치 SSOT는 world/progression.py, 설계는 [progression.md](progression.md)다. 새 PR은 검토를 위해 OPEN으로 유지하며 merge하지 않는다. 최종 HEAD·PR URL·해당 HEAD의 CI run/job 결과는 새 PR의 Validation이 기준이다.
 
 ### 장기 성장 구현·검증 (2026-10-04)

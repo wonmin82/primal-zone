@@ -195,7 +195,14 @@ def outgoing_attack(profile, enemy_name, outcome, damage):
         return ft.text(prefix, ft.named("hostile", enemy_name, "을/를"), f" 사격해 {damage} 피해를 입혔다.")
     if action == "suppress":
         effect = outcome["suppression"]
-        return ft.text(prefix, ft.named("hostile", enemy_name, "을/를"), f" 견제해 {damage} 피해를 입히고 다음 {effect['attacks']}회 공격력을 {effect['reduction']:.0%} 낮췄다.")
+        status = outcome.get("suppression_status", "applied")
+        suffix = {
+            "applied": f"입히고 다음 {effect['attacks']}회 공격력을 {effect['reduction'] * 100:g}% 낮췄다.",
+            "refreshed": f"입히고 자신의 견제 효과를 다음 {effect['attacks']}회 공격까지 연장했다.",
+            "upgraded": f"입히고 자신의 견제 효과를 다음 {effect['attacks']}회 공격력 {effect['reduction'] * 100:g}% 감소로 강화했다.",
+            "preserved": "입혔지만 기존의 더 강한 견제 효과가 유지됐다.",
+        }[status]
+        return ft.text(prefix, ft.named("hostile", enemy_name, "을/를"), f" 견제해 {damage} 피해를 {suffix}")
     weapon = profile["equipment"].get("weapon")
     weapon_name = ITEMS[weapon]["name"] if weapon else "맨손"
     return ft.text(prefix, ft.item(weapon) if weapon else weapon_name, ft.particle(weapon_name, "으로/로"), " ", ft.named("hostile", enemy_name, "을/를"), f" 공격해 {damage} 피해를 입혔다.")

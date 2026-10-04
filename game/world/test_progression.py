@@ -1,6 +1,7 @@
 """장기 성장·기술 수학, 저장 변환과 원자적 실패 경계."""
 
 from copy import deepcopy
+from json import dumps, loads
 from random import Random
 from unittest import TestCase
 from unittest.mock import Mock
@@ -113,15 +114,64 @@ class ProgressionTests(TestCase):
             self.assertAlmostEqual(pg.suppression_effect(rank, True)["reduction"], effect["reduction"] / 2)
 
     def test_suppression_refresh_and_one_event_consumption(self):
-        stronger = pg.suppression_effect(7)
-        self.assertEqual(pg.refresh_suppression(stronger, 2), stronger)
-        _, once = pg.consume_suppression(stronger)
-        self.assertEqual(once["attacks"], 2)
-        self.assertEqual(pg.refresh_suppression(once, 7)["attacks"], 3)
-        self.assertEqual(pg.refresh_suppression(once, 10)["attacks"], 4)
+        stronger, status = pg.apply_suppression({}, 1, 7)
+        self.assertEqual(status, "applied")
+        self.assertEqual(pg.apply_suppression(stronger, 1, 2), (stronger, "preserved"))
+        once = pg.consume_suppressions(stronger)
+        self.assertEqual(once["1"]["attacks"], 2)
+        refreshed, status = pg.apply_suppression(once, "1", 7)
+        self.assertEqual((refreshed["1"]["attacks"], status), (3, "refreshed"))
+        upgraded, status = pg.apply_suppression(once, 1, 10)
+        self.assertEqual((upgraded["1"]["attacks"], status), (4, "upgraded"))
         for _ in range(3):
-            _, stronger = pg.consume_suppression(stronger)
-        self.assertIsNone(stronger)
+            stronger = pg.consume_suppressions(stronger)
+        self.assertEqual(stronger, {})
+
+    def test_source_suppression_stacking_boss_and_serialization_contract(self):
+        for rank, reduction in ((1, .10), (5, .14), (10, .19)):
+            self.assertAlmostEqual(pg.suppression_effect(rank)["reduction"], reduction)
+        for boss, expected in ((False, .56953279), (True, .329198049375)):
+            effects = {}
+            for source in range(4):
+                effects, status = pg.apply_suppression(effects, source, 10, boss)
+                self.assertEqual(status, "applied")
+                if source == 1 and not boss:
+                    self.assertAlmostEqual(pg.combined_suppression(effects), .3439)
+            self.assertAlmostEqual(pg.combined_suppression(effects), expected)
+            self.assertEqual(loads(dumps(effects)), effects)
+            before = deepcopy(effects)
+            changed, _ = pg.apply_suppression(effects, 0, 7, boss)
+            self.assertEqual(changed, effects)
+            self.assertEqual(effects, before)
+            consumed = pg.consume_suppressions(effects)
+            self.assertEqual({effect["attacks"] for effect in consumed.values()}, {3})
+            self.assertEqual(effects, before)
+        mixed = {"A": pg.suppression_effect(10), "B": pg.suppression_effect(4), "C": pg.suppression_effect(1)}
+        consumed = pg.consume_suppressions(mixed)
+        self.assertEqual({key: effect["attacks"] for key, effect in consumed.items()}, {"A": 3, "B": 1})
+        refreshed, status = pg.apply_suppression(consumed, "B", 4)
+        self.assertEqual(status, "refreshed")
+        self.assertEqual(refreshed["B"]["attacks"], 2)
+        self.assertEqual(refreshed["A"], consumed["A"])
+        self.assertEqual(pg.combined_suppression({}), 0)
+
+    def test_insight_and_suppress_deadlines_survive_migration_and_retraining(self):
+        for skill in ("insight", "suppress"):
+            p = at_level(50)
+            p.update(combat_target=1, queued_action=skill)
+            rules.player_attack(p, "alpha", 100, 2.5, Random(1))
+            self.assertEqual(pg.cooldown(skill, 1), 10)
+            self.assertEqual(p["skill_ready_at"][skill], 110)
+            for scope in ("skills", "all"):
+                reloaded = rules.migrate_profile(p)
+                reloaded["combat_target"] = None
+                rules.retrain(reloaded, scope, safe=True)
+                reloaded["combat_target"] = 1
+                before = deepcopy(reloaded)
+                with self.assertRaisesRegex(rules.RuleError, "7초"):
+                    rules.queue_action(reloaded, skill, 103)
+                self.assertEqual(reloaded, before)
+                rules.queue_action(reloaded, skill, 110)
 
     def test_equipment_restrictions_and_atomic_cost_failure(self):
         p = at_level(20)
@@ -155,7 +205,7 @@ class ProgressionTests(TestCase):
         self.assertIsNone(p["insight"])
         p["insight"] = original
         p.update(combat_target=2, queued_action="insight")
-        rules.player_attack(p, "alpha", 108, 2.5)
+        rules.player_attack(p, "alpha", 110, 2.5)
         self.assertEqual(p["insight"]["target"], 2)
 
     def test_support_effective_healing_bandage_breathing_and_absolute_cooldowns(self):
@@ -209,9 +259,9 @@ class ProgressionTests(TestCase):
         self.assertEqual(p["mental"], 331 - 17 - 12)
         p["equipment"]["weapon"] = "machete"
         p["queued_action"] = "insight"
-        rules.player_attack(p, "alpha", 105, 2.5)
+        rules.player_attack(p, "alpha", 110, 2.5)
         p["queued_action"] = "heavy"
-        self.assertEqual(rules.player_attack(p, "alpha", 107.5, 2.5, Mock(randint=Mock(return_value=0)))[0], 174)
+        self.assertEqual(rules.player_attack(p, "alpha", 112.5, 2.5, Mock(randint=Mock(return_value=0)))[0], 174)
 
     def test_passive_defense_after_fixed_defense_and_charge_and_breathing_tiers(self):
         p = at_level(20)

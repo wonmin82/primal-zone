@@ -196,7 +196,9 @@ profile v10의 `attributes`는 기본 10과 추가 투자, `skills`는 여덟 Ra
 
 `insight`는 플레이어의 한 대상에만 귀속되고 유효한 공격 적중·사망·전투 종료·양쪽 이동에서 해제한다. 지원 행동은 소모하지 않는다. 파티 치료는 예약과 실행 양쪽에서 동일 방·파티·관찰 조건을 검증하고 단일 world_change로 양쪽을 저장한다. 대상이 바뀌거나 사라지면 무료 공격으로 바꾸지 않고 그 지원 기회를 종료한다.
 
-견제는 공유 Enemy의 `suppression`에 Rank·감소율·남은 공격 횟수를 저장한다. 적 attack event당 한 번만 소비한다. 현재 엔진은 단일 대상 확정 공격이며 향후 miss/AoE도 event 단위 helper를 호출해야 한다. telegraph는 추가 소비하지 않는다. 보스는 감소율 절반, 같은 Rank refresh·높은 Rank 교체·낮은 Rank 보존이다. 액티브 guard와 응급처치 기술은 사용하지 않는다.
+견제는 공유 Enemy의 `suppressions[str(source_player_id)]`에 Rank·개별 감소율·남은 공격 횟수를 저장한다. 동일 source의 효과만 Rank 비교하며 다른 source와 공존한다. `progression.apply_suppression`이 applied/refreshed/upgraded/preserved를 반환하고 `combined_suppression`이 곱산한다. 보스 판정은 기존 boss_quest를 사용해 각 효과의 감소율을 한 번만 절반으로 적용한다. 적 attack event마다 `consume_suppressions`로 모든 효과를 한 번 소비한다. 현재 엔진은 단일 대상 확정 공격이며 향후 miss/AoE도 event 단위 helper를 호출해야 한다. telegraph는 추가 소비하지 않는다. 마지막 combatant 이탈·claim timeout·Enemy 이동·사망·respawn에서 전체 정리하며 HP 회복과 수명을 분리한다. source 없는 옛 suppression은 reconcile/bootstrap에서 제거한다. 간파와 견제는 플레이어별 절대 deadline으로10초 cooldown을 적용한다. 액티브 guard와 응급처치 기술은 사용하지 않는다.
+
+전문 교관은 공통 SkillTrainer/AttributeTrainer와 담당 ID·presence·description·dialogue 데이터로 구성한다. object appearance는 담당 훈련과 사용법만 안내하고 현재 성장 수치·효과는 조회/도움말에 맡긴다. Web growth controls는 appearance와 별개로 실제 NPC provider에서 생성한다. TrainingManager만 재분배를 제공하며 `rules.retrain`의 scope·초기화 이후 available 총량을 받아 scope별 문장으로 안내한다. 현재 HP/정신력을 무료 복원하지 않고 cooldown도 보존한다.
 
 ## 공통 동사와 객체 action dispatch
 

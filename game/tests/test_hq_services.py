@@ -90,7 +90,7 @@ class ServiceRelocationTests(WorldCommandTest):
         for command in ("남", "동", "승강기", "2층", "동", "북"):
             self.command(command)
         self.assertEqual(self.char1.zone, "training_room")
-        self.assertIn("훈련과 재훈련은 무료", self.command("근력교관 대화"))
+        self.assertIn(INTERACTABLES["trainer_strength"]["dialogue"], self.command("근력교관 대화"))
         self.assertTrue(self.state()["training_available"])
         self.command("힘 1 배분")
         self.assertEqual(self.char1.profile()["attributes"]["strength"]["allocated"], 1)

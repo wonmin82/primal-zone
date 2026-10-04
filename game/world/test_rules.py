@@ -375,12 +375,12 @@ class RuleTests(TestCase):
                 rules.add_item(profile, item)
                 rules.equip(profile, item)
             profile["combat_target"] = 1
-            suppression = None
+            suppressions = {}
             rng, hp = Random(seed), ENEMIES["alpha"]["hp"]
             defeated = False
             for turn in range(1, 51):
                 now = turn * 2.5
-                if turn % 3 == 0 and profile["mental"] >= 6:
+                if turn % 3 == 0 and profile["mental"] >= 6 and now >= profile["skill_ready_at"].get("suppress", 0):
                     rules.queue_action(profile, "suppress", now)
                 elif profile["hp"] < 45 and profile["inventory"].get("bandage"):
                     rules.queue_action(profile, "bandage", now)
@@ -389,8 +389,9 @@ class RuleTests(TestCase):
                 damage, outcome = rules.player_attack(profile, "alpha", now, 2.5, rng)
                 from world import progression as pg
                 if "suppression" in outcome:
-                    suppression = pg.refresh_suppression(suppression, outcome["suppression"]["rank"], True)
-                reduction, suppression = pg.consume_suppression(suppression)
+                    suppressions, _ = pg.apply_suppression(suppressions, "solo", outcome["suppression"]["rank"], True)
+                reduction = pg.combined_suppression(suppressions)
+                suppressions = pg.consume_suppressions(suppressions)
                 hp -= damage
                 if hp <= 0:
                     break
@@ -409,11 +410,11 @@ class RuleTests(TestCase):
                 rules.add_item(profile, item)
                 rules.equip(profile, item)
             profile["combat_target"] = 1
-            suppression = None
+            suppressions = {}
             rng, hp = Random(seed), ENEMIES["jungle_apex"]["hp"]
             for turn in range(1, 51):
                 now = turn * 2.5
-                if rules.boss_telegraph("jungle_apex", turn - 1) and profile["mental"] >= 6:
+                if rules.boss_telegraph("jungle_apex", turn - 1) and profile["mental"] >= 6 and now >= profile["skill_ready_at"].get("suppress", 0):
                     rules.queue_action(profile, "suppress", now)
                 elif profile["hp"] < 55 and profile["inventory"].get("bandage"):
                     rules.queue_action(profile, "bandage", now)
@@ -422,8 +423,9 @@ class RuleTests(TestCase):
                 damage, outcome = rules.player_attack(profile, "jungle_apex", now, 2.5, rng)
                 from world import progression as pg
                 if "suppression" in outcome:
-                    suppression = pg.refresh_suppression(suppression, outcome["suppression"]["rank"], True)
-                reduction, suppression = pg.consume_suppression(suppression)
+                    suppressions, _ = pg.apply_suppression(suppressions, "solo", outcome["suppression"]["rank"], True)
+                reduction = pg.combined_suppression(suppressions)
+                suppressions = pg.consume_suppressions(suppressions)
                 hp -= damage
                 if hp <= 0:
                     break
