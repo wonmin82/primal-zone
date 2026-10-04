@@ -115,8 +115,12 @@ def _build_world():
             obj.location = rooms[data["room"]]
             obj.aliases.clear()
             obj.aliases.add(data["aliases"])
-        if "shop_id" in data:
-            obj.db.shop_id = data["shop_id"]
+        expected_type = f"typeclasses.interactables.{data['typeclass']}"
+        if obj.typeclass_path != expected_type:
+            obj.swap_typeclass(expected_type, clean_attributes=False, run_start_hooks="at_object_creation")
+        for field in ("shop_id", "skill_id", "attribute_id"):
+            if field in data:
+                obj.attributes.add(field, data[field])
     return rooms
 
 

@@ -89,6 +89,8 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         if profile.get("version", 1) < rules.PROFILE_VERSION:
             profile = rules.migrate_profile(profile)
             self.db.profile = profile
+        else:
+            rules.normalize_growth(profile)
         return profile
 
     def profile_snapshot(self):
@@ -97,6 +99,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         return rules.migrate_profile(saved) if saved is not None else rules.new_profile()
 
     def save_profile(self, profile):
+        rules.normalize_growth(profile)
         recovery.clamp(profile, rules.stats(profile))
         with transaction.atomic():
             self.db.profile = profile
@@ -261,8 +264,12 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             for key, count in profile["inventory"].items()
         ]
         instructor = instructor_for(self, observed_at=observed_at)
+        from typeclasses.interactables import growth_controls
+
         payload = {
             "growth": rules.growth_state(profile),
+            "training_controls": growth_controls(self, observed_at),
+            "max_level": rules.MAX_LEVEL,
             "training_available": bool(instructor),
             "name": self.key,
             "hp": profile["hp"],
@@ -490,7 +497,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             profile = self.profile()
             if profile.get("combat_target"):
                 self.accrue_recovery(profile, now)
-                profile.update(combat_target=None, queued_action="attack", guard_until=0)
+                profile.update(combat_target=None, queued_action="attack", insight=None, heal_target=None)
                 self.save_profile(profile)
 
     def schedule_combat(self):

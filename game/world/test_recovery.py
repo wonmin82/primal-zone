@@ -146,7 +146,7 @@ class RecoveryRulesTests(TestCase):
         old.pop("recovery_effects")
         before = deepcopy(old)
         result = rules.migrate_profile(old)
-        self.assertEqual(result, {**before, "version": 9, "mental": 60, "recovery_effects": []})
+        self.assertEqual(result, {**before, "version": rules.PROFILE_VERSION, "mental": 60, "recovery_effects": []})
         self.assertEqual(old, before)
         self.assertEqual(rules.migrate_profile(result), result)
         self.assertNotIn("recovery", result)
@@ -155,14 +155,14 @@ class RecoveryRulesTests(TestCase):
         p = self.profile()
         rules.treat(p, safe=True)
         self.assertEqual((p["hp"], p["mental"]), (60, 10))
-        before = p["proficiencies"]["medicine"]["xp"]
+        before = deepcopy(p["skills"])
         rules.rest(p, safe=True)
         self.assertEqual((p["hp"], p["mental"]), (60, 40))
-        self.assertEqual(p["proficiencies"]["medicine"]["xp"], before)
+        self.assertEqual(p["skills"], before)
         with self.assertRaises(rules.RuleError):
             rules.rest(p, safe=True)
         p["hp"] = 1
-        rules.first_aid(p)
+        rules.use_bandage(p)
         self.assertEqual(p["mental"], 40)
 
     def test_place_metadata_and_no_staging_bonus(self):

@@ -103,39 +103,36 @@
   }
   function renderGrowth(state) {
     // Keep focused training controls stable during unchanged world lifecycle updates.
-    const nextKey = JSON.stringify([state.growth, state.training_available]);
+    const nextKey = JSON.stringify([state.growth, state.training_controls]);
     if (nextKey === growthKey) return;
     growthKey = nextKey;
-    const growth = state.growth, available = state.training_available;
-    byId("training-location").textContent = available ? "탐사대 훈련관 · 훈련 가능" : "학습·배분·재훈련은 훈련관이 있는 안전한 곳에서 비전투 상태로 이용하세요.";
+    const growth = state.growth, controls = state.training_controls || {};
+    byId("training-location").textContent = state.training_available ? "주변 담당 교관에게 훈련 가능" : "담당 교관이 있는 안전한 곳에서 비전투 상태로 훈련하세요.";
     byId("attribute-points").textContent = "· 남은 포인트 " + growth.attribute_points;
-    byId("skill-points").textContent = "· 남은 점수 " + growth.skill_points;
+    byId("skill-points").textContent = "· 남은 훈련 " + growth.skill_points;
     byId("attributes").replaceChildren(...growth.attributes.map((attribute) => {
       const row = document.createElement("div"), text = document.createElement("span");
       row.className = "growth-row";
       text.textContent = attribute.name + " " + attribute.value + " (기본 " + attribute.base + " + " + attribute.allocated + ")";
       text.title = attribute.description;
-      const add = button("+1", attribute.name + " 1 배분");
+      const action = controls[attribute.id]?.[0];
+      const add = button("+1", action?.command || "");
       add.setAttribute("aria-label", attribute.name + " 1 포인트 배분");
-      add.disabled = !available || growth.attribute_points < 1;
+      add.disabled = !action;
       row.append(text, add); return row;
-    }));
-    byId("proficiencies").replaceChildren(...growth.proficiencies.map((proficiency) => {
-      const row = document.createElement("p");
-      row.textContent = proficiency.name + " Rank " + proficiency.rank + "/" + proficiency.max_rank + " · XP " + proficiency.xp;
-      return row;
     }));
     byId("skills").replaceChildren(...growth.skills.map((skill) => {
       const row = document.createElement("div"), title = document.createElement("p"), detail = document.createElement("p");
       row.className = "skill-row";
       title.textContent = skill.name + " Rank " + skill.rank + "/" + skill.max_rank;
       detail.className = "muted";
-      detail.textContent = skill.description + (skill.rank === skill.max_rank ? " · 최고 Rank" : " · 다음: Lv." + skill.required_level + " / " + skill.next_points + "점 / " + skill.next_cost);
-      const learn = button(skill.name + " 배워", skill.name + " 배워");
-      learn.disabled = !available || !skill.can_learn;
+      detail.textContent = skill.description + (skill.rank === skill.max_rank ? " · 최고 Rank" : " · 다음 Rank: 훈련 1회");
+      const action = controls[skill.id]?.[0];
+      const learn = button(skill.name + " 배워", action?.command || "");
+      learn.disabled = !action;
       row.append(title, detail, learn); return row;
     }));
-    ["reset-attributes", "reset-skills", "reset-all"].forEach((id) => { byId(id).disabled = !available; });
+    ["reset-attributes", "reset-skills", "reset-all"].forEach((id, index) => { const action = controls.reset?.[index]; byId(id).disabled = !action; byId(id).dataset.command = action?.command || ""; });
   }
   function render(state) {
     if (Array.isArray(state.resource_prompt?.segments)) latestPrompt = state.resource_prompt.segments;
@@ -147,7 +144,7 @@
     byId("logout").hidden = false;
     const fields = {"player-name": state.name, level: "Lv. " + state.level,
       credits: state.currency.formatted, "inventory-balance": state.currency.name + " " + state.currency.formatted, "hp-label": state.hp + " / " + state.max_hp,
-      "xp-label": state.level >= 10 ? "최고 레벨" : (state.xp - state.xp_floor) + " / " + (state.xp_next - state.xp_floor),
+      "xp-label": state.level >= state.max_level ? "최고 레벨" : (state.xp - state.xp_floor) + " / " + (state.xp_next - state.xp_floor),
       attack: state.attack, defense: state.defense, "room-name": state.room,
       "zone-tag": state.safe ? "안전 지대" : "탐사 구역", quest: state.quest, "room-hint": state.hint};
     Object.entries(fields).forEach(([key, value]) => { byId(key).textContent = value; });
@@ -162,7 +159,7 @@
     byId("mental-label").textContent = state.mental + " / " + state.max_mental;
     byId("mental").max = state.max_mental; byId("mental").value = state.mental;
     byId("xp").max = state.xp_next - state.xp_floor;
-    byId("xp").value = state.level >= 10 ? byId("xp").max : state.xp - state.xp_floor;
+    byId("xp").value = state.level >= state.max_level ? byId("xp").max : state.xp - state.xp_floor;
     renderExits(state.exits);
     const actions = state.enemies.map((enemy) => {
       const el = button(enemy.label + " " + enemy.hp + "/" + enemy.max_hp + (enemy.can_attack ? " 사냥" : " · 다른 그룹 교전 중"), enemy.attack_command);
@@ -235,7 +232,7 @@
         if (item.remove_action) row.append(button(item.remove_action, item.name + " " + item.remove_action));
       } else if (item.equip_action) row.append(button(item.equip_action, item.name + " " + item.equip_action));
       else if (item.consume_action) row.append(button(item.consume_action, item.name + " " + item.consume_action));
-      else if (item.id === "bandage") row.append(button("사용", "응급처치"));
+      else if (item.id === "bandage") row.append(button("사용", "붕대 사용"));
       if (item.light_source) {
         const active = observation?.light_source?.id === item.id && observation.light_source.active;
         row.append(button(active ? "끄기" : "켜기", item.name + (active ? " 꺼" : " 켜")), button("확인", item.name + " 확인"));
@@ -256,7 +253,7 @@
     byId("inventory").replaceChildren(...rows);
     const encounter = state.combat_target;
     byId("encounter").hidden = !encounter;
-    if (encounter) byId("encounter").replaceChildren(semantic("hostile", encounter.name), " · 공유 체력 " + encounter.hp + "/" + encounter.max_hp + " · 적 " + encounter.round + "차례" + (encounter.telegraph ? " · 다음 돌진! 방어를 준비하세요." : " · 강타 / 방어 / 응급처치"));
+    if (encounter) byId("encounter").replaceChildren(semantic("hostile", encounter.name), " · 공유 체력 " + encounter.hp + "/" + encounter.max_hp + " · 적 " + encounter.round + "차례" + (encounter.telegraph ? " · 다음 돌진! 견제와 치료를 준비하세요." : " · 강타 / 사격 / 견제 / 치료"));
   }
   function connect() {
     if (socket && [WebSocket.OPEN, WebSocket.CONNECTING].includes(socket.readyState)) return;

@@ -49,7 +49,7 @@ class PromptTests(WorldCommandTest):
         return messages
 
     def test_commands_errors_exits_and_sequence_finish_once(self):
-        for raw in ("상태", "의무관 진료", "침대 휴식", "응급처치", "없는대상 보기", "날아"):
+        for raw in ("상태", "의무관 진료", "침대 휴식", "붕대 사용", "없는대상 보기", "날아"):
             with self.subTest(raw=raw):
                 self.char1.change(lambda p: p.update(hp=10, mental=10))
                 self.assertGreater(len(self.one_final_prompt(raw)), 1)

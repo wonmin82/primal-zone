@@ -171,8 +171,8 @@ class MaintenanceLog(ActionObject):
                 "를 수리하면 능선의 문을 열 수 있다.\n  ",
                 ft.named("hostile", ENEMIES["alpha"]["name"], "이/가"),
                 " 몸을 낮추면 다음 차례에는 ",
-                ft.token("command", "방어"),
-                "할 것.",
+                ft.token("command", "견제"),
+                "로 공격을 약화시키고 부상은 치료할 것.",
             )
         )
 
@@ -224,40 +224,71 @@ def _service_available(obj, caller, observed_at=None):
 
 
 
-class Instructor(ActionObject):
+class GrowthTrainer(ActionObject):
     detectability = "conspicuous"
     distant_visible = True
     semantic_role = "npc"
-    presence = "탐사자의 전투 기록을 살피며 훈련 계획을 세우고 있다."
-    description = "전투 기록을 분석하고 신체 훈련과 전술을 다시 설계하는 교관이다."
-    actions = ("대화", "배워", "배분", "재분배")
-
+    presence = "탐사자의 훈련을 지도하고 있다."
+    description = "담당 분야의 훈련을 돕는 탐사대 교관이다."
     available = _service_available
 
     def act(self, caller, action, args):
-        safe = self.available(caller)
         if action == "대화":
-            caller.msg(
-                ft.text(
-                    ft.token("npc", self.key),
-                    "\n\n  전투 기록을 분석하고 훈련 계획을 다시 짜 드리지요.\n  재훈련은 무료입니다. 기본 Rank 1은 유지하며 학습 보급칩은 반환하지 않습니다.\n\n",
-                    ft.actions(self.actions),
-                )
-            )
-        elif action == "배워":
-            caller.change(lambda profile: rules.learn_skill(profile, args, safe=safe))
-            caller.msg(f"{SKILLS[args]['name']} Rank {caller.profile()['skills'][args]} 학습 완료.")
-        elif action == "배분":
-            attribute, amount = args
-            caller.change(
-                lambda profile: rules.allocate_attribute(profile, attribute, amount, safe=safe)
-            )
-            caller.msg(f"{ATTRIBUTES[attribute]['name']}에 {amount} 포인트를 배분했습니다.")
-        elif action == "재분배":
-            caller.change(lambda profile: rules.retrain(profile, args, safe=safe))
-            caller.msg("재훈련 완료. 투자 포인트를 반환했습니다. 숙련과 탐사 기록은 유지됩니다.")
+            caller.msg(ft.text(ft.token("npc", self.key), "에게서 담당 분야를 훈련받을 수 있다. 훈련과 재훈련은 무료다."))
+        else:
+            self.train(caller, action, args)
 
 
+class SkillTrainer(GrowthTrainer):
+    actions = ("대화", "배워")
+
+    def train(self, caller, action, skill):
+        if action != "배워" or skill != self.db.skill_id:
+            raise rules.RuleError("이 교관이 담당하는 기술이 아니다.")
+        before = rules.skill_rank(caller.profile(), skill)
+        caller.change(lambda profile: rules.learn_skill(profile, skill, safe=self.available(caller)))
+        remaining = rules.point_pools(caller.profile())["skill_points"]
+        caller.msg(f"{self.key}에게 {SKILLS[skill]['name']}{ft.particle(SKILLS[skill]['name'], '을/를')} 훈련받아 R{before}에서 R{before + 1}로 올랐고 기술 훈련이 {remaining}회 남았다.")
+
+    def web_actions(self, caller, target, observed_at=None):
+        if not self.available(caller, observed_at):
+            return []
+        skill = rules.skill_state(caller.profile_snapshot(), self.db.skill_id)
+        return [{"label": skill["name"] + " 배워", "command": f"{target}에게 {skill['name']} 배워"}] if skill["can_learn"] else []
+
+
+class AttributeTrainer(GrowthTrainer):
+    actions = ("대화", "배분")
+
+    def train(self, caller, action, args):
+        attribute, amount = args
+        if action != "배분" or attribute != self.db.attribute_id:
+            raise rules.RuleError("이 교관이 담당하는 특성이 아니다.")
+        before = 10 + rules.allocated(caller.profile(), attribute)
+        caller.change(lambda profile: rules.allocate_attribute(profile, attribute, amount, safe=self.available(caller)))
+        remaining = rules.point_pools(caller.profile())["attribute_points"]
+        name = ATTRIBUTES[attribute]['name']
+        caller.msg(f"{self.key}에게 훈련받아 {name}{ft.particle(name)} {before}에서 {before + amount}{ft.particle(str(before + amount), '으로/로')} 올랐고 특성 포인트가 {remaining}점 남았다.")
+
+    def web_actions(self, caller, target, observed_at=None):
+        profile = caller.profile_snapshot()
+        if not self.available(caller, observed_at) or rules.point_pools(profile)["attribute_points"] < 1 or rules.allocated(profile, self.db.attribute_id) >= 20:
+            return []
+        name = ATTRIBUTES[self.db.attribute_id]["name"]
+        return [{"label": name + " +1 배분", "command": f"{target}에게 {name} 1 배분"}]
+
+
+class TrainingManager(GrowthTrainer):
+    actions = ("대화", "재분배")
+
+    def train(self, caller, action, scope):
+        caller.change(lambda profile: rules.retrain(profile, scope, safe=self.available(caller)))
+        caller.msg("재훈련 완료. 투자한 특성 포인트와 기술 훈련을 반환했다. 탐사 기록은 유지된다.")
+
+    def web_actions(self, caller, target, observed_at=None):
+        if not self.available(caller, observed_at):
+            return []
+        return [{"label": text, "command": target + "에게 " + text} for text in ("특성 재분배", "기술 재분배", "전체 재훈련")]
 
 
 class Doctor(ActionObject):
@@ -507,8 +538,23 @@ def instructor_for(caller, observed_at=None):
 
     return next(
         (obj for obj in room_objects(caller, observed_at=observed_at)
-         if isinstance(obj, Instructor) and obj.available(caller, observed_at=observed_at)), None
+         if isinstance(obj, GrowthTrainer) and obj.available(caller, observed_at=observed_at)), None
     )
+
+
+def growth_controls(caller, observed_at=None):
+    """전용 패널도 실제 NPC가 생성한 명령만 사용한다. 중복 provider는 자동 선택하지 않는다."""
+    from world.targets import labels, room_objects
+
+    objects = room_objects(caller, observed_at=observed_at)
+    targets = labels(objects)
+    grouped = {}
+    for obj in objects:
+        if not isinstance(obj, GrowthTrainer) or not obj.available(caller, observed_at):
+            continue
+        key = obj.db.skill_id if isinstance(obj, SkillTrainer) else obj.db.attribute_id if isinstance(obj, AttributeTrainer) else "reset"
+        grouped.setdefault(key, []).append(obj.web_actions(caller, targets[obj.id], observed_at))
+    return {key: values[0] for key, values in grouped.items() if len(values) == 1}
 
 
 INTERACTABLES = {
@@ -522,7 +568,7 @@ INTERACTABLES = {
     "shared_container": {"room": "storage_room", "typeclass": "Container", "name": "보관상자", "aliases": []},
     "personal_locker": {"room": "storage_room", "typeclass": "PersonalLocker", "name": "개인 보관함", "aliases": ["보관함"]},
     "commander": {"room": "dock", "typeclass": "Commander", "name": "윤대장", "aliases": ["대장"]},
-    "instructor": {"room": "training_room", "typeclass": "Instructor", "name": "탐사대 훈련관", "aliases": ["훈련관", "교관"]},
+    "instructor": {"room": "training_office", "typeclass": "TrainingManager", "name": "훈련관리관", "aliases": ["훈련관", "관리관"]},
     "maintenance_log": {"room": "office", "typeclass": "MaintenanceLog", "name": "정비기록", "aliases": ["기록"]},
     "supply_cache": {"room": "wreck", "typeclass": "SupplyCache", "name": "보급상자", "aliases": ["상자"]},
     "generator": {"room": "generator", "typeclass": "Generator", "name": "발전기", "aliases": []},
@@ -532,6 +578,20 @@ INTERACTABLES = {
     "signal_device": {"room": "jungle_grove", "typeclass": "SignalDevice", "name": "신호 장치", "aliases": ["장치"]},
     "jungle_cache": {"room": "jungle_fen", "typeclass": "JungleCache", "name": "늪지 보급품", "aliases": ["보급품"]},
 }
+
+
+for skill, room, name in (
+    ("attack", "training_room", "전투교관"), ("defense", "training_room", "방호교관"),
+    ("heavy", "training_room", "타격교관"), ("heal", "infirmary", "의무교관"),
+    ("shooting", "shooting_range", "사격교관"), ("insight", "shooting_range", "정밀전술교관"),
+    ("suppress", "tactics_room", "전술교관"), ("breathing", "tactics_room", "정신훈련관"),
+):
+    INTERACTABLES["trainer_" + skill] = {"room": room, "typeclass": "SkillTrainer", "name": name, "aliases": [], "skill_id": skill}
+for attribute, room, name in (
+    ("strength", "training_room", "근력교관"), ("agility", "shooting_range", "기동교관"),
+    ("constitution", "infirmary", "체력교관"), ("wisdom", "tactics_room", "분석교관"),
+):
+    INTERACTABLES["trainer_" + attribute] = {"room": room, "typeclass": "AttributeTrainer", "name": name, "aliases": [], "attribute_id": attribute}
 
 
 for definition in INTERACTABLES.values():

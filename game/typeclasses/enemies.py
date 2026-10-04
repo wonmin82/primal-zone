@@ -75,6 +75,11 @@ class Enemy(DistantPresenceMixin, DefaultObject):
         self.db.next_attack_at = 0
         self.db.last_activity = 0
 
+    def at_post_move(self, source_location, **kwargs):
+        super().at_post_move(source_location, **kwargs)
+        if self.db.combatants:
+            self.reconcile()
+
     def active_players(self):
         return [
             player
@@ -250,14 +255,42 @@ class Enemy(DistantPresenceMixin, DefaultObject):
             if now < profile["next_attack_at"]:
                 return
             player.accrue_recovery(profile, now)
-            damage, outcome = rules.player_attack(
-                profile, self.db.enemy_id, now, COMBAT_INTERVAL, rng
-            )
+            recipient = player
+            recipient_profile = None
+            error = None
+            if profile["queued_action"] == "heal":
+                from world.skill_services import heal_target
+
+                try:
+                    recipient = heal_target(player, profile.get("heal_target"))
+                    if recipient is not player:
+                        recipient_profile = recipient.profile()
+                        recipient.accrue_recovery(recipient_profile, now)
+                except rules.RuleError as failure:
+                    error = str(failure)
+            if error:
+                profile.update(queued_action="attack", next_attack_at=now + COMBAT_INTERVAL)
+                profile["player_round"] += 1
+                damage, outcome = 0, {"action": "error", "message": error}
+            else:
+                damage, outcome = rules.player_attack(
+                    profile, self.db.enemy_id, now, COMBAT_INTERVAL, rng, recipient_profile
+                )
+            profile["heal_target"] = None
+            if recipient_profile is not None and outcome["action"] == "heal":
+                recipient.save_profile(recipient_profile)
+                outcome["recipient"] = recipient.key
+                after_change(lambda: recipient.msg(f"{player.key}의 치료로 HP {outcome['amount']}을 회복했다."))
             damage = min(self.db.hp, damage)
             self.db.hp -= damage
-            rules.train_proficiency(
-                profile, "weapon", damage, ENEMIES[self.db.enemy_id]["training_cap"]
-            )
+            if "suppression" in outcome:
+                from world.progression import refresh_suppression
+
+                self.db.suppression = refresh_suppression(
+                    deserialize(self.db.suppression), outcome["suppression"]["rank"],
+                    bool(ENEMIES[self.db.enemy_id].get("boss_quest")),
+                )
+                outcome["suppression"] = deserialize(self.db.suppression)
             self.db.last_activity = now
             self.db.claim_last_activity = now
             threat = deserialize(self.db.threat)
@@ -294,6 +327,7 @@ class Enemy(DistantPresenceMixin, DefaultObject):
         for participant in self.active_players():
             after_change(lambda participant=participant: participant.msg(fallen))
         self.db.state = "respawning"
+        self.db.suppression = None
         self.db.respawn_at = now + CORPSE_TTL_SECONDS + RESPAWN_DELAY_SECONDS
         definition = ENEMIES[self.db.enemy_id]
         for identity, xp in rules.reward_allocation(
@@ -327,8 +361,12 @@ class Enemy(DistantPresenceMixin, DefaultObject):
             self.db.next_attack_at = now + COMBAT_INTERVAL
             result_profile = target.profile()
             target.accrue_recovery(result_profile, now)
+            from world.progression import consume_suppression
+
+            reduction, remaining = consume_suppression(deserialize(self.db.suppression))
+            self.db.suppression = remaining
             result = rules.enemy_attack(
-                result_profile, self.db.enemy_id, self.db.enemy_round, now, rng
+                result_profile, self.db.enemy_id, self.db.enemy_round, now, rng, reduction
             )
             lost = rules.apply_defeat(result_profile) if result["defeated"] else 0
             target.save_profile(result_profile)
@@ -337,9 +375,6 @@ class Enemy(DistantPresenceMixin, DefaultObject):
                 f" {ENEMIES[self.db.enemy_id].get('special_verb', '거세게 돌진해')} "
                 if result["charged"] else " 달려들어 ",
                 f"{result['damage']}의 피해를 입혔다.",
-                f" 방어로 {result['prevented']}의 피해를 막았다."
-                if result["prevented"]
-                else "",
             )
             after_change(lambda: target.msg(message))
             if result["defeated"]:

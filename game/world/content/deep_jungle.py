@@ -2,7 +2,6 @@
 
 ENEMIES = {
     "dartclaw": {
-        "training_cap": 7,
         "name": "날쌘발톱룡",
         "description": "낮은 관목 사이를 빠르게 오가며 틈을 노리는 포식자다.",
         "presence": "관목 사이를 빠르게 파고들며 사냥감의 틈을 노리고 있다.",
@@ -17,7 +16,6 @@ ENEMIES = {
         "chance": 0.25,
     },
     "shellback": {
-        "training_cap": 8,
         "name": "철갑등짐승",
         "description": "등을 덮은 두꺼운 껍질 때문에 묵직한 일격이 필요하다.",
         "presence": "물가를 따라 무겁게 움직이고 있다.",
@@ -32,7 +30,6 @@ ENEMIES = {
         "chance": 0.2,
     },
     "stalker": {
-        "training_cap": 9,
         "name": "그늘추적룡",
         "description": "거목 그림자 속에서 오래 먹잇감을 쫓는 사냥룡이다.",
         "presence": "그늘에 몸을 낮추고 주변의 기척을 살피고 있다.",
@@ -47,7 +44,6 @@ ENEMIES = {
         "chance": 0.3,
     },
     "jungle_apex": {
-        "training_cap": 10,
         "name": "밀림의포식자",
         "detectability": "conspicuous",
         "description": "깊은 숲을 지배하는 거대한 포식자다. 몸을 뒤틀어 도약하기 전에 숨을 고른다.",
@@ -142,7 +138,7 @@ ROOMS = {
         "light_profile": "filtered",
         "enemies": ["jungle_apex"],
         "desc": "휘어진 나무 아래에 거대한 둥지가 있다. 바닥에는 오래된 탐사대 장비가 흩어져 있다.",
-        "hints": [{"text": "포식자가 숨을 고르면 방어 자세를 취하자."}],
+        "hints": [{"text": "포식자가 숨을 고르면 견제와 치료를 준비하자."}],
         "exits": {"남": "jungle_gate"},
     },
 }

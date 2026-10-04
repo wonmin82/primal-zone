@@ -9,21 +9,18 @@ from commands.vocabulary import V7_GLOBAL_SHORTCUTS, migrate_shortcuts
 
 from world import presentation, rules
 from world.content.directions import DIRECTION_SHORTCUTS, DIRECTIONS
-from world.progression import PROFICIENCIES, SKILLS
+from world.progression import SKILLS
 
 
 class VocabularyTests(TestCase):
-    def test_medicine_proficiency_and_firstaid_skill_have_distinct_display_names(self):
-        self.assertEqual(PROFICIENCIES["medicine"], "의술")
-        self.assertEqual(SKILLS["firstaid"]["name"], "응급처치")
-        self.assertEqual(SKILLS["firstaid"]["related_proficiency"], "medicine")
+    def test_curriculum_has_no_proficiency_and_healing_is_active(self):
+        self.assertEqual(set(SKILLS), {'attack', 'defense', 'heavy', 'heal', 'shooting', 'insight', 'suppress', 'breathing'})
         profile = rules.new_profile()
-        self.assertEqual(profile["version"], rules.PROFILE_VERSION)
-        self.assertIn("의술 R0", presentation.abilities(profile))
-        self.assertIn("의술 R0 XP0", presentation.experience(profile))
-        self.assertIn("응급처치 R1/3", presentation.skills(profile))
-        medicine = next(entry for entry in rules.growth_state(profile)["proficiencies"] if entry["id"] == "medicine")
-        self.assertEqual(medicine["name"], "의술")
+        self.assertNotIn('proficiencies', profile)
+        self.assertNotIn('숙련', presentation.abilities(profile))
+        self.assertNotIn('숙련', presentation.experience(profile))
+        self.assertIn('치료', presentation.skills(profile))
+        self.assertNotIn('응급처치', presentation.skills(profile))
 
     def test_v7_hil_name_collision_preserves_data_and_exact_references(self):
         old = rules.new_profile()
@@ -35,7 +32,7 @@ class VocabularyTests(TestCase):
         migrated = rules.migrate_profile(old)
         self.assertEqual(migrated["command_shortcuts"], {
             "힐_개인3": ["소지품"], "힐_개인": ["장비"], "힐_개인2": ["상태"],
-            "생존": ["힐_개인3", "힐 보기", "힐 말", "'힐, 회복", "진료", "응급처치"],
+            "생존": ["힐_개인3", "힐 보기", "힐 말", "'힐, 회복", "진료", "붕대 사용"],
         })
         self.assertEqual(old, before)
         self.assertEqual(rules.migrate_profile(migrated), migrated)
@@ -62,19 +59,19 @@ class VocabularyTests(TestCase):
         old.update(version=7, xp=123, credits=95, hp=31, combat_target=345, queued_action="heal", next_attack_at=456)
         old.pop("mental")  # v7에는 아직 정신력 자원이 없다.
         old.pop("recovery_effects")
-        old["skills"]["heal"] = old["skills"].pop("firstaid") + 2
+        old['skills'] = {'heavy': 1, 'guard': 1, 'heal': 3}
         old["command_shortcuts"] = {"점검": ["상태", "장비", "가"], "인사": ["회복 말", "'상점, 치료"],
                                     "쇼핑": ["무기상 메뉴", "붕대 구매", "의무관에게 치료", "가방", "heal", "내리기"]}
         before = deepcopy(old)
         migrated = rules.migrate_profile(old)
         self.assertEqual(migrated["version"], rules.PROFILE_VERSION)
-        self.assertEqual(migrated["skills"]["firstaid"], 3)
-        self.assertNotIn("heal", migrated["skills"])
-        self.assertEqual(migrated["queued_action"], "firstaid")
+        self.assertEqual(set(migrated["skills"].values()), {1})
+        self.assertNotIn("firstaid", migrated["skills"])
+        self.assertEqual(migrated["queued_action"], "attack")
         self.assertEqual(migrated["command_shortcuts"], {
             "점검": ["상태", "장비", "소지품"], "인사": ["회복 말", "'상점, 치료"],
-            "쇼핑": ["무기상 상품", "붕대 구매", "의무관에게 진료", "소지품", "응급처치", "내려"]})
-        for key in old.keys() - {"version", "skills", "queued_action", "command_shortcuts"}:
+            "쇼핑": ["무기상 상품", "붕대 구매", "의무관에게 진료", "소지품", "붕대 사용", "내려"]})
+        for key in old.keys() - {"version", "skills", "queued_action", "command_shortcuts", "skill_ready_at"}:
             self.assertEqual(migrated[key], old[key], key)
         self.assertEqual(rules.migrate_profile(migrated), migrated)
         self.assertEqual(old, before)

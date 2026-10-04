@@ -6,7 +6,6 @@ from world.content import EQUIPMENT_ACTIONS, ITEMS, SHOP_CATALOGS
 from world.currency import format_currency
 from world.progression import (
     ATTRIBUTES,
-    PROFICIENCIES,
     SKILLS,
 )
 
@@ -60,72 +59,46 @@ def status(name, profile):
 
 
 def abilities(profile):
-    attributes = [
-        f"{data['name']} {profile['attributes'][key]['base'] + rules.allocated(profile, key)} "
-        f"({profile['attributes'][key]['base']}+{rules.allocated(profile, key)})"
-        for key, data in ATTRIBUTES.items()
-    ]
-    lines = [ft.join(attributes[i : i + 2], " · ") for i in range(0, len(attributes), 2)]
-    lines.extend(
-        [
-            f"남은 특성 포인트 {rules.point_pools(profile)['attribute_points']}",
-            "",
-            ft.text(
-                "[숙련] ",
-                ft.join(
-                    [
-                        f"{name} R{rules.proficiency_rank(profile, key)}"
-                        for key, name in PROFICIENCIES.items()
-                    ],
-                    " · ",
-                ),
-            ),
-        ]
-    )
+    pools = rules.point_pools(profile)
+    lines = []
+    for key, data in ATTRIBUTES.items():
+        invested = rules.allocated(profile, key)
+        lines.append(ft.row(data["name"], f"{10 + invested} (10+{invested})" + (" MAX" if invested == 20 else ""), 8))
+    lines.append("모든 특성을 완성했다." if pools["attribute_spent"] == 80 else f"남은 특성 포인트 {pools['attribute_points']}")
+    lines.append(f"투자한 특성 {pools['attribute_spent']}/80")
     return ft.compact("능력", *lines)
 
 
 def experience(profile):
+    from world.progression import attribute_points
+
     level = rules.level_of(profile)
-    progress = (
-        f"XP {profile['xp']}/{rules.xp_threshold(level + 1)} · 다음 {rules.xp_threshold(level + 1) - profile['xp']}"
-        if level < rules.MAX_LEVEL
-        else f"XP {profile['xp']} · 최고 등급"
-    )
-    return ft.compact(
-        "경험치",
-        ft.text(
-            "숙련 | ",
-            ft.join(
-                [
-                    f"{name} R{rules.proficiency_rank(profile, key)} XP{profile['proficiencies'][key]['xp']}"
-                    for key, name in PROFICIENCIES.items()
-                ],
-                " · ",
-            ),
-        ),
-        summary=f"Lv.{level} · {progress}",
-    )
+    if level == rules.MAX_LEVEL:
+        return ft.compact("경험치", f"경험치 {profile['xp']:,}", "최고 레벨에 도달했다.", summary=f"Lv.{level} MAX")
+    floor, ceiling = rules.xp_threshold(level), rules.xp_threshold(level + 1)
+    lines = [f"현재 경험치 {profile['xp']:,}", f"현재 레벨 시작 {floor:,}", f"다음 레벨 {ceiling:,}",
+             f"진행 {profile['xp'] - floor:,} / {ceiling - floor:,}", f"다음 레벨까지 {ceiling - profile['xp']:,}",
+             f"Lv.{level + 1} 도달 시", "기술 훈련 +1"]
+    points = attribute_points(level + 1) - attribute_points(level)
+    if points:
+        lines.append(f"특성 포인트 +{points}")
+    return ft.compact("경험치", *lines, summary=f"Lv.{level}")
 
 
 def skills(profile):
-    lines = []
+    from world.progression import TOTAL_SKILL_TRAINING
+
+    pools = rules.point_pools(profile)
+    lines, group = [], None
     for key, data in SKILLS.items():
+        if data["group"] != group:
+            group = data["group"]
+            lines.append(f"[{group}]")
         rank = rules.skill_rank(profile, key)
-        next_rank = rank + 1
-        learning = (
-            f"다음 Lv{data['requirements'][next_rank]}/{data['point_cost'][next_rank]}점/{format_currency(data['credit_cost'][next_rank])}"
-            if next_rank <= data["max_rank"]
-            else "최고 Rank"
-        )
-        # 기존 설명을 그대로 사용한다. 모바일에서는 한 항목 안에서 자연스럽게 줄바꿈한다.
-        lines.append(
-            f"{data['name']} R{rank}/{data['max_rank']} · {data['description']} · {learning}"
-        )
-    lines.append(ft.text("학습: 교관에게 기술이름 ", ft.token("command", "배워"), ""))
-    return ft.compact(
-        "기술", *lines, summary=f"남은 점수 {rules.point_pools(profile)['skill_points']}"
-    )
+        lines.append(ft.row(data["name"], f"R{rank}/{data['max_rank']}" + (" MAX" if rank == data["max_rank"] else ""), 12))
+    lines.append(f"투자한 훈련 {pools['skill_spent']}/{TOTAL_SKILL_TRAINING}")
+    summary = "모든 기술을 완성했다." if pools["skill_spent"] == TOTAL_SKILL_TRAINING else f"남은 기술 훈련 {pools['skill_points']}"
+    return ft.compact("기술", *lines, summary=f"Lv.{rules.level_of(profile)} · {summary}")
 
 
 def inventory(profile):
@@ -197,24 +170,35 @@ def quest(profile):
     return ft.compact("임무", *lines)
 
 
+def support_result(outcome, recipient=None, combat=False):
+    action, amount = outcome["action"], outcome["amount"]
+    if action == "bandage":
+        return ft.text(ft.item("bandage"), f" 하나를 사용해 HP {amount}{ft.particle(amount, '을/를')} 회복했다.")
+    if action == "breathing":
+        return ft.text(("공격을 멈추고 " if combat else "") + f"호흡을 가다듬어 정신력 {amount}{ft.particle(amount, '을/를')} 회복했다.")
+    subject = ft.text(ft.named("player", recipient, "을/를"), " 치료해") if recipient else "상처를 치료해"
+    return ft.text(subject, f" HP {amount}{ft.particle(amount, '을/를')} 회복", "시키고" if recipient else "하고", f" 정신력 {outcome['cost']}{ft.particle(outcome['cost'], '을/를')} 소모했다.")
+
+
 def outgoing_attack(profile, enemy_name, outcome, damage):
-    if outcome["action"] == "error":
+    action = outcome["action"]
+    if action == "error":
         return ft.text(ft.token("error", "! "), outcome["message"], kind="error")
-    if outcome["action"] == "firstaid":
-        return healing(outcome["amount"])
-    verb = "강하게 내리쳐" if outcome["action"] == "heavy" else "공격해"
-    weapon = profile["equipment"]["weapon"]
-    tool = ft.text(ft.item(weapon), ft.particle(ITEMS[weapon]["name"], "으로/로"), " ") if weapon else "맨손으로 "
-    return ft.text(
-        tool,
-        ft.named("hostile", enemy_name, "을/를"),
-        f" {verb} {damage}의 피해를 입혔다.",
-        " 이어서 방어 자세를 취했다." if outcome["action"] == "guard" else "",
-    )
-
-
-def healing(amount):
-    return ft.text(ft.item("bandage"), f"를 꺼내 상처를 감았다. 체력이 {amount} 회복되었다.")
+    if action in ("heal", "breathing", "bandage"):
+        return support_result(outcome, outcome.get("recipient"), combat=True)
+    if action == "insight":
+        return ft.text(ft.token("hostile", enemy_name), f"의 빈틈을 간파해 다음 공격의 방어 관통이 {outcome['penetration']:.0%}, 피해가 {outcome['bonus']:.0%} 증가한다.")
+    prefix = "간파한 빈틈에 " if outcome.get("insight") else ""
+    if action == "heavy":
+        return ft.text(prefix, ft.token("hostile", enemy_name), f"에게 강타를 적중시켜 {damage} 피해를 입혔다.")
+    if action == "shooting":
+        return ft.text(prefix, ft.named("hostile", enemy_name, "을/를"), f" 사격해 {damage} 피해를 입혔다.")
+    if action == "suppress":
+        effect = outcome["suppression"]
+        return ft.text(prefix, ft.named("hostile", enemy_name, "을/를"), f" 견제해 {damage} 피해를 입히고 다음 {effect['attacks']}회 공격력을 {effect['reduction']:.0%} 낮췄다.")
+    weapon = profile["equipment"].get("weapon")
+    weapon_name = ITEMS[weapon]["name"] if weapon else "맨손"
+    return ft.text(prefix, ft.item(weapon) if weapon else weapon_name, ft.particle(weapon_name, "으로/로"), " ", ft.named("hostile", enemy_name, "을/를"), f" 공격해 {damage} 피해를 입혔다.")
 
 
 def reward(xp):
@@ -243,7 +227,7 @@ def item_appearance(identity, *, light_status=None):
         if data.get("light_source")
         else [EQUIPMENT_ACTIONS[data["slot"]]]
         if data["slot"] in EQUIPMENT_ACTIONS
-        else ["응급처치"]
+        else ["붕대 사용"]
         if identity == "bandage"
         else [data["consume_action"]]
         if data.get("consume_action")

@@ -3,6 +3,7 @@
 from copy import deepcopy
 from random import Random
 
+from world import progression as pg
 from world import recovery
 from world.content import (
     ENEMIES,
@@ -12,19 +13,11 @@ from world.content import (
     SHOP_CATALOGS,
     UNEQUIP_ACTIONS,
 )
-from world.currency import format_currency
-from world.progression import (
-    ATTRIBUTES,
-    PROFICIENCIES,
-    PROFICIENCY_MAX_RANK,
-    PROFICIENCY_XP_PER_RANK,
-    SAFE_FIRSTAID_TRAINING_CAP,
-    SKILLS,
-)
+from world.progression import ATTRIBUTES, SKILLS
 from world.quests import progress_defaults
 
-MAX_LEVEL = 10
-PROFILE_VERSION = 9
+MAX_LEVEL = pg.MAX_LEVEL
+PROFILE_VERSION = 10
 DEFEAT_RECOVERY_HP = 1
 
 
@@ -54,13 +47,15 @@ def new_profile():
         "queued_action": "attack",
         "next_attack_at": 0,
         "heavy_ready_at": 0,
-        "guard_until": 0,
+        "skill_ready_at": {},
+        "insight": None,
+        "heal_target": None,
         "player_round": 0,
     }
 
 
 def xp_threshold(level):
-    return sum(40 + step * 20 for step in range(1, level))
+    return 10 * (level - 1) ** 2 + 50 * (level - 1)
 
 
 def level_of(profile):
@@ -69,23 +64,15 @@ def level_of(profile):
 
 def stats(profile):
     level = level_of(profile)
+    base = pg.base_stats(level)
     equipped = [ITEMS[item] for item in profile["equipment"].values() if item is not None]
     return {
         "level": level,
-        "max_hp": 60 + (level - 1) * 10 + allocated(profile, "constitution") * 4,
-        "max_mental": 40 + (level - 1) * 5 + allocated(profile, "wisdom") * 4,
-        "attack": (
-            7
-            + (level - 1) * 2
-            + sum(item.get("attack", 0) for item in equipped)
-            + allocated(profile, "strength") // 2
-            + proficiency_rank(profile, "weapon") // 3
-        ),
-        "defense": (
-            (level - 1) // 2
-            + sum(item.get("defense", 0) for item in equipped)
-            + allocated(profile, "agility") // 3
-        ),
+        "base_max_mental": base["base_max_mental"],
+        "max_hp": base["max_hp"] + allocated(profile, "constitution") * 4,
+        "max_mental": base["base_max_mental"] + allocated(profile, "wisdom") * 4,
+        "attack": base["attack"] + sum(item.get("attack", 0) for item in equipped) + allocated(profile, "strength") // 2,
+        "defense": base["defense"] + sum(item.get("defense", 0) for item in equipped) + allocated(profile, "agility") // 3,
     }
 
 
@@ -242,89 +229,129 @@ def eat_or_drink(profile, item_id, action):
     return restored
 
 
-def first_aid(profile, training_cap=SAFE_FIRSTAID_TRAINING_CAP):
+def use_bandage(profile):
     maximum = stats(profile)["max_hp"]
     if profile["hp"] >= maximum:
         raise RuleError("이미 체력이 가득합니다.")
     consume(profile, "bandage")
-    amount = min(
-        ITEMS["bandage"]["heal"]
-        + allocated(profile, "wisdom") * 2
-        + (skill_rank(profile, "firstaid") - 1) * 5
-        + proficiency_rank(profile, "medicine") // 2,
-        maximum - profile["hp"],
-    )
+    amount = min(ITEMS["bandage"]["heal"], maximum - profile["hp"])
     profile["hp"] += amount
     recovery.clamp(profile, stats(profile))
-    train_proficiency(profile, "medicine", amount, training_cap)
     return amount
 
 
-def queue_action(profile, action, now=None):
+def validate_skill_action(profile, action, now, target_profile=None):
+    if action not in ("heavy", "shooting", "insight", "suppress", "heal", "breathing", "bandage"):
+        raise RuleError("알 수 없는 전투 행동입니다.")
+    firearm = ITEMS.get(profile["equipment"].get("weapon"), {}).get("weapon_type") == "firearm"
+    if action == "heavy" and firearm:
+        raise RuleError("총기를 들고는 강타를 사용할 수 없다.")
+    if action == "shooting" and not firearm:
+        raise RuleError("총기를 장착해야 사격할 수 있다.")
+    ready = profile.get("skill_ready_at", {}).get(action, 0)
+    if action == "heavy":
+        ready = max(ready, profile.get("heavy_ready_at", 0))
+    if now < ready:
+        raise RuleError(f"{SKILLS[action]['name']}을 다시 사용하려면 {pg.remaining_seconds(ready, now)}초 더 기다려야 한다.")
+    if profile["mental"] < pg.mental_cost(action, level_of(profile)):
+        raise RuleError("정신력이 부족하다.")
+    target = profile if target_profile is None else target_profile
+    if action in ("heal", "bandage") and target["hp"] >= stats(target)["max_hp"]:
+        raise RuleError("이미 체력이 가득합니다.")
+    if action == "bandage" and not profile["inventory"].get("bandage"):
+        raise RuleError("붕대가 없습니다.")
+    if action == "breathing" and profile["mental"] >= stats(profile)["max_mental"]:
+        raise RuleError("이미 정신력이 가득합니다.")
+
+
+def commit_skill_cost(profile, action, now):
+    cost = pg.mental_cost(action, level_of(profile))
+    profile["mental"] -= cost
+    deadline = now + pg.cooldown(action, skill_rank(profile, action))
+    profile.setdefault("skill_ready_at", {})[action] = deadline
+    if action == "heavy":
+        profile["heavy_ready_at"] = deadline
+    recovery.clamp(profile, stats(profile))
+    return cost
+
+
+def support_action(profile, action, now, target_profile=None):
+    validate_skill_action(profile, action, now, target_profile)
+    if action == "bandage":
+        return {"action": action, "amount": use_bandage(profile), "cost": 0}
+    cost = commit_skill_cost(profile, action, now)
+    if action == "heal":
+        target = profile if target_profile is None else target_profile
+        amount = min(stats(target)["max_hp"] - target["hp"], pg.healing_amount(stats(profile)["max_hp"], skill_rank(profile, action), allocated(profile, "wisdom")))
+        target["hp"] += amount
+        recovery.clamp(target, stats(target))
+    else:
+        amount = min(stats(profile)["max_mental"] - profile["mental"], pg.breathing_amount(stats(profile)["max_mental"], skill_rank(profile, action)))
+        profile["mental"] += amount
+        recovery.clamp(profile, stats(profile))
+    return {"action": action, "amount": amount, "cost": cost}
+
+
+def queue_action(profile, action, now=None, target_profile=None):
     from time import time
 
     now = time() if now is None else now
     if not profile.get("combat_target"):
         raise RuleError("진행 중인 교전이 없습니다.")
-    if action not in ("heavy", "guard", "firstaid"):
-        raise RuleError("알 수 없는 전투 행동입니다.")
-    if action == "heavy" and now < profile["heavy_ready_at"]:
-        raise RuleError("강타가 아직 준비되지 않았습니다.")
-    if action == "firstaid":
-        if not profile["inventory"].get("bandage", 0):
-            raise RuleError("붕대가 없습니다.")
-        if profile["hp"] >= stats(profile)["max_hp"]:
-            raise RuleError("체력이 가득합니다.")
+    validate_skill_action(profile, action, now, target_profile)
     profile["queued_action"] = action
 
 
-def player_attack(profile, enemy_id, now, interval, rng=None):
-    """플레이어 입력만 계산한다. 적 HP, 반격, 보상은 소유하지 않는다."""
+def player_attack(profile, enemy_id, now, interval, rng=None, target_profile=None):
+    """One opportunity, regardless of whether it attacks or prepares/supports."""
     rng = rng or Random()
     action = profile["queued_action"]
     profile["queued_action"] = "attack"
     profile["player_round"] += 1
     profile["next_attack_at"] = now + interval
-    if action == "firstaid":
+    if action in ("heal", "breathing", "bandage"):
         try:
-            amount = first_aid(profile, ENEMIES[enemy_id]["training_cap"])
-            return 0, {"action": "firstaid", "amount": amount}
+            return 0, support_action(profile, action, now, target_profile)
         except RuleError as error:
             return 0, {"action": "error", "message": str(error)}
-    multiplier = 1.0
-    if action == "heavy" and now >= profile["heavy_ready_at"]:
-        multiplier = 1.8 + (skill_rank(profile, "heavy") - 1) * 0.2
-        profile["heavy_ready_at"] = now + SKILLS["heavy"]["cooldown"]
-    if action == "guard":
-        profile["guard_until"] = now + interval * 1.1
-    damage = max(
-        1,
-        int((stats(profile)["attack"] + rng.randint(-1, 2)) * multiplier)
-        - ENEMIES[enemy_id]["defense"],
-    )
-    return damage, {"action": "heavy" if multiplier > 1 else "guard" if action == "guard" else "attack"}
+    if action != "attack":
+        try:
+            validate_skill_action(profile, action, now)
+        except RuleError as error:
+            return 0, {"action": "error", "message": str(error)}
+        commit_skill_cost(profile, action, now)
+    rank = skill_rank(profile, action) if action in SKILLS else 1
+    if action == "insight":
+        profile["insight"] = {"target": profile["combat_target"], **pg.insight_effect(rank)}
+        return 0, {"action": action, **pg.insight_effect(rank)}
+    insight = profile.get("insight")
+    if insight and insight["target"] != profile["combat_target"]:
+        profile["insight"] = insight = None
+    penetration = pg.shooting_penetration(rank) if action == "shooting" else 0
+    bonus = 1.0
+    if insight:
+        penetration = pg.combined_penetration(insight["penetration"], penetration)
+        bonus += insight["bonus"]
+        profile["insight"] = None
+    raw = (stats(profile)["attack"] + rng.randint(-1, 2)) * pg.physical_multiplier(action, rank)
+    damage = max(1, int(max(1, raw - ENEMIES[enemy_id]["defense"] * (1 - penetration)) * bonus * pg.attack_multiplier(skill_rank(profile, "attack"))))
+    outcome = {"action": action, "insight": bool(insight)}
+    if action == "suppress":
+        outcome["suppression"] = pg.suppression_effect(rank, bool(ENEMIES[enemy_id].get("boss_quest")))
+    return damage, outcome
 
 
-def enemy_attack(profile, enemy_id, enemy_round, now, rng=None):
-    """독립된 적 차례의 피해와 패배 여부만 계산한다."""
+def enemy_attack(profile, enemy_id, enemy_round, now, rng=None, suppression=0):
     rng = rng or Random()
     enemy = ENEMIES[enemy_id]
-    damage = max(1, enemy["attack"] + rng.randint(-1, 1) - stats(profile)["defense"])
     charged = bool(enemy.get("special_period") and enemy_round % enemy["special_period"] == 0)
+    raw = (enemy["attack"] + rng.randint(-1, 1)) * (1 - suppression)
+    damage = max(1, int(raw - stats(profile)["defense"]))
     if charged:
         damage *= 2
-    unguarded = damage
-    if profile["guard_until"] > now:
-        damage = max(
-            1,
-            damage // (2 + skill_rank(profile, "guard"))
-            - proficiency_rank(profile, "defense") // 3,
-        )
-    prevented = unguarded - damage
-    train_proficiency(profile, "defense", prevented, enemy["training_cap"])
+    damage = max(1, int(damage * (1 - pg.defense_reduction(skill_rank(profile, "defense")))))
     profile["hp"] -= damage
-    defeated = profile["hp"] <= 0
-    return {"damage": damage, "charged": charged, "defeated": defeated, "prevented": prevented}
+    return {"damage": damage, "charged": charged, "defeated": profile["hp"] <= 0}
 
 
 def apply_defeat(profile):
@@ -437,7 +464,6 @@ def reward_shares(xp, credits, groups):
 def growth_defaults():
     return {
         "attributes": {key: {"base": 10, "allocated": 0} for key in ATTRIBUTES},
-        "proficiencies": {key: {"xp": 0} for key in PROFICIENCIES},
         "skills": {key: value["base_rank"] for key, value in SKILLS.items()},
     }
 
@@ -453,7 +479,6 @@ def migrate_profile(profile):
             "queued_action",
             "next_attack_at",
             "heavy_ready_at",
-            "guard_until",
             "player_round",
         ):
             result.setdefault(key, defaults[key])
@@ -488,6 +513,22 @@ def migrate_profile(profile):
     if version < 9:
         result["mental"] = stats(result)["max_mental"]
         result.setdefault("recovery_effects", [])
+    if version < 10:
+        # Old curricula are not scaled into new ranks: all earned training is returned.
+        result["skills"] = growth_defaults()["skills"]
+        result["queued_action"] = "attack"
+        result.setdefault("skill_ready_at", {})
+        if result.get("heavy_ready_at", 0) > 0:
+            result["skill_ready_at"]["heavy"] = max(result["heavy_ready_at"], result["skill_ready_at"].get("heavy", 0))
+        result["insight"] = None
+        result["heal_target"] = None
+        result.pop("guard_until", None)
+        result.pop("proficiencies", None)
+        from commands.vocabulary import migrate_progression_shortcuts
+
+        result["command_shortcuts"] = migrate_progression_shortcuts(result.get("command_shortcuts", {}))
+    normalize_growth(result)
+    recovery.clamp(result, stats(result))
     return result
 
 
@@ -496,42 +537,41 @@ def allocated(profile, attribute):
 
 
 def skill_rank(profile, skill):
-    return profile.get("skills", {}).get(skill, SKILLS[skill]["base_rank"])
+    value = profile.get("skills", {}).get(skill, 1)
+    return min(SKILLS[skill]["max_rank"], max(1, value)) if type(value) is int else 1
 
 
-def proficiency_rank(profile, proficiency):
-    xp = profile.get("proficiencies", {}).get(proficiency, {}).get("xp", 0)
-    return min(PROFICIENCY_MAX_RANK, xp // PROFICIENCY_XP_PER_RANK)
-
-
-def train_proficiency(profile, proficiency, effect, cap):
-    if effect <= 0:
-        return
-    entry = profile["proficiencies"][proficiency]
-    ceiling = min(PROFICIENCY_MAX_RANK, cap) * PROFICIENCY_XP_PER_RANK
-    if entry["xp"] < ceiling:
-        entry["xp"] += 1
+def normalize_growth(profile):
+    # Canonical order makes malformed over-budget records deterministic and idempotent.
+    budget = pg.attribute_points(level_of(profile))
+    source = profile.get("attributes", {})
+    profile["attributes"] = {}
+    for key in ATTRIBUTES:
+        value = source.get(key, {}).get("allocated", 0)
+        value = min(pg.ATTRIBUTE_CAP, budget, max(0, value)) if type(value) is int else 0
+        profile["attributes"][key] = {"base": 10, "allocated": value}
+        budget -= value
+    budget = level_of(profile) - 1
+    source = profile.get("skills", {})
+    profile["skills"] = {}
+    for key, data in SKILLS.items():
+        rank = source.get(key, 1)
+        rank = min(data["max_rank"], budget + 1, max(1, rank)) if type(rank) is int else 1
+        profile["skills"][key] = rank
+        budget -= rank - 1
+    profile.pop("proficiencies", None)
+    profile.pop("guard_until", None)
 
 
 def point_pools(profile):
-    attribute_total = level_of(profile) * 2 + 2
-    skill_total = level_of(profile) + 1
+    attribute_total = pg.attribute_points(level_of(profile))
+    skill_total = level_of(profile) - 1
     attribute_spent = sum(allocated(profile, key) for key in ATTRIBUTES)
-    skill_spent = sum(
-        sum(
-            data["point_cost"][rank]
-            for rank in range(data["base_rank"] + 1, skill_rank(profile, key) + 1)
-        )
-        for key, data in SKILLS.items()
-    )
-    return {
-        "attribute_total": attribute_total,
-        "attribute_spent": attribute_spent,
-        "attribute_points": attribute_total - attribute_spent,
-        "skill_total": skill_total,
-        "skill_spent": skill_spent,
-        "skill_points": skill_total - skill_spent,
-    }
+    skill_spent = sum(skill_rank(profile, key) - 1 for key in SKILLS)
+    return {"attribute_total": attribute_total, "attribute_spent": attribute_spent,
+            "attribute_points": max(0, attribute_total - attribute_spent),
+            "skill_total": skill_total, "skill_spent": skill_spent,
+            "skill_points": max(0, skill_total - skill_spent)}
 
 
 def require_training(profile, safe):
@@ -546,6 +586,8 @@ def allocate_attribute(profile, attribute, amount=1, *, safe=False):
         raise RuleError("특성과 양의 정수 포인트를 지정하세요. 예: 힘 1 배분")
     if point_pools(profile)["attribute_points"] < amount:
         raise RuleError("특성 포인트가 부족합니다.")
+    if allocated(profile, attribute) + amount > pg.ATTRIBUTE_CAP:
+        raise RuleError("특성 추가 투자는 20점이 상한입니다.")
     profile["attributes"][attribute]["allocated"] += amount
     profile["hp"] = min(profile["hp"], stats(profile)["max_hp"])
     profile["mental"] = min(profile["mental"], stats(profile)["max_mental"])
@@ -560,13 +602,8 @@ def learn_skill(profile, skill, *, safe=False):
     rank = skill_rank(profile, skill) + 1
     if rank > data["max_rank"]:
         raise RuleError("이미 최고 Rank입니다.")
-    if level_of(profile) < data["requirements"][rank]:
-        raise RuleError(f"레벨 {data['requirements'][rank]}부터 배울 수 있습니다.")
-    if point_pools(profile)["skill_points"] < data["point_cost"][rank]:
-        raise RuleError("기술점수가 부족합니다.")
-    if profile["credits"] < data["credit_cost"][rank]:
-        raise RuleError("보급칩이 부족합니다.")
-    profile["credits"] -= data["credit_cost"][rank]
+    if point_pools(profile)["skill_points"] < 1:
+        raise RuleError("남은 기술 훈련이 없습니다.")
     profile["skills"][skill] = rank
 
 
@@ -693,16 +730,6 @@ def growth_state(profile):
             }
             for key, data in ATTRIBUTES.items()
         ],
-        "proficiencies": [
-            {
-                "id": key,
-                "name": name,
-                "xp": profile["proficiencies"][key]["xp"],
-                "rank": proficiency_rank(profile, key),
-                "max_rank": PROFICIENCY_MAX_RANK,
-            }
-            for key, name in PROFICIENCIES.items()
-        ],
         "skills": [skill_state(profile, key) for key in SKILLS],
     }
 
@@ -710,23 +737,5 @@ def growth_state(profile):
 def skill_state(profile, key):
     data = SKILLS[key]
     rank = skill_rank(profile, key)
-    next_rank = rank + 1
-    maximum = rank == data["max_rank"]
-    points = 0 if maximum else data["point_cost"][next_rank]
-    credits = 0 if maximum else data["credit_cost"][next_rank]
-    level = 0 if maximum else data["requirements"][next_rank]
-    return {
-        "id": key,
-        "name": data["name"],
-        "description": data["description"],
-        "rank": rank,
-        "max_rank": data["max_rank"],
-        "next_points": points,
-        "next_credits": credits,
-        "next_cost": format_currency(credits),
-        "required_level": level,
-        "can_learn": not maximum
-        and level_of(profile) >= level
-        and point_pools(profile)["skill_points"] >= points
-        and profile["credits"] >= credits,
-    }
+    return {"id": key, **data, "rank": rank,
+            "can_learn": rank < data["max_rank"] and point_pools(profile)["skill_points"] > 0}

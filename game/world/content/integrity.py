@@ -70,6 +70,9 @@ def headquarters_errors():
     for facility, corridor in facilities:
         expected[facility] = {"남": corridor}
         expected[corridor]["북"] = facility
+    for facility, corridor in (("tactics_room", "support_2f_w2"), ("training_office", "support_2f_c"), ("shooting_range", "support_2f_e2")):
+        expected[facility] = {"북": corridor}
+        expected[corridor]["남"] = facility
     issues = []
     for zone in ROOF_ROOMS:
         room = ROOMS.get(zone, {})
@@ -162,7 +165,7 @@ def errors(interactables):
         issues.append("회수부품 정산율은 양의 정수여야 합니다.")
     for identity, room in (
         ("shared_container", "storage_room"), ("personal_locker", "storage_room"),
-        ("instructor", "training_room"),
+        ("instructor", "training_office"),
         ("doctor", "infirmary"), ("infirmary_bed", "infirmary"),
         ("salvage_officer", "salvage_office"),
         ("supply_shopkeeper", "supply_shop"), ("weapon_shopkeeper", "weapon_shop"),

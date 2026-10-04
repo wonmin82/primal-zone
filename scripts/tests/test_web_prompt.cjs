@@ -61,7 +61,7 @@ function client() {
   const state = segments => receive("pz_state", {
     resource_prompt:{kind:"prompt",segments}, currency:{formatted:"20칩",name:"보급칩"},
     exits:[], enemies:[], corpses:[], ground_loot:[], interactables:[], inventory:[],
-    growth:{attributes:[],proficiencies:[],skills:[],attribute_points:0,skill_points:0},
+    growth:{attributes:[],skills:[],attribute_points:0,skill_points:0},
   });
   const prompt = segments => receive("pz_log", {kind:"prompt",segments});
   const event = text => receive("pz_log", {kind:"event",segments:[{role:"text",text}]});

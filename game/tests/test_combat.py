@@ -110,12 +110,12 @@ class SharedCombatTests(WorldCommandTest):
                 break
             now = 100 + turn * 2.5
             profile = self.char1.profile()
-            if self.enemy.db.enemy_round % 3 == 2:
-                rules.queue_action(profile, "guard", now)
+            if self.enemy.db.enemy_round % 3 == 2 and profile["mental"] >= 6:
+                rules.queue_action(profile, "suppress", now)
             elif profile["hp"] < 45 and profile["inventory"].get("bandage"):
-                rules.queue_action(profile, "firstaid", now)
-            elif now >= profile["heavy_ready_at"]:
-                rules.queue_action(profile, "heavy", now)
+                rules.queue_action(profile, "bandage", now)
+            elif now >= profile["skill_ready_at"].get("shooting", 0) and profile["mental"] >= 6:
+                rules.queue_action(profile, "shooting", now)
             self.char1.save_profile(profile)
             self.enemy.receive_attack(self.char1, now=now, rng=rng)
             self.enemy.enemy_tick(now=now, rng=rng)

@@ -24,8 +24,19 @@ class Closeout:
         player = self.first
         xp = player.state["xp"]
         await player.act(enemy_name + " 공격", lambda s: s["combat_target"] is not None)
-        await player.until(lambda s: s["combat_target"] is None and s["xp"] > xp,
-                           self.scenario.timeouts.combat)
+        while player.state["combat_target"] is not None:
+            state = player.state
+            turn = state["player_round"]
+            enemy = next((e for e in state['enemies'] if e['name'] == enemy_name), {})
+            if enemy.get('telegraph') and state['mental'] >= 6:
+                await player.act('견제')
+            elif state["hp"] < state["max_hp"] * .55 and count_item(state, "bandage"):
+                await player.act("붕대 사용")
+            elif state["mental"] >= 8 and state["heavy_ready"]:
+                await player.act("강타")
+            await player.until(lambda s: s["combat_target"] is None or s["player_round"] > turn,
+                               self.scenario.timeouts.combat)
+        assert player.state["xp"] > xp and player.state["zone"] != "infirmary"
 
     async def run(self):
         await self.enemy_recovery()
@@ -48,8 +59,8 @@ class Closeout:
         await self.floor(player, "2층", "support_2f_c")
         await route(player, (("동", "support_2f_e1"), ("북", "training_room")))
         assert player.state["training_available"]
-        await player.act("강타 배워", lambda s: any(skill["id"] == "heavy" and skill["rank"] == 2
-                                                  for skill in s["growth"]["skills"]))
+        # Lv.1 has no earned upgrade. Training becomes available after real XP gains.
+        await player.expect_text("강타 배워", "남은 기술 훈련")
         await route(player, (("남", "support_2f_e1"), ("서", "support_2f_c"),
                              ("서", "support_2f_w1"), ("북", "infirmary")))
         await player.act("의무관 진료", lambda s: s["hp"] == s["max_hp"])
@@ -112,12 +123,35 @@ class Closeout:
         await player.act("정비기록 조사", lambda s: "발전기 수리" in s["quest"])
         await route(player, (("동", "generator"),))
         await player.act("발전기 수리", lambda s: count_item(s, "scrap") == 0)
-        await route(player, (("서", "office"), ("서", "trail"), ("북", "marsh"), ("북", "ridge")))
+        # Earn the first boss's preparation level through real kills, not an oversized HP fixture.
+        await self.kill('고장난경비기')
+        await player.act('시체에서 모두 가져')
+        await route(player, (("서", "office"), ("서", "trail")))
+        await self.kill('갈퀴사냥룡')
+        await player.act('시체에서 모두 가져')
+        await route(player, (("남", "grass"),))
+        await self.kill('어린청소룡')
+        await player.act('시체에서 모두 가져')
+        await route(player, (("동", "wreck"),))
+        await self.kill('어린청소룡')
+        await player.act('시체에서 모두 가져')
+        await route(player, (("서", "grass"), ("북", "trail"), ("북", "marsh")))
+        await self.kill('갈퀴사냥룡')
+        await player.act('시체에서 모두 가져')
+        await self.kill('고장난경비기')
+        await player.act('시체에서 모두 가져')
+        assert player.state['level'] >= 4
+        await self.prepare_boss()
+        await self.dock(player)
+        await route(player, (("북", "grass"), ("북", "trail"), ("북", "marsh"), ("북", "ridge")))
         await self.kill("능선의우두머리")
+        await player.act('시체에서 모두 가져')
         await player.expect_text("북", "보고")
         await self.dock(player)
         await player.act("윤대장 대화", lambda s: "선발대 길잡이" in s["quest"])
         self.scenario.report("quest", "정비기록/부품 3개 수리/첫 gate/alpha/윤대장 보고")
+        await self.prepare_boss()
+        await self.dock(player)
         await route(player, (("북", "grass"), ("북", "trail"), ("북", "marsh"),
                              ("북", "ridge"), ("북", "jungle_edge")))
         await player.act("선발대 길잡이 대화", lambda s: "관측소" in s["quest"])
@@ -134,6 +168,28 @@ class Closeout:
                              ("남", "jungle_road"), ("서", "jungle_edge")))
         await player.act("선발대 길잡이 대화", lambda s: s["quest"] == "깊은 밀림 조사를 마쳤습니다.")
         self.scenario.report("progression", "두 표식/신호전지/두 번째 gate/jungle apex/최종 보고 완료")
+        await self.dock(player)
+        await route(player, (("동", "hq_concourse"), ("남", "support_1f_c")))
+        await self.floor(player, "2층", "support_2f_c")
+        await route(player, (("동", "support_2f_e1"), ("북", "training_room")))
+        await player.act("타격교관에게 강타 배워", lambda s: any(skill["id"] == "heavy" and skill["rank"] == 2 for skill in s["growth"]["skills"]))
+        self.scenario.report("training", "Lv.1 훈련 없음 / 실제 임무 XP 이후 NPC Rank +1 / 무료")
+
+    async def prepare_boss(self):
+        player = self.first
+        await player.act('귀환', lambda s: s['zone'] == 'support_roof')
+        await self.floor(player, '1층', 'support_1f_c')
+        await route(player, (('동', 'support_1f_e1'), ('북', 'supply_shop')))
+        while count_item(player.state, 'bandage') < 8:
+            before = count_item(player.state, 'bandage')
+            await player.act('붕대 구매', lambda s: count_item(s, 'bandage') == before + 1)
+        await route(player, (('남', 'support_1f_e1'), ('서', 'support_1f_c')))
+        await self.floor(player, '2층', 'support_2f_c')
+        await route(player, (('서', 'support_2f_w1'), ('북', 'infirmary')))
+        remaining = player.state['growth']['attribute_points']
+        if remaining:
+            await player.act(f'체질 {remaining} 배분')
+        await player.act('침대 휴식', lambda s: s['hp'] == s['max_hp'] and s['mental'] == s['max_mental'])
 
     async def restart(self):
         self.scenario.phase = "restart"
@@ -152,7 +208,7 @@ class Closeout:
             await client.open()
         after = await asyncio.to_thread(self.scenario.harness.checkpoint)
         preserved = ("xp", "credits", "inventory", "equipment", "storage", "attributes", "skills",
-                     "proficiencies", "quests", "discoveries", "visited")
+                     "skill_ready_at", "quests", "discoveries", "visited")
         for name, saved in stopped["players"].items():
             restored = after["players"][name]
             assert saved["id"] == restored["id"] and restored["zone"] == "staging_room"

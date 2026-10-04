@@ -74,7 +74,7 @@ class CommandShortcutsTests(WorldCommandTest):
 
     def test_gameplay_failure_and_unknown_command_continue(self):
         self.char1.change(lambda p: p["inventory"].pop("bandage"))
-        output = self.run_raw("응급처치, 없는명령, 상태 해")
+        output = self.run_raw("붕대 사용, 없는명령, 상태 해")
         self.assertIn("대상 뒤에 행동", output)
         self.assertIn("체력", output)
 

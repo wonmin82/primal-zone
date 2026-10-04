@@ -186,7 +186,7 @@ class DistantViewTests(WorldCommandTest):
         self.assertTrue(any(s["role"] == "object" for s in output.segments))
         self.char1.location = self.rooms["support_2f_e1"]
         output = self.command("북 봐")
-        self.assertIn("탐사대 훈련관", output)
+        self.assertIn("타격교관", output)
         self.assertTrue(any(s["role"] == "npc" for s in output.segments))
         for secret in ("배워", "배분", "재분배", "강타", "Rank", "대화"):
             self.assertNotIn(secret, output)
@@ -423,7 +423,7 @@ class DistantViewTests(WorldCommandTest):
         self.assertIn(generic.key, room.return_distant_appearance(context))
         visible = {
             "Commander",
-            "Instructor",
+            "TrainingManager", "SkillTrainer", "AttributeTrainer",
             "Pathfinder",
             "Container",
             "PersonalLocker",

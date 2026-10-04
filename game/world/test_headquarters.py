@@ -19,7 +19,7 @@ def content_targets():
     targets = {
         "shared_container": {"room": "storage_room", "actions": ["넣어", "꺼내"]},
         "personal_locker": {"room": "storage_room", "actions": ["넣어", "꺼내"]},
-        "instructor": {"room": "training_room", "actions": ["대화", "배워", "배분", "재분배"]},
+        "instructor": {"room": "training_office", "typeclass": "TrainingManager", "actions": ["대화", "재분배"]},
         "salvage_officer": {"room": "salvage_office", "actions": ["환율", "교환"]},
     }
     for shop_id, room in (("supply", "supply_shop"), ("weapon", "weapon_shop"), ("armor", "armor_shop")):
@@ -49,7 +49,7 @@ class HeadquartersRulesTests(TestCase):
         self.assertTrue(any("instructor: 본부 서비스" in issue for issue in errors(targets)))
 
     def test_hub_layout_and_prepared_rooms_are_valid(self):
-        self.assertEqual(len(HQ_ROOMS), 34)
+        self.assertEqual(len(HQ_ROOMS), 37)
         self.assertEqual(errors(content_targets()), [])
         self.assertEqual(ROOMS["staging_room"]["exits"], {"남": "hq_concourse"})
         self.assertEqual(ROOMS["hq_concourse"]["exits"], {
@@ -148,7 +148,7 @@ class HeadquartersRulesTests(TestCase):
                 count += 1
                 self.assertNotIn(direction, room["exits"])
                 self.assertEqual(blocked_exit_message(zone, direction), message)
-        self.assertEqual(count, 22)
+        self.assertEqual(count, 19)
         for direction in ("남", "s", " S "):
             self.assertEqual(blocked_exit_message("support_1f_c", direction), "남쪽 출입문은 현재 폐쇄되어 있다.")
         self.assertIsNone(blocked_exit_message("support_1f_c", "북"))

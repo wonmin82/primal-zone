@@ -40,7 +40,7 @@ class HeadquartersCloseoutTests(WorldCommandTest):
         profile.update(credits=143, xp=90, storage={"scrap": 5},
                        visited=["staging_room", "storage_room", "support_3f_c"])
         profile["skills"]["heavy"] = 2
-        profile["proficiencies"]["weapon"]["xp"] = 7
+        profile["skill_ready_at"]["breathing"] = 77
         profile["attributes"]["strength"]["allocated"] = 1
         profile["quests"]["radio_tower"]["record_read"] = True
         self.char1.save_profile(profile)

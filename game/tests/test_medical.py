@@ -49,7 +49,7 @@ class MedicalCommandsTests(WorldCommandTest):
                 self.char1.change(lambda p: p.update(hp=1))
                 before = deepcopy(self.char1.profile())
                 other = "rest" if "진료" in raw or "treat" in raw else "treat"
-                with patch.object(rules, other) as separate, patch.object(rules, "first_aid") as bandage:
+                with patch.object(rules, other) as separate, patch.object(rules, "use_bandage") as bandage:
                     self.assertIn("체력을 모두 회복" if other == "rest" else "체력과 정신력을 모두 회복", self.command(raw))
                     separate.assert_not_called()
                     bandage.assert_not_called()
@@ -99,7 +99,7 @@ class MedicalCommandsTests(WorldCommandTest):
         self.bed.location = self.rooms["support_roof"]
         for action in ("진료", "휴식"):
             self.assertIn("이용할 대상을 찾지", self.command(action))
-        self.assertEqual(multiplayer_state(self.char1)["interactables"], [])
+        self.assertEqual({obj["name"] for obj in multiplayer_state(self.char1)["interactables"]}, {"의무교관", "체력교관"})
         self.assertEqual(render(context_for(self.char1)), "")
 
     def test_services_follow_actual_object_to_safe_room_and_reject_unsafe(self):
@@ -124,7 +124,7 @@ class MedicalCommandsTests(WorldCommandTest):
 
     def test_web_presentation_and_distant_privacy_use_real_objects(self):
         state = multiplayer_state(self.char1)
-        self.assertEqual({action["command"] for obj in state["interactables"] for action in obj["actions"]},
+        self.assertEqual({action["command"] for obj in state["interactables"] if obj["name"] in ("의무관", "침대") for action in obj["actions"]},
                          {"의무관 진료", "침대 휴식"})
         self.assertEqual(render(context_for(self.char1)), "의무관 진료 · 침대 휴식")
         appearance = str(self.char1.location.return_appearance(self.char1))
@@ -221,7 +221,7 @@ class MedicalDefeatTests(WorldCommandTest):
             rest.assert_not_called()
         self.assertEqual(self.char1.zone, "infirmary")
         self.assertEqual(self.char1.home, self.rooms["dock"])
-        before.update(hp=rules.DEFEAT_RECOVERY_HP, credits=40, combat_target=None, queued_action="attack", guard_until=0)
+        before.update(hp=rules.DEFEAT_RECOVERY_HP, credits=40, combat_target=None, queued_action="attack", insight=None, heal_target=None)
         before["visited"].append("infirmary")
         before["recovery"]["updated_at"] = 102.5
         self.assertEqual(self.char1.profile(), before)

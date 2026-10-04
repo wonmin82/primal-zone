@@ -171,6 +171,17 @@ ROOMS = {
     },
 }
 
+for zone, name, corridor, description in (
+    ("tactics_room", "전술훈련실", "support_2f_w2", "모래판과 낡은 지형 모형이 낮은 탁자 위에 놓여 있다. 벽에 걸린 표적에는 전술 연습의 흔적이 남아 있다."),
+    ("training_office", "훈련관리실", "support_2f_c", "훈련 기록과 빈 신청서가 책상 위에 정돈되어 있다. 벽의 안내판에는 훈련 일정이 붙어 있다."),
+    ("shooting_range", "사격장", "support_2f_e2", "두꺼운 방음벽 안쪽으로 사격선과 표적이 나란히 놓여 있다. 모래를 채운 둔덕이 표적 뒤를 막고 있다."),
+):
+    ROOMS[zone] = {"name": name, "desc": description + " 북쪽 문은 지원동 2층 복도로 이어진다.", "exits": {"북": corridor}}
+    ROOMS[corridor]["desc"] += f" 남쪽 문에는 {name} 표지가 붙어 있다."
+    ROOMS[corridor]["exits"]["남"] = zone
+    ROOMS[corridor]["blocked_exits"].pop("남")
+
+
 for direction, name, desc in (
     ("북", "북쪽 전망 구역", "난간 너머로 본부 진입로가 내려다보인다. 바닥의 마모된 선을 따라 옥상 중앙으로 돌아갈 수 있다."),
     ("북동", "북동쪽 설비 구역", "낡은 설비 덮개가 콘크리트 받침 위에 놓여 있다. 배관 사이로 옥상 중앙이 보인다."),

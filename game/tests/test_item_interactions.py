@@ -148,7 +148,7 @@ class ItemInteractionTests(WorldCommandTest):
             self.assertEqual(self.char1.profile()["credits"], before["credits"] - ITEMS[identity]["value"])
             self.command(name + " " + action)
             self.assertEqual(self.char1.profile()["hp"], before["hp"] + ITEMS[identity]["heal"])
-            self.assertEqual(self.char1.profile()["proficiencies"], before["proficiencies"])
+            self.assertEqual(self.char1.profile()["skills"], before["skills"])
             self.assertIn(action, view.item_appearance(identity))
         self.char1.change(lambda p: p["inventory"].update(field_ration=2, water=2))
         for raw in (
