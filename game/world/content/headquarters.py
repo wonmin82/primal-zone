@@ -190,3 +190,7 @@ for room in ROOMS.values():
     room.update(safe=True, enemies=[], exposure="indoor", light_profile="artificial")
 for zone in ROOF_ROOMS:
     ROOMS[zone].update(exposure="outdoor", light_profile="natural")
+    ROOMS[zone]["recovery"] = {"mental_per_minute": 2}
+
+ROOMS["infirmary"]["recovery"] = {"hp_per_minute": 6, "mental_per_minute": 2}
+ROOMS["hq_concourse"]["recovery"] = {"hp_per_minute": 2, "mental_per_minute": 2}

@@ -1,8 +1,96 @@
 # Current Task State
 
-확인일: 2026-10-03. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
+확인일: 2026-10-04. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
 
 ## Objective
+
+[PR #26](https://github.com/wonmin82/primal-zone/pull/26)의 정신력·주기 회복·prompt lifecycle과 Web 입력 행 기능 구현 및 검증을 마감했다. 기능 설계는 architecture, 사용법은 README, 실제 출력 예와 재검증 절차는 text-examples/playtest가 기준이다. 사용자의 2026-10-04 병합·소스 브랜치 삭제 요청에 따라 문서를 최종 정리한다. 아래 OPEN·병합 미요청 표현은 당시 작업 범위의 과거 기록이며 현재 병합 승인보다 우선하지 않는다.
+
+### 병합 closeout 기준
+
+- 문서 마감 시작의 로컬·원격·PR HEAD는 `cf6dada2d35c79c01a5cc72e263b807e04639074`, 최신 origin/main·PR base는 `500ad782a8f4c16621728a50d511be1b7d926523`다. 작업 트리는 깨끗했고 최신 main을 이미 포함해 rebase는 필요하지 않았다. PR은 non-draft·MERGEABLE·CLEAN이며 미해결 review thread는 0개였다.
+- 구현 HEAD와 [Game checks 37163420451](https://github.com/wonmin82/primal-zone/actions/runs/37163420451)의 headSha를 대조했다. [test](https://github.com/wonmin82/primal-zone/actions/runs/37163420451/job/111321398928)와 [smoke](https://github.com/wonmin82/primal-zone/actions/runs/37163420451/job/111321399103)가 모두 success다. 문서 마감 이후의 최종 PR HEAD와 병합된 main의 CI는 별도로 확인하며 실제 SHA·run/job 링크는 PR의 최신 Validation에 기록한다.
+- 이번 변경은 CODEX_TASK_STATE와 playtest의 Markdown뿐이다. 아래 2026-10-04 실행 코드 기준 전체 486개·Quick 51.212s·Full 332.477s·Node 9개·1440/1100/390px browser 성공 근거를 재사용하며 새 로컬 검사로 표현하지 않는다. 실행 코드·의존성·static 변경이 없어 게임 테스트·smoke·browser·collectstatic은 반복하지 않는다. 문서 링크/현재 정책 대조와 git diff --check를 확인한다.
+- 필수 CI·보호 규칙을 통과한 최종 HEAD만 merge commit 방식으로 병합한다. 변경이 main에 포함되었는지 확인한 뒤 사용자가 요청한 원격·로컬 소스 브랜치를 삭제하고 로컬 main을 fast-forward한다. 병합 결과와 merge commit·main CI·브랜치 정리는 PR의 closeout 기록이 기준이다.
+
+### 완료 기능과 남은 범위
+
+profile v9는 기존 v1~v8 진행을 보존하며 정신력과 시간제 회복 기본값을 추가한다. 플레이어의 고정 10초 경계와 적의 15초 유예 후 점진 회복, silent 이동 checkpoint, 정수 회복/명령 완료의 prompt 경계를 유지한다. Web/Telnet은 같은 서버 formatter를 사용한다. Web은 고정 prompt 없이 scrollback에 `[ 자원 ] > 명령` 행을 남기고 비동기 메시지 뒤에는 최신 서버 semantic으로 새 입력 행을 만든다. 빈/공백·idle/history·button/Account/progressive 완료와 기존 경제/파티/전리품 계약을 보존한다.
+
+실제 회복 장비/소비품·정신력 소비·치료 기술은 추가하지 않았다. 실제 OS IME, 외부 Telnet 클라이언트/font, browser의 실제 progressive 추가 응답은 수동 미검증이며 transport/renderer·Evennia lifecycle 자동 검증과 구분한다. 다음 독립 작업은 완료 PR의 삭제된 소스 브랜치가 아니라 fetch한 최신 origin/main에서 시작한다. 상세 과거 검증은 아래에 보존한다.
+
+## PR #26 Web 입력 행 Objective (과거 기록)
+
+기존 OPEN [PR #26](https://github.com/wonmin82/primal-zone/pull/26)의 Web 명령 입력 표현을 `codex/mental-recovery`에서 보강했다. 시작 fetch의 로컬·원격·PR HEAD는 `c18177736e44b93f9d469c22fd5caf661d52d823`, origin/main·PR base는 `500ad782a8f4c16621728a50d511be1b7d926523`이며 작업 트리는 깨끗했다. 완료 전 fetch에서도 같은 기준을 확인했다. 새 branch/PR, rebase, force push 또는 merge는 수행하지 않는다. 최종 후속 HEAD와 정확히 같은 headSha의 test·smoke CI 및 링크는 기존 PR의 최신 Validation에 기록한다. 아래 이전 검증 기록은 당시 결과로 보존한다.
+
+### Web 입력 행 후속 변경
+
+별도 `› 명령` log entry를 제거했다. 마지막 entry가 대기 prompt일 때만 command semantic을 오른쪽에 붙여 `[ 60/60 · 40/40 ] > 상태` 한 행으로 완료한다. 비동기 출력이나 완료한 입력 행 뒤에는 과거 prompt를 수정하지 않고 최신 서버 semantic으로 새 입력 행을 만든다. `pz_state.resource_prompt`는 서버 `world.text.resource_prompt()`의 입력 echo용 metadata이며 state 수신 자체로 화면에 prompt를 추가하지 않는다. 고정 prompt UI는 없다. currentServerPrompt와 lastRenderedPrompt를 구분하며 JS의 숫자/색/formatter 계산과 별도 ACK를 추가하지 않았다.
+
+빈/공백 Enter는 command span/history 없이 서버 prompt만 추가한다. 직접 입력·버튼·채팅·실패·Account 명령은 같은 경로를 사용하며 성공 전송한 실제 명령만 history에 저장한다. keepalive idle은 echo/history가 없고 Evennia inputfunc에서 consume된다. 직접 제출은 bottom으로, 비동기 출력은 기존 scroll-lock으로 처리한다. 정적 cache version은 `prompt-input-row`다. 서버 gameplay/lifecycle·회복·정신력·enemy recovery·Telnet prompt channel은 변경하지 않았다.
+
+### 후속 검증 (2026-10-04)
+
+- `.venv\Scripts\python.exe scripts/dev.py check`, `node --check game/web/static/webclient/js/primal.js`, `git diff --check` 성공. game의 `python -m evennia collectstatic --noinput` 성공(2개 복사/211개 최신 유지). 수집 이후 static 변경 없음.
+- `node --test scripts/tests/test_web_prompt.cjs`: 실제 primal.js의 DOM/WS 경계를 실행하는 9개 회귀 성공. 기본 행·비동기 피해·최신 회복 행·blank/history·버튼·60초 idle·연속 제출·scroll-lock·채팅/실패/Account/progressive 입력의 literal command semantic을 검사했다. 새 framework/의존성 없이 Node 표준 모듈을 사용하며 전체 Python suite의 tests.test_web_prompt로도 실행했다(Node 미설치 환경은 명시적 skip).
+- `scripts/dev.py test tests.test_prompt tests.test_recovery tests.test_web_prompt tests.test_text --parallel 2 --reverse`: 40개 / 17.644s, runner 26.602s 성공.
+- 전체 `scripts/dev.py test`: pure 147개 / 1.790s, integration 339개 / 123.478s, 합계 486개 성공, integration runner 132.635s. 이후 추가한 Telnet full-resource assertion의 formatter 인자 누락을 수정하고 `tests.test_recovery --parallel 2 --reverse` 14개 / 6.504s·runner 15.523s로 확인했다. 실행 코드 변경 없이 assertion만 보강했으므로 전체 검사를 반복하지 않았다.
+- Quick smoke 51.212s, Full smoke 332.477s 성공. Full은 첫 round 2.818s, corpse decay 29.903s/respawn 44.815s/protection expiry 121.310s, 적 15초 유예/17→18 점진 회복, 실제 패배·본부·두 임무/보스·Portal+Server restart와 진행 보존을 확인했다.
+- 격리 browser 1440/1100/390px에서 `[ 60/60 · 40/40 ] > 상태`·버튼 동일 행, 별도 command 행 없음, 실제 자동 공격 뒤 old 60 prompt 보존/current 57 입력 행, 자연회복 49→50의 최신 행에 입력, blank/space·history ↑↓·실패·채팅·접속자·종료를 확인했다. full 자원 상태의 96초 idle 동안 추가 로그가 없었고 위로 읽는 recovery scroll-lock과 직접 제출 bottom 이동을 확인했다. 390px 긴 명령은 한 입력 행에서 두 visual line으로 wrap되며 page/log 가로 overflow가 없다. 기존 3×3 compass/SURROUNDINGS 순서와 앱 console error/warning 없음도 확인했다.
+- Telnet 정상 prompt channel의 `[ 60/60 · 40/40 ] >`, ANSI와 Web semantic 동등 내용·기존 progressive/Account 완료 동작은 자동 검증했다. 실제 OS IME, 외부 Telnet 클라이언트/font와 browser의 실제 progressive 추가 응답은 수동 미검증이며 renderer 경계와 Evennia lifecycle은 자동 검사했다. 별도 echo ACK를 추가하지 않아 제출 직전 미수신 state의 작은 race는 다음 authoritative 결과 prompt로 정상화된다.
+- Quick·Full·browser 전후 플레이 DB size/mtime_ns/SHA256 불변. 테스트 서버/탭을 종료·정리했으며 DB/runtime/credential/log/screenshot은 Git 제외 work에만 보관했다. PR은 검토를 위해 OPEN으로 남기고 merge하지 않는다.
+
+## PR #26 회복 리뷰·출력 lifecycle Objective (과거 기록)
+
+기존 OPEN [PR #26](https://github.com/wonmin82/primal-zone/pull/26)의 회복 리뷰와 프롬프트 출력 lifecycle을 `codex/mental-recovery`에서 보강했다. 시작 fetch의 로컬·원격·PR HEAD는 `9fd2e1f5c1fb59cb8b3d560d44b36b2b089dba54`, origin/main과 PR base는 `500ad782a8f4c16621728a50d511be1b7d926523`로 일치했으며 작업 트리는 깨끗했다. 최종 검증 후 fetch에서도 기준은 동일했다. 새 PR을 만들거나 merge하지 않는다. 후속 최종 HEAD와 해당 HEAD의 test·smoke CI 링크는 PR Validation에 기록한다. 아래 최초 구현과 이전 PR 검증은 당시 기록으로 보존하며 현재 출력 정책보다 우선하지 않는다.
+
+### 현재 구현과 정책
+
+save_profile에서 prompt를 분리하고 이동 checkpoint는 조용히 저장한다. move_to의 transaction은 목적지 hook 거절도 profile/recovery/location rollback으로 처리하며 도착 화면은 성공 후 출력한다. 만료 effect는 과거 기여 반영 후 제거하고 future effect는 활성으로 취급하지 않으며 필요한 시작 시점만 예약한다. ENEMY_RECOVERY_DELAY_SECONDS를 timing SSOT의 canonical 이름으로 사용하고 구 PRIMAL_ENEMY_RESET_SECONDS fallback/import alias와 production 15초를 보존한다. profile v9·회복률·전투/경제 계약은 유지한다.
+
+실제 Evennia 6.1 pre/post hook과 no-input/no-match/multimatch를 사용해 정상·실패·Exit·engine/account·progressive·묶음 입력의 마지막에 prompt 한 번을 출력한다. MuxAccountCommand가 caller를 Account로 바꿔도 시작 Explorer의 context를 종료하고 마지막 logout 때 중단 context를 제거한다. 빈/공백 Enter는 서버 최신 정상 경계 정산 후 prompt만 출력하며 echo/history/최근 명령/입력 대기 답변에 넣지 않는다. 자동 전투와 일반 비동기 알림은 prompt를 추가하지 않고 실제 정수 recovery만 다음 reactor turn에서 합쳐 출력한다. 패배는 피해·구조/손실·의무실 설명 뒤 HP 1, 로그인은 방/환영 뒤 최종 한 번이며 logout/shutdown은 출력하지 않는다.
+
+Web은 고정 prompt DOM/state/CSS를 제거하고 서버 resource_prompt semantic을 메인 scrollback의 kind=prompt로 표시한다. 현재 숫자만 비율별 색을 적용하고 HP/정신력/XP HUD와 기존 scroll-lock/near-bottom scroll을 유지한다. 상세 정책은 [architecture의 lifecycle](architecture.md#프롬프트-출력-lifecycle), 실제 출력 예는 [text-examples](text-examples.md#자원-prompt)를 따른다.
+
+### 후속 최종 검증 (2026-10-04)
+
+- `.venv\Scripts\python.exe scripts/dev.py check` 성공. 전체 `scripts/dev.py test`는 pure 147개 / 6.156s, integration 337개 / 124.407s, 총 484개 성공이며 integration runner는 141.929s다.
+- 관련 `scripts/dev.py test tests.test_prompt tests.test_recovery tests.test_item_interactions --parallel 2 --reverse`는 42개 / 18.653s·runner 27.749s 성공. 실제 dispatcher·progressive 완료·Account caller 변경·unpuppet/puppet·transport의 프롬프트 순서/중복, silent 이동/rollback, 경계 정산을 검사했다. pure future effect/만료 정리·timing fallback 테스트도 보강했다.
+- 초기 전체 검사에서 command 사본의 객체 identity 기대와 실시간 10초 경계에 걸친 아이템 실패 비교를 발견했다. dispatcher key/실제 func 보존을 확인하고 아이템 suite 시계를 고정해 기존 전체 profile 불변 assertion을 유지했다. 브라우저에서 종료 후 재로그인 prompt 누락을 발견해 실제 Account command의 red 테스트로 재현하고 context 소유자/마지막 logout 정리를 수정한 뒤 위 최종 검사를 통과했다.
+- Quick live smoke 49.295s 성공. 실제 일반/계정/실패/빈 입력 prompt, 종료 명령·재로그인 prompt 복원, 파티/화폐·상점·회복·진행 보존을 확인했다.
+- Full live smoke 335.660s 성공. 첫 combat 2.923s, corpse decay 29.833s, respawn 44.779s, protection expiry 121.368s로 production 30/45/120초를 확인했다. 적 15초 유예/부분 회복 16→17·재교전 HP, 패배/본부 전체/두 임무·보스/실제 Portal+Server restart와 relogin을 통과했다.
+- `node --check game/web/static/webclient/js/primal.js`, game 디렉터리의 `python -m evennia collectstatic --noinput`, `git diff --check` 성공. 최종 static 수집 뒤 JS/CSS 변경은 없다. 새 profile의 상태와 resource_prompt를 직접 생성해 최신 예시와 대조했다.
+- 격리 browser의 1440px desktop·1100px 중간 폭·390px mobile에서 메인 prompt/기존 meter·compass/SURROUNDINGS, 일반/실패/빈 입력·history·묶음 마지막 한 번, 자동 전투 무출력/정수 자연회복, 실제 피해→구조/10칩 손실→의무실→HP 1 prompt, Doctor HP만/Bed 양 자원 회복, Account 접속자 및 종료 후 같은 캐릭터 재로그인 prompt를 확인했다. 위로 읽는 scroll-lock과 새 기록으로 이동도 유지했다. 앱 console error/warning·가로 overflow/clipping은 없다.
+- Quick·Full·browser 전후 플레이 DB size/mtime_ns/SHA256은 733184 / 1790080153765082800 / `b1318296f505b9b7522fcbdedff7642a06cf055e9de72802198c70e6b8a7f700`로 불변이다. 소유한 테스트 서버/탭을 종료·정리했고 runtime/DB/credential/log/screenshot은 Git 제외 work에만 보관했다.
+- 실제 OS IME와 별도 Telnet 클라이언트/font는 미검증이다. Telnet 정상 prompt 채널·ANSI·Web semantic 동등 내용과 출력 순서는 자동 검사했다. 회복 장비/소비품·정신력 소비/치료 기술은 추가하지 않았다. 최신 후속 HEAD의 두 CI가 성공하고 미해결 blocker가 없을 때 merge-ready로 보고하되 병합은 수행하지 않는다.
+
+## PR #26 최초 구현 Objective (과거 기록)
+
+정신력과 10초 주기 자연회복 시스템의 구현·검증·문서 정리를 독립 branch `codex/mental-recovery`에서 완료했다. 시작 fetch의 최신 origin/main은 `500ad782a8f4c16621728a50d511be1b7d926523`이며 작업 트리는 깨끗했다. PR #25는 MERGED이고 아래 경제 PR의 병합 준비/OPEN 표현은 과거 기록이다. 구현 커밋은 `1e87004f10f14acaf392adefd4ea975e15489e4f`다. 사용자의 후속 PR 생성 요청에 따라 같은 branch를 push하고 main 대상 PR과 최종 HEAD의 test·smoke CI를 확인한다. 병합은 요청되지 않았다.
+
+현재 정신력과 최대치·v9 migration, DB 없는 accrue/commit 계산, Room/equipment/timed effect source, offline 옛 위치 batch, 살아 있는 session reload 보존, 플레이어 단일 경계 예약과 적 15초 유예/점진·lazy 회복을 구현했다. 진료는 HP만, 휴식은 HP·정신력을 채우며 firstaid/의술·기존 경제를 보존한다. Web 정신력 meter와 로그와 분리된 prompt를 추가했다. 회복 장비/소모품·정신력 소비/치료 기술은 범위 밖이다.
+
+### 완료 검증 (2026-10-03)
+
+- 최종 `.venv\Scripts\python.exe scripts/dev.py test`: pure 145개(3.441s), integration 325개(141.898s), 합계 470개 성공, integration runner 152.662s. 신규 recovery pure 12개·integration 14개이며 기존 migration·경제·전투·장비·의료 assertion을 유지했다.
+- 관련 `tests.test_recovery --parallel 2 --reverse`: 14개 성공(7.245s, runner 16.981s). 전투·장비·아이템 이동·정산·상점·지역·환경의 관련 reverse/parallel 검사 73개 성공(57.460s, runner 67.083s), restart harness 검사 10개 성공.
+- `scripts/dev.py check`, `node --check game/web/static/webclient/js/primal.js`, `git diff --check` 성공. 최종 정적 파일의 collectstatic 성공(213개 최신 유지), 실제 새 profile의 상태·능력·경험치·기술·소지품·장비·능 도움말·prompt를 문서 예시와 대조했다.
+- Quick live smoke 53.424s 성공: 실제 10초 경계 정신력 증가, 시체 화폐·보호·respawn·구매/판매·재로그인 진행 보존. 이후 Full 전용 fixture/restart snapshot·테스트 기대·0 prompt ANSI 강조 보정은 Quick의 검증 경로에 영향을 주지 않아 기존 성공 근거를 재사용했다.
+- Full live smoke 361.952s 성공: 첫 라운드, 시체 decay 29.542s/respawn 44.506s/보호 종료 120.250s, 적 15초 유예 후 부분 회복 18→20(29.623s), 재교전 HP 보존, 실제 패배/진료/휴식·본부 전체·두 임무/보스·Portal+Server restart/relogin. 실행 중 snapshot 이후의 정상 전투까지 보존하려고 프로세스 종료 DB snapshot과 restart 결과를 비교한다.
+- 초기 Full은 자연회복으로 저체력 fixture가 적을 처치해 패배 검사에 실패했다. 정상 Lv1 fixture와 실제 갈퀴사냥룡 교전으로 수정했다. 두 번째 Full의 restart 비교는 실행 중 snapshot과 종료 사이의 라운드를 포함하지 않아 실패했고, 종료 시점 snapshot으로 경합을 제거했다. production 수치와 진행 보존 assertion은 바꾸지 않고 최종 Full을 통과했다.
+- 격리 browser에서 1440px desktop·1100px 중간 폭·390px mobile, HP/정신력/XP 분리·prompt·자연회복 중 로그 개수 불변·SURROUNDINGS/compass 유지·지혜 투자·의무관 진료의 정신력 비회복·HP full/정신력 부족 상태의 침대 버튼을 확인했다. 앱 console error/warning과 가로 overflow 없음. 실제 OS IME와 별도 Telnet 클라이언트/font는 미검증이며 입력 composition 코드는 변경하지 않았다. Telnet prompt 채널/ANSI/현재 숫자만 semantic 색 적용은 자동 검사했다.
+- Quick·Full·browser의 play DB size/mtime_ns/SHA256 불변: 733184 / 1790080153765082800 / `b1318296f505b9b7522fcbdedff7642a06cf055e9de72802198c70e6b8a7f700`. 성공 임시 서버는 종료·정리했고 실패 진단은 gitignored work 아래에 보존했다. runtime/DB/credential/screenshot은 소스에 포함하지 않는다.
+- 구현 완료 당시 최종 fetch에서도 origin/main은 시작 SHA와 같았고 로컬 커밋까지 진행했다. 후속 PR 준비 fetch에서도 main과 실행 코드는 동일했다. 변경은 이 인계 문서뿐이므로 위 로컬 성공 근거를 재사용하며 실제 PR URL·최종 HEAD·새 CI 결과는 PR 본문과 GitHub Actions에서 확인한다.
+
+### PR #26 CI 후속 검증
+
+[PR #26](https://github.com/wonmin82/primal-zone/pull/26)을 생성했다. 초기 문서 HEAD `477bb6f762905447592b48a13f7c97233118a2a0`의 test CI는 성공했지만 Linux Quick 흐름이 첫 회복 지급 전에 끝나 정신력 증가 assertion이 실패했다. smoke에서 실제 정신력이 증가한 state를 두 경계와 통신 여유(최대 30초) 안에 기다리도록 보강했다. 고정 sleep이나 회복 규칙·production 타이머 변경은 없다. 후속 `world.test_smoke` 10개(7.901s, runner 11.677s), check, Quick 60.222s와 play DB fingerprint 불변을 확인했다. 전체 게임 테스트·Full·browser는 게임/정적 코드가 같아 위 성공 근거를 재사용한다. 후속 최종 HEAD의 test·smoke CI와 SHA는 PR Validation에 기록한다.
+
+### 다음 작업
+
+새 PR에서 현재 구현을 리뷰한다. 실제 회복 장비·시간제 회복 소비품·정신력 소비/치료 기술은 별도 요청에서 다룬다. PR은 검토를 위해 OPEN 상태로 남기며 병합하지 않는다.
+
+## 이전 PR #25 병합 준비 Objective (과거 기록)
 
 보급칩 경제와 [PR #25](https://github.com/wonmin82/primal-zone/pull/25)의 후속 리뷰 네 항목 구현·검증을 완료했다. 사용자의 병합·소스 브랜치 삭제 요청에 따라 최종 인계 문서를 정리한다. 병합 준비 fetch에서 로컬/원격/PR 구현 HEAD는 `f81eb3a51a0cf6d65c6d3f89ee4fc09c001d4195`, origin/main과 PR base는 `0229a2275f33436a74f75274c94e464c8077b3a2`로 일치하고 작업 트리는 깨끗했다. 최신 main을 이미 포함하므로 rebase 재작성은 필요하지 않다. 아래 과거 OPEN·병합 금지 설명은 당시 작업 범위이며 현재 승인 범위보다 우선하지 않는다.
 

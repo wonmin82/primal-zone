@@ -48,11 +48,15 @@ def setup(credentials):
         # 맨손 공격으로 양쪽 참여와 outsider 거절을 확인할 시간을 확보한다.
         profile["equipment"]["weapon"] = None
         profile["hp"] = rules.stats(profile)["max_hp"]
+        profile["mental"] = 10
         if settings.PRIMAL_SMOKE_MODE == "full":
             # 진행 전제만 준비한다. 수리·정산·구매·패배 결과는 실제 명령으로 만든다.
             if name == credentials[0][0]:
                 profile["inventory"]["scrap"] = 10
             if name == credentials[2][0]:
+                # 자연회복으로 저체력 fixture가 오래 대기하며 과도하게 회복하지 않도록
+                # 패배 검증자는 정상 Lv1 최대 HP를 쓴다. 실제 전투가 패배를 만든다.
+                profile["attributes"]["constitution"]["allocated"] = 0
                 profile["hp"] = 1
         character.save_profile(profile)
     call_command("collectstatic", interactive=False, verbosity=0)

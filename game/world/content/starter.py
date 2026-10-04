@@ -108,6 +108,7 @@ ROOMS = {
         "exits": {"남": "grass", "동": "office", "북": "marsh"},
     },
     "office": {
+        "recovery": {"hp_per_minute": 2, "mental_per_minute": 1},
         "name": "폐쇄된 관리동",
         "facility_lights": [{"power": "outpost_power", "strength": 4}],
         "exposure": "indoor",

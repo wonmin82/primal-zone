@@ -119,8 +119,11 @@ class ItemInteractionRulesTests(TestCase):
         old = deepcopy(profile)
         old.update(version=4, xp=333, credits=88)
         old.pop("storage")
+        old.pop("mental")
+        old.pop("recovery_effects")
         migrated = rules.migrate_profile(old)
-        self.assertEqual(migrated, {**old, "version": rules.PROFILE_VERSION, "storage": {}})
+        self.assertEqual(migrated, {**old, "version": rules.PROFILE_VERSION, "storage": {},
+                                    "mental": rules.stats(old)["max_mental"], "recovery_effects": []})
         migrated["storage"]["bandage"] = 2
         self.assertEqual(rules.migrate_profile(migrated), migrated)
 
@@ -504,6 +507,8 @@ class GrowthRuleTests(TestCase):
                 queued_action="guard",
             )
             old["quests"]["radio_tower"]["record_read"] = True
+            old.pop("mental")
+            old.pop("recovery_effects")
             if version < 4:
                 old.pop("quests")
                 old.pop("discoveries")
@@ -520,6 +525,7 @@ class GrowthRuleTests(TestCase):
             self.assertTrue(migrated["quests"]["radio_tower"]["record_read"])
             self.assertTrue(migrated["discoveries"]["supply_cache"])
             self.assertEqual(migrated["version"], rules.PROFILE_VERSION)
+            self.assertEqual(migrated["mental"], rules.stats(migrated)["max_mental"])
             self.assertEqual(rules.migrate_profile(migrated), migrated)
             self.assertEqual(old, before)
             self.assertEqual(rules.stats(old), rules.stats(migrated))

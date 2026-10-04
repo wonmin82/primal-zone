@@ -4,7 +4,7 @@ ATTRIBUTES = {
     "strength": {"name": "힘", "description": "투자 2점마다 공격 +1"},
     "agility": {"name": "민첩", "description": "투자 3점마다 방어 +1"},
     "constitution": {"name": "체질", "description": "투자 1점마다 최대 HP +4"},
-    "wisdom": {"name": "지혜", "description": "투자 1점마다 붕대 회복 +2"},
+    "wisdom": {"name": "지혜", "description": "투자 1점마다 최대 정신력 +4 · 붕대 회복 +2"},
 }
 PROFICIENCIES = {"weapon": "무기", "defense": "방어", "medicine": "의술"}
 PROFICIENCY_MAX_RANK = 10

@@ -35,6 +35,13 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
 
         for command in COMMANDS:
             self.add(command())
+        from evennia.commands.default.syscommands import SystemMultimatch
+
+        from commands.base import NoInput
+        from commands.prompt import with_prompt
+
+        self.add(NoInput())
+        self.add(with_prompt(SystemMultimatch()))
 
 
 class AccountCmdSet(default_cmds.AccountCmdSet):

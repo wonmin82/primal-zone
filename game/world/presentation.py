@@ -46,7 +46,8 @@ def status(name, profile):
     )
     return ft.compact(
         "상태",
-        f"체력 {profile['hp']}/{values['max_hp']} · 공격 {values['attack']} · 방어 {values['defense']}",
+        f"체력 {profile['hp']}/{values['max_hp']} · 정신력 {profile['mental']}/{values['max_mental']}",
+        f"공격 {values['attack']} · 방어 {values['defense']}",
         f"경험치 {xp} · 보급칩 {format_currency(profile['credits'])} · 처치 {profile['kills']}",
         "특성 | "
         + " ".join(

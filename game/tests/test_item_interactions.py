@@ -22,6 +22,8 @@ class ItemInteractionTests(WorldCommandTest):
     character_typeclass = Explorer
 
     def setUp(self):
+        # 아이템 실패 원자성과 실제 시간 경계의 자연회복을 분리해 검증한다.
+        self.enterContext(patch("typeclasses.explorers.time", return_value=100))
         super().setUp()
         self.rooms = self.world_rooms()
         for player in (self.char1, self.char2):
@@ -352,13 +354,16 @@ class ItemInteractionTests(WorldCommandTest):
     def test_v4_load_migrates_without_overwriting_equipment_or_progress(self):
         old = self.char1.profile()
         old.update(version=4, hp=37, xp=333)
+        old.pop("mental")
+        old.pop("recovery_effects")
         old.pop("storage")
         old["equipment"]["weapon"] = None
         old["quests"]["radio_tower"]["claimed"] = True
         self.char1.db.profile = old
         self.char1.attributes.reset_cache()
         migrated = self.char1.profile()
-        self.assertEqual(migrated, {**old, "version": rules.PROFILE_VERSION, "storage": {}, "light_sources": {}})
+        self.assertEqual(migrated, {**old, "version": rules.PROFILE_VERSION, "storage": {}, "light_sources": {},
+                                    "mental": rules.stats(old)["max_mental"], "recovery_effects": []})
         self.assertEqual(self.char1.profile(), migrated)
         self.assertIn("맨손", view.outgoing_attack(migrated, "어린청소룡", {"action": "attack"}, 7))
 

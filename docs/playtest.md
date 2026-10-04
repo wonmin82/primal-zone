@@ -1,5 +1,44 @@
 # 원시구역 테스트 안내
 
+## 현재 절차: 정신력과 주기 회복
+
+격리 DB의 테스트 캐릭터로 확인한다. 일반 플레이 DB를 초기화하거나 fixture 상태로 덮어쓰지 않는다.
+
+1. 새 profile은 v9·정신력 40/40이며 Lv5/지혜 0은 60, Lv10/지혜 5는 105다. v8 이하 fixture는 기존 진행을 유지하고 현재 최대 정신력으로 migration한다. profile_snapshot만으로 저장·시계 초기화가 발생하지 않아야 한다.
+2. 부족한 HP/정신력으로 9초를 보내고 이동·장비 변경·전투를 시작한다. 현재 수치는 그대로이고 다음 고정 10초 경계에서만 정수 기여가 지급돼야 한다. 짧게 여러 번 계산한 결과와 offline batch를 비교한다.
+3. 비전투 HP는 2+max_hp/60, 정신력은 4+max_mental/20의 분당 기본률이다. 의무실 6/2·중앙홀 2/2·관리동 2/1·옥상 0/2를 더하고 staging에는 추가하지 않는다. 전투에서는 장소 보너스와 기본 HP만 제외한다.
+4. 실제 계정 logout/login으로 의무실의 offline 회복 후 대기실 시작을 확인한다. 기간 중 만료하는 효과는 만료 전만 계산한다. live session at_sync와 서버 restart에서는 기존 위치·단일 timer를 확인하고 offline 캐릭터에 timer가 없어야 한다.
+5. HP full/정신력 부족에서 진료는 거절하고 휴식은 두 자원을 채운다. 붕대·음식·진료와 패배는 정신력을 바꾸지 않으며 full 자원의 credit을 남기지 않는다. 패배의 HP 1·최대 10칩 손실과 의무실 이동은 유지한다.
+6. 적에게 피해를 주고 도망한다. 15초 유예 동안 HP가 같고 이후 경계에서 일부만 회복한다. 재교전은 그 HP이며 빈 방은 tick 없이 다음 접근에서 경과를 계산한다. 죽은 적은 회복하지 않고 기존 45초에 재생성한다.
+7. 최종 collectstatic 후 1440px desktop·1100px·390px에서 HP/정신력/XP meter와 메인 scrollback의 prompt, 현재 숫자의 색, 3×3 compass/SURROUNDINGS를 확인한다. 입력창 위 고정 prompt는 없어야 한다. 과거 prompt는 남고 위로 읽는 중 새 prompt가 강제로 아래로 이동시키면 안 된다. overflow/clipping·console 앱 error/warning을 확인한다.
+8. 상태·잘못된 명령·이동·공격·응급처치·진료·휴식의 결과 뒤 prompt가 하나여야 한다. 빈 Enter와 공백 Enter는 서버 최신 값의 prompt만 추가하고 command echo/↑↓ history에는 넣지 않는다. 지난 10초 경계와 Enter 연타를 비교해 중복 회복이 없어야 한다.
+9. 자동 전투 공격 메시지에는 prompt가 붙지 않으며 자연회복으로 실제 정수 자원이 바뀔 때만 추가된다. 같은 이벤트 구간의 전투 메시지가 먼저 나와야 한다. 패배는 구조/손실·의무실 화면 뒤 최종 HP 1 prompt를 하나 출력한다. 새 로그인은 방/환영 출력 뒤 하나, logout은 없음이다.
+10. Telnet 실제 text-session 경로에서 결과→prompt channel 순서·blank·회복·패배·중복을 확인한다. progressive 입력 대기/완료와 blank의 비응답 경로를 확인한다. 실제 OS IME와 Telnet font 렌더링은 별도 수동 검사다.
+11. 일반 명령·실패·채팅·접속자와 compass/quick/context 버튼을 실행해 `[ 자원 ] > 명령` 한 행인지 확인한다. 별도 `› 명령` 행이 없어야 한다. 자동 적 공격 뒤 상태를 입력하면 과거 prompt와 공격 메시지를 보존하고 최신 서버 값의 입력 행을 끝에 추가해야 한다. 자연회복 prompt 뒤에는 가장 최신 행에 붙는다.
+12. 빈/공백 Enter는 command span/history 없이 새 서버 prompt만 추가한다. ↑/↓는 실제 명령과 버튼 명령을 되짚고 idle은 제외한다. 60초 keepalive 전후 echo/prompt/history가 없어야 한다(정상 회복 prompt는 별개). 위로 읽는 비동기 출력은 scroll-lock, 직접 제출은 bottom 이동이다. 390px에서 `어린청소룡의 시체 2에서 회수부품 모두 가져`가 같은 입력 행에서 시작해 자연스럽게 wrap되고 가로 overflow가 없어야 한다.
+
+자동 검사는 world.test_recovery·tests.test_recovery·tests.test_prompt와 의료/전투/성장/이동 suite를 사용한다. 계정 명령(접속자/종료) 뒤에도 context가 정리되고 실제 unpuppet/puppet 재접속에서 prompt가 정상 복원되어야 한다. Quick은 실제 정신력 경계 회복과 재접속, Full은 production 시체/보호/respawn·적 점진 회복과 restart를 검증한다. 이후 실행 수치는 당시의 과거 기록으로 보존하며 새 결과는 최상단 Task State에 기록한다.
+
+Web 입력 행 자동 회귀는 `node --test scripts/tests/test_web_prompt.cjs`로 실행한다. 별도 JS framework 없이 실제 client와 DOM/WS 경계를 검사하며 `tests.test_web_prompt`로 전체 suite에도 포함된다. Node.js가 없으면 그 검사는 skip이므로 실제 실행 여부를 결과에 기록한다.
+
+## PR #26 최종 검증 기준 (2026-10-04)
+
+실행 코드 기준은 `cf6dada2d35c79c01a5cc72e263b807e04639074`다. 문서 마감은 Markdown만 변경하므로 아래 결과를 재사용하며 새로 실행한 검사처럼 표현하지 않는다. 이후 코드가 바뀌면 실제 영향에 맞춰 재검증한다.
+
+- 전체 pure 147 + integration 339 = 486개 성공, integration runner 132.635s. 관련 prompt/recovery/Web/text reverse·parallel 40개와 Telnet full-resource assertion 보강 뒤 recovery 14개가 성공했다. Node 표준 모듈의 실제 client 경계 9개도 실행됐다.
+- Quick 51.212s와 Full 332.477s 성공. production corpse 29.903s/respawn 44.815s/protection 121.310s, 적 점진 회복·패배·두 임무/보스·Portal+Server restart와 재로그인을 확인했다.
+- 1440/1100/390px browser에서 prompt 오른쪽 입력·자동 피해 뒤 과거 prompt 보존·최신 회복 행 결합·blank/history/button/Account/idle/scroll-lock·모바일 긴 명령 wrap을 확인했다. 앱 console 오류와 가로 overflow가 없었고 플레이 DB fingerprint는 불변이었다.
+- [Game checks 37163420451](https://github.com/wonmin82/primal-zone/actions/runs/37163420451)의 test·smoke는 위 구현 HEAD에서 모두 success다. 문서 마감 최종 HEAD와 병합 main의 CI는 [PR #26 Validation](https://github.com/wonmin82/primal-zone/pull/26)에서 SHA와 run/job 링크를 확인한다.
+- OS IME·외부 Telnet 클라이언트/font·browser의 실제 progressive 추가 응답은 수동 미검증이다. Telnet 정상 prompt 채널/ANSI·Web semantic 및 progressive/Account 완료의 자동 검증을 수동 검증으로 대신 표기하지 않는다.
+
+## 정신력·회복 검증 기록 (2026-10-03, 프롬프트 변경 전 과거 기록)
+
+최종 pure 145 + integration 325 = 470개, runner 152.662s 성공. 관련 recovery 14개와 전투·장비·정산·상점·지역·환경 73개를 `--parallel 2 --reverse`로 확인했다. check/node/diff 검사와 정적 파일 수집도 성공했다.
+
+Quick 53.424s와 Full 361.952s가 성공했다. Full은 시체 29.542s·respawn 44.506s·보호 120.250s, 적 부분 회복 18→20/재교전, 실제 패배와 침대 양 자원 회복, 두 임무·보스·restart를 검증했다. 자연회복으로 달라진 패배 fixture 및 종료 전 전투 라운드 snapshot 경합의 초기 실패를 수정하고 재실행한 최종 결과다. 자세한 실패·재검증 근거는 [작업 상태](CODEX_TASK_STATE.md#완료-검증-2026-10-03)에 남겼다.
+
+격리 browser의 desktop 1440px·중간 1100px·mobile 390px에서 정신력 meter, 별도 prompt, 자동 회복 중 로그 개수 불변, 지혜 투자 후 현재값 유지, 진료/휴식 차이를 실제 명령과 침대 버튼으로 확인했다. console 앱 error/warning과 가로 overflow는 없었다. 플레이 DB hash/mtime/size는 불변이고 성공 테스트 서버를 정리했다. OS IME와 별도 Telnet 클라이언트의 시각 검사는 수행하지 않았다.
+
 ## 현재 절차: 명령 체계·도움말·로그인
 
 아래 절차는 최신 코드 기준이다. 이후 단계별 실행 결과는 당시 명령과 수치를 보존한 과거 기록이며 현재 어휘보다 우선하지 않는다.
@@ -10,13 +49,13 @@
 4. 의무실에서 `응급처치`/붕대/firstaid로 소지 붕대를 사용한다. `의무관 진료`/`의무관에게 진료`/treat는 Doctor, 휴식/rest는 Bed 서비스인지 비교한다. 전투에서 도망/flee를 사용한다. 회복/응급치료/heal·도주·치료·힐은 명령으로 동작하지 않아야 한다.
 5. 세 판매자에게 `상품`/`무기상 상품` 및 구매를 실행한다. 상점/메뉴/shop은 command가 아니다. 다른 본부 서비스와 가격·정산율을 확인한다.
 6. 도움말 root의 여섯 분류, 이동/전투/아이템/성장/교류/편의 도움말, 소·ㅂㄷ 도움말, 파티 명령 detail, 입력 도움말을 확인한다. 8방향 이동은 command 색을 사용하지 않는다.
-7. v7 fixture에서 heal Rank/예약 action과 old command 정의를 저장한 뒤 v8을 로드한다. 새 예약 이름 충돌은 _개인[번호]로 보존하고 nested 참조도 연결되어야 한다. 소/ㅂㄷ/치료/힐/heal 신규 이름은 거절하며 가는 개인 이름으로 등록 가능하다. v7의 힐 정의와 exact nested 참조는 힐_개인[번호]로 보존하되 채팅·대상 문자열은 유지한다. 기존 줄임말/묶음/전체 삭제의 직접 2단계 계약도 확인한다.
-8. 밀림 또는 3층에서 로그아웃/로그인하면 대기실에서 시작하고 HP/XP/보급칩/소지품/성장/임무/방문/줄임말이 유지되어야 한다. live-session reload 복원은 기존 위치를 보존한다.
+7. v7 fixture에서 heal Rank/예약 action과 old command 정의를 저장한 뒤 최신 v9를 로드한다. 새 예약 이름 충돌은 _개인[번호]로 보존하고 nested 참조도 연결되어야 한다. 소/ㅂㄷ/치료/힐/heal 신규 이름은 거절하며 가는 개인 이름으로 등록 가능하다. v7의 힐 정의와 exact nested 참조는 힐_개인[번호]로 보존하되 채팅·대상 문자열은 유지한다. 기존 줄임말/묶음/전체 삭제의 직접 2단계 계약도 확인한다.
+8. 밀림 또는 3층에서 로그아웃/로그인하면 대기실에서 시작하고 XP/보급칩/소지품/성장/임무/방문/줄임말이 유지되고 HP/정신력은 offline 회복만큼 증가할 수 있다. live-session reload 복원은 기존 위치를 보존한다.
 9. 최종 collectstatic 이후 desktop·중간 breakpoint·390px browser에서 FIELD GUIDE 소지품, 응급처치/도망, inventory 붕대 사용, 상품/진료, 승강기 자동 하차/내려 버튼을 실행한다. compass와 SURROUNDINGS 순서, console error/warning·가로 overflow·한글 clipping을 확인한다. OS IME는 별도 실제 입력 검증이다.
 
 자동 검사는 `world.test_vocabulary`·`tests.test_vocabulary`와 기존 parser/줄임말/의료/상점/승강기/본부 suite, 전체 check/test, Quick live smoke를 사용한다. Full은 production timer와 restart/progression의 수동 검증이며 이번 변경의 실제 실행 여부는 PR 검증 기록을 따른다.
 
-능력·경험치·Web 성장 화면의 숙련은 의술(medicine), 기술은 응급처치(firstaid)로 구분한다. 실제 붕대 회복에서만 의술 XP가 증가하며 진료·휴식에서는 증가하지 않아야 한다. 치료/힐/heal은 현재 command·도움말 목록·Web 버튼에 없어야 한다. profile version은 8이고 저장된 medicine XP/Rank는 동일해야 한다.
+능력·경험치·Web 성장 화면의 숙련은 의술(medicine), 기술은 응급처치(firstaid)로 구분한다. 실제 붕대 회복에서만 의술 XP가 증가하며 진료·휴식에서는 증가하지 않아야 한다. 치료/힐/heal은 현재 command·도움말 목록·Web 버튼에 없어야 한다. profile version은 9이고 저장된 medicine XP/Rank는 동일해야 한다.
 
 ## 현재 절차: 보급칩 경제
 

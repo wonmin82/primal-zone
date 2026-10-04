@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#101b17">
   <title>원시구역 — 탐사 기록</title>
-  <link rel="stylesheet" href="{% static 'webclient/css/primal.css' %}?v=supply-chip-review">
-  <script defer src="{% static 'webclient/js/primal.js' %}?v=supply-chip-review"></script>
+  <link rel="stylesheet" href="{% static 'webclient/css/primal.css' %}?v=prompt-input-row">
+  <script defer src="{% static 'webclient/js/primal.js' %}?v=prompt-input-row"></script>
 </head>
 <body data-ws-url="{{ websocket_url|default:'' }}" data-ws-port="{{ websocket_port }}">
   <header class="masthead">
@@ -24,6 +24,8 @@
         <p id="resources" class="muted">자원 · —</p>
         <div class="meter-label"><span>체력</span><span id="hp-label">— / —</span></div>
         <progress id="hp" max="100" value="0" aria-label="체력"></progress>
+        <div class="meter-label"><span>정신력</span><span id="mental-label">— / —</span></div>
+        <progress id="mental" max="40" value="0" aria-label="정신력"></progress>
         <div class="meter-label"><span>경험치</span><span id="xp-label">— / —</span></div>
         <progress id="xp" max="100" value="0" aria-label="경험치"></progress>
         <div class="stats"><span>공격 <b id="attack">—</b></span><span>방어 <b id="defense">—</b></span></div>

@@ -13,6 +13,7 @@ from websockets.asyncio.client import connect
 
 sys.path.insert(0, str(ROOT / "game"))
 from server.conf.smoke_support import smoke_timings  # noqa: E402
+from world.recovery import RECOVERY_INTERVAL  # noqa: E402
 
 AUTH_TIMEOUT = 15
 STATE_TIMEOUT = 10
@@ -38,6 +39,7 @@ class Client:
         self.revision = 0
         self.changed = asyncio.Condition()
         self.messages = asyncio.Queue()
+        self.prompts = asyncio.Queue()
         self.error = None
         self.closing = False
         self.received = []
@@ -71,6 +73,8 @@ class Client:
                         self.state = args[0]
                         self.revision += 1
                     elif kind == "pz_log":
+                        if args[0].get("kind") == "prompt":
+                            self.prompts.put_nowait(args[0])
                         self.messages.put_nowait(
                             "".join(part["text"] for part in args[0]["segments"]))
                     elif kind == "text":
@@ -110,11 +114,18 @@ class Client:
             while expected not in await self.messages.get():
                 pass
 
+    async def expect_prompt(self, command):
+        while not self.prompts.empty():
+            self.prompts.get_nowait()
+        await self.send("text", [command])
+        async with asyncio.timeout(STATE_TIMEOUT):
+            return await self.prompts.get()
+
     def summary(self):
         return {"player": self.name, "revision": self.revision,
                 "received": self.received, "error": str(self.error) if self.error else None,
                 "state": {key: self.state.get(key) for key in
-                          ("zone", "hp", "xp", "credits", "combat_target")} if self.state else None}
+                          ("zone", "hp", "mental", "xp", "credits", "combat_target")} if self.state else None}
 
     async def close(self):
         self.closing = True
@@ -162,7 +173,13 @@ class Scenario:
                 await player.open()
                 assert player.state["zone"] == "staging_room"
                 assert player.state["party"] is None and player.state["combat_target"] is None
+                assert player.state["max_mental"] == 40 and 10 <= player.state["mental"] <= 40
             self.report("auth", "fixture login / 출정 대기실")
+            for raw in ("상태", "", "   ", "없는명령", "접속자"):
+                prompt = await first.expect_prompt(raw)
+                assert prompt["kind"] == "prompt"
+                assert "".join(part["text"] for part in prompt["segments"]).endswith(" ] >")
+            self.report("prompt", "일반/계정/실패 명령과 빈·공백 Enter의 실제 semantic prompt")
             for player in self.players:
                 await route(player, (("남", "hq_concourse"), ("서", "dock")))
             await first.act("윤대장 대화", lambda state: "정비기록" in state["quest"])
@@ -249,12 +266,25 @@ class Scenario:
             self.report("shop", "옥상 귀환 / 승강기 / 가치·구매·판매 / 재구매")
             self.phase = "persistence"
             saved = {key: first.state[key] for key in
-                     ("name", "hp", "xp", "credits", "inventory", "quest")}
+                     ("name", "xp", "credits", "inventory", "quest")}
+            saved_resources = {key: first.state[key] for key in ("hp", "mental")}
+            first.closing = True
+            await first.send("text", ["종료"])
+            await asyncio.wait_for(first.socket.wait_closed(), STATE_TIMEOUT)
             await first.close()
             await first.open()
             assert first.state["zone"] == "staging_room"
             assert saved == {key: first.state[key] for key in saved}
-            self.report("persistence", "disconnect / fixture relogin / 대기실 시작 및 진행 상태 보존")
+            assert all(value <= first.state[key] <= first.state["max_" + key]
+                       for key, value in saved_resources.items())
+            await first.expect_prompt("접속자")
+            # 빠른 CI에서는 전체 흐름이 첫 지급 전에 끝날 수 있다. 부분 경계의
+            # 소수 기여까지 쌓여 정수가 지급되는 실제 상태를 두 경계 안에서 기다린다.
+            await first.until(lambda state: state["mental"] > 10,
+                              RECOVERY_INTERVAL * 2 + STATE_TIMEOUT)
+            assert first.state["mental"] > 10
+            self.report("recovery", "10초 경계의 실제 정신력 회복 / 재로그인 회복·진행 보존")
+            self.report("persistence", "종료 명령 / fixture relogin / prompt 복원 / 대기실 및 진행 보존")
             if self.harness.mode == "full":
                 from smoke_closeout import Closeout
 

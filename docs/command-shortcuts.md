@@ -40,7 +40,7 @@
 }
 ```
 
-profile 최신 버전은 **8**이다. 신규 profile에는 빈 dict가 있고 v1~v6는 기존 migration을 적용한 뒤 빈 `command_shortcuts`를 보완한다. 기존 보급칩(저장 키 credits)·소지품·장비·보관·성장·임무·전투·방문 데이터는 그대로 유지하며 반복 migration은 idempotent다. 등록·교체·개별 삭제·전체 삭제는 기존 `caller.change()` transaction과 저장 경계를 사용한다.
+profile 최신 버전은 **9**다. v9는 정신력·회복 기본값을 추가하며 아래 v8 저장 어휘 변환과 줄임말 형식은 유지한다. 신규 profile에는 빈 dict가 있고 v1~v6는 기존 migration을 적용한 뒤 빈 `command_shortcuts`를 보완한다. 기존 보급칩(저장 키 credits)·소지품·장비·보관·성장·임무·전투·방문 데이터는 그대로 유지하며 반복 migration은 idempotent다. 등록·교체·개별 삭제·전체 삭제는 기존 `caller.change()` transaction과 저장 경계를 사용한다.
 
 ### v8 저장 어휘와 새 예약 이름 충돌
 
@@ -50,7 +50,7 @@ v7 저장 명령의 `ㅂ/ㄴ/ㄷ/ㅅ`과 `상/능/기/장`은 당시의 고정 �
 
 새 글로벌 `소`, 대각선 `ㅂㄷ/ㄴㄷ/ㄴㅅ/ㅂㅅ`, 미래 예약 `치료/힐/heal`과 새 실제 명령/alias 이름이 기존 개인 key와 충돌하면 조용히 삭제하지 않는다. 이름순으로 `<이름>_개인`, 이미 있으면 `_개인2`·`_개인3`의 유효하고 고유한 이름을 정한다. 20자 한도 안에서 suffix 공간을 확보하고 exact 중첩 참조만 함께 바꾼다. 예를 들어 v7의 `힐=["가방"]`, `생존=["힐"]`은 `힐_개인=["소지품"]`, `생존=["힐_개인"]`으로 보존되며 채팅·대상 문자열 속 힐은 바꾸지 않는다. 목록에서 변경된 이름과 정의를 확인할 수 있다. `heal` 기술 Rank와 예약 action은 `firstaid`로 보존하며 다른 진행 데이터는 유지한다.
 
-v7 historical 입력의 `치료 → 진료`, `heal → 응급처치`는 당시 기능을 해석하는 계약이며 그대로 유지한다. 향후 runtime의 `치료/힐/heal`은 정신력 기반 자신·타인 치료 기술용 예약 이름으로, 현재 사용할 수 없다. 두 계약을 혼동하지 않으며 이번 표시명·예약 보강에서도 profile version은 8이다.
+v7 historical 입력의 `치료 → 진료`, `heal → 응급처치`는 당시 기능을 해석하는 계약이며 그대로 유지한다. 향후 runtime의 `치료/힐/heal`은 정신력 기반 자신·타인 치료 기술용 예약 이름으로, 현재 사용할 수 없다. 두 계약을 혼동하지 않는다. 이 어휘 변환은 v8 단계의 계약이며 정신력 추가에 따른 최신 profile v9에서도 그대로 유지한다.
 
 ## Parser 우선순위와 이름 정책
 
@@ -165,6 +165,8 @@ Syntax/expansion/사전 안전 검사 실패는 전체를 거절하고 어떤 �
 | 동적 CmdSet + progressive 실행 정책 | command metadata·dispatch 직전 재검사·중단/partial execution·completion/result contract |
 
 ## 검증 위치
+
+현재 출력 lifecycle에서는 묶음과 개인 줄임말의 child dispatch를 하나의 사용자 입력 context로 취급한다. 각 leaf에 prompt를 붙이지 않고 최종 command completion 뒤 하나만 출력한다. progressive 사전 검사와 기존 expansion/삭제 안전 정책은 유지한다. 출력·빈 입력·progressive 완료의 회귀는 `tests.test_prompt`에서 검증한다.
 
 순수 suite는 `world.test_command_shortcuts`, DB/dispatcher suite는 `tests.test_command_shortcuts`다. 기존 `tests.test_integration`/`tests.test_text`와 전체 suite가 후치형·채팅·관리·lock·인증 parser와 기존 gameplay 회귀를 검증한다. Quick live smoke는 실제 서버/WS/scheduler의 기존 전체 경로를 검증한다. 이번 기능 때문에 smoke scenario나 client UI를 확장하지 않는다.
 

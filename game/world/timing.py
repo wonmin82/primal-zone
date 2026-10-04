@@ -7,12 +7,17 @@ PRODUCTION_TIMING = {
     "LOOT_PROTECTION_SECONDS": 120,
     "CLAIM_TIMEOUT_SECONDS": 15,
     "PARTICIPATION_TIMEOUT_SECONDS": 15,
-    "ENEMY_RESET_SECONDS": 15,
+    "ENEMY_RECOVERY_DELAY_SECONDS": 15,
 }
 
 
 def configured_timings(settings):
-    return {
+    timings = {
         key: getattr(settings, "PRIMAL_" + key, default)
         for key, default in PRODUCTION_TIMING.items()
     }
+    timings["ENEMY_RECOVERY_DELAY_SECONDS"] = getattr(
+        settings, "PRIMAL_ENEMY_RECOVERY_DELAY_SECONDS",
+        getattr(settings, "PRIMAL_ENEMY_RESET_SECONDS", PRODUCTION_TIMING["ENEMY_RECOVERY_DELAY_SECONDS"]),
+    )
+    return timings
