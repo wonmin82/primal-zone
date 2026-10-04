@@ -4,6 +4,23 @@
 
 ## Objective
 
+[PR #26](https://github.com/wonmin82/primal-zone/pull/26)의 정신력·주기 회복·prompt lifecycle과 Web 입력 행 기능 구현 및 검증을 마감했다. 기능 설계는 architecture, 사용법은 README, 실제 출력 예와 재검증 절차는 text-examples/playtest가 기준이다. 사용자의 2026-10-04 병합·소스 브랜치 삭제 요청에 따라 문서를 최종 정리한다. 아래 OPEN·병합 미요청 표현은 당시 작업 범위의 과거 기록이며 현재 병합 승인보다 우선하지 않는다.
+
+### 병합 closeout 기준
+
+- 문서 마감 시작의 로컬·원격·PR HEAD는 `cf6dada2d35c79c01a5cc72e263b807e04639074`, 최신 origin/main·PR base는 `500ad782a8f4c16621728a50d511be1b7d926523`다. 작업 트리는 깨끗했고 최신 main을 이미 포함해 rebase는 필요하지 않았다. PR은 non-draft·MERGEABLE·CLEAN이며 미해결 review thread는 0개였다.
+- 구현 HEAD와 [Game checks 37163420451](https://github.com/wonmin82/primal-zone/actions/runs/37163420451)의 headSha를 대조했다. [test](https://github.com/wonmin82/primal-zone/actions/runs/37163420451/job/111321398928)와 [smoke](https://github.com/wonmin82/primal-zone/actions/runs/37163420451/job/111321399103)가 모두 success다. 문서 마감 이후의 최종 PR HEAD와 병합된 main의 CI는 별도로 확인하며 실제 SHA·run/job 링크는 PR의 최신 Validation에 기록한다.
+- 이번 변경은 CODEX_TASK_STATE와 playtest의 Markdown뿐이다. 아래 2026-10-04 실행 코드 기준 전체 486개·Quick 51.212s·Full 332.477s·Node 9개·1440/1100/390px browser 성공 근거를 재사용하며 새 로컬 검사로 표현하지 않는다. 실행 코드·의존성·static 변경이 없어 게임 테스트·smoke·browser·collectstatic은 반복하지 않는다. 문서 링크/현재 정책 대조와 git diff --check를 확인한다.
+- 필수 CI·보호 규칙을 통과한 최종 HEAD만 merge commit 방식으로 병합한다. 변경이 main에 포함되었는지 확인한 뒤 사용자가 요청한 원격·로컬 소스 브랜치를 삭제하고 로컬 main을 fast-forward한다. 병합 결과와 merge commit·main CI·브랜치 정리는 PR의 closeout 기록이 기준이다.
+
+### 완료 기능과 남은 범위
+
+profile v9는 기존 v1~v8 진행을 보존하며 정신력과 시간제 회복 기본값을 추가한다. 플레이어의 고정 10초 경계와 적의 15초 유예 후 점진 회복, silent 이동 checkpoint, 정수 회복/명령 완료의 prompt 경계를 유지한다. Web/Telnet은 같은 서버 formatter를 사용한다. Web은 고정 prompt 없이 scrollback에 `[ 자원 ] > 명령` 행을 남기고 비동기 메시지 뒤에는 최신 서버 semantic으로 새 입력 행을 만든다. 빈/공백·idle/history·button/Account/progressive 완료와 기존 경제/파티/전리품 계약을 보존한다.
+
+실제 회복 장비/소비품·정신력 소비·치료 기술은 추가하지 않았다. 실제 OS IME, 외부 Telnet 클라이언트/font, browser의 실제 progressive 추가 응답은 수동 미검증이며 transport/renderer·Evennia lifecycle 자동 검증과 구분한다. 다음 독립 작업은 완료 PR의 삭제된 소스 브랜치가 아니라 fetch한 최신 origin/main에서 시작한다. 상세 과거 검증은 아래에 보존한다.
+
+## PR #26 Web 입력 행 Objective (과거 기록)
+
 기존 OPEN [PR #26](https://github.com/wonmin82/primal-zone/pull/26)의 Web 명령 입력 표현을 `codex/mental-recovery`에서 보강했다. 시작 fetch의 로컬·원격·PR HEAD는 `c18177736e44b93f9d469c22fd5caf661d52d823`, origin/main·PR base는 `500ad782a8f4c16621728a50d511be1b7d926523`이며 작업 트리는 깨끗했다. 완료 전 fetch에서도 같은 기준을 확인했다. 새 branch/PR, rebase, force push 또는 merge는 수행하지 않는다. 최종 후속 HEAD와 정확히 같은 headSha의 test·smoke CI 및 링크는 기존 PR의 최신 Validation에 기록한다. 아래 이전 검증 기록은 당시 결과로 보존한다.
 
 ### Web 입력 행 후속 변경

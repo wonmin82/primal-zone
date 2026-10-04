@@ -21,6 +21,16 @@
 
 Web 입력 행 자동 회귀는 `node --test scripts/tests/test_web_prompt.cjs`로 실행한다. 별도 JS framework 없이 실제 client와 DOM/WS 경계를 검사하며 `tests.test_web_prompt`로 전체 suite에도 포함된다. Node.js가 없으면 그 검사는 skip이므로 실제 실행 여부를 결과에 기록한다.
 
+## PR #26 최종 검증 기준 (2026-10-04)
+
+실행 코드 기준은 `cf6dada2d35c79c01a5cc72e263b807e04639074`다. 문서 마감은 Markdown만 변경하므로 아래 결과를 재사용하며 새로 실행한 검사처럼 표현하지 않는다. 이후 코드가 바뀌면 실제 영향에 맞춰 재검증한다.
+
+- 전체 pure 147 + integration 339 = 486개 성공, integration runner 132.635s. 관련 prompt/recovery/Web/text reverse·parallel 40개와 Telnet full-resource assertion 보강 뒤 recovery 14개가 성공했다. Node 표준 모듈의 실제 client 경계 9개도 실행됐다.
+- Quick 51.212s와 Full 332.477s 성공. production corpse 29.903s/respawn 44.815s/protection 121.310s, 적 점진 회복·패배·두 임무/보스·Portal+Server restart와 재로그인을 확인했다.
+- 1440/1100/390px browser에서 prompt 오른쪽 입력·자동 피해 뒤 과거 prompt 보존·최신 회복 행 결합·blank/history/button/Account/idle/scroll-lock·모바일 긴 명령 wrap을 확인했다. 앱 console 오류와 가로 overflow가 없었고 플레이 DB fingerprint는 불변이었다.
+- [Game checks 37163420451](https://github.com/wonmin82/primal-zone/actions/runs/37163420451)의 test·smoke는 위 구현 HEAD에서 모두 success다. 문서 마감 최종 HEAD와 병합 main의 CI는 [PR #26 Validation](https://github.com/wonmin82/primal-zone/pull/26)에서 SHA와 run/job 링크를 확인한다.
+- OS IME·외부 Telnet 클라이언트/font·browser의 실제 progressive 추가 응답은 수동 미검증이다. Telnet 정상 prompt 채널/ANSI·Web semantic 및 progressive/Account 완료의 자동 검증을 수동 검증으로 대신 표기하지 않는다.
+
 ## 정신력·회복 검증 기록 (2026-10-03, 프롬프트 변경 전 과거 기록)
 
 최종 pure 145 + integration 325 = 470개, runner 152.662s 성공. 관련 recovery 14개와 전투·장비·정산·상점·지역·환경 73개를 `--parallel 2 --reverse`로 확인했다. check/node/diff 검사와 정적 파일 수집도 성공했다.
