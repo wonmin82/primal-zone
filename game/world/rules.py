@@ -255,8 +255,10 @@ def validate_skill_action(profile, action, now, target_profile=None):
     if now < ready:
         name = SKILLS[action]["name"]
         raise RuleError(f"{name}{ft.particle(name, '을/를')} 다시 사용하려면 {pg.remaining_seconds(ready, now)}초 더 기다려야 한다.")
-    if profile["mental"] < pg.mental_cost(action, level_of(profile)):
-        raise RuleError("정신력이 부족하다.")
+    cost = pg.mental_cost(action, level_of(profile))
+    if profile["mental"] < cost:
+        name = SKILLS[action]["name"]
+        raise RuleError(f"{name}{ft.particle(name, '을/를')} 사용하려면 정신력이 {cost} 필요하다.")
     target = profile if target_profile is None else target_profile
     if action in ("heal", "bandage") and target["hp"] >= stats(target)["max_hp"]:
         raise RuleError("이미 체력이 가득합니다.")
@@ -339,7 +341,7 @@ def player_attack(profile, enemy_id, now, interval, rng=None, target_profile=Non
     damage = max(1, int(max(1, raw - ENEMIES[enemy_id]["defense"] * (1 - penetration)) * bonus * pg.attack_multiplier(skill_rank(profile, "attack"))))
     outcome = {"action": action, "insight": bool(insight)}
     if action == "suppress":
-        outcome["suppression"] = pg.suppression_effect(rank, bool(ENEMIES[enemy_id].get("boss_quest")))
+        outcome["suppression"] = pg.suppression_effect(rank, bool(ENEMIES[enemy_id].get("boss")))
     return damage, outcome
 
 

@@ -4,7 +4,7 @@ from copy import deepcopy
 from json import dumps, loads
 from random import Random
 from unittest import TestCase
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from world import progression as pg
 from world import rules
@@ -136,8 +136,8 @@ class ProgressionTests(TestCase):
                 effects, status = pg.apply_suppression(effects, source, 10, boss)
                 self.assertEqual(status, "applied")
                 if source == 1 and not boss:
-                    self.assertAlmostEqual(pg.combined_suppression(effects), .3439)
-            self.assertAlmostEqual(pg.combined_suppression(effects), expected)
+                    self.assertAlmostEqual(pg.combined_suppression(effects, boss), .3439)
+            self.assertAlmostEqual(pg.combined_suppression(effects, boss), expected)
             self.assertEqual(loads(dumps(effects)), effects)
             before = deepcopy(effects)
             changed, _ = pg.apply_suppression(effects, 0, 7, boss)
@@ -154,6 +154,68 @@ class ProgressionTests(TestCase):
         self.assertEqual(refreshed["B"]["attacks"], 2)
         self.assertEqual(refreshed["A"], consumed["A"])
         self.assertEqual(pg.combined_suppression({}), 0)
+
+    def test_suppression_cap_limits_reduction_not_sources_or_consumption(self):
+        for boss, individual, cap in ((False, .19, .56953279), (True, .095, .329198049375)):
+            with self.subTest(boss=boss):
+                effects = {}
+                self.assertAlmostEqual(pg.suppression_cap(boss), cap)
+                for source in range(8):
+                    effects, _ = pg.apply_suppression(effects, source, 10, boss)
+                    self.assertEqual(len(effects), source + 1)
+                    self.assertAlmostEqual(pg.combined_suppression(effects, boss),
+                                           min(1 - (1 - individual) ** (source + 1), cap))
+                before = deepcopy(effects)
+                remaining = pg.consume_suppressions(effects)
+                self.assertEqual(set(remaining), {str(source) for source in range(8)})
+                self.assertEqual({effect["attacks"] for effect in remaining.values()}, {3})
+                self.assertEqual(effects, before)
+                for _ in range(3):
+                    remaining = pg.consume_suppressions(remaining)
+                self.assertEqual(remaining, {})
+                # Weak sources are not individually discarded merely for exceeding four.
+                weak = {str(source): pg.suppression_effect(1, boss) for source in range(5)}
+                self.assertAlmostEqual(pg.combined_suppression(weak, boss),
+                                       1 - (1 - pg.suppression_effect(1, boss)["reduction"]) ** 5)
+
+    def test_suppression_boss_flag_is_independent_of_quest_metadata(self):
+        for boss, quest, expected in ((True, None, .095), (False, "radio_tower", .19)):
+            definition = {**rules.ENEMIES["alpha"], "boss": boss}
+            definition.pop("boss_quest", None)
+            if quest:
+                definition["boss_quest"] = quest
+            with self.subTest(boss=boss), patch.dict(rules.ENEMIES, alpha=definition):
+                p = at_level(50)
+                p.update(combat_target=1, queued_action="suppress")
+                p["skills"]["suppress"] = 10
+                _, outcome = rules.player_attack(p, "alpha", 100, 2.5, Random(1))
+                self.assertAlmostEqual(outcome["suppression"]["reduction"], expected)
+
+    def test_mental_shortage_uses_actual_cost_and_preserves_state_and_priority(self):
+        for level, costs in ((1, (8, 6, 8, 6, 10)), (133, (15, 12, 17, 15, 20))):
+            for action, cost in zip(("heavy", "shooting", "insight", "suppress", "heal"), costs):
+                with self.subTest(level=level, action=action):
+                    p = at_level(level)
+                    p.update(mental=cost - 1, combat_target=1)
+                    p["equipment"]["weapon"] = "carbine" if action == "shooting" else "machete"
+                    target = at_level(level)
+                    target["hp"] -= 10
+                    before, target_before = deepcopy(p), deepcopy(target)
+                    with self.assertRaises(rules.RuleError) as error:
+                        rules.queue_action(p, action, 100, target)
+                    self.assertIn(pg.SKILLS[action]["name"], str(error.exception))
+                    self.assertIn(f"정신력이 {cost} 필요하다", str(error.exception))
+                    self.assertEqual(p, before)
+                    self.assertEqual(target, target_before)
+                    if action == "heal":
+                        with self.assertRaises(rules.RuleError):
+                            rules.support_action(p, action, 100, target)
+                        self.assertEqual((p, target), (before, target_before))
+                    p["skill_ready_at"][action] = 110
+                    before = deepcopy(p)
+                    with self.assertRaisesRegex(rules.RuleError, "10초 더 기다려야"):
+                        rules.queue_action(p, action, 100, target)
+                    self.assertEqual(p, before)
 
     def test_insight_and_suppress_deadlines_survive_migration_and_retraining(self):
         for skill in ("insight", "suppress"):

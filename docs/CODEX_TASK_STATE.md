@@ -4,7 +4,19 @@
 
 ## Objective
 
-### PR #28 최종 리뷰 후속 수정 (2026-10-04)
+### PR #28 public 견제 상한·정신력 안내 후속 (2026-10-04)
+
+[PR #28](https://github.com/wonmin82/primal-zone/pull/28)의 기존 `codex/long-term-progression`에서 이어간다. 시작 로컬·원격·PR HEAD는 `0ed37cab989c0f878fe181e5c390e8ad23c9faf5`, origin/main은 `133b271b61ec0bfcb1799dd7226f9ed75da8be2c`다. 작업 트리는 깨끗했고 main 대비 behind0/ahead3이었다. 새 branch/PR을 만들지 않고 PR을 OPEN으로 유지하며 merge하지 않는다. 아래 이전 실행은 과거 검증이다.
+
+- public 전투에서 여러 파티가 참여하므로 source 수는 제한하지 않고 최종 감소율만 MAX Rank 네 효과 기준으로 cap한다. SSOT는 `progression.suppression_cap`이며 일반56.953279%·보스32.9198049375%다. 1~4명 수치, 모든 source의 저장·Rank 비교·cooldown·attack 소비와 교전 종료 cleanup은 유지한다.
+- 개별 보스 저항과 최종 cap은 `boss` flag를 사용한다. `boss_quest`는 quest 진행/콘텐츠 검증에서만 유지한다. Enemy 수치·public 참여·reward group·migration을 바꾸지 않는다.
+- 정신력 부족 안내에 기술명과 현재 레벨의 실제 비용을 넣는다. 검증 순서와 자원·예약·cooldown·대상 상태의 실패 원자성은 유지한다. 실제 Lv.133 메시지 다섯 개를 생성해 text-examples와 대조했다.
+- 수정 전 새 테스트로 세 문제를 재현했다. 보완 후 관련29개/22.548s, 확대 회귀92개/26.236s가 성공했다. 최종 전체 test는 순수166개/1.972s·통합359개/139.982s, 총525개 성공이며 runner149.903s다. check와 diff 검사는 성공했다. 기존 source/lifetime/cooldown/교관/migration 회귀를 유지하고 상한·boss flag·비용/우선순위·전투 안팎 동료 치료의 상태 불변을 추가했다.
+- 실제 public Enemy에서 두 파티8명의 효과를 모두 유지하고 reward group 둘·참여자8명 및 attack event 후 모든 횟수 감소를 확인했다. 순수 검사는 R10 일반/보스1~8명과 약한 source5명의 상한 미도달 곱산을 확인한다.
+- Quick smoke51.749s·Full smoke411.025s 성공. Full은 production 시체29.798s·respawn44.755s·보호121.503s, 두 보스/임무·NPC 훈련·실제 Portal/Server restart와 진행 보존을 확인했다. 플레이 DB fingerprint는 불변이며 실행 소유 프로세스와 임시 디렉터리를 정리했다.
+- 이번 후속은 Python gameplay/테스트와 Markdown만 변경하므로 Web static·cache·node·collectstatic·브라우저 레이아웃은 반복하지 않는다. Web state 회귀는 관련/전체 자동 검사에 포함한다. 이전 화면 검증은 아래 당시 기준으로 보존하며 이번에 새로 실행한 것으로 표현하지 않는다. 최종 HEAD와 해당 HEAD의 CI는 PR Validation에 기록한다.
+
+### PR #28 source 중첩·교관 후속 수정 (과거 기록: 2026-10-04)
 
 [PR #28](https://github.com/wonmin82/primal-zone/pull/28)의 기존 `codex/long-term-progression`에서 시작했다. 시작 로컬·원격·PR HEAD는 `b00d7658a1a9a3441076c56755990dcad9161eea`, 최신 main은 `133b271b61ec0bfcb1799dd7226f9ed75da8be2c`로 일치했다. 새 branch/PR을 만들지 않고 기존 PR을 OPEN으로 유지한다. 아래 최초 구현 결과는 과거 검증이며 이번 gameplay 변경의 성공 근거로 재사용하지 않는다.
 

@@ -301,7 +301,7 @@ class Enemy(DistantPresenceMixin, DefaultObject):
 
                 effects, status = apply_suppression(
                     deserialize(self.db.suppressions), player.id, outcome["suppression"]["rank"],
-                    bool(ENEMIES[self.db.enemy_id].get("boss_quest")),
+                    bool(ENEMIES[self.db.enemy_id].get("boss")),
                 )
                 self.db.suppressions = effects
                 outcome["suppression"] = effects[str(player.id)]
@@ -379,7 +379,7 @@ class Enemy(DistantPresenceMixin, DefaultObject):
             from world.progression import combined_suppression, consume_suppressions
 
             effects = deserialize(self.db.suppressions)
-            reduction = combined_suppression(effects)
+            reduction = combined_suppression(effects, bool(ENEMIES[self.db.enemy_id].get("boss")))
             self.db.suppressions = consume_suppressions(effects)
             result = rules.enemy_attack(
                 result_profile, self.db.enemy_id, self.db.enemy_round, now, rng, reduction

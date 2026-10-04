@@ -26,6 +26,7 @@ TOTAL_SKILL_TRAINING = sum(data["max_rank"] - 1 for data in SKILLS.values())
 # The cap follows the current basic curriculum, not an eternal level rule.
 MAX_LEVEL = TOTAL_SKILL_TRAINING + 1
 MENTAL_COSTS = {"heavy": (8, 45), "shooting": (6, 35), "insight": (8, 50), "suppress": (6, 45), "heal": (10, 60)}
+SUPPRESSION_REFERENCE_SOURCES = 4
 
 
 def base_stats(level):
@@ -106,8 +107,15 @@ def apply_suppression(effects, source_id, rank, boss=False):
     return updated, status
 
 
-def combined_suppression(effects):
-    return 1 - prod(1 - effect["reduction"] for effect in (effects or {}).values() if effect["attacks"] > 0)
+def suppression_cap(boss=False):
+    individual = suppression_effect(SKILLS["suppress"]["max_rank"], boss)["reduction"]
+    return 1 - (1 - individual) ** SUPPRESSION_REFERENCE_SOURCES
+
+
+def combined_suppression(effects, boss=False):
+    # Effects already include boss resistance; this flag selects only the final cap.
+    raw = 1 - prod(1 - effect["reduction"] for effect in (effects or {}).values() if effect["attacks"] > 0)
+    return min(raw, suppression_cap(boss))
 
 
 def consume_suppressions(effects):

@@ -4,7 +4,7 @@ from copy import deepcopy
 from random import Random
 from unittest.mock import Mock, patch
 
-from evennia import search_tag
+from evennia import create_object, search_tag
 from evennia.utils.ansi import strip_ansi
 from evennia.utils.dbserialize import deserialize
 from typeclasses.enemies import room_enemies
@@ -17,11 +17,12 @@ from typeclasses.interactables import (
     action_objects,
     growth_controls,
 )
+from typeclasses.parties import invite, respond
 from world import progression as pg
 from world import rules
 from world.bootstrap import build_world
 from world.content.integrity import errors
-from world.multiplayer import CLAIM_TIMEOUT_SECONDS
+from world.multiplayer import CLAIM_TIMEOUT_SECONDS, PARTY_MAX_SIZE
 
 from tests.base import WorldCommandTest
 
@@ -122,6 +123,72 @@ class GrowthReviewTests(WorldCommandTest):
         enemy.enemy_tick(now=132.5, rng=Random(1))
         self.assertEqual({key: value["attacks"] for key, value in deserialize(enemy.db.suppressions).items()},
                          {str(self.char1.id): 3, str(self.char2.id): 1})
+
+    def test_public_enemy_multi_party_cap_keeps_and_consumes_all_sources(self):
+        enemy = room_enemies(self.rooms["ridge"])[0]
+        players = [self.char1, self.char2]
+        for index in range(6):
+            player = create_object(Explorer, key=f"견제참여자{index}", location=enemy.location)
+            player.push_state = Mock()
+            self.enterContext(patch.object(player.sessions, "count", return_value=1))
+            players.append(player)
+        for player in players:
+            player.location = enemy.location
+        for members in (players[:4], players[4:]):
+            for member in members[1:]:
+                invite(members[0], member, now=100)
+                respond(member, True, now=100)
+        self.assertGreater(len(players), PARTY_MAX_SIZE)
+        for boss, quest, individual, cap in ((True, None, .095, .329198049375), (False, "radio_tower", .19, .56953279)):
+            with self.subTest(boss=boss):
+                definition = {**rules.ENEMIES["alpha"], "boss": boss}
+                definition.pop("boss_quest", None)
+                if quest:
+                    definition["boss_quest"] = quest
+                with patch.dict(rules.ENEMIES, alpha=definition):
+                    self.assertEqual(definition["combat_mode"], "public")
+                    enemy.db.hp = enemy.db.max_hp = 10000
+                    enemy.db.suppressions = {}
+                    for player in players:
+                        player.change(lambda p: (p.update(xp=rules.xp_threshold(50), mental=165, next_attack_at=0),
+                                                 p["skills"].update(suppress=10), p["skill_ready_at"].clear()))
+                        enemy.engage(player, now=100)
+                        player.change(lambda p: rules.queue_action(p, "suppress", 100))
+                        enemy.receive_attack(player, now=102.5, rng=Random(1))
+                    effects = deserialize(enemy.db.suppressions)
+                    self.assertEqual(set(effects), {str(player.id) for player in players})
+                    for effect in effects.values():
+                        self.assertAlmostEqual(effect["reduction"], individual)
+                    groups = enemy.reward_groups(102.5)
+                    self.assertEqual(len(groups), 2)
+                    self.assertEqual(sum(len(group) for group in groups.values()), 8)
+                    enemy.db.next_attack_at = 102.5
+                    with patch("world.rules.enemy_attack", wraps=rules.enemy_attack) as attack:
+                        enemy.enemy_tick(now=102.5, rng=Random(1))
+                    self.assertAlmostEqual(attack.call_args.args[-1], cap)
+                    self.assertEqual({effect["attacks"] for effect in deserialize(enemy.db.suppressions).values()}, {3})
+                    self.assertEqual(len(enemy.db.suppressions), 8)
+                    for player in players:
+                        player.leave_combat(now=102.5)
+
+    def test_party_heal_shortage_command_is_atomic_in_and_out_of_combat(self):
+        self.char1.location = self.char2.location = self.rooms["ridge"]
+        invite(self.char1, self.char2, now=100)
+        respond(self.char2, True, now=100)
+        self.char1.change(lambda p: p.update(xp=rules.xp_threshold(133), mental=19))
+        self.char2.change(lambda p: p.update(hp=20))
+        enemy = room_enemies(self.rooms["ridge"])[0]
+        for in_combat in (False, True):
+            with self.subTest(in_combat=in_combat):
+                if in_combat:
+                    enemy.engage(self.char1, now=100)
+                before = deepcopy(self.char1.profile()), deepcopy(self.char2.profile())
+                enemy_before = enemy.db.hp, deepcopy(deserialize(enemy.db.suppressions))
+                result = self.command(self.char2.key + " 치료")
+                self.assertIn("치료", result)
+                self.assertIn("정신력이 20 필요하다", result)
+                self.assertEqual((self.char1.profile(), self.char2.profile()), before)
+                self.assertEqual((enemy.db.hp, deserialize(enemy.db.suppressions)), enemy_before)
 
     def test_cooldowns_survive_profile_reload_real_login_session_restore_and_resets(self):
         self.char1.change(lambda p: (p.update(xp=rules.xp_threshold(50)), p["skill_ready_at"].update(insight=110, suppress=110)))

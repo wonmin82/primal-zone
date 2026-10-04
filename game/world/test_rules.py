@@ -390,7 +390,7 @@ class RuleTests(TestCase):
                 from world import progression as pg
                 if "suppression" in outcome:
                     suppressions, _ = pg.apply_suppression(suppressions, "solo", outcome["suppression"]["rank"], True)
-                reduction = pg.combined_suppression(suppressions)
+                reduction = pg.combined_suppression(suppressions, boss=True)
                 suppressions = pg.consume_suppressions(suppressions)
                 hp -= damage
                 if hp <= 0:
@@ -424,7 +424,7 @@ class RuleTests(TestCase):
                 from world import progression as pg
                 if "suppression" in outcome:
                     suppressions, _ = pg.apply_suppression(suppressions, "solo", outcome["suppression"]["rank"], True)
-                reduction = pg.combined_suppression(suppressions)
+                reduction = pg.combined_suppression(suppressions, boss=True)
                 suppressions = pg.consume_suppressions(suppressions)
                 hp -= damage
                 if hp <= 0:
