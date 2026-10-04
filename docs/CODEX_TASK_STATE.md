@@ -4,7 +4,17 @@
 
 ## Objective
 
-### PR #28 public 견제 상한·정신력 안내 후속 (2026-10-04)
+### PR #28 문서 마감·병합 및 브랜치 정리 (2026-10-04)
+
+레벨·특성·여덟 기술, 전문 교관, profile v10 migration과 최종 견제/정신력 안내 구현을 완료했다. 사용자의 병합·소스 브랜치 삭제 요청에 따라 문서를 마감한다. 아래 OPEN 유지·merge 금지 문장은 당시 개발 단계의 과거 기록이다. 병합 완료 여부·merge commit·최종 문서 HEAD의 CI와 브랜치 정리 결과는 [PR #28](https://github.com/wonmin82/primal-zone/pull/28)의 실제 원격 상태와 Validation이 기준이다.
+
+- 시작 로컬·원격·PR 구현 HEAD는 `a00165ca7c957af10b316648a67c0f52d7583ee1`, fetch 후 main은 `133b271b61ec0bfcb1799dd7226f9ed75da8be2c`다. 작업 트리는 깨끗했고 main 대비 behind0/ahead4였다. 이미 최신 main을 포함해 rebase와 이력 재작성은 필요 없다.
+- 구현 HEAD의 [Game checks 37203749674](https://github.com/wonmin82/primal-zone/actions/runs/37203749674)는 headSha 일치·test/smoke success다. 충돌 없는 비Draft PR이며 미해결 리뷰 대화는 없다. 문서 마감 커밋의 CI와 병합된 main의 CI도 각각 해당 SHA로 확인하고 PR Validation에 별도로 기록한다.
+- 이전 구현 검증은 2026-10-04의 동일 실행 코드 기준이다. 관련29개·확대92개·전체525개, check, Quick51.749s·Full411.025s가 성공했다. 문서와 수치 SSOT·출력 예를 최종 대조하고 `git diff --check`로 문서 변경을 검사한다. 이후 diff는 Markdown뿐이므로 로컬 전체 테스트·smoke·정적 수집·브라우저는 반복하지 않는다.
+- 성장 공식·견제 cap·boss/quest 책임·정신력 비용·NPC 훈련·migration은 [progression.md](progression.md), [architecture.md](architecture.md), [README](../README.md)와 일치한다. 미검증 수동 범위는 실제 OS IME·외부 Telnet client·다인 브라우저 동시 조작이며 기존 기록을 유지한다. DB·비밀 설정·runtime은 이번 문서 커밋에 포함하지 않는다.
+- 최신 PR HEAD의 필수 CI가 성공한 후 merge commit 방식으로 병합한다. 소스 HEAD가 main에 포함됨을 확인한 다음 원격/로컬 `codex/long-term-progression`을 삭제하고 로컬 main은 fast-forward로 갱신한다. 보호 규칙을 우회하지 않는다.
+
+### PR #28 public 견제 상한·정신력 안내 후속 (과거 기록: 2026-10-04)
 
 [PR #28](https://github.com/wonmin82/primal-zone/pull/28)의 기존 `codex/long-term-progression`에서 이어간다. 시작 로컬·원격·PR HEAD는 `0ed37cab989c0f878fe181e5c390e8ad23c9faf5`, origin/main은 `133b271b61ec0bfcb1799dd7226f9ed75da8be2c`다. 작업 트리는 깨끗했고 main 대비 behind0/ahead3이었다. 새 branch/PR을 만들지 않고 PR을 OPEN으로 유지하며 merge하지 않는다. 아래 이전 실행은 과거 검증이다.
 
