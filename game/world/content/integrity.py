@@ -18,6 +18,7 @@ from world.content.elevator import ELEVATOR_DEFAULT_STOP, ELEVATOR_ROOM, ELEVATO
 from world.content.environment import EXPOSURES, LIGHT_PROFILES, WEATHER_ZONES, WEATHERS
 from world.content.facilities import FACILITIES
 from world.content.headquarters import ROOF_ROOMS, ROOF_SIDES
+from world.item_entities.policy import definition_errors
 from world.quests import QUESTS
 
 
@@ -275,6 +276,7 @@ def errors(interactables):
         if data.get("boss_quest") and data["boss_quest"] not in QUESTS:
             issues.append(f"{enemy}: 임무 정의가 없습니다.")
     for key, data in ITEMS.items():
+        issues.extend(definition_errors(key, data))
         issues.extend(recovery_errors(key, data, "recovery_bonus"))
         source = data.get("power_source")
         if source and (not isinstance(source.get("type"), str) or not source["type"].strip() or not positive_number(source.get("capacity_seconds"))):

@@ -1,5 +1,9 @@
 # 원시구역 구조와 설계 결정
 
+## ItemEntity 기반 1단계
+
+`world.item_entities` Django 앱이 독립 실물 아이템 row·전역 순번·canonical 위치·스택·부모 트리·원자적 API를 제공한다. 정적 정의는 기존 ITEMS registry다. 기존 gameplay의 profile/Attribute 저장은 아직 전환하지 않고 새 row와 이중 쓰기를 하지 않는다. profile version은 10이며 장비·총기·LootClaim·화폐·Credential·전체 저장 변환은 후속 단계다. DB/application 제약, API와 migration 적용 경계는 [ItemEntity 기반](item-entities.md)을 따른다.
+
 ## 정신력과 주기 회복
 
 `world/progression.py`가 레벨 기본 능력치·특성·기술 수치의 SSOT이며 `world/rules.py`가 현재 자원과 저장 변환을 담당한다. 정신력은 레벨 기본값 + 지혜 투자×4다. 기술 비용은 지혜를 제외한 기본값, 호흡 회복은 실제 최대값을 사용한다. 레벨 상승은 최대치 증가분을 현재 값에 더하고 특성 투자·재훈련은 무료 회복 없이 clamp한다.

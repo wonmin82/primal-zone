@@ -1,6 +1,50 @@
 # Current Task State
 
-확인일: 2026-10-04. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
+확인일: 2026-10-05. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
+
+## PR #29 문서 마감·병합 및 소스 브랜치 정리 (2026-10-05)
+
+ItemEntity Foundation과 리뷰 P1/P2 수정을 완료했다. 사용자가 문서 갱신 후 [PR #29](https://github.com/wonmin82/primal-zone/pull/29) 병합·소스 브랜치 삭제를 요청했다. 아래 리뷰 단계의 병합 미요청·OPEN 유지 표현은 당시 범위이며 이번 명시적 요청보다 우선하지 않는다. 병합 완료 여부·merge commit·병합된 main의 CI·브랜치 정리 결과는 PR의 최신 Validation 기록과 실제 원격 상태가 기준이다.
+
+- 마감 시작 fetch의 로컬·원격·PR HEAD는 `8cfd14caaed33e5dd2789fe75a2fd5cc31422f92`, 최신 base `origin/main`은 `25dd10061b7e63826011f04d69b2646883f2d80c`다. 작업 트리는 깨끗하고 main 대비 ahead2/behind0이다. 최신 main을 이미 포함하여 불필요한 rebase나 기존 커밋 재작성은 하지 않는다. PR은 non-draft·MERGEABLE·CLEAN이며 미해결 리뷰 대화0개였다.
+- 리뷰 구현 HEAD와 [Game checks 37289716444](https://github.com/wonmin82/primal-zone/actions/runs/37289716444)의 headSha 일치를 다시 확인했다. [test](https://github.com/wonmin82/primal-zone/actions/runs/37289716444/job/111696999774)·[smoke](https://github.com/wonmin82/primal-zone/actions/runs/37289716444/job/111696999548)는 success다. 당시 CI는 순수168개·통합384개, 총552개와 Quick28.824초를 통과했다. 문서 마감 HEAD와 merge commit의 CI는 각각 해당 SHA로 별도 확인하며 이전 성공으로 대신하지 않는다.
+- 이번 마감 diff는 Task State·playtest·item-entities의 Markdown뿐이다. 2026-10-05 리뷰 구현과 실행 코드·의존성·설정·정적 파일이 동일하므로 당시 check·targeted25개 성공 근거를 재사용하고 로컬 게임 테스트·smoke·브라우저·정적 파일 수집은 반복하지 않는다. 링크·명령·현재 정책을 대조하고 `git diff --check`를 실행한다. 새 결과와 과거 테스트 개수를 합산하지 않는다.
+- 검증 안내에 root equip/contained child의 수동 이동, tree-wide 보호·실패 원자성, merge_state 기본/확장 계약과 로컬 targeted/자동 CI의 구분을 반영한다. gameplay cutover·dual-write·profile v10·콘텐츠·밸런스는 변경하지 않는다. 플레이 DB·비밀 설정·runtime은 문서 마감과 Git 정리 대상이 아니다.
+- 남은 범위는 실제 PostgreSQL row-lock 경쟁·multi-server concurrency, 후속 LootClaim identity 비교와 단계별 실제 콘텐츠/저장 전환이다. smoke-full·브라우저 전체·OS IME·full-world migration·balance simulation은 이번 마감에서 미실행이며 1단계 완료와 전체 통합 검증 완료를 혼동하지 않는다.
+- 최신 대상 반영·최종 문서 HEAD의 필수 CI·리뷰·충돌 조건을 확인한 뒤 merge commit 방식으로 병합한다. 소스 HEAD가 main에 포함되었는지 확인하고 요청된 원격·로컬 `codex/itementity-foundation`을 삭제하며 로컬 main은 fast-forward로 갱신한다. 이후 독립 작업은 다시 fetch한 최신 main에서 시작하고 다음 Phase를 임의로 구현하지 않는다.
+
+### 문서 마감 CI 실패와 검사 보완
+
+- 문서 마감 HEAD `e3e4dff29aa198194a00f90ed9993f196d3953e3`의 [Game checks 37293479966](https://github.com/wonmin82/primal-zone/actions/runs/37293479966)는 check·순수168개·Quick28.513초가 성공했으나 통합384개 중 기존 경제 테스트1개가 실패했다. `test_bad_amounts_and_recipients_leave_state_unchanged`의 입력 전후 profile 비교가 실제10초 경계를 지나 recovery updated_at/boundary가 달라졌다. ItemEntity나 문서 기능 실패가 아니며 실패한 CI를 성공으로 표현하지 않는다.
+- 해당 테스트에서 `typeclasses.explorers.time`을100으로 고정해 자연회복 시간 진행과 실패 입력의 원자성을 구분한다. 전체 profile 비교와 전리품 불변 검사는 그대로 유지하며 gameplay·경제·회복 코드와 밸런스는 바꾸지 않았다. 후속 diff는 이 테스트2줄과 실패/검증 기록 문서뿐이다.
+- `.venv\Scripts\python.exe scripts/dev.py test tests.test_economy --parallel 2 --reverse`: 18개 / 10.381초·runner23.727초 성공. `scripts/dev.py check`와 `git diff --check`도 성공했다. ItemEntity 실행 코드와 기존 핵심25개는 동일하여 로컬 재실행하지 않았으며 로컬 전체 suite도 반복하지 않는다. 후속 최종 HEAD의 자동 전체 CI와 병합된 main CI를 각각 확인하고 실제 run/job 링크는 PR Validation에 기록한다.
+
+## PR #29 ItemEntity 리뷰 수정·검증 (과거 기록: 2026-10-05)
+
+[PR #29](https://github.com/wonmin82/primal-zone/pull/29)의 `codex/itementity-foundation`에서 이어간다. 시작 fetch 후 로컬·원격·PR HEAD는 리뷰 기준 `18cc26fe611d2617c18e381034c6205acf11c592`와 일치했고 staged/unstaged/untracked 변경은 없었다. 최신 base `origin/main`은 `25dd10061b7e63826011f04d69b2646883f2d80c`다. 최종 검토 fetch에서도 기준이 같고 main을 이미 포함하므로 rebase와 기존 이력 재작성은 하지 않는다. 이번 요청은 리뷰 수정 커밋·기존 PR 푸시까지이며 병합하지 않는다. 수정 후 HEAD와 해당 HEAD의 CI는 PR Validation을 기준으로 확인한다.
+
+- 리뷰 P1: 기존 `_move()`가 root와 모든 descendants에 같은 operation을 요구해 root `equip=true`·child `equip=false`인 정상 내부 구조의 장착을 거절했다. 중앙 `TREE_OPERATION_SCOPES`와 `_check_tree_operation()`으로 root의 직접 행동과 child의 수동 이동을 구분했다. `equip`은 root만, `give/drop/store/sell/burn/loot/consume`는 root와 모든 descendants를 검사한다. policy를 모두 검사한 뒤 위치를 변경하며 child의 inside·parent·socket과 트리 고유 범위의 원자성을 보존한다. 적용 범위가 정의되지 않은 operation은 거절한다.
+- `operation=None`은 신뢰된 migration/bootstrap 등 내부 작업의 policy 생략 의미를 유지한다. 위치·순환·고유 범위 검증은 유지하며 사용자 action의 거절 우회에 사용하지 않는다. 실제 권한·목적지 검증은 호출 서비스의 책임이다. 판매·소각·소비·획득 등의 신규 gameplay 기능은 추가하지 않았다.
+- 리뷰 P2: `same_merge_context()`가 raw state 전체를 직접 merge identity로 고정하지 않고 `merge_state(item)` 계약을 사용하도록 분리했다. 현재 기본값은 전체 state의 복사본 비교로 기존 동작이 동일하다. 테스트 안에서만 merge 관련 값 선택을 재현했다. 향후 LootClaim은 same_merge_context에서 claim identity를 별도로 비교하며 서로 다른 claim의 병합은 금지해야 한다. 이번에는 LootClaim·새 state schema·정의별 state 선택 구현을 추가하지 않았다.
+- 신규 regression 5개: 테스트 전용 비스택 root/child의 `main_hand` 장착과 magazine socket 보존·root policy 거절, 7개 tree-wide operation의 descendant 제한과 전체 DB row/unique scope/발급기 불변, unknown 거절·None 내부 이전, 기본 전체 state 동일/차이 병합, 선택된 merge 관련 상태의 동일/차이 병합을 확인했다. 기존 2개 검사에는 stale 수량 객체 입력과 삭제된 ItemEntity 객체 입력의 회귀를 보강했다. 실제 firearm/magazine 콘텐츠는 추가하지 않았다.
+- 최종 리뷰 수정 미커밋 코드 기준 `.venv\Scripts\python.exe scripts/dev.py test tests.test_item_entities --parallel 2 --reverse`: 25개 / 6.855초, runner16.303초 성공. 신규5개와 기존20개를 포함한 결과이며 과거20/45/55개와 합산하지 않는다. UUID·전역 순번·move 순번 유지·split 새 순번·merge destination ID/순번·canonical 위치·cycle·owner/parent PROTECT·개인 보관 owner·nested uniqueness·deterministic lock·outer world_change/sequence rollback·stale 입력·unknown/None 경계를 확인했다.
+- `.venv\Scripts\python.exe scripts/dev.py check`: 성공. 문서 갱신 후 `git diff --check`도 성공했다. 변경은 API·policy·해당 테스트와 두 문서뿐이며 최종 targeted 성공 이후 실행 코드 변경은 없다.
+- 수정 전 2개 regression은 기존 장착 거절·merge 계약 미사용으로 예상대로 실패했다. 첫25개에서는 테스트용 고유 child에 기존 jungle_cell의 stackable을 남긴 fixture 오류1개가 발생했다. 테스트 정의를 비스택으로 고친 뒤 관련3개 / 0.896초·runner9.999초와 위 최종25개가 통과했다. 첫 check의 import 공백 오류도 수정 후 통과했다. 실패 결과를 성공 개수에 더하지 않는다.
+- 직접 변경이 없는 legacy 명령·전리품 테스트는 이번에 별도 재실행하지 않았다. 사용자 지정 범위에 따라 로컬 전체 suite·Quick/Full smoke·브라우저 전체·OS IME·full-world/legacy migration·balance simulation은 미실행이다. PostgreSQL 실제 row-lock 경쟁과 multi-server concurrency는 미검증이다. 기존 CI의 전체 검사·Quick smoke는 그대로 자동 실행되며 최신 HEAD 결과를 로컬 결과와 구분해 PR에 기록한다. 아래 최초 구현 기록은 당시 결과로 보존한다.
+- gameplay inventory/equipment/storage·Container.db.items·Corpse/DroppedLoot entry의 cutover/dual-write, profile schema·밸런스·Phase 2 이후 기능은 변경하지 않았다. 플레이 DB·비밀 설정을 변경하거나 테스트 초기화에 사용하지 않았다. 통합 기획 대비 변경 제안이나 범위 축소는 없다.
+
+## ItemEntity 1단계 구현·검증 (과거 기록: 2026-10-05, 리뷰 전)
+
+사용자가 제공한 통합 기획안과 1단계 실행 문서를 기준으로 ItemEntity 영속 기반을 구현하고 커밋·푸시·PR 생성까지 진행한다. 2단계 이후의 선행 구현이나 병합은 요청 범위가 아니다. 시작 fetch 후 main/origin/main은 `25dd10061b7e63826011f04d69b2646883f2d80c`로 일치했고 작업 트리는 깨끗했다. 이 최신 기준에서 `codex/itementity-foundation`을 생성했다.
+
+- `world.item_entities` 앱의 ItemEntity·ItemSequence 모델과 두 migration, registry metadata·중앙 operation policy, create/move/tree/split/merge/delete/query API를 추가했다. UUID identity·global sequence, canonical 위치 DB 제약, owner/parent PROTECT, Explorer 소유 개인 보관, 스택/트리 application validation과 고유 범위 DB uniqueness를 제공한다. 상세 계약은 [ItemEntity 기반](item-entities.md)을 따른다.
+- API는 기존 world_change에 통합하며 UUID lock 순서와 sequence 표시 순서를 분리한다. 내부 스택 분할도 source와 부모 조상을 처음부터 함께 잠근다. 트리 이동은 내부 상대 위치를 유지하고 실제 root owner의 고유 범위 키를 함께 갱신하며 충돌 시 전체 이동을 rollback한다.
+- 기존 명령·전투·광원·화폐·아이템 값과 profile v10은 유지한다. profile/Container/Corpse/DroppedLoot의 기존 실물 저장을 복제하거나 이중 쓰기하지 않는다. 플레이 DB에 migration·초기화·fixture를 실행하지 않았다. 현재 schema migration은 테스트 전용 DB에만 적용했다.
+- 최종 미커밋 코드 기준 `.venv\Scripts\python.exe scripts/dev.py test tests.test_item_entities --parallel 2 --reverse`: 신규 핵심20개 / 5.137초, runner14.445초 성공. 생성·위치 SQL 제약·비스택/max_stack·split/merge·sequence·parent cycle·PROTECT·nested 고유 범위·DB uniqueness·rollback/cache/callback·deterministic lock·개인 보관 owner·발급기 반복 초기화를 확인했다.
+- 직전 코드 기준 `test tests.test_item_entities tests.test_item_interactions tests.test_loot --parallel 2 --reverse`: 45개 / 21.106초, runner30.502초 성공. 이후 변경은 신규 내부 스택 분할의 lock 보완·해당 테스트와 문서뿐이며 이 영향은 위 신규20개로 재검증했다. 이전 기존26개를 새로 실행한 결과로 합산하지 않는다.
+- game에서 `python -m unittest world.test_item_definitions world.test_rules world.test_headquarters world.test_shops`: 관련 순수55개 / 0.219초 성공. `scripts/dev.py check`, `git diff --check`, 테스트 설정의 Django `makemigrations item_entities --check --dry-run`·system check도 성공했다. 코드 성공 이후의 후속 문서 변경은 문서/diff 검사만 수행한다.
+- 초기 신규17개에서 bool 수량이 Django 정규화로1이 되는 실패를 발견해 save 이전 실제 정수 검증으로 수정했다. 후속19개와 최종20개는 성공했다. 첫 Evennia CLI makemigrations는 메모리 DB의 Account 테이블 선행 검사 때문에 생성되지 않았고, 같은 settings_test의 Django management API로 생성·drift 검사를 완료했다. 플레이 DB 설정으로 우회하지 않았다.
+- 단계별 사용자 계획에 따라 로컬 전체 suite·Quick/Full smoke·브라우저·OS IME·다인 전체 시나리오·전체 migration·balance simulation은 미실행이다. 기존 GitHub workflow는 변경하지 않았으며 PR 생성 후 자동 CI 결과는 최신 HEAD와 대조해 PR Validation에 별도로 기록한다. PostgreSQL row lock/다중 서버 운영은 미검증이다. 장비 slot 용량·주무기/광원 참조·LootClaim-aware merge와 실제 runtime cutover는 해당 후속 단계에 남긴다.
 
 ## Objective
 

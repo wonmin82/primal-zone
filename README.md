@@ -380,6 +380,8 @@ Web과 Telnet은 같은 서버 수치와 formatter를 사용하며 입력은 `[ 
 
 ## 개발
 
+실물 아이템 개편의 1단계로 독립 Django `ItemEntity` domain과 migration을 추가했다. 기존 게임 명령과 저장은 유지하며 새 모델로 자동 복제하지 않는다. [ItemEntity 기반과 후속 전환 경계](docs/item-entities.md)를 참고한다.
+
 ```sh
 uv run python scripts/dev.py check
 uv run python scripts/dev.py test

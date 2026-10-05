@@ -45,6 +45,18 @@ ITEMS = {
 # 일반 물품은 이동 가능하고 임무 핵심 물품은 정의에서 명시적으로 차단한다.
 for definition in ITEMS.values():
     definition.setdefault("transferable", True)
+    # 새 Entity domain의 정의. 기존 수량 저장이나 장비 규칙은 여기서 전환하지 않는다.
+    definition.setdefault("item_type", definition["slot"])
+    definition.setdefault("stackable", definition["slot"] not in ("weapon", "armor", "tool"))
+    definition.setdefault("max_stack", None)
+    definition.setdefault("unique_per_owner", False)
+    definition.setdefault("operation_policy", {
+        **{operation: definition["transferable"] for operation in ("drop", "give", "store", "sell")},
+        "consume": bool(definition.get("heal") or definition.get("power_source")),
+        "equip": definition["slot"] in ("weapon", "armor"),
+        "loot": definition["transferable"],
+        "burn": definition["transferable"],
+    })
 
 # 행동 선택은 아이템 이름이 아니라 slot만 사용한다.
 EQUIPMENT_ACTIONS = {"weapon": "무장", "armor": "착용"}
