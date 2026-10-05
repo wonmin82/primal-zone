@@ -11,7 +11,10 @@ class PromptLifecycle:
         begin = getattr(self.caller, "begin_command_output", None)
         if not begin:
             return super().at_pre_cmd()
-        begin()
+        if getattr(self, "equipment_change", False):
+            begin(reconcile=False)
+        else:
+            begin()
         self.primal_prompt_context = True
         # MuxAccountCommand.parse가 caller를 Account로 바꿔도 시작 캐릭터를 종료한다.
         self.primal_prompt_caller = self.caller

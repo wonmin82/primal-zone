@@ -3,16 +3,14 @@
 from copy import deepcopy
 from random import Random
 
+from world import equipment, modifiers, recovery
 from world import progression as pg
-from world import recovery
 from world import text as ft
 from world.content import (
     ENEMIES,
-    EQUIPMENT_ACTIONS,
     ITEMS,
     SALVAGE_CREDIT_RATE,
     SHOP_CATALOGS,
-    UNEQUIP_ACTIONS,
 )
 from world.progression import ATTRIBUTES, SKILLS
 from world.quests import progress_defaults
@@ -63,18 +61,34 @@ def level_of(profile):
     return max(level for level in range(1, MAX_LEVEL + 1) if profile["xp"] >= xp_threshold(level))
 
 
-def stats(profile):
+def stats(profile, equipment_context=None):
     level = level_of(profile)
     base = pg.base_stats(level)
-    equipped = [ITEMS[item] for item in profile["equipment"].values() if item is not None]
+    snapshot = equipment.context(profile, equipment_context)
+    selected = snapshot.modifiers
+    character_attack = modifiers.apply("stat.attack", base["attack"] + allocated(profile, "strength") // 2, selected)
+    weapon_attack = modifiers.apply("weapon.attack", snapshot.active.weapon_attack if snapshot.active else 0, selected)
     return {
         "level": level,
         "base_max_mental": base["base_max_mental"],
-        "max_hp": base["max_hp"] + allocated(profile, "constitution") * 4,
-        "max_mental": base["base_max_mental"] + allocated(profile, "wisdom") * 4,
-        "attack": base["attack"] + sum(item.get("attack", 0) for item in equipped) + allocated(profile, "strength") // 2,
-        "defense": base["defense"] + sum(item.get("defense", 0) for item in equipped) + allocated(profile, "agility") // 3,
+        "max_hp": int(modifiers.apply("stat.max_hp", base["max_hp"] + allocated(profile, "constitution") * 4, selected)),
+        "max_mental": int(modifiers.apply("stat.max_mental", base["base_max_mental"] + allocated(profile, "wisdom") * 4, selected)),
+        "character_attack": character_attack,
+        "weapon_attack": weapon_attack,
+        "attack": character_attack + weapon_attack,
+        "defense": modifiers.apply("stat.defense", base["defense"] + allocated(profile, "agility") // 3, selected),
     }
+
+
+def modified(profile, target, base):
+    return modifiers.apply(target, base, equipment.context(profile).modifiers)
+
+
+def apply_defense(raw_damage, defense, penetration=0, defense_skill_reduction=0):
+    """양방향 공통 곡선. 모든 float 계산 후 int로 버림하고 최소 피해 1을 적용한다."""
+    effective = max(0, defense) * (1 - min(1, max(0, penetration)))
+    damage = raw_damage * 20 / (20 + effective) * (1 - min(1, max(0, defense_skill_reduction)))
+    return max(1, int(damage))
 
 
 def add_item(profile, item_id, quantity=1):
@@ -106,17 +120,11 @@ def require_peace(profile):
 
 
 def equip(profile, item_id, expected_slot=None):
+    from world.equipment_legacy import equip as legacy_equip
+
     require_peace(profile)
-    if profile["inventory"].get(item_id, 0) < 1:
-        raise RuleError("소지품에 없는 장비입니다.")
-    slot = ITEMS[item_id]["slot"]
-    if slot not in EQUIPMENT_ACTIONS:
-        raise RuleError("무기와 방어구만 장착할 수 있습니다.")
-    if expected_slot is not None and slot != expected_slot:
-        name = ITEMS[item_id]["name"]
-        kind = "무기" if slot == "weapon" else "방어구"
-        raise RuleError(f"{name}: {kind}입니다. '{name} {EQUIPMENT_ACTIONS[slot]}'을 사용하세요.")
-    profile["equipment"][slot] = item_id
+    legacy_equip(profile, item_id, expected_slot)
+    recovery.clamp(profile, stats(profile))
 
 
 def buy(profile, shop_id, item_id):
@@ -197,16 +205,11 @@ def move_item(source, destination, item_id, *, all_items=False, equipment=None):
 
 
 def unequip(profile, item_id, expected_slot):
+    from world.equipment_legacy import unequip as legacy_unequip
+
     require_peace(profile)
-    definition = ITEMS[item_id]
-    slot = definition["slot"]
-    action = UNEQUIP_ACTIONS.get(slot)
-    if slot != expected_slot or not action:
-        hint = f"'{definition['name']} {action}'를 사용하세요." if action else "장비가 아닙니다."
-        raise RuleError(hint)
-    if profile["equipment"].get(slot) != item_id:
-        raise RuleError("현재 사용 중인 장비가 아닙니다.")
-    profile["equipment"][slot] = None
+    legacy_unequip(profile, item_id, expected_slot)
+    recovery.clamp(profile, stats(profile))
 
 
 def eat_or_drink(profile, item_id, action):
@@ -244,7 +247,8 @@ def use_bandage(profile):
 def validate_skill_action(profile, action, now, target_profile=None):
     if action not in ("heavy", "shooting", "insight", "suppress", "heal", "breathing", "bandage"):
         raise RuleError("알 수 없는 전투 행동입니다.")
-    firearm = ITEMS.get(profile["equipment"].get("weapon"), {}).get("weapon_type") == "firearm"
+    active = equipment.context(profile).active
+    firearm = active is not None and active.weapon_type == "firearm"
     if action == "heavy" and firearm:
         raise RuleError("총기를 들고는 강타를 사용할 수 없다.")
     if action == "shooting" and not firearm:
@@ -286,11 +290,11 @@ def support_action(profile, action, now, target_profile=None):
     cost = commit_skill_cost(profile, action, now)
     if action == "heal":
         target = profile if target_profile is None else target_profile
-        amount = min(stats(target)["max_hp"] - target["hp"], pg.healing_amount(stats(profile)["max_hp"], skill_rank(profile, action), allocated(profile, "wisdom")))
+        amount = min(stats(target)["max_hp"] - target["hp"], int(modified(profile, "skill.heal.amount", pg.healing_amount(stats(profile)["max_hp"], skill_rank(profile, action), allocated(profile, "wisdom")))))
         target["hp"] += amount
         recovery.clamp(target, stats(target))
     else:
-        amount = min(stats(profile)["max_mental"] - profile["mental"], pg.breathing_amount(stats(profile)["max_mental"], skill_rank(profile, action)))
+        amount = min(stats(profile)["max_mental"] - profile["mental"], int(modified(profile, "skill.breathing.amount", pg.breathing_amount(stats(profile)["max_mental"], skill_rank(profile, action)))))
         profile["mental"] += amount
         recovery.clamp(profile, stats(profile))
     return {"action": action, "amount": amount, "cost": cost}
@@ -326,22 +330,30 @@ def player_attack(profile, enemy_id, now, interval, rng=None, target_profile=Non
         commit_skill_cost(profile, action, now)
     rank = skill_rank(profile, action) if action in SKILLS else 1
     if action == "insight":
-        profile["insight"] = {"target": profile["combat_target"], **pg.insight_effect(rank)}
-        return 0, {"action": action, **pg.insight_effect(rank)}
+        effect = pg.insight_effect(rank)
+        effect["penetration"] = modified(profile, "skill.insight.penetration", effect["penetration"])
+        effect["bonus"] = modified(profile, "skill.insight.damage", 1 + effect["bonus"]) - 1
+        profile["insight"] = {"target": profile["combat_target"], **effect}
+        return 0, {"action": action, **effect}
     insight = profile.get("insight")
     if insight and insight["target"] != profile["combat_target"]:
         profile["insight"] = insight = None
-    penetration = pg.shooting_penetration(rank) if action == "shooting" else 0
+    penetration = modified(profile, "skill.shooting.penetration", pg.shooting_penetration(rank)) if action == "shooting" else 0
     bonus = 1.0
     if insight:
         penetration = pg.combined_penetration(insight["penetration"], penetration)
         bonus += insight["bonus"]
         profile["insight"] = None
-    raw = (stats(profile)["attack"] + rng.randint(-1, 2)) * pg.physical_multiplier(action, rank)
-    damage = max(1, int(max(1, raw - ENEMIES[enemy_id]["defense"] * (1 - penetration)) * bonus * pg.attack_multiplier(skill_rank(profile, "attack"))))
+    multiplier = pg.physical_multiplier(action, rank)
+    raw = (stats(profile)["attack"] + rng.randint(-1, 2)) * multiplier
+    if action in ("heavy", "shooting"):
+        raw = modified(profile, f"skill.{action}.damage", raw)
+    raw *= bonus * pg.attack_multiplier(skill_rank(profile, "attack"))
+    damage = apply_defense(raw, ENEMIES[enemy_id]["defense"], penetration)
     outcome = {"action": action, "insight": bool(insight)}
     if action == "suppress":
         outcome["suppression"] = pg.suppression_effect(rank, bool(ENEMIES[enemy_id].get("boss")))
+        outcome["suppression"]["reduction"] = modified(profile, "skill.suppress.reduction", outcome["suppression"]["reduction"])
     return damage, outcome
 
 
@@ -350,10 +362,10 @@ def enemy_attack(profile, enemy_id, enemy_round, now, rng=None, suppression=0):
     enemy = ENEMIES[enemy_id]
     charged = bool(enemy.get("special_period") and enemy_round % enemy["special_period"] == 0)
     raw = (enemy["attack"] + rng.randint(-1, 1)) * (1 - suppression)
-    damage = max(1, int(raw - stats(profile)["defense"]))
     if charged:
-        damage *= 2
-    damage = max(1, int(damage * (1 - pg.defense_reduction(skill_rank(profile, "defense")))))
+        raw *= 2
+    damage = apply_defense(raw, stats(profile)["defense"], enemy.get("penetration", 0),
+                           pg.defense_reduction(skill_rank(profile, "defense")))
     profile["hp"] -= damage
     return {"damage": damage, "charged": charged, "defeated": profile["hp"] <= 0}
 

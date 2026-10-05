@@ -23,6 +23,7 @@ class Inventory(GameCommand):
 
 
 class Equip(GameCommand):
+    equipment_change = True
     category = "아이템·보급"
     usage = "강화 조끼 착용"
     summary = "소유한 방어구를 착용합니다."
@@ -32,19 +33,21 @@ class Equip(GameCommand):
     aliases = ["wear"]
 
     def run(self):
-        item = item_selector(self.args, ITEMS, self.key)
-        if not item:
-            raise rules.RuleError(f"사용법: {self.usage}")
-        self.caller.change(lambda profile: rules.equip(profile, item, self.expected_slot))
+        from world.equipment_service import equip_item, resolve_item, selector_label
+
+        selected = resolve_item(self.caller, self.args, self.key)
+        item = selected.definition_id if hasattr(selected, "definition_id") else selected
+        label = selector_label(self.caller, selected)
+        equip_item(self.caller, selected, self.expected_slot)
         particle = "으로/로" if ITEMS[item]["slot"] == "weapon" else "을/를"
         self.caller.msg(
-            ft.text(ft.item(item), ft.particle(ITEMS[item]["name"], particle), f" {self.key}했다.")
+            ft.text(ft.token("item", label), ft.particle(label, particle), f" {self.key}했다.")
         )
 
 
 class Wield(Equip):
     usage = "강철 마체테 무장"
-    summary = "소유한 무기를 사용 중인 무기로 바꿉니다."
+    summary = "소유한 무기를 빈 손에 장착합니다. 자동 교체는 하지 않습니다."
     expected_slot = "weapon"
     key = EQUIPMENT_ACTIONS[expected_slot]
     aliases = ["wield"]
@@ -125,3 +128,19 @@ class Equipment(GameCommand):
 
     def run(self):
         self.caller.msg(view.equipment(self.caller.profile()))
+
+
+class ActiveWeapon(GameCommand):
+    key = "주무기"
+    input_style = "target"
+    category = "아이템·보급"
+    equipment_change = True
+    usage = "강철마체테 2 주무기"
+    summary = "장착한 무기 하나를 실제 공격에 사용할 주무기로 지정합니다."
+
+    def run(self):
+        from world.equipment_service import resolve_item, set_active_weapon
+
+        item = resolve_item(self.caller, self.args, self.key)
+        set_active_weapon(self.caller, item)
+        self.caller.msg("주무기를 지정했다.")

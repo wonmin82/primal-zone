@@ -2,6 +2,91 @@
 
 확인일: 2026-10-05. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
 
+## PR #30 문서 마감·병합 및 소스 브랜치 정리 (2026-10-05)
+
+사용자가 [PR #30](https://github.com/wonmin82/primal-zone/pull/30)의 필요한 문서 업데이트 후 병합과 소스 브랜치 삭제를 요청했다. 아래 구현·리뷰 단계의 OPEN 유지·merge 금지 설명은 당시 요청 범위이며 이번 명시적 요청보다 우선하지 않는다. 병합 여부·merge commit·병합된 main CI·브랜치 삭제 결과는 PR의 최신 마감 기록과 실제 원격 상태를 기준으로 확인한다. 이후 독립 작업은 다시 fetch한 최신 main에서 시작하며 다음 Phase를 임의로 구현하지 않는다.
+
+- 마감 시작 fetch에서 로컬·원격·PR HEAD는 `96a8fd2b1c7d5915121f622cb2cd337fd1b1bdd4`, base/origin/main은 `cf4dc078b8347fb63ae459c55d71a8b160950a5a`다. 작업 트리는 clean이며 main 대비 ahead3/behind0, 다른 worktree에서 소스 브랜치를 사용하지 않는다. 최신 main을 이미 포함하므로 불필요한 rebase나 과거 commit 재작성은 하지 않는다. PR은 non-draft·MERGEABLE·CLEAN, 미해결 리뷰 대화0개였다.
+- 리뷰 코드 HEAD와 [Game checks 37312294397](https://github.com/wonmin82/primal-zone/actions/runs/37312294397)의 SHA 일치를 다시 확인했다. test/smoke는 success였으며 순수179개/1.029초·통합404개/172.900초·Quick30.526초를 통과했다. 문서 마감 HEAD와 병합된 main의 CI는 각각 별도로 확인하고 이 성공으로 대신하지 않는다.
+- 이번 diff는 Task State·playtest·item-entities 문서다. 2026-10-05 리뷰의 실행 코드·의존성·설정·정적 파일이 동일하므로 당시 targeted82개/39개와 Full438.541초 성공 근거를 재사용한다. 로컬 게임 테스트·smoke·브라우저·node·정적 파일 수집은 반복하지 않는다. 링크·명령·현재 API/표시 계약과 과거 검증 구분을 확인하고 git diff --check를 실행한다. 이전 실행을 이번 새 실행으로 표현하거나 개수를 중복 합산하지 않는다.
+- 검증 안내에 명시 해제 후 장착, legacy/Entity 공통 snapshot과 Entity row 전용 조회, 동일 무기 두 번째 instance의 상태·장비·소지품·Web 주무기 표시를 정리했다. Phase 2 리뷰에서 실제 Full smoke를 실행한 사실을 일반 단계별 미실행 범위와 구분한다. profile version10·legacy SSOT·transaction·콘텐츠·밸런스는 변경하지 않고 플레이 DB·비밀 설정도 건드리지 않는다.
+- 최신 대상 반영·문서 HEAD의 필수 CI·리뷰·충돌 조건을 확인한 뒤 merge commit 방식으로 병합한다. 소스 HEAD가 main에 포함됐는지 확인하고 요청된 원격·로컬 codex/equipment-modifier-defense를 제거하며 로컬 main은 fast-forward로 갱신한다.
+- 남은 검증 공백은 실제 PostgreSQL row-lock 경쟁·multi-server concurrency·OS IME·전체 브라우저/Phase 7 matrix·Phase 6 migration·전체 balance simulation이다. Full 성공이 이 검증들을 대신하지 않으며 실제 Lighting/Firearm·LootClaim·CurrencyLoot·Credential·상점·소각·전체 cutover는 각 후속 단계다.
+
+## PR #30 Phase 2 리뷰 수정 (과거 기록: 2026-10-05)
+
+시작 fetch에서 branch는 `codex/equipment-modifier-defense`, 로컬·원격·PR HEAD는 `e21c98e215fabd3be069bd5f7b97fd452c703532`, origin/main/base는 `cf4dc078b8347fb63ae459c55d71a8b160950a5a`였다. 작업 트리는 clean이고 base 이후 main 변경이 없었다. 첨부 인계 ZIP의 Decision Log/통합 계획은 앞서 사용한 문서와 byte 단위로 동일함을 확인했다. 첨부의 Phase 2 일반 검증 범위보다 이번 사용자 리뷰 요청의 Full smoke 실행 요구를 우선한다. 기존 PR에 리뷰 수정 commit을 추가하고 merge하지 않는다. 최종 HEAD·CI는 PR의 최신 Review fixes/Validation 기록과 실제 원격 상태로 확인한다.
+
+### 리뷰 문제와 수정 계약
+
+- P1: Full closeout가 시작 낡은마체테를 해제하지 않고 강철마체테를 무장해 자동 교체 금지와 충돌했다. 기존 무기를 명시 해제하고 hands=None을 확인한 뒤 새 무기를 장착한다. 자동 교체·smoke 예외·장비 수치 변경은 없다.
+- P2: active_weapon/hand_usage가 entity_snapshot만 읽어 legacy 캐릭터에 사용할 수 없었다. 두 API는 backend-neutral equipment_snapshot을 사용한다. active_weapon은 EquipmentItem 또는 None이며, 기존 Entity row 조회는 active_weapon_item으로 분리했다. legacy row helper는 None이고 fake UUID/임시 Entity/새 profile 참조를 만들지 않는다. 기존 production row 호출은 없고 row 검증 테스트는 새 helper를 사용한다. Phase 3 gameplay는 snapshot.active의 weapon_type 등 정보로 계산한다.
+- legacy snapshot의 단일 장착 weapon을 명시적으로 active로 간주한다. legacy adapter/SSOT는 유지하며 profile schema·dual-write·lazy migration을 추가하지 않는다. Entity는 기존 persistent UUID를 그대로 사용한다.
+- P2: 상태 장비 줄에 주무기 표시가 빠져 있었다. 장비와 상태는 같은 formatting helper로 stable selector와 주무기를 표시하고, 상태의 stats도 같은 snapshot을 받는다. definition ID로 active를 비교하지 않으며 UUID/전역 sequence 숫자를 표시하지 않는다.
+- before/after_item_change, world_change, ItemEntity lock/owner lock/expected_source/reconcile/rollback, Phase 1 policy·merge·identity 계약과 modifier/Defense/recovery 공식은 수정하지 않았다.
+
+### 회귀와 실제 검증
+
+- 실제 명령으로 기본 무장 → 새 무장 거절/상태 불변 → 명시 해제 → 새 무장 성공을 검사한다. legacy API의 active=machete/hand usage1/해제 후0, UUID 없음·row/profile 불변을 확인한다.
+- Entity 1H 두 개에서 hand usage2·명시 UUID 선택/승계/None/stale를 유지하고, 동일 무기 두 번째 선택이 상태·장비·소지품·실제 Web payload에서 같은 instance에 표시되는지 검사한다. 기존 nested/자원/회복/외부 이동·삭제/reconcile 실패/outer rollback도 필수 module에 포함한다.
+
+| 이번 리뷰에서 실행한 명령 | 결과 |
+| --- | --- |
+| `.venv/Scripts/python.exe scripts/dev.py test tests.test_item_entities tests.test_equipment_entities tests.test_equipment tests.test_text tests.test_integration --parallel 2 --reverse` | 82개 /36.091초·runner49.014초 성공 |
+| `.venv/Scripts/python.exe scripts/dev.py test tests.test_combat tests.test_recovery tests.test_environment --parallel 2 --reverse` | 39개 /20.419초·runner31.888초 성공 |
+| `.venv/Scripts/python.exe scripts/dev.py check` | 성공 |
+| `git diff --check` | 성공 |
+| `.venv/Scripts/python.exe scripts/dev.py smoke-full` | 438.541초 성공, 실제 Portal/Server 종료·임시 DB/로그 cleanup 완료 |
+
+이번 미커밋 코드의 Full은 production corpse30초/respawn45초/protection120초, 공유 전투·전리품 권리/부분 회수, 자연회복/재로그인, 기존 무기 명시 해제를 포함한 본부 closeout, 두 임무·실제 XP/성장 준비·보스, 훈련, 같은 격리 DB의 Portal/Server restart·진행/파티/월드 보존까지 통과했다. 플레이 DB의 SHA256/mtime_ns/size 불변도 확인했다. 이번 리뷰의 로컬 검사에서 실패는 없었다. 최종 수정 HEAD의 자동 test/smoke 결과는 PR Validation에 별도로 기록한다.
+
+JS/CSS/template을 수정하지 않아 node 검사와 브라우저는 이번 리뷰에서 재실행하지 않는다. 시작 HEAD의 CI 및 아래 이전 구현 검증을 이번 수정의 새 성공으로 합산하지 않는다. 전체 로컬 suite·OS IME·실제 PostgreSQL 경쟁·multi-server·full-world migration·전체 balance simulation은 미실행이다. Full 실행이 Phase 7 전체 검증을 대신하지 않는다.
+
+## Phase 2 — Equipment + Modifier + Defense (2026-10-05)
+
+사용자가 Decision Log를 제공한 뒤 기준선 조사부터 다시 시작했다. 우선순위는 Decision Log → 통합 계획 → Phase 2 요청 → 저장소 문서/코드다. 시작·최종 준비 fetch에서 최신 origin/main은 `cf4dc078b8347fb63ae459c55d71a8b160950a5a`이며 PR #29의 기반과 리뷰 수정이 포함되어 있다. 로컬 main도 같은 SHA, 시작 작업 트리는 clean, main CI run `37294676846`은 success였다. 이 SHA는 이번 시작 기록이며 미래 작업의 고정 기준이 아니다. 최신 main에서 새 `codex/equipment-modifier-defense`를 만들었다. 이번 요청은 commit/push/새 PR과 최신 HEAD CI 확인까지이며 merge하지 않는다. 최종 HEAD·PR URL·CI는 해당 Phase 2 PR의 Validation이 기준이다.
+
+### 구현과 경계
+
+- `world.equipment_service`는 영속 조회/장비/주무기/참조 정리를, frozen EquipmentSnapshot과 equipment/modifiers는 순수 domain/계산을 담당한다. rules/progression/recovery에 ORM·Evennia query를 넣지 않는다. EquipmentProfile은 일시 context이며 일반 dict로 저장해 profile version10/schema를 유지한다.
+- 최종 hands/head/neck/body/gloves/waist/legs/feet/ring/accessory, hands2·ring2·나머지1 capacity와 허용 손 조합을 검사한다. 자동 교체를 거절하고 instance UUID로 장착·해제한다. 공통 targets 문법과 sequence 순서를 사용해 동일 definition의 이름/이름2 selector를 유지한다. Web 버튼도 같은 selector로 명령을 보낸다.
+- Phase 1 TREE_OPERATION_SCOPES에 unequip=root를 추가했다. equip/unequip은 root의 직접 행동이고 child는 inside/parent/socket을 유지하는 passive 이동이다. give/drop/store/sell/burn/loot/consume은 후손까지 검사한다. unknown operation은 policy에서 fail-closed이고 None은 신뢰된 migration/bootstrap 경계다. merge_state·UUID·global sequence·split/merge·canonical SQL·PROTECT·nested unique scope는 유지한다. equipment 저장에 최종 slot/정의/capacity 검증을 추가했으므로 과거 임의 main_hand/비스택이 아닌 equipment fixture는 hands/실제 장비 정의로 갱신했다.
+- 주무기는 Explorer.db.active_weapon_item_id의 UUID 문자열이다. 하나 자동 선택, 두 번째1H는 기존 선택 유지, 명시적 변경, 제거 시 sequence 첫 남은 무기 승계/None을 구현했다. 공통 ItemEntity create/move/delete에서 owner ID lock → 기존 장비 포함 UUID 정렬 lock → 이동 → 참조 reconcile을 같은 world_change 안에서 처리한다. reconcile 실패면 이동/삭제/자원/회복/참조/순번/고유 범위도 rollback한다. stale UUID는 활성 무기로 인정하지 않는다. 후속 active light는 이 hook 경계를 확장할 수 있으며 이번에 구현하지 않았다.
+- Modifier target15개, add 합산 뒤 multiply 실제 곱·target clamp와 equipped/active_weapon scope를 지원한다. active base weapon attack만 더하고 secondary equipped passive는 적용한다. 기존 Rank/cost/cooldown/성장 공식을 유지하고 기술·stats·recovery에 연결했다. legacy metadata 수치 변환은 equipment_legacy 한 곳에 모았다.
+- 옛 snapshot으로 recovery accrue/commit → 장비 변경 → 새 max/rate → current clamp/저장 순서다. 장비 max 증가 무료 회복은 없고 감소 시 clamp한다. 장비 명령의 prompt 사전 정산은 transaction 안으로 옮겨 실패 원자성을 보존한다. 레벨업 지급은 기존 max 증가분 semantics를 유지한다.
+- 공통 rules.apply_defense가 양방향 `raw*20/(20+defense*(1-penetration))*(1-defense_skill_reduction)`을 계산한다. float 계산 마지막 한 번 int 버림, 최소1이다. 적/아이템/보상/성장 수치 tuning은 없다.
+- 기존 캐릭터의 legacy profile equipment SSOT는 유지한다. 빈 신규/fixture만 신뢰된 use_item_entities로 backend를 명시 선택한다. hidden migration·profile/Entity dual-write·full-world 변환은 없다. legacy inventory/equipment/storage, Container.db.items, Corpse/DroppedLoot blob, light_sources는 Phase 6/3에 남는다. 장착 복사본 예약 때문에 rules.sell·item_transfers.transfer·Container.perform_action의 legacy 장비 direct-read를 의도적으로 유지한다. combat/recovery/presentation/Web는 adapter/snapshot을 사용한다. Phase 6 cutover 후 adapter/backend 선택과 예약 경계를 제거한다.
+
+### 실제 검증과 실패 수정
+
+모든 로컬 Python 검사는 이번 작업 트리의 미커밋 코드로 격리 settings_test DB에서 실행했다. 플레이 DB·비밀 설정을 변경하거나 초기화하지 않았다. 아래 실행은 서로 중복된 module을 포함하므로 개수를 합산하지 않는다.
+
+| 실행 | 최종 확인 결과 |
+| --- | --- |
+| `.\.venv\Scripts\python.exe scripts/dev.py check` | 성공 |
+| game에서 `..\.venv\Scripts\python.exe -m unittest world.test_equipment_engine world.test_rules world.test_recovery world.test_progression world.test_item_definitions` | 83개, 0.589s 성공 |
+| `.\.venv\Scripts\python.exe scripts/dev.py test tests.test_item_entities tests.test_equipment_entities tests.test_equipment tests.test_combat tests.test_recovery tests.test_text tests.test_item_interactions tests.test_economy tests.test_command_shortcuts --parallel 2 --reverse` | 132개, 49.452s 성공 (추가4개 regression 전 실행) |
+| `.\.venv\Scripts\python.exe scripts/dev.py test tests.test_item_entities tests.test_equipment_entities --parallel 2 --reverse` | 44개, 14.457s 성공 (최종 source guard 보완 뒤 재검증; 이전44개/12.725s와 중복 합산하지 않음) |
+| `.\.venv\Scripts\python.exe scripts/dev.py test tests.test_item_entities tests.test_equipment_entities tests.test_equipment tests.test_integration tests.test_text --parallel 2 --reverse` | 81개, 28.299s 성공 (중복 selector 성공 메시지와 cache version 수정 뒤) |
+| `.\.venv\Scripts\python.exe scripts/dev.py test tests.test_item_entities tests.test_equipment tests.test_growth --parallel 2 --reverse` | 45개, 21.667s 성공 (legacy policy와 unknown delete fail-closed 보완 뒤) |
+| `node --check game/web/static/webclient/js/primal.js` | 성공 |
+| `git diff --check` | 성공 |
+
+개발 중 초기29개 실행은 옛 main_hand/비장비 equipment fixture, stale missing row 예외와 자동 교체/표시 기대 때문에 실패했다. 새 장비15개 첫 실행은 level base attack fixture 기대10을 실제11로 고쳐 재검증했다. 초기 순수81개는 자동 교체·옛 flat 방어 기대·솔로 보스 준비 fixture 때문에 실패했다. 솔로 fixture는 같은 레벨/장비/아이템 수치에서 이미 얻은 체질 포인트를 투자하고 전투 전 치료하도록 수정했다. 기존 미투자 저체력 준비의 승리를 새 곡선에서 보장한 결과로 표현하지 않는다. 초기 관련132개는 누락된 명시 해제 fixture·표시 기대 때문에 실패했고 이후132개 성공했다. Random에 기대던 고방어 최소피해 검사는 deterministic 새 curve 기대와 별도 minimum1 regression으로 구분했다. 실패 실행 수를 성공 개수에 더하지 않는다.
+
+회귀는 모든 slot/hand 조합/자동 교체 거절, UUID 주무기 선택·승계·stale·삭제·외부 give/drop/store, 동일 ring/weapon instance selector, child equip/unequip=false 수동 이동, scope/secondary passive, add/product/invalid metadata, max 무료 회복 없음/clamp, recovery 과거 시간 경계, 양방향 Defense/관통/방어기술/rounding/min1, 참조 실패/outer rollback, 단일 쓰기/Web payload와 Phase 1 invariant를 포함한다.
+
+변경된 소지품 Web 화면만 기존 Harness로 복사한 격리 서버에서 확인했다. setup의 collectstatic 후 실제 기존 정의의 동일1H 무기 두 개·대기 무기 한 개를 사용했다. 기본 desktop와390px에서 selector/주무기 버튼, 세 번째 장착 거절, 해제 시 승계, 재장착 시 기존 주무기 유지, 직접 주무기 명령의 동등한 결과를 확인했다. console error/warning 없음,390px 가로 overflow 없음이다. 검사 후 서버/탭/임시 DB를 정리했고 플레이 DB fingerprint는 불변이다. 이후 수정은 성공 메시지의 selector 번호·JS cache query·policy/저장 경계이며 브라우저에서 확인한 JS/배치 동작을 다시 바꾸지 않았다.
+
+### Phase 2 첫 HEAD CI 실패와 기대값 보완
+
+- 첫 구현 HEAD `00b9c7c5e2cd0d5f24ba3f09ffcafa4e37e360d8`의 [Game checks 37305214100](https://github.com/wonmin82/primal-zone/actions/runs/37305214100)은 check·순수179개가 성공했고 통합403개 중 Web template 검사1개가 실패했다. `tests.test_environment`가 이전 JS cache version `long-term-growth`를 기대했지만 template은 장비 UI 변경을 반영한 `equipment-phase2`였다. 기대값 갱신 누락이며 이 CI를 성공으로 표현하지 않는다. 같은 HEAD의 Quick smoke는36.428초 성공했다.
+- 후속 diff는 해당 기대값1줄과 이 검증 기록이다. 실제 JS/template/gameplay는 첫 HEAD와 동일하다. `scripts/dev.py test tests.test_environment --parallel 2 --reverse`: 19개 /14.530초·runner23.713초 성공. check와 diff check도 성공했다. 동일 장비 코드의 로컬 targeted·브라우저를 반복하지 않으며 수정 후 최신 HEAD 자동 CI는 PR Validation에 별도 기록한다. 이전 통합403개 실패 실행과 후속 성공 개수를 합산하지 않는다.
+
+### 미실행 범위와 후속 단계
+
+로컬 full suite·smoke-full·브라우저 전체 regression·실제 OS IME·multiplayer 전체 E2E·PostgreSQL 실제 row-lock 경쟁·multi-server concurrency·full-world migration·전체 balance simulation은 요청대로 미실행이다. Full smoke helper는 최종 slot/명시 해제 계약에 맞췄지만 실행하지 않았다. 기존 자동 CI full suite/Quick smoke는 PR의 최신 HEAD에서 별도 확인하며 로컬 개수와 합산하지 않는다. 이번 장비/Entity 구조는 Phase 3의 inside magazine·active light hook을 받을 수 있지만 실제 flashlight state/ammo/reload/empty gun을 구현하거나 검증하지 않았다. 전체 legacy cutover와 최종 콘텐츠/balance는 Phase 6이다. 기획 변경은 없다.
+
 ## PR #29 문서 마감·병합 및 소스 브랜치 정리 (2026-10-05)
 
 ItemEntity Foundation과 리뷰 P1/P2 수정을 완료했다. 사용자가 문서 갱신 후 [PR #29](https://github.com/wonmin82/primal-zone/pull/29) 병합·소스 브랜치 삭제를 요청했다. 아래 리뷰 단계의 병합 미요청·OPEN 유지 표현은 당시 범위이며 이번 명시적 요청보다 우선하지 않는다. 병합 완료 여부·merge commit·병합된 main의 CI·브랜치 정리 결과는 PR의 최신 Validation 기록과 실제 원격 상태가 기준이다.

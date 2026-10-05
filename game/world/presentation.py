@@ -1,5 +1,6 @@
 """캐릭터 조회 화면. 수치와 이름은 기존 규칙/콘텐츠에서 읽는다."""
 
+from world import equipment as eq
 from world import rules
 from world import text as ft
 from world.content import EQUIPMENT_ACTIONS, ITEMS, SHOP_CATALOGS
@@ -10,34 +11,26 @@ from world.progression import (
 )
 
 
+def _equipment_item_name(snapshot, item):
+    return ft.text(ft.token("item", snapshot.label(item)), " [주무기]" if item is snapshot.active else "")
+
+
 def equipment(profile):
+    snapshot = eq.context(profile)
     lines = []
-    attack = defense = 0
-    for slot, identity in profile["equipment"].items():
-        if identity is None:
-            lines.append(ft.row("무기" if slot == "weapon" else "방어구", "없음", 8))
-            continue
-        data = ITEMS[identity]
-        attack += data.get("attack", 0)
-        defense += data.get("defense", 0)
-        bonuses = [
-            f"{label} +{data[key]}"
-            for key, label in (("attack", "공격"), ("defense", "방어"))
-            if data.get(key, 0)
-        ]
-        lines.append(
-            ft.row(
-                "무기" if slot == "weapon" else "방어구",
-                ft.join([ft.item(identity), *bonuses], " · "),
-                8,
-            )
-        )
-    lines.append(ft.row("보정", f"공격 +{attack} · 방어 +{defense}", 8))
+    for slot, label in eq.SLOT_LABELS.items():
+        selected = [item for item in snapshot.items if item.slot == slot]
+        names = [_equipment_item_name(snapshot, item) for item in selected]
+        lines.append(ft.row(label, ft.join(names, " · ") if names else "없음", 8))
+    values = rules.stats(profile, snapshot)
+    base = rules.stats(profile, eq.EquipmentSnapshot())
+    lines.append(ft.row("보정", f"공격 +{values['attack'] - base['attack']:g} · 방어 +{values['defense'] - base['defense']:g}", 8))
     return ft.compact("장비", *lines)
 
 
 def status(name, profile):
-    values = rules.stats(profile)
+    snapshot = eq.context(profile)
+    values = rules.stats(profile, snapshot)
     xp = (
         f"{profile['xp']}/{rules.xp_threshold(values['level'] + 1)}"
         if values["level"] < rules.MAX_LEVEL
@@ -53,7 +46,8 @@ def status(name, profile):
             f"{v['name']}{profile['attributes'][k]['base'] + rules.allocated(profile, k)}"
             for k, v in ATTRIBUTES.items()
         ),
-        ft.text("장비 | ", ft.join([ft.item(i) if i else ("무기 없음" if slot == "weapon" else "방어구 없음") for slot, i in profile["equipment"].items()], " · ")),
+        ft.text("장비 | ", ft.join([_equipment_item_name(snapshot, item)
+                                   for item in snapshot.items], " · ") or "없음"),
         summary=ft.text(ft.token("player", name), f" · Lv.{values['level']}"),
     )
 
@@ -103,26 +97,14 @@ def skills(profile):
 
 def inventory(profile):
     groups = {"장비": [], "소모품": [], "재료": [], "기타": []}
-    for identity, count in profile["inventory"].items():
-        if count <= 0:
-            continue
-        slot = ITEMS[identity]["slot"]
-        group = (
-            "장비"
-            if slot in ("weapon", "armor")
-            else "소모품"
-            if slot == "consumable"
-            else "재료"
-            if slot == "material"
-            else "기타"
-        )
-        mark = ft.token("success", " [착용]") if identity in profile["equipment"].values() else ""
-        groups[group].append(ft.text(ft.item(identity), f"×{count}", mark))
-    lines = [
-        ft.text(f"[{title}] ", ft.join(entries, " · "))
-        for title, entries in groups.items()
-        if entries
-    ]
+    for row in eq.inventory_rows(profile):
+        slot = row["slot"]
+        group = "장비" if slot in eq.SLOT_CAPACITY else "소모품" if slot == "consumable" else "재료" if slot == "material" else "기타"
+        mark = " [착용]" if row["equipped"] else ""
+        if row["active_weapon"]:
+            mark += " [주무기]"
+        groups[group].append(ft.text(ft.token("item", row["selector"]), f"×{row['count']}", ft.token("success", mark) if mark else ""))
+    lines = [ft.text(f"[{title}] ", ft.join(entries, " · ")) for title, entries in groups.items() if entries]
     return ft.compact("소지품", "", *(lines or ["비어 있다."]), summary=format_currency(profile["credits"]))
 
 
@@ -203,7 +185,8 @@ def outgoing_attack(profile, enemy_name, outcome, damage):
             "preserved": "입혔지만 기존의 더 강한 견제 효과가 유지됐다.",
         }[status]
         return ft.text(prefix, ft.named("hostile", enemy_name, "을/를"), f" 견제해 {damage} 피해를 {suffix}")
-    weapon = profile["equipment"].get("weapon")
+    active = eq.context(profile).active
+    weapon = active.definition_id if active else None
     weapon_name = ITEMS[weapon]["name"] if weapon else "맨손"
     return ft.text(prefix, ft.item(weapon) if weapon else weapon_name, ft.particle(weapon_name, "으로/로"), " ", ft.named("hostile", enemy_name, "을/를"), f" 공격해 {damage} 피해를 입혔다.")
 

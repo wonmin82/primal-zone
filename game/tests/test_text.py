@@ -205,11 +205,9 @@ class SemanticTextTests(WorldCommandTest):
         self.assertNotIn("[기타]", bag)
         equip = view.equipment(profile)
         for slot, identity in profile["equipment"].items():
-            self.assertIn("무기" if slot == "weapon" else "방어구", equip)
+            self.assertIn("손" if slot == "weapon" else "몸", equip)
             self.assertIn(ITEMS[identity]["name"], tokens(equip, "item"))
-            for key, label in (("attack", "공격"), ("defense", "방어")):
-                if ITEMS[identity].get(key):
-                    self.assertIn(f"{label} +{ITEMS[identity][key]}", equip)
+        self.assertIn("[주무기]", equip)
         attack = sum(ITEMS[i].get("attack", 0) for i in profile["equipment"].values())
         defense = sum(ITEMS[i].get("defense", 0) for i in profile["equipment"].values())
         self.assertIn(f"공격 +{attack} · 방어 +{defense}", equip.splitlines()[-1])

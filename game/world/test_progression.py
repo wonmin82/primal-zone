@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 from world import progression as pg
 from world import rules
 from world import text as ft
+from world.content import ENEMIES
 
 
 def at_level(level):
@@ -305,7 +306,9 @@ class ProgressionTests(TestCase):
         p["skills"]["defense"] = 20
         p["proficiencies"] = {"weapon": {"xp": 999999}}
         self.assertEqual(rules.stats(p), rules.stats(plain))
-        self.assertEqual(rules.enemy_attack(p, "scavenger", 1, 100)["damage"], 1)
+        self.assertEqual(rules.enemy_attack(p, "scavenger", 1, 100, Mock(randint=Mock(return_value=0)))["damage"],
+                         rules.apply_defense(ENEMIES["scavenger"]["attack"], rules.stats(p)["defense"],
+                                             defense_skill_reduction=pg.defense_reduction(20)))
 
     def test_insight_shooting_and_heavy_apply_penetration_before_final_multipliers(self):
         p = at_level(133)
@@ -315,7 +318,7 @@ class ProgressionTests(TestCase):
         p["equipment"]["weapon"] = "carbine"
         p["queued_action"] = "shooting"
         damage, outcome = rules.player_attack(p, "alpha", 102.5, 2.5, Mock(randint=Mock(return_value=0)))
-        self.assertEqual(damage, 119)
+        self.assertEqual(damage, 113)
         self.assertTrue(outcome["insight"])
         self.assertIsNone(p["insight"])
         self.assertEqual(p["mental"], 331 - 17 - 12)
@@ -323,14 +326,14 @@ class ProgressionTests(TestCase):
         p["queued_action"] = "insight"
         rules.player_attack(p, "alpha", 110, 2.5)
         p["queued_action"] = "heavy"
-        self.assertEqual(rules.player_attack(p, "alpha", 112.5, 2.5, Mock(randint=Mock(return_value=0)))[0], 174)
+        self.assertEqual(rules.player_attack(p, "alpha", 112.5, 2.5, Mock(randint=Mock(return_value=0)))[0], 162)
 
     def test_passive_defense_after_fixed_defense_and_charge_and_breathing_tiers(self):
         p = at_level(20)
         p["attributes"]["agility"]["allocated"] = 3
         p["skills"]["defense"] = 20
         self.assertEqual(rules.stats(p)["defense"], 8)
-        self.assertEqual(rules.enemy_attack(p, "alpha", 1, 100, Mock(randint=Mock(return_value=0)))["damage"], 7)
-        self.assertEqual(rules.enemy_attack(p, "alpha", 3, 103, Mock(randint=Mock(return_value=0)))["damage"], 15)
+        self.assertEqual(rules.enemy_attack(p, "alpha", 1, 100, Mock(randint=Mock(return_value=0)))["damage"], 10)
+        self.assertEqual(rules.enemy_attack(p, "alpha", 3, 103, Mock(randint=Mock(return_value=0)))["damage"], 20)
         for rank, seconds in ((1, 30), (3, 30), (4, 27), (6, 27), (7, 24), (9, 24), (10, 20)):
             self.assertEqual(pg.cooldown("breathing", rank), seconds)

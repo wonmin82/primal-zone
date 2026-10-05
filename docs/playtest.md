@@ -8,7 +8,7 @@
 
 ### PR #29 리뷰 수정의 검증 기준
 
-`tests.test_item_entities`는 테스트 전용 비스택 root/child로 root의 `equip=true`·child의 `equip=false`를 재현한다. root를 `equipment/main_hand`로 옮긴 뒤 child의 `inside`·같은 parent·`socket="magazine"`·sequence가 유지되는지 확인한다. 실제 firearm/magazine 콘텐츠는 fixture로도 배포하지 않는다. `give/drop/store/sell/burn/loot/consume`의 descendant 제한은 거절 후 전체 row·unique scope·발급기 불변을 검사한다. 미정의 operation 거절과 `operation=None`의 신뢰된 내부 이전도 구분한다.
+`tests.test_item_entities`는 테스트 전용 비스택 root/child로 root의 `equip=true`·child의 `equip=false`를 재현한다. root를 `equipment/hands`로 옮긴 뒤 child의 `inside`·같은 parent·`socket="magazine"`·sequence가 유지되는지 확인한다. 실제 firearm/magazine 콘텐츠는 fixture로도 배포하지 않는다. `give/drop/store/sell/burn/loot/consume`의 descendant 제한은 거절 후 전체 row·unique scope·발급기 불변을 검사한다. 미정의 operation 거절과 `operation=None`의 신뢰된 내부 이전도 구분한다.
 
 merge는 현재 기본 계약의 전체 state 동일/차이와 테스트 안에서만 선택한 merge 관련 state 동일/차이를 각각 검사한다. LootClaim은 후속 단계이며 다른 claim의 병합 금지 계약만 유지한다. UUID·전역 sequence·split/merge identity·canonical 위치·cycle·PROTECT·개인 보관 owner·nested uniqueness·lock 순서·outer rollback·stale 입력은 같은 핵심 suite의 회귀 대상이다.
 
@@ -22,7 +22,28 @@ git diff --check
 
 문서 마감 HEAD `e3e4dff29aa198194a00f90ed9993f196d3953e3`의 CI에서는 기존 경제 실패 입력의 전체 profile 비교가 실제 자연회복10초 경계를 지나 실패했다. 해당 테스트의 시각만 고정하고 전체 비교·전리품 불변 검사를 유지했다. 후속 `scripts/dev.py test tests.test_economy --parallel 2 --reverse`의18개와 check는 성공했으며 실제 기록은 Task State를 따른다. gameplay 원자성 검사를 약화하거나 회복 규칙을 변경하지 않았고 이전 CI 실패를 최종 HEAD의 성공 근거로 사용하지 않는다.
 
-## 현재 절차: PR #28 견제와 교관
+## PR #30 Phase 2 리뷰의 검증 기준
+
+장비 상세 모델과 조회 API는 [장비 설계](equipment.md)를 따른다. 실제 명령으로 기본 낡은마체테 장착 상태에서 강철마체테의 즉시 무장이 거절되고, 낡은마체테를 해제한 후 무장이 성공하는지 검사한다. Full closeout도 같은 명시 해제 순서를 사용하고 해제 직후 hands=None·장착 후 새 주무기 표시를 기다린다. 자동 교체 금지나 실제 gameplay 계약을 smoke 예외로 완화하지 않는다.
+
+공통 active_weapon()은 legacy/Entity 모두 EquipmentItem 정보를 반환하고 hand_usage()도 공통 snapshot을 사용한다. legacy 장착 무기는 identity=None의 주무기이며 임시 Entity/UUID/profile 참조를 생성하지 않는다. 영속 row가 필요한 검사는 active_weapon_item()을 사용한다. 동일1H 무기 두 개에서 두 번째를 선택하면 상태·장비·소지품·Web가 같은 instance selector에 주무기를 표시해야 한다. 조회만으로 profile·row를 변경하지 않고 Entity 자동 선택·승계·stale·nested 이동·실패 rollback을 유지한다.
+
+```powershell
+.\.venv\Scripts\python.exe scripts/dev.py check
+.\.venv\Scripts\python.exe scripts/dev.py test tests.test_item_entities tests.test_equipment_entities tests.test_equipment tests.test_text tests.test_integration --parallel 2 --reverse
+.\.venv\Scripts\python.exe scripts/dev.py test tests.test_combat tests.test_recovery tests.test_environment --parallel 2 --reverse
+git diff --check
+```
+
+수정 closeout의 실제 서버 검증이 필요할 때 다음 격리 Full을 사용한다. production scheduler를 기다리므로 Quick CI보다 오래 걸린다.
+
+```powershell
+.\.venv\Scripts\python.exe scripts/dev.py smoke-full
+```
+
+2026-10-05 리뷰 코드 HEAD `96a8fd2b1c7d5915121f622cb2cd337fd1b1bdd4`에서 로컬 targeted82개/39개·check·diff가 성공했고 Full438.541초도 통과했다. production30/45/120초·본부의 수정 장비 교체·두 임무·실제 Portal/Server restart·진행 보존과 cleanup, 플레이 DB fingerprint 불변을 확인했다. [해당 HEAD CI](https://github.com/wonmin82/primal-zone/actions/runs/37312294397)는 순수179개·통합404개·Quick30.526초 성공이다. 로컬/CI/이전 실행 개수를 합산하지 않는다. 문서 마감에서는 같은 코드의 로컬 검사·Full을 반복하지 않고 새 문서 HEAD와 병합된 main CI를 각각 확인한다. 전체 브라우저·OS IME·PostgreSQL 경쟁·multi-server·Phase 7 전체 matrix·전체 변환·balance simulation의 성공을 의미하지 않는다.
+
+## 기존 gameplay 절차: PR #28 견제와 교관
 
 1. 격리 캐릭터 두 명으로 같은 적에게 견제를 적용한다. 문자열 source ID별 효과가 공존하고 각자 자신의 Rank만 교체/갱신/보존하는지 확인한다. R10 두 명34.39%, 네 명56.95%, 보스 네 명32.92%는 순수 helper로 검사한다. public 적에 두 파티8명이 참여해도 source를 모두 유지하며 최종 감소율만 네 명 기준으로 제한한다. cap 상태에서도 모든 효과를 소비한다. boss=True/quest 없음과 boss=False/quest 존재 fixture는 각각 보스/일반 수치를 사용해야 한다.
 2. 적 attack event에서 모든 횟수가 각각1 줄고0은 제거되는지 확인한다. telegraph는 추가 소비하지 않는다. 도망·마지막 참가자 이탈·claim timeout·Enemy 이동·사망·respawn 후 효과가 없어야 하며 HP 유예 중에도 재교전에 남아서는 안 된다.

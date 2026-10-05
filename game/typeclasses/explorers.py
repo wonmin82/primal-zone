@@ -11,12 +11,10 @@ from evennia.utils.dbserialize import deserialize
 from world import recovery, rules
 from world import text as ft
 from world.content import (
-    EQUIPMENT_ACTIONS,
     ITEMS,
     REGIONS,
     ROOM_REGION,
     ROOMS,
-    UNEQUIP_ACTIONS,
     ordered_directions,
 )
 from world.content.economy import CURRENCY
@@ -88,21 +86,31 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         profile = deserialize(self.db.profile)
         if profile.get("version", 1) < rules.PROFILE_VERSION:
             profile = rules.migrate_profile(profile)
-            self.db.profile = profile
+            self.db.profile = dict(profile)
         else:
             rules.normalize_growth(profile)
-        return profile
+        from world.equipment_service import bind_profile
+
+        return bind_profile(self, profile)
 
     def profile_snapshot(self):
         """관찰용 사본만 변환한다. 구버전 profile도 저장하거나 진행하지 않는다."""
         saved = deserialize(self.db.profile)
-        return rules.migrate_profile(saved) if saved is not None else rules.new_profile()
+        from world.equipment_service import bind_profile
+
+        profile = bind_profile(self, saved if saved is not None else rules.new_profile())
+        return rules.migrate_profile(profile)
 
     def save_profile(self, profile):
+        from world.equipment import EquipmentProfile
+        from world.equipment_service import bind_profile
+
+        if not isinstance(profile, EquipmentProfile):
+            profile = bind_profile(self, profile)
         rules.normalize_growth(profile)
         recovery.clamp(profile, rules.stats(profile))
         with transaction.atomic():
-            self.db.profile = profile
+            self.db.profile = dict(profile)
         after_change(self.push_state)
         after_change(self.schedule_recovery)
 
@@ -130,7 +138,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         with world_change():
             profile = self.profile()
             self.accrue_recovery(profile)
-            self.db.profile = profile
+            self.db.profile = dict(profile)
 
     def reconcile_recovery(self, now=None, *, emit_prompt=True):
         from world.multiplayer import world_change
@@ -140,7 +148,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             profile = self.profile()
             self.accrue_recovery(profile, now)
             changed = recovery.commit(profile, rules.stats(profile))
-            self.db.profile = profile
+            self.db.profile = dict(profile)
             if changed:
                 after_change(self.push_state)
                 if emit_prompt:
@@ -148,11 +156,13 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             after_change(self.schedule_recovery)
         return changed
 
-    def begin_command_output(self):
+    def begin_command_output(self, *, reconcile=True):
         depth = self.ndb.command_output_depth or 0
         self.ndb.command_output_depth = depth + 1
         if not depth:
             self.cancel_pending_prompt()
+            if not reconcile:
+                return
             profile = self.profile_snapshot()
             state = profile.get("recovery")
             now = time()
@@ -248,21 +258,9 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         values = rules.stats(profile)
         zone = self.zone
         room = ROOMS.get(zone, {})
-        inventory = [
-            {
-                "id": key,
-                "name": ITEMS[key]["name"],
-                "count": count,
-                "slot": ITEMS[key]["slot"],
-                "equip_action": EQUIPMENT_ACTIONS.get(ITEMS[key]["slot"]),
-                "remove_action": UNEQUIP_ACTIONS.get(ITEMS[key]["slot"]),
-                "consume_action": ITEMS[key].get("consume_action"),
-                "equipped": key in profile["equipment"].values(),
-                "light_source": ITEMS[key].get("light_source"),
-                "power_source": ITEMS[key].get("power_source"),
-            }
-            for key, count in profile["inventory"].items()
-        ]
+        from world import equipment as eq
+
+        inventory = eq.inventory_rows(profile)
         instructor = instructor_for(self, observed_at=observed_at)
         from typeclasses.interactables import growth_controls
 
@@ -290,7 +288,8 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             "region_name": REGIONS[ROOM_REGION[zone]]["name"] if zone in ROOM_REGION else None,
             "safe": room.get("safe", False),
             "inventory": inventory,
-            "equipment": {slot: ITEMS[identity]["name"] if identity else None for slot, identity in profile["equipment"].items()},
+            "equipment": eq.equipment_rows(profile),
+            "equipment_labels": eq.SLOT_LABELS,
             "exits": ordered_directions(room.get("exits", {})),
             "hint": room_hint(observation),
             **multiplayer_state(self, now=observed_at),

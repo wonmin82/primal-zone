@@ -34,6 +34,9 @@ class EquipmentTests(WorldCommandTest):
             if not action:
                 continue
             with self.subTest(item=identity):
+                old = self.char1.profile()["equipment"].get(data["slot"])
+                if old:
+                    self.char1.change(lambda p: rules.unequip(p, old, data["slot"]))
                 before = deepcopy(self.char1.profile())
                 with patch.object(self.char1, "msg") as message:
                     self.char1.execute_cmd(f"{data['name']} {action}")
@@ -67,6 +70,20 @@ class EquipmentTests(WorldCommandTest):
             self.assertEqual(self.char1.profile(), before)
             self.assertIn("대상 뒤에 행동", str(message.call_args_list))
 
+    def test_closeout_weapon_swap_requires_explicit_unequip(self):
+        self.char1.change(lambda p: p["inventory"].update(blade=1))
+        before = deepcopy(self.char1.profile())
+        with patch.object(self.char1, "msg") as message:
+            self.char1.execute_cmd("강철마체테 무장")
+        self.assertIn("먼저 기존 장비를 해제", str(message.call_args_list))
+        self.assertEqual(self.char1.profile(), before)
+        self.char1.execute_cmd("낡은마체테 해제")
+        self.assertIsNone(self.char1.profile()["equipment"]["weapon"])
+        self.assertIsNone(Explorer.profile(self.char1).equipment_context.active)
+        self.char1.execute_cmd("강철마체테 무장")
+        self.assertEqual(self.char1.profile()["equipment"]["weapon"], "blade")
+        self.assertIn("강철마체테 [주무기]", view.equipment(self.char1.profile()))
+
     def test_spaced_names_aliases_and_combat_restriction(self):
         self.char1.change(lambda p: p.update(credits=1000))
         for name, identity, alias in (
@@ -75,6 +92,8 @@ class EquipmentTests(WorldCommandTest):
         ):
             self.char1.location = self.rooms["weapon_shop" if identity == "blade" else "armor_shop"]
             self.char1.execute_cmd(f"{name} 구매")
+            slot = ITEMS[identity]["slot"]
+            self.char1.change(lambda p: rules.unequip(p, p["equipment"][slot], slot))
             self.char1.execute_cmd(f"{name} {alias}")
             self.assertEqual(self.char1.profile()["equipment"][ITEMS[identity]["slot"]], identity)
         self.char1.change(lambda p: p.update(combat_target=123))
@@ -93,7 +112,7 @@ class EquipmentTests(WorldCommandTest):
         state = message.call_args.kwargs["pz_state"][0][0]
         for entry in state["inventory"]:
             data = ITEMS[entry["id"]]
-            self.assertEqual(entry["slot"], data["slot"])
+            self.assertEqual(entry["slot"], {"weapon": "hands", "armor": "body"}.get(data["slot"], data["slot"]))
             self.assertEqual(entry["equip_action"], EQUIPMENT_ACTIONS.get(data["slot"]))
             if data["slot"] not in EQUIPMENT_ACTIONS:
                 continue
@@ -108,8 +127,11 @@ class EquipmentTests(WorldCommandTest):
         bag = view.inventory(self.char1.profile())
         self.assertEqual(set(tokens(bag, "item")), {i["name"] for i in ITEMS.values()})
         for identity in ("jungle_blade", "tactical_vest"):
-            self.char1.change(lambda p: rules.equip(p, identity, ITEMS[identity]["slot"]))
-        self.assertIn("공격 +9 · 방어 +3", view.equipment(self.char1.profile()))
+            slot = ITEMS[identity]["slot"]
+            self.char1.change(lambda p: rules.unequip(p, p["equipment"][slot], slot))
+            self.char1.change(lambda p: rules.equip(p, identity, slot))
+        self.assertIn(ITEMS["jungle_blade"]["name"] + " [주무기]", view.equipment(self.char1.profile()))
+        self.assertEqual((rules.stats(self.char1.profile())["attack"], rules.stats(self.char1.profile())["defense"]), (16, 3))
         for shop_id, catalog in SHOP_CATALOGS.items():
             self.assertEqual({ITEMS[i]["name"] for i in catalog}, set(tokens(view.shop(shop_id, "상인"), "item")))
         for action, alias in (("무장", "wield"), ("착용", "wear")):

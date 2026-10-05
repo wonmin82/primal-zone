@@ -225,12 +225,14 @@
     const rows = state.inventory.map((item) => {
       const row = document.createElement("li"), name = document.createElement("span");
       if (item.light_source || item.power_source) row.classList.add("lighting-item");
-      name.append(semantic("item", item.name), " ×" + item.count);
+      const selector = item.selector || item.name;
+      name.append(semantic("item", selector), " ×" + item.count);
       row.append(name);
       if (item.equipped) {
-        const mark = document.createElement("small"); mark.textContent = "착용 중"; row.append(mark);
-        if (item.remove_action) row.append(button(item.remove_action, item.name + " " + item.remove_action));
-      } else if (item.equip_action) row.append(button(item.equip_action, item.name + " " + item.equip_action));
+        const mark = document.createElement("small"); mark.textContent = item.active_weapon ? "주무기" : "착용 중"; row.append(mark);
+        if (item.weapon) row.append(button("주무기", selector + " 주무기"));
+        if (item.remove_action) row.append(button(item.remove_action, selector + " " + item.remove_action));
+      } else if (item.equip_action) row.append(button(item.equip_action, selector + " " + item.equip_action));
       else if (item.consume_action) row.append(button(item.consume_action, item.name + " " + item.consume_action));
       else if (item.id === "bandage") row.append(button("사용", "붕대 사용"));
       if (item.light_source) {
@@ -247,7 +249,7 @@
     const emptySlots = Object.entries(state.equipment || {}).filter(([, name]) => !name);
     if (emptySlots.length) {
       const empty = document.createElement("li");
-      empty.textContent = emptySlots.map(([slot]) => (slot === "weapon" ? "무기" : "방어구") + " 없음").join(" · ");
+      empty.textContent = emptySlots.map(([slot]) => (state.equipment_labels?.[slot] || slot) + " 없음").join(" · ");
       rows.unshift(empty);
     }
     byId("inventory").replaceChildren(...rows);

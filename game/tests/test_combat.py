@@ -97,9 +97,14 @@ class SharedCombatTests(WorldCommandTest):
         profile = self.char1.profile()
         profile["quests"]["radio_tower"].update(started=True, record_read=True)
         rules.gain_xp(profile, rules.xp_threshold(4))
+        while rules.point_pools(profile)["attribute_points"]:
+            rules.allocate_attribute(profile, "constitution", safe=True)
+        rules.treat(profile, safe=True)
         rules.add_item(profile, "scrap", 3)
         for item in ("carbine", "armor"):
             rules.add_item(profile, item)
+            slot = rules.ITEMS[item]["slot"]
+            rules.unequip(profile, profile["equipment"][slot], slot)
             rules.equip(profile, item)
         rules.fix_generator(profile)
         self.char1.save_profile(profile)

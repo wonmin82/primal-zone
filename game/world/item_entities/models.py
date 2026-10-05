@@ -170,6 +170,10 @@ class ItemEntity(models.Model):
             raise ValidationError(
                 {"unique_scope_key": "현재 소유자와 고유 아이템 범위가 일치하지 않습니다."}
             )
+        if self.location_kind == self.Location.EQUIPMENT and self.owner_object_id is not None:
+            from world.equipment_service import validate_equipment_row
+
+            validate_equipment_row(self)
         saved = type(self).objects.filter(pk=self.pk).values("sequence", "definition_id").first()
         if saved and (
             saved["sequence"] != self.sequence or saved["definition_id"] != self.definition_id

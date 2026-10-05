@@ -181,7 +181,7 @@ class ItemInteractionTests(WorldCommandTest):
         self.assertEqual(profile["equipment"], {"weapon": None, "armor": None})
         self.assertEqual(profile["inventory"], inventory)
         self.assertEqual(rules.stats(profile)["attack"], 7)
-        self.assertIn("무기 없음", view.status(self.char1.key, profile))
+        self.assertIn("장비 | 없음", view.status(self.char1.key, profile))
         self.assertIn("없음", view.equipment(profile))
         with (
             patch.object(self.char1.sessions, "count", return_value=1),
@@ -189,7 +189,9 @@ class ItemInteractionTests(WorldCommandTest):
         ):
             Explorer.push_state(self.char1)
         state = message.call_args.kwargs["pz_state"][0][0]
-        self.assertEqual(state["equipment"], profile["equipment"])
+        from world.equipment import SLOT_CAPACITY
+
+        self.assertEqual(state["equipment"], dict.fromkeys(SLOT_CAPACITY))
         self.assertFalse(any(i["equipped"] for i in state["inventory"]))
         self.char1.location = self.rooms["grass"]
         enemy = room_enemies(self.char1.location)[0]

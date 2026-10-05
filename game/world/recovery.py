@@ -2,21 +2,24 @@
 
 from math import floor
 
+from world import equipment as eq
+from world import modifiers
+
 RECOVERY_INTERVAL = 10
 RESOURCES = ("hp", "mental")
 
 
-def player_rates(values, combat=False, room=None, equipment=(), items=None):
+def player_rates(values, combat=False, room=None, equipment=(), items=None, snapshot=None):
     bonus = (room or {}).get("recovery", {}) if not combat else {}
     rates = {
         "hp": (0 if combat else 2 + values["max_hp"] / 60) + bonus.get("hp_per_minute", 0),
         "mental": 4 + values["max_mental"] / 20 + bonus.get("mental_per_minute", 0),
     }
-    for identity in equipment:
-        data = (items or {}).get(identity, {}).get("recovery_bonus", {})
-        for resource in RESOURCES:
-            rates[resource] += data.get(resource + "_per_minute", 0)
-    return rates
+    from world.equipment_legacy import recovery_modifiers
+
+    selected = snapshot.modifiers if snapshot is not None else recovery_modifiers(equipment, items)
+    return {key: modifiers.apply("recovery." + key + "_per_minute", value, selected)
+            for key, value in rates.items()}
 
 
 def enemy_rate(max_hp):
@@ -83,7 +86,7 @@ def commit(profile, values):
 def accrue_player(profile, values, room, items, now):
     state = profile.setdefault("recovery", initialize(now))
     rates = player_rates(values, bool(profile.get("combat_target")), room,
-                         profile["equipment"].values(), items)
+                         snapshot=eq.recovery_context(profile, items))
     # 가득 찬 동안의 기여는 미래 피해를 미리 회복할 수 없다.
     full = [key for key in RESOURCES if profile[key] >= values["max_" + key]]
     accrue(state, now, rates, profile.get("recovery_effects", ()))
@@ -97,7 +100,7 @@ def accrue_player(profile, values, room, items, now):
 
 def needs_tick(profile, values, room, items, now):
     rates = player_rates(values, bool(profile.get("combat_target")), room,
-                         profile["equipment"].values(), items)
+                         snapshot=eq.recovery_context(profile, items))
     effects = profile.get("recovery_effects", ())
     for key in RESOURCES:
         if profile[key] < values["max_" + key] and (

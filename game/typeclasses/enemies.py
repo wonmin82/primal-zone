@@ -301,7 +301,7 @@ class Enemy(DistantPresenceMixin, DefaultObject):
 
                 effects, status = apply_suppression(
                     deserialize(self.db.suppressions), player.id, outcome["suppression"]["rank"],
-                    bool(ENEMIES[self.db.enemy_id].get("boss")),
+                    bool(ENEMIES[self.db.enemy_id].get("boss")), effect=outcome["suppression"],
                 )
                 self.db.suppressions = effects
                 outcome["suppression"] = effects[str(player.id)]

@@ -159,6 +159,7 @@ class RuleTests(TestCase):
         base = rules.new_profile()
         upgraded = deepcopy(base)
         rules.add_item(upgraded, "blade")
+        rules.unequip(upgraded, "machete", "weapon")
         rules.equip(upgraded, "blade")
         a, _ = rules.player_attack(base, "hunter", 100, 2.5, Random(4))
         b, _ = rules.player_attack(upgraded, "hunter", 100, 2.5, Random(4))
@@ -215,6 +216,7 @@ class RuleTests(TestCase):
                 profile = rules.new_profile()
                 rules.add_item(profile, identity)
                 before = deepcopy(profile)
+                rules.unequip(profile, profile["equipment"][data["slot"]], data["slot"])
                 rules.equip(profile, identity, expected_slot=data["slot"])
                 expected = deepcopy(before)
                 expected["equipment"][data["slot"]] = identity
@@ -229,7 +231,9 @@ class RuleTests(TestCase):
         profile = rules.new_profile()
         for identity in ("spear", "tactical_vest"):
             rules.add_item(profile, identity)
-            rules.equip(profile, identity, ITEMS[identity]["slot"])
+            slot = ITEMS[identity]["slot"]
+            rules.unequip(profile, profile["equipment"][slot], slot)
+            rules.equip(profile, identity, slot)
         self.assertEqual((rules.stats(profile)["attack"], rules.stats(profile)["defense"]), (12, 4))
 
     def test_wrong_slot_unowned_and_combat_rejections_are_lossless(self):
@@ -371,8 +375,16 @@ class RuleTests(TestCase):
         for seed in range(20):
             profile = rules.new_profile()
             rules.gain_xp(profile, rules.xp_threshold(4))
+            # 새 방어 곡선에서도 이미 획득한 성장 포인트로 솔로 준비를 검증한다.
+            while rules.point_pools(profile)["attribute_points"]:
+                rules.allocate_attribute(profile, "constitution", safe=True)
+            rules.treat(profile, safe=True)
             for item in ("carbine", "armor"):
                 rules.add_item(profile, item)
+                slot = ITEMS[item]["slot"]
+                old = profile["equipment"].get(slot)
+                if old:
+                    rules.unequip(profile, old, slot)
                 rules.equip(profile, item)
             profile["combat_target"] = 1
             suppressions = {}
@@ -405,9 +417,16 @@ class RuleTests(TestCase):
         for seed in range(10):
             profile = rules.new_profile()
             rules.gain_xp(profile, rules.xp_threshold(5))
+            while rules.point_pools(profile)["attribute_points"]:
+                rules.allocate_attribute(profile, "constitution", safe=True)
+            rules.treat(profile, safe=True)
             profile["inventory"]["bandage"] = 8
             for item in ("carbine", "heavy_suit"):
                 rules.add_item(profile, item)
+                slot = ITEMS[item]["slot"]
+                old = profile["equipment"].get(slot)
+                if old:
+                    rules.unequip(profile, old, slot)
                 rules.equip(profile, item)
             profile["combat_target"] = 1
             suppressions = {}

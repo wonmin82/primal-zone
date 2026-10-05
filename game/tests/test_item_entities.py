@@ -141,7 +141,7 @@ class ItemEntityTests(GameCommandTest):
             ("inside", None, {"parent_item": parent, "socket": "part"}),
         ):
             with self.subTest(location=location):
-                item = self.create(location_kind=location, owner_object=owner, **fields)
+                item = self.create("machete" if location == "equipment" else "bandage", location_kind=location, owner_object=owner, **fields)
                 item.refresh_from_db()
                 self.assertEqual(item.location_kind, location)
 
@@ -388,12 +388,12 @@ class ItemEntityTests(GameCommandTest):
                 root,
                 location_kind="equipment",
                 owner_object=self.char1,
-                slot="main_hand",
+                slot="hands",
                 operation="equip",
             )
             root.refresh_from_db()
             child.refresh_from_db()
-            self.assertEqual((root.location_kind, root.slot), ("equipment", "main_hand"))
+            self.assertEqual((root.location_kind, root.slot), ("equipment", "hands"))
             self.assertEqual(root.owner_object_id, self.char1.pk)
             self.assertEqual(
                 (child.location_kind, child.parent_item_id, child.socket, child.owner_object_id),
@@ -406,7 +406,7 @@ class ItemEntityTests(GameCommandTest):
                         root, location_kind="inventory", owner_object=self.char1, operation="equip"
                     )
             root.refresh_from_db()
-            self.assertEqual((root.location_kind, root.slot), ("equipment", "main_hand"))
+            self.assertEqual((root.location_kind, root.slot), ("equipment", "hands"))
 
     def test_tree_transfer_restriction_preserves_all_rows_and_unique_scopes(self):
         operations = ("give", "drop", "store", "sell", "burn", "loot", "consume")
@@ -461,6 +461,10 @@ class ItemEntityTests(GameCommandTest):
             api.move_item_tree(
                 root, location_kind="inventory", owner_object=self.char2, operation="unknown"
             )
+        with patch.dict(ITEMS["machete"]["operation_policy"], {"unknown": True}):
+            self.assertFalse(can_item_operation(root, "unknown"))
+            with self.assertRaises(ValidationError):
+                api.delete_item(root, operation="unknown")
         root.refresh_from_db()
         self.assertEqual(root.owner_object_id, self.char1.pk)
         api.move_item_tree(root, location_kind="inventory", owner_object=self.char2, operation=None)

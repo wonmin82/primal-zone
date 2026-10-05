@@ -54,6 +54,7 @@ for definition in ITEMS.values():
         **{operation: definition["transferable"] for operation in ("drop", "give", "store", "sell")},
         "consume": bool(definition.get("heal") or definition.get("power_source")),
         "equip": definition["slot"] in ("weapon", "armor"),
+        "unequip": definition["slot"] in ("weapon", "armor"),
         "loot": definition["transferable"],
         "burn": definition["transferable"],
     })

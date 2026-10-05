@@ -1,8 +1,18 @@
 # 원시구역 구조와 설계 결정
 
+## Phase 2 장비·Modifier·Defense (2026-10-05)
+
+현재 장비 계산은 `equipment_service → EquipmentSnapshot → equipment/modifiers/rules/recovery/presentation` 경계로 연결한다. ORM은 service에 있고 rules/progression/recovery의 계산은 DB·Evennia와 독립적이다. profile version은 10이다. 아래 과거 구현 설명의 고정 방어와 두 legacy 장비 slot은 이번 단계의 최종 계산·slot 계약보다 우선하지 않는다.
+
+Entity 장비는 equipment/Explorer/최종 slot에 저장하며 손 capacity2·반지2·나머지1과 손 조합을 검사한다. 주무기는 Explorer Attribute의 ItemEntity UUID 참조이며 공통 create/move/delete transaction 안에서 자동 선택·승계·제거한다. 장비 변경은 옛 recovery rate 정산 → 새 위치/주무기/snapshot → 새 max/rate 계산 → current clamp → 저장 순서다. 자원 무료 회복과 자동 장비 교체는 없다.
+
+기존 플레이어의 profile 장비 SSOT는 Phase 6까지 유지한다. 제거 가능한 `equipment_legacy` 단일 adapter가 weapon→hands, armor→body와 수치→modifier를 연결한다. 명시적으로 선택한 backend 한 곳만 쓰고 hidden migration/dual-write하지 않는다. stats/combat/recovery/presentation/Web는 공통 snapshot을 사용한다. legacy 이전·판매의 장착분 예약 direct-read만 해당 저장 shape와 함께 후속 단계에 남긴다.
+
+Modifier는 구조화된 target/op/value/scope의 add 합산·multiply 곱·clamp 계약이다. Defense V1은 `raw*20/(20+defense*(1-penetration))*(1-defense_skill_reduction)`이며 양방향 공통 helper에서 마지막에 int 내림·최소1을 적용한다. 성장·콘텐츠 수치는 유지한다. 상세 slot/selector/참조/기술·회복 적용/Phase 6 제거 경계는 [장비 설계](equipment.md), ItemEntity 불변조건은 [영속 기반](item-entities.md)에 기록한다.
+
 ## ItemEntity 기반 1단계
 
-`world.item_entities` Django 앱이 독립 실물 아이템 row·전역 순번·canonical 위치·스택·부모 트리·원자적 API를 제공한다. 정적 정의는 기존 ITEMS registry다. 기존 gameplay의 profile/Attribute 저장은 아직 전환하지 않고 새 row와 이중 쓰기를 하지 않는다. profile version은 10이며 장비·총기·LootClaim·화폐·Credential·전체 저장 변환은 후속 단계다. DB/application 제약, API와 migration 적용 경계는 [ItemEntity 기반](item-entities.md)을 따른다.
+`world.item_entities` Django 앱이 독립 실물 아이템 row·전역 순번·canonical 위치·스택·부모 트리·원자적 API를 제공한다. 정적 정의는 기존 ITEMS registry다. 기존 gameplay의 profile/Attribute 저장은 아직 전환하지 않고 새 row와 이중 쓰기를 하지 않는다. profile version은 10이다. 장비·modifier·Defense는 Phase 2 서비스에 연결했고 총기 상태·LootClaim·화폐·Credential·전체 저장 변환은 후속 단계다. DB/application 제약, API와 migration 적용 경계는 [ItemEntity 기반](item-entities.md)을 따른다.
 
 ## 정신력과 주기 회복
 
@@ -292,7 +302,7 @@ Corpse는 실제 방 객체이며 source spawn/enemy, created_at, decay_at과 lo
 
 ## 기존 데이터와 운영 범위
 
-profile의 최신 버전은 9다. v1/v2의 개인 encounter 제거·전투 입력 필드·성장 기본값 변환을 거친 뒤, v1~v3의 첫 임무 boolean을 `quests.radio_tower`의 진행 필드로 옮긴다. `cache_claimed`는 `discoveries.supply_cache`로 옮긴다. v1~v4에는 개인 보관 `storage={}`의 기본값을 추가한다. XP, HP, credits, inventory, equipment(명시적 None 포함), kills, 완료 여부와 visited 및 개인 전투 상태를 유지한다. 이미 받은 보상은 재지급하지 않는다. v1~v5에는 개인 광원 `light_sources={}`, v1~v6에는 개인 줄임말 `command_shortcuts={}`를 보완한다. v8 이하에는 현재 최대 정신력과 빈 recovery_effects를 추가하며 timestamp는 첫 mutable accrue에서 초기화한다. migration은 시간을 조회하지 않고 profile_snapshot은 사본만 변환한다.
+profile의 최신 버전은 10이다. v9 이하는 여덟 기술의 기본 Rank와 재투자 가능 훈련으로 정규화하며 자세한 성장 호환은 [성장 설계](progression.md)를 따른다. v1/v2의 개인 encounter 제거·전투 입력 필드·성장 기본값 변환을 거친 뒤, v1~v3의 첫 임무 boolean을 `quests.radio_tower`의 진행 필드로 옮긴다. `cache_claimed`는 `discoveries.supply_cache`로 옮긴다. v1~v4에는 개인 보관 `storage={}`의 기본값을 추가한다. XP, HP, credits, inventory, equipment(명시적 None 포함), kills, 완료 여부와 visited 및 개인 전투 상태를 유지한다. 이미 받은 보상은 재지급하지 않는다. v1~v5에는 개인 광원 `light_sources={}`, v1~v6에는 개인 줄임말 `command_shortcuts={}`를 보완한다. v8 이하에는 현재 최대 정신력과 빈 recovery_effects를 추가하며 timestamp는 첫 mutable accrue에서 초기화한다. migration은 시간을 조회하지 않고 profile_snapshot은 사본만 변환한다.
 
 변환은 기존 프로필의 복사본에서 첫 임무·보급 boolean을 새 구조로 옮기고 오래된 key를 제거한다. 기존 플레이어는 현재 레벨에 해당하는 포인트를 즉시 사용할 수 있고, 무료 기본 기술 Rank 1과 미투자 특성은 기존 전투 성능을 유지한다. Party·Enemy·Corpse·DroppedLoot는 profile 밖에 있으므로 migration이 수정하지 않는다. 기존 DB의 로드 시 점진적으로 변환하며 DB 삭제·교체는 필요 없다. 위의 서버 재시작/재접속 전투 정리 정책과 migration 자체의 보존 정책은 별개다.
 
