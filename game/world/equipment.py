@@ -133,6 +133,9 @@ class EquipmentSnapshot:
 
     @property
     def active(self):
+        if self.source == "legacy":
+            # legacy의 단일 weapon slot은 곧 주무기다. 영속 UUID를 만들지 않는다.
+            return next((item for item in self.items if item.role == "weapon"), None)
         return next((item for item in self.items if item.role == "weapon" and item.identity == self.active_id), None)
 
     @property

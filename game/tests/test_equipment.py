@@ -70,6 +70,20 @@ class EquipmentTests(WorldCommandTest):
             self.assertEqual(self.char1.profile(), before)
             self.assertIn("대상 뒤에 행동", str(message.call_args_list))
 
+    def test_closeout_weapon_swap_requires_explicit_unequip(self):
+        self.char1.change(lambda p: p["inventory"].update(blade=1))
+        before = deepcopy(self.char1.profile())
+        with patch.object(self.char1, "msg") as message:
+            self.char1.execute_cmd("강철마체테 무장")
+        self.assertIn("먼저 기존 장비를 해제", str(message.call_args_list))
+        self.assertEqual(self.char1.profile(), before)
+        self.char1.execute_cmd("낡은마체테 해제")
+        self.assertIsNone(self.char1.profile()["equipment"]["weapon"])
+        self.assertIsNone(Explorer.profile(self.char1).equipment_context.active)
+        self.char1.execute_cmd("강철마체테 무장")
+        self.assertEqual(self.char1.profile()["equipment"]["weapon"], "blade")
+        self.assertIn("강철마체테 [주무기]", view.equipment(self.char1.profile()))
+
     def test_spaced_names_aliases_and_combat_restriction(self):
         self.char1.change(lambda p: p.update(credits=1000))
         for name, identity, alias in (

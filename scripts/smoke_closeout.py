@@ -87,6 +87,7 @@ class Closeout:
         await self.floor(player, "3층", "support_3f_c")
         await route(player, (("서", "support_3f_w1"), ("북", "armor_shop")))
         await player.act("강화조끼 구매", lambda s: count_item(s, "armor") == 1)
+        await player.act("낡은마체테 해제", lambda s: s["equipment"]["hands"] is None)
         await player.act("강철마체테 무장", lambda s: s["equipment"]["hands"] == "강철마체테 [주무기]")
         await player.act("탐사조끼 벗어", lambda s: s["equipment"]["body"] is None)
         await player.act("강화조끼 착용", lambda s: s["equipment"]["body"] == "강화조끼")

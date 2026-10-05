@@ -2,6 +2,35 @@
 
 확인일: 2026-10-05. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
 
+## PR #30 Phase 2 리뷰 수정 (2026-10-05)
+
+시작 fetch에서 branch는 `codex/equipment-modifier-defense`, 로컬·원격·PR HEAD는 `e21c98e215fabd3be069bd5f7b97fd452c703532`, origin/main/base는 `cf4dc078b8347fb63ae459c55d71a8b160950a5a`였다. 작업 트리는 clean이고 base 이후 main 변경이 없었다. 첨부 인계 ZIP의 Decision Log/통합 계획은 앞서 사용한 문서와 byte 단위로 동일함을 확인했다. 첨부의 Phase 2 일반 검증 범위보다 이번 사용자 리뷰 요청의 Full smoke 실행 요구를 우선한다. 기존 PR에 리뷰 수정 commit을 추가하고 merge하지 않는다. 최종 HEAD·CI는 PR의 최신 Review fixes/Validation 기록과 실제 원격 상태로 확인한다.
+
+### 리뷰 문제와 수정 계약
+
+- P1: Full closeout가 시작 낡은마체테를 해제하지 않고 강철마체테를 무장해 자동 교체 금지와 충돌했다. 기존 무기를 명시 해제하고 hands=None을 확인한 뒤 새 무기를 장착한다. 자동 교체·smoke 예외·장비 수치 변경은 없다.
+- P2: active_weapon/hand_usage가 entity_snapshot만 읽어 legacy 캐릭터에 사용할 수 없었다. 두 API는 backend-neutral equipment_snapshot을 사용한다. active_weapon은 EquipmentItem 또는 None이며, 기존 Entity row 조회는 active_weapon_item으로 분리했다. legacy row helper는 None이고 fake UUID/임시 Entity/새 profile 참조를 만들지 않는다. 기존 production row 호출은 없고 row 검증 테스트는 새 helper를 사용한다. Phase 3 gameplay는 snapshot.active의 weapon_type 등 정보로 계산한다.
+- legacy snapshot의 단일 장착 weapon을 명시적으로 active로 간주한다. legacy adapter/SSOT는 유지하며 profile schema·dual-write·lazy migration을 추가하지 않는다. Entity는 기존 persistent UUID를 그대로 사용한다.
+- P2: 상태 장비 줄에 주무기 표시가 빠져 있었다. 장비와 상태는 같은 formatting helper로 stable selector와 주무기를 표시하고, 상태의 stats도 같은 snapshot을 받는다. definition ID로 active를 비교하지 않으며 UUID/전역 sequence 숫자를 표시하지 않는다.
+- before/after_item_change, world_change, ItemEntity lock/owner lock/expected_source/reconcile/rollback, Phase 1 policy·merge·identity 계약과 modifier/Defense/recovery 공식은 수정하지 않았다.
+
+### 회귀와 실제 검증
+
+- 실제 명령으로 기본 무장 → 새 무장 거절/상태 불변 → 명시 해제 → 새 무장 성공을 검사한다. legacy API의 active=machete/hand usage1/해제 후0, UUID 없음·row/profile 불변을 확인한다.
+- Entity 1H 두 개에서 hand usage2·명시 UUID 선택/승계/None/stale를 유지하고, 동일 무기 두 번째 선택이 상태·장비·소지품·실제 Web payload에서 같은 instance에 표시되는지 검사한다. 기존 nested/자원/회복/외부 이동·삭제/reconcile 실패/outer rollback도 필수 module에 포함한다.
+
+| 이번 리뷰에서 실행한 명령 | 결과 |
+| --- | --- |
+| `.venv/Scripts/python.exe scripts/dev.py test tests.test_item_entities tests.test_equipment_entities tests.test_equipment tests.test_text tests.test_integration --parallel 2 --reverse` | 82개 /36.091초·runner49.014초 성공 |
+| `.venv/Scripts/python.exe scripts/dev.py test tests.test_combat tests.test_recovery tests.test_environment --parallel 2 --reverse` | 39개 /20.419초·runner31.888초 성공 |
+| `.venv/Scripts/python.exe scripts/dev.py check` | 성공 |
+| `git diff --check` | 성공 |
+| `.venv/Scripts/python.exe scripts/dev.py smoke-full` | 438.541초 성공, 실제 Portal/Server 종료·임시 DB/로그 cleanup 완료 |
+
+이번 미커밋 코드의 Full은 production corpse30초/respawn45초/protection120초, 공유 전투·전리품 권리/부분 회수, 자연회복/재로그인, 기존 무기 명시 해제를 포함한 본부 closeout, 두 임무·실제 XP/성장 준비·보스, 훈련, 같은 격리 DB의 Portal/Server restart·진행/파티/월드 보존까지 통과했다. 플레이 DB의 SHA256/mtime_ns/size 불변도 확인했다. 이번 리뷰의 로컬 검사에서 실패는 없었다. 최종 수정 HEAD의 자동 test/smoke 결과는 PR Validation에 별도로 기록한다.
+
+JS/CSS/template을 수정하지 않아 node 검사와 브라우저는 이번 리뷰에서 재실행하지 않는다. 시작 HEAD의 CI 및 아래 이전 구현 검증을 이번 수정의 새 성공으로 합산하지 않는다. 전체 로컬 suite·OS IME·실제 PostgreSQL 경쟁·multi-server·full-world migration·전체 balance simulation은 미실행이다. Full 실행이 Phase 7 전체 검증을 대신하지 않는다.
+
 ## Phase 2 — Equipment + Modifier + Defense (2026-10-05)
 
 사용자가 Decision Log를 제공한 뒤 기준선 조사부터 다시 시작했다. 우선순위는 Decision Log → 통합 계획 → Phase 2 요청 → 저장소 문서/코드다. 시작·최종 준비 fetch에서 최신 origin/main은 `cf4dc078b8347fb63ae459c55d71a8b160950a5a`이며 PR #29의 기반과 리뷰 수정이 포함되어 있다. 로컬 main도 같은 SHA, 시작 작업 트리는 clean, main CI run `37294676846`은 success였다. 이 SHA는 이번 시작 기록이며 미래 작업의 고정 기준이 아니다. 최신 main에서 새 `codex/equipment-modifier-defense`를 만들었다. 이번 요청은 commit/push/새 PR과 최신 HEAD CI 확인까지이며 merge하지 않는다. 최종 HEAD·PR URL·CI는 해당 Phase 2 PR의 Validation이 기준이다.

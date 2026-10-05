@@ -27,6 +27,20 @@ inventory와 equipment의 직접 소유 root를 sequence 순으로 한 번 정�
 
 Entity 주무기는 `Explorer.db.active_weapon_item_id`에 UUID 문자열을 저장한다. 무기 하나/2H는 자동 선택하고 두 번째 1H는 기존 선택을 유지한다. `<무기> 주무기`로 바꿀 수 있다. 선택한 무기가 장비에서 사라지면 sequence가 가장 작은 남은 weapon으로 승계하고 없으면 None이다. inventory·다른 소유자·삭제된 UUID를 가리키는 stale 참조는 주무기로 인정하지 않는다. 읽기에서는 수리·쓰기하지 않고 domain 변경에서 reconcile한다.
 
+### 공통 정보 조회와 Entity row 조회
+
+| API | 반환과 사용 경계 |
+| --- | --- |
+| equipment_snapshot(character, profile=None) | backend-neutral EquipmentSnapshot. gameplay/domain은 이 snapshot을 사용한다. |
+| active_weapon(character, profile=None) | 공통 snapshot의 active EquipmentItem 또는 None. weapon_type·hands_required·base attack 등 gameplay 정보 조회용이다. |
+| hand_usage(character, profile=None) | 공통 snapshot의 손 사용량. legacy 1H도 1로 계산한다. |
+| equipped_items(character) | ItemEntity 장비 row QuerySet. backend-neutral 장비 목록은 equipment_snapshot().items를 사용한다. |
+| active_weapon_item(character) | ItemEntity backend의 실제 row 또는 None. legacy에는 대응 row가 없어 None이며 영속 작업 전용이다. 조회가 operation의 lock/권한 검증을 대신하지 않는다. |
+
+legacy의 단일 weapon slot에 장착한 아이템을 명시적으로 active로 간주한다. 그 EquipmentItem.identity는 None이며 fake UUID·임시 Entity·profile 참조를 만들지 않는다. Entity snapshot의 active는 실제 선택 UUID로 구분한다. 기존 active_weapon()의 Entity row 반환은 리뷰 수정에서 active_weapon_item()으로 분리했으며 row가 필요한 호출은 새 helper를 사용한다. Phase 3은 equipment_snapshot().active 또는 공통 active_weapon()의 정보를 읽고 raw profile 장비를 다시 해석하지 않는다. 한 작업에서 이미 만든 snapshot은 그대로 전달해 사용한다.
+
+상태와 장비 출력은 같은 formatting helper에서 stable selector에 `[주무기]`를 붙인다. 소지품·Web도 같은 snapshot의 selected instance를 표시하며 definition ID로 주무기를 결정하지 않는다.
+
 ItemEntity create/move/delete의 `before_item_change`/`after_item_change`가 같은 world_change 안에서 장비·주무기 참조·자원을 정리한다. owner ID 오름차순 row lock으로 빈 슬롯 경쟁을 직렬화하고 기존 장비와 이동 트리/조상을 한 집합에 모아 UUID 정렬 lock을 얻는다. 조회와 lock 사이의 위치·소유자 변경은 거절한다. move_item_tree의 선택적 expected_source는 사용자 장비 서비스가 기대하는 출발 위치·소유자를 잠근 row와 대조한다. reconcile 실패면 이동/삭제·참조·자원·회복·순번·unique scope도 rollback된다. 신규 사용자 기능은 이 API를 사용해야 하며 raw QuerySet update/delete로 domain 검증과 참조 정리를 우회하지 않는다. 이 경계에 향후 active light 참조 정리를 추가할 수 있지만 지금 구현하지 않는다.
 
 ## Modifier와 자원

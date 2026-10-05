@@ -54,13 +54,21 @@ def bind_profile(character, profile):
     return eq.EquipmentProfile(profile, equipment_snapshot(character, profile))
 
 
-def active_weapon(character):
-    active = entity_snapshot(character).active
+def active_weapon(character, profile=None):
+    """backend-neutral gameplay 정보. Entity/legacy 모두 EquipmentItem 또는 None이다."""
+    return equipment_snapshot(character, profile).active
+
+
+def active_weapon_item(character):
+    """영속 작업용 Entity row 조회. legacy에는 대응 row가 없으므로 None이다."""
+    if not entity_runtime(character):
+        return None
+    active = active_weapon(character)
     return ItemEntity.objects.get(pk=active.identity) if active else None
 
 
-def hand_usage(character):
-    return entity_snapshot(character).hand_usage
+def hand_usage(character, profile=None):
+    return equipment_snapshot(character, profile).hand_usage
 
 
 def reconcile_references(character):
