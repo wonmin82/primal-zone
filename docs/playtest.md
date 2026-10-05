@@ -33,6 +33,8 @@
 
 [PR #32](https://github.com/wonmin82/primal-zone/pull/32)의 구현 HEAD `8e199b6df30a649fc567ef3baee75f3353286982`에서 [Game checks37384065998](https://github.com/wonmin82/primal-zone/actions/runs/37384065998)가 test/smoke success다. 자동 check·순수190개/1.038초·통합482개/197.032초·Quick27.517초를 확인했다. 문서 마감 commit은 실행 코드가 동일하여 로컬 테스트를 반복하지 않으며, 최종 문서 HEAD의 CI run/SHA는 PR Validation에 별도로 기록한다. 시작 main CI37378988784 attempt2 success는 과거 baseline이고 이번 결과가 아니다. 자동 전체 suite의 개수와 로컬168개·native 재검증·순수5개는 합산하지 않는다.
 
+문서 마감 HEAD `bcaf0887bce0a3d9a3a7be2581448683d18d1700`의 [CI37384558940](https://github.com/wonmin82/primal-zone/actions/runs/37384558940)는 smoke success, test failure(통합482개 중 distant-view 1개)였다. `test_gate_preview_does_not_unlock_or_traverse`의 recovery boundary가 실제 시각 1791240390→1791240400으로 넘어 profile 비교가 실패했다. Phase 4 gameplay 회귀가 아닌 기존 wall-clock flaky로 확인했고, 실행 지침74에 따라 해당 테스트의 Explorer 시각만 기존 observation fixture100에 맞췄다. gameplay/recovery 공식은 변경하지 않았다. `scripts/dev.py test tests.test_distant_view --parallel 2 --reverse`는14개/10.895초(runner23.041초) 성공했고 check/diff도 통과했다. 최종 수정 HEAD CI는 PR Validation에서 별도로 확인하며 실패 이력을 성공으로 바꾸지 않는다.
+
 요청한 단계별 전략에 따라 local full suite·smoke-full·전체 browser/multiplayer matrix·OS IME·실제 PostgreSQL contention·multi-server concurrency·full-world migration·balance simulation은 미실행이다. Credential/access/shop V2/incinerator·drop/content/balance tuning은 구현하지 않았다.
 
 ## Phase 3 Lighting + Firearm 검증
