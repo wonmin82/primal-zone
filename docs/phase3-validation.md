@@ -68,3 +68,11 @@ push/pull_request 자동 workflow의 최신 HEAD test/smoke는 PR Validation과 
 새8개 method는 RECOVERY_INTERVAL을 실제로 넘긴 legacy 보관·전원/ON/OFF, native ON/OFF와 비전투 reload, native/legacy Weather의 단일 snapshot·시야·저장 불변, malformed/missing/None orphan과 유효 active/추가 orphan/storage 보호를 검사한다. 기존 foreign-owner 및 이동/삭제/rollback·combat reload·실제 발사/빈 총기 회귀도 유지한다.
 
 최신 리뷰 HEAD의 Game checks/test/Quick smoke는 [PR #31 Review fixes 및 Validation](https://github.com/wonmin82/primal-zone/pull/31)에 정확한 HEAD SHA·run ID·결과를 별도로 기록한다. 이 링크의 최신 결과가 CI 근거이며 위 시작 HEAD 성공을 재사용하지 않는다. local full suite·smoke-full·전체 browser matrix는 이번 리뷰 요청에 따라 미실행이다. JS/CSS/template 변경이 없어 node·브라우저·정적 파일 수집도 반복하지 않았다. 실제 PostgreSQL 경쟁·multi-server·OS IME·Phase 6 migration·balance simulation 공백은 그대로다.
+
+## PR #31 병합 문서 마감 (2026-10-06)
+
+리뷰 수정 HEAD `72fb9549e7d7def69478013e5afb31c855a30400`의 [CI37376220133](https://github.com/wonmin82/primal-zone/actions/runs/37376220133)는 Game checks/test/smoke 모두 success다. 자동 check·순수185개/1.039초·통합442개/191.541초·runner197.908초·Quick24.411초를 성공했다. 이는 로컬18/86/36개 및 앞선 Phase 3 구현 실행과 별도 결과이며 합산하지 않는다.
+
+사용자의 후속 병합·브랜치 삭제 요청에 따라 검증 기록과 인계를 마감한다. main은 `b2ec5f5c0fc0e511a580d04891d655d7babc0cb3` 그대로이며 실행 코드·테스트·의존성·정적 파일은 위 리뷰 HEAD와 동일하다. 따라서 문서 마감에서는 경로·내용·링크와 git diff --check만 검사하고 기존 로컬 테스트·smoke·브라우저를 반복하지 않는다. 과거 실패 이력과 미검증 범위를 보존한다.
+
+문서 마감 PR HEAD의 CI와 병합된 main의 CI는 각각 SHA를 대조해 [PR #31 Validation](https://github.com/wonmin82/primal-zone/pull/31)에 별도로 기록한다. 리뷰 HEAD의 성공으로 최종 문서 HEAD·merge commit 성공을 대신하지 않는다. 병합은 merge commit 방식이며 소스 HEAD 포함 확인 후 원격·로컬 브랜치를 삭제한다.

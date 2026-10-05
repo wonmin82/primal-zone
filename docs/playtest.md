@@ -14,6 +14,8 @@ PR #31 리뷰 회귀는 실제 dispatcher에서 `RECOVERY_INTERVAL`을 넘긴 �
 
 이번 리뷰의 실제 결과·이전 실패 이력·최신 HEAD CI는 [Phase 3 실제 검증 기록](phase3-validation.md)을 따른다. JS/CSS/template 변경이 없어 이번에는 node·브라우저·정적 파일 수집을 반복하지 않으며 local full suite·smoke-full도 실행하지 않는다.
 
+리뷰 HEAD `72fb9549e7d7def69478013e5afb31c855a30400`의 [Game checks37376220133](https://github.com/wonmin82/primal-zone/actions/runs/37376220133)는 자동 순수185개·통합442개·Quick smoke 성공이다. 로컬 리뷰18/86/36개와 합산하지 않는다. 2026-10-06 후속 병합 문서 마감은 실행 코드가 같아 로컬 검사를 반복하지 않으며 문서 HEAD와 merge commit의 CI는 각각 PR Validation의 새 run/SHA로 확인한다. 실제 PostgreSQL 경쟁·multi-server·OS IME·Phase 6 migration·balance 검증 공백은 그대로다.
+
 ## ItemEntity 1단계 검증
 
 1단계는 gameplay cutover 없이 독립 Django domain만 추가한다. `tests.test_item_entities`로 위치·스택·순번·트리·고유 범위·rollback을, 기존 `tests.test_item_interactions tests.test_loot`로 이전/전리품 호환을 검사한다. 정의·이동 순수 검사는 game에서 `python -m unittest world.test_item_definitions world.test_rules world.test_headquarters world.test_shops`로 실행한다. 일반 플레이 DB에 테스트 fixture나 migration을 적용하지 않는다.

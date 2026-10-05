@@ -2,6 +2,16 @@
 
 확인일: 2026-10-06. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
 
+## PR #31 문서 마감·병합 및 소스 브랜치 정리 (2026-10-06)
+
+사용자가 필요한 문서 업데이트 후 [PR #31](https://github.com/wonmin82/primal-zone/pull/31) 병합과 소스 브랜치 삭제를 요청했다. 아래 구현·리뷰 단계의 OPEN 유지·merge 금지 기록은 당시 요청 범위이며 이번 명시적 요청보다 우선하지 않는다. 다음 Phase는 별도 요청 전 시작하지 않는다.
+
+- 마감 시작 fetch에서 local/remote/PR HEAD는 `72fb9549e7d7def69478013e5afb31c855a30400`, main/base는 `b2ec5f5c0fc0e511a580d04891d655d7babc0cb3`다. 작업 트리는 clean이며 main 대비 ahead4/behind0, 다른 worktree에서 소스 브랜치를 사용하지 않는다. 최신 main을 이미 포함하므로 불필요한 rebase·이력 재작성은 하지 않는다.
+- 리뷰 HEAD의 [Game checks37376220133](https://github.com/wonmin82/primal-zone/actions/runs/37376220133)는 test/smoke success다. check·순수185개/1.039초·통합442개/191.541초·Quick24.411초를 해당 SHA에서 성공했다. 문서 마감 HEAD와 병합된 main의 CI는 각각 따로 확인해 PR Validation에 run/SHA·결과를 기록하며 이 리뷰 HEAD 성공으로 대신하지 않는다.
+- 이번 마감은 Task State·검증 기록·playtest 문서만 수정한다. 실행 코드·테스트·의존성·정적 파일이 리뷰 검증 당시와 같으므로 당시 targeted86개/pure18개 성공을 재사용한다. 로컬 게임 검사·브라우저·smoke·node·정적 파일 수집은 반복하지 않는다. 문서의 경로·명령·현재 API/검증 이력 구분과 git diff --check를 확인한다.
+- 최신 main 포함·non-draft·필수 CI·리뷰 대화·충돌 조건을 확인한 뒤 merge commit 방식으로 병합한다. 소스 HEAD의 main 포함을 확인한 뒤 원격·로컬 `codex/lighting-firearm`을 삭제하고 로컬 main은 fast-forward로 갱신한다. 실제 병합 commit·main CI·삭제 결과는 PR의 최신 마감 기록과 원격 상태를 기준으로 확인한다.
+- 실제 PostgreSQL 경쟁·multi-server·OS IME·전체 browser/multiplayer matrix·full-world migration·balance simulation 공백은 유지한다. legacy SSOT·profile version10·콘텐츠·밸런스·플레이 DB·비밀 설정은 이번 문서 마감에서 변경하지 않는다.
+
 ## PR #31 Phase 3 리뷰 수정 (2026-10-06)
 
 시작 HEAD는 `17823459c81bbf866a7d308b29039b36ecddc97e`, branch는 기존 `codex/lighting-firearm`이며 clean이었다. fetch 후 PR/local/remote HEAD가 같고 main은 `b2ec5f5c0fc0e511a580d04891d655d7babc0cb3` 그대로다. 최신 main을 이미 포함하므로 불필요한 rebase·과거 commit 재작성·새 branch/PR 생성은 하지 않는다. 이번 요청은 리뷰3건 수정·문서·commit/push·최신 HEAD CI 확인까지이며 PR은 merge하지 않는다.
