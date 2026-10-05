@@ -34,13 +34,19 @@ Phase 4는 기존 ItemEntity·장비·광원·총기를 유지하며 권리와 �
 
 `source.db.loot_backend="item_entities"`는 신뢰된 생성 경계다. `populate_source(source, entries)`는 비어 있는 Corpse/DroppedLoot를 명시적으로 선택해 모델을 만든다. 기존 blob을 조회하거나 명령을 실행한다고 변환하지 않는다. 비어 있지 않은 source는 거절한다. `create_claim()`/`create_currency()`는 이미 선택한 native 공간에만 쓴다.
 
+생성 전 emptiness 검사는 presentation의 backend 분기에 의존하지 않는다. owner lock 후 legacy db.entries와 `has_native_assets(source)`의 실제 ItemEntity/CurrencyLoot 존재 여부를 모두 검사한다. ItemEntity는 위치 필터 없이 직접 owner 연결을 검사해 잘못된 위치의 asset도 숨기지 않는다. inside child의 직접 owner는 canonical constraint상 NULL이고 정상 subtree는 source 소유 root를 통해 감지된다. 하나라도 있으면 generation을 거절하며 marker·기존 rows·sequence는 바뀌지 않는다.
+
+`integrity_errors(source)`는 native marker+legacy entries와 legacy/non-native marker+native rows 양쪽 불일치를 보고한다. 빈 native marker 자체는 정상이다. 불일치를 자동 복구하거나 lazy migration하지 않는다.
+
 `Corpse.from_enemy(..., backend="item_entities")`는 기존 drop/allocation 결과를 모델로 생성한다. 관련 player/party owner를 먼저 잠그고 같은 world_change에서 cursor와 rows를 처리한다. 기본 backend는 legacy여서 현재 일반 사냥을 강제로 전환하지 않는다. native 생성 실패는 rows·sequence·party cursor·새 공간을 rollback한다. 총기 drop에 full 탄창을 자동 생성하지 않으며 기존 콘텐츠·가격·보상 수치를 유지한다.
 
 ## 실물 pickup와 claim-aware merge
 
 `pickup(source, selected_snapshot, caller, quantity, now=...)`는 lock 후 출처·권리·수량·지분을 재검증한다. 이미 회수/decay되었거나 선택 후 변경된 snapshot은 거절한다. command의 기존 시야/광원 검사를 유지하며 domain도 같은 장소의 source만 허용한다.
 
-전체 회수는 claim을 먼저 삭제한 뒤 source ItemEntity 자체를 inventory로 옮겨 UUID·sequence를 유지한다. 부분 회수는 generic `split_stack()`으로 새 row를 만들고 source quantity·claim·sequence를 유지한다. 분할 destination에 claim을 복사하지 않는다. 이동 후 호환 inventory stack에 merge할 수 있으며 destination ID·sequence를 유지한다. split/move/merge/claim 정리 실패는 전체 rollback한다.
+전체 회수는 split 없이 claim을 먼저 삭제한 뒤 source ItemEntity 자체를 inventory로 옮겨 UUID·sequence를 유지한다. 부분 회수는 pickup의 transaction 안에서 `split_stack(..., allow_claimed=True)`로 새 row를 만들고 source quantity·claim·sequence를 유지한다. 분할 destination에 claim을 복사하지 않으며 사용자 이동은 기존 operation="loot"를 사용한다. 즉시 inventory로 옮긴 뒤 호환 stack에 merge할 수 있고 destination ID·sequence를 유지한다. split/move/merge/claim 정리 실패는 전체 rollback한다.
+
+일반 `split_stack()`은 잠근 현재 DB row의 LootClaim을 확인하고 corpse/world claimed stack을 새 row 생성 전에 거절한다. stale Python 입력으로 우회할 수 없으며 source·claim·sequence 발급기도 불변이다. `allow_claimed=True`는 claim 없는 fragment를 즉시 inventory로 옮기는 loot partial pickup의 trusted 경계 전용이다. 같은 source에 보호 없는 fragment를 남기는 일반 split이나 permission 우회 용도로 사용하지 않는다. claim 없는 inventory split은 기존 의미를 유지한다.
 
 generic `same_merge_context()`도 `merge_state()`와 `ClaimContext`를 비교한다. ClaimContext는 root UUID를 배정 단위로 삼고 reserved_party/player·assigned_player·protection_until을 함께 비교한다. claim DB PK가 기준은 아니다. 같은 root와 권리로 claim row를 다시 만들어도 context는 같다. 독립 entry의 root는 권리 필드가 같아도 서로 다른 배정 단위이므로 병합하지 않는다. claim 없는 호환 inventory stack은 기존대로 merge한다.
 

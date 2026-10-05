@@ -2,6 +2,19 @@
 
 확인일: 2026-10-06. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
 
+## PR #32 Phase 4 리뷰 수정 (2026-10-06)
+
+시작 HEAD는 `13cb330eb5a28784bab48688a8afa11291582d14`, branch는 기존 `codex/loot-claim-currency`이며 clean이었다. fetch 후 local/remote/PR HEAD가 같고 origin/main은 `4d6a3057dbae08003cae8b5a082882135b31837b`다. 시작 HEAD의 CI37385084401 test/smoke success는 과거 검증이며 이번 수정 HEAD의 성공을 대신하지 않는다. 기존 PR/branch에서 리뷰2건만 수정하며 merge하지 않는다.
+
+- P1: `populate_source()`는 owner lock 후 legacy entries와 `has_native_assets()`의 실제 ItemEntity/CurrencyLoot 존재 여부를 marker와 독립적으로 검사한다. 위치 필터 없이 source 직접 owner 연결을 확인해 잘못된 위치의 row도 거절한다. 양방향 marker/storage 불일치는 integrity 오류로만 보고하며 빈 native source는 허용한다. 자동 repair/conversion은 없다.
+- P2: generic `split_stack()`은 잠근 current row의 claim을 새 row/sequence 발급 전에 검사해 거절한다. `allow_claimed=False`가 기본이고 True는 loot partial pickup transaction에서만 사용한다. claim 없는 fragment를 즉시 operation="loot"로 inventory 이동/merge하며 source claim을 유지한다. full pickup은 split 없이 identity/sequence를 유지하고 정상 inventory split도 기존대로다.
+- regression은 숨겨진 실물/화폐·잘못된 위치 row·marker 양방향 불일치·빈 source generation·거절 후 모든 rows/sequence/marker 불변·corpse/world claimed split·stale 입력·inventory split·partial/full pickup을 포함한다. 기존 move/split/merge failure rollback도 같은 targeted 실행에서 확인했다.
+- CurrencyLoot/zero-share·merge/ClaimContext·party allocation·legacy blob·Phase 6 boundary·콘텐츠/밸런스는 바꾸지 않았다. 사용자 action에 operation=None 우회를 추가하지 않았다. 원래 삭제 보호 테스트2개는 Evennia 삭제가 PROTECT 전에 Attribute를 지우므로 실제 domain과 같은 world_change 경계에서 실행하도록 fixture만 보정했다. production 삭제 경로나 transaction framework는 변경하지 않는다.
+
+`check`, `git diff --check` 성공. `scripts/dev.py test tests.test_loot_entities tests.test_currency_loot tests.test_item_entities tests.test_loot tests.test_item_interactions --parallel 2 --reverse`는 최종97개/34.030초(runner43.880초) 성공했다. 이전 개수와 합산하지 않는다. 수정 전 재현3개(실패 subcase5개), 첫97개의 기존 삭제 fixture2개 실패, 해당2개 재검증 성공 이력은 [playtest](playtest.md#pr-32-phase-4-리뷰-수정-검증)에 보존한다. 최종 리뷰 HEAD CI의 run/SHA와 test/Quick smoke 실제 결과는 [PR #32 Validation](https://github.com/wonmin82/primal-zone/pull/32)의 Review fixes에 별도로 기록한다.
+
+순수 ClaimContext/payout helper는 바뀌지 않아 pure tests를 반복하지 않았다. JS/CSS/template/UI 변경이 없어 browser/node도 반복하지 않았다. local full suite·smoke-full·전체 browser/multiplayer matrix·OS IME·실제 PostgreSQL contention·multi-server race·full-world migration·balance simulation 공백은 유지한다. Phase 5+는 구현하지 않는다. 아래 Phase 4 구현 및 이전 단계 기록은 당시 이력이다.
+
 ## Phase 4 — LootClaim + CurrencyLoot (2026-10-06)
 
 시작 main/origin/main은 `4d6a3057dbae08003cae8b5a082882135b31837b`, clean이고 열린 PR은 없었다. Phase 1~3를 포함하며 main CI37378988784 attempt2 success를 확인했다. 이는 시작 기준의 과거 결과이고 이번 PR HEAD 성공을 대신하지 않는다. 새 branch는 `codex/loot-claim-currency`다. 최종 준비 fetch에서도 main은 같은 SHA다. 이번 요청 범위는 구현·검증·문서·commit/push·새 PR·최신 HEAD CI 확인까지이며 merge하지 않는다.

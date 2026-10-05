@@ -9,7 +9,7 @@ from typeclasses.loot import Corpse, take_loot
 from world import loot_service, rules
 from world.item_entities.models import ItemEntity
 from world.loot_entities.models import CurrencyLoot, CurrencyLootShare
-from world.multiplayer import object_by_id
+from world.multiplayer import object_by_id, world_change
 from world.state import loot_controls
 from world.targets import parse_loot
 
@@ -33,7 +33,7 @@ class CurrencyLootTests(NativeLootTest):
         self.assertFalse(ItemEntity.objects.exists())
         with self.assertRaises(ProtectedError):
             row.delete()
-        with self.assertRaises(ProtectedError):
+        with self.assertRaises(ProtectedError), world_change():
             self.source.delete()
         with self.assertRaises((ValidationError, IntegrityError)), transaction.atomic():
             CurrencyLootShare(currency_loot=row, player=self.char1, remaining_amount=0).save()

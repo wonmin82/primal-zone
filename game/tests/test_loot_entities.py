@@ -13,6 +13,7 @@ from world import loot_service, rules
 from world.item_entities import api
 from world.item_entities.models import ItemEntity
 from world.loot_entities.models import LootClaim
+from world.multiplayer import world_change
 from world.state import loot_controls, loot_entries
 from world.targets import parse_loot
 
@@ -26,9 +27,9 @@ class LootEntityTests(NativeLootTest):
         self.assertNotIn("claim", root.state)
         with self.assertRaises(ProtectedError):
             root.delete()
-        with self.assertRaises(ProtectedError):
+        with self.assertRaises(ProtectedError), world_change():
             self.source.delete()
-        with self.assertRaises(ProtectedError):
+        with self.assertRaises(ProtectedError), world_change():
             self.char1.delete()
         with self.assertRaises(ValidationError):
             api.move_item(root, location_kind="inventory", owner_object=self.char1)
@@ -49,7 +50,8 @@ class LootEntityTests(NativeLootTest):
     def test_full_pickup_keeps_identity_sequence_and_drops_claim(self):
         root = self.loot_item()
         identity, sequence = root.pk, root.sequence
-        loot_service.pickup(self.source, self.entry(root), self.char1, 10, now=100)
+        with patch("world.item_entities.api.split_stack", side_effect=AssertionError("full pickup split")):
+            loot_service.pickup(self.source, self.entry(root), self.char1, 10, now=100)
         root.refresh_from_db()
         self.assertEqual((root.pk, root.sequence, root.location_kind, root.owner_object_id),
                          (identity, sequence, "inventory", self.char1.pk))
@@ -72,11 +74,41 @@ class LootEntityTests(NativeLootTest):
 
     def test_partial_pickup_new_sequence_without_claim(self):
         root = self.loot_item()
+        original_claim = LootClaim.objects.get(item_entity=root).pk
         loot_service.pickup(self.source, self.entry(root), self.char1, 3, now=100)
+        root.refresh_from_db()
         split = ItemEntity.objects.get(location_kind="inventory")
+        self.assertEqual((root.quantity, LootClaim.objects.get(item_entity=root).pk), (7, original_claim))
         self.assertGreater(split.sequence, root.sequence)
         self.assertEqual(split.quantity, 3)
         self.assertFalse(LootClaim.objects.filter(item_entity=split).exists())
+
+    def test_generic_split_rejects_current_claim_in_corpse_and_world_loot(self):
+        root = api.create_item("ammo_9", quantity=10, location_kind="corpse_loot", owner_object=self.source,
+                               state={"batch": 3})
+        stale = api._current(root)  # 이 입력을 읽은 뒤 DB에 claim이 생겨도 거절해야 한다.
+        loot_service.create_claim(root, reserved_player=self.char1, protection_until=300)
+        for location in ("corpse_loot", "world_loot"):
+            if location == "world_loot":
+                owner = loot_service.decay_source(self.source, now=200)[0]
+                root.refresh_from_db()
+                self.assertEqual(root.owner_object_id, owner.pk)
+            with self.subTest(location=location):
+                before = self.all_state()
+                with self.assertRaises(ValidationError):
+                    api.split_stack(stale, 3)
+                self.assertEqual(self.all_state(), before)
+
+    def test_inventory_split_remains_claim_free_and_keeps_source_identity(self):
+        root = self.create("ammo_9", quantity=10, state={"batch": 3})
+        identity, sequence = root.pk, root.sequence
+        fragment = api.split_stack(root, 3)
+        root.refresh_from_db()
+        self.assertEqual((root.pk, root.sequence, root.quantity), (identity, sequence, 7))
+        self.assertEqual((fragment.quantity, fragment.location_kind, fragment.owner_object_id, fragment.state),
+                         (3, "inventory", self.char1.pk, root.state))
+        self.assertGreater(fragment.sequence, sequence)
+        self.assertFalse(LootClaim.objects.exists())
 
     def test_outsider_protection_and_expiry_reconcile(self):
         root = self.loot_item(deadline=110)
@@ -318,6 +350,53 @@ class LootEntityTests(NativeLootTest):
             loot_service.populate_source(source, entries)
         self.assertEqual(self.all_state(), before)
         self.assertIsNone(source.db.loot_backend)
+
+    def test_populate_rejects_hidden_physical_assets_without_mutation(self):
+        root = api.create_item("ammo_9", quantity=10, location_kind="corpse_loot", owner_object=self.source)
+        self.source.db.loot_backend = None
+        for location in ("corpse_loot", "inventory"):
+            # 두 번째는 source에 잘못 연결된 비전리품 row fixture다. 위치 필터로 숨기면 안 된다.
+            ItemEntity.objects.filter(pk=root.pk).update(location_kind=location)
+            with self.subTest(location=location):
+                before = self.all_state()
+                with self.assertRaises(rules.RuleError):
+                    loot_service.populate_source(self.source, [dict(kind="item", id="scrap", quantity=1)])
+                self.assertEqual(self.all_state(), before)
+                self.assertIsNone(self.source.db.loot_backend)
+                self.assertIn("legacy 전리품 공간에 native 전리품 row가 존재합니다.",
+                              loot_service.integrity_errors(self.source))
+                self.assertEqual(self.all_state(), before)
+
+    def test_populate_rejects_hidden_currency_assets_without_mutation(self):
+        loot_service.create_currency(self.source, 20, shares={self.char1: 0, self.char2: 20}, protection_until=300)
+        self.source.db.loot_backend = None
+        before = self.all_state()
+        with self.assertRaises(rules.RuleError):
+            loot_service.populate_source(self.source, [dict(kind="item", id="scrap", quantity=1)])
+        self.assertEqual(self.all_state(), before)
+        self.assertIsNone(self.source.db.loot_backend)
+        self.assertIn("legacy 전리품 공간에 native 전리품 row가 존재합니다.",
+                      loot_service.integrity_errors(self.source))
+        self.assertEqual(self.all_state(), before)
+
+    def test_populate_empty_source_and_backend_integrity(self):
+        self.assertEqual(loot_service.integrity_errors(self.source), [])  # 빈 native는 정상이다.
+        self.source.db.entries = [dict(kind="item", id="scrap", quantity=1)]
+        before = self.all_state()
+        self.assertIn("native 전리품 공간에 legacy entry가 남았습니다.",
+                      loot_service.integrity_errors(self.source))
+        with self.assertRaises(rules.RuleError):
+            loot_service.populate_source(self.source, [])
+        self.assertEqual(self.all_state(), before)
+        self.assertEqual(self.source.db.loot_backend, "item_entities")
+        self.source.db.entries = []
+        self.source.db.loot_backend = None
+        self.assertEqual(loot_service.integrity_errors(self.source), [])
+        loot_service.populate_source(self.source, [dict(kind="item", id="scrap", quantity=2)])
+        self.assertEqual(self.source.db.loot_backend, "item_entities")
+        self.assertEqual(self.source.db.entries, [])
+        self.assertEqual(ItemEntity.objects.get(owner_object=self.source).quantity, 2)
+        self.assertEqual(loot_service.integrity_errors(self.source), [])
 
     def test_model_invalid_reference_and_time_rejected(self):
         root = self.loot_item()

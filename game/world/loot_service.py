@@ -51,6 +51,12 @@ def native_source(source):
     return source.db.loot_backend == "item_entities"
 
 
+def has_native_assets(source):
+    """marker와 무관한 실제 저장 검사. 잘못된 위치의 직접 owner 연결도 숨기지 않는다."""
+    return (ItemEntity.objects.filter(owner_object=source).exists()
+            or CurrencyLoot.objects.filter(owner_object=source).exists())
+
+
 def _require_container(source):
     from typeclasses.loot import Corpse, DroppedLoot
 
@@ -207,7 +213,7 @@ def populate_source(source, entries):
                 for identity in (entry["reserved_party"], entry["reserved_player"], entry["assigned_player"],
                                  *entry.get("eligible_players", [])) if identity}
         lock_sources([source], extra_owners=refs)
-        if source.db.entries or loot_snapshot(source).entries:
+        if source.db.entries or has_native_assets(source):
             raise rules.RuleError("비어 있는 전리품 공간만 native로 선택할 수 있습니다.")
         source.db.loot_backend = "item_entities"
         location = "corpse_loot" if isinstance(source, Corpse) else "world_loot"
@@ -292,7 +298,8 @@ def pickup(source, selected, caller, quantity, *, now):
             raise rules.RuleError("실물 전리품은 ItemEntity 소지품을 사용하는 지급 대상이 필요합니다.")
         source_item = ItemEntity.objects.get(pk=current.item_id)
         if quantity < source_item.quantity:
-            item = api.split_stack(source_item, quantity)
+            # claim 없는 fragment는 이 transaction에서 즉시 inventory로 이동한다.
+            item = api.split_stack(source_item, quantity, allow_claimed=True)
         else:
             item = source_item
             LootClaim.objects.filter(item_entity=item).delete()
@@ -341,10 +348,12 @@ def decay_source(source, *, now):
 
 
 def integrity_errors(source):
-    """해당 native 출처만 검사한다. startup/world 전체 변환이나 scan을 수행하지 않는다."""
+    """출처의 marker/실제 저장과 모델을 검사한다. 자동 복구나 전체 scan은 하지 않는다."""
     issues = []
     if native_source(source) and source.db.entries:
         issues.append("native 전리품 공간에 legacy entry가 남았습니다.")
+    if not native_source(source) and has_native_assets(source):
+        issues.append("legacy 전리품 공간에 native 전리품 row가 존재합니다.")
     rows = [*LootClaim.objects.filter(item_entity__owner_object=source),
             *CurrencyLoot.objects.filter(owner_object=source),
             *CurrencyLootShare.objects.filter(currency_loot__owner_object=source)]

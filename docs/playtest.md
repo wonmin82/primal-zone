@@ -1,5 +1,23 @@
 # 원시구역 테스트 안내
 
+## PR #32 Phase 4 리뷰 수정 검증
+
+기준 HEAD `13cb330eb5a28784bab48688a8afa11291582d14` 위 리뷰2건만 수정한 diff를 격리 settings_test DB로 검사했다. 기존 Phase 4 검증과 아래 결과를 합산하지 않는다.
+
+```powershell
+.\.venv\Scripts\python.exe scripts/dev.py check
+.\.venv\Scripts\python.exe scripts/dev.py test tests.test_loot_entities tests.test_currency_loot tests.test_item_entities tests.test_loot tests.test_item_interactions --parallel 2 --reverse
+git diff --check
+```
+
+- 최종 targeted97개/34.030초, runner43.880초 성공. check/diff 성공.
+- 수정 전 generation 실물/화폐·claimed split 재현3개는 실패 subcase5개로 두 이슈를 확인했다. corpse/world split, hidden asset generation이 기존 구현에서 거절되지 않았다.
+- 첫97개는 삭제 보호 fixture2개에서 실패했다(35.058초, runner45.424초). Evennia 직접 delete가 PROTECT 전에 marker Attribute를 제거해 새 integrity 검사에서 불일치를 감지했다. 실제 domain의 world_change 경계로 fixture를 보정한 뒤 해당2개는5.445초(runner14.993초) 성공했고 전체 관련97개도 위와 같이 성공했다. production 삭제나 화폐 semantics를 변경하지 않았다.
+- 새 회귀는 marker 없는 실제 실물/화폐·잘못된 source owner 위치 row·양방향 integrity·빈 generation·reject 후 rows/quantity/state/claim/sequence/marker 불변, stale 입력의 corpse/world claimed split 거절, claim 없는 inventory split, partial pickup/merge와 full pickup의 split 미사용을 확인한다. 기존 legacy partial/권리·CurrencyLoot·ItemEntity rollback 회귀도 포함했다.
+- 최신 리뷰 HEAD CI run/SHA·test/Quick smoke 결과는 [PR #32 Review fixes/Validation](https://github.com/wonmin82/primal-zone/pull/32)에 별도로 기록한다. 시작 HEAD의 CI37385084401 성공은 과거 기준이며 이번 HEAD 성공으로 대신하지 않는다.
+
+ClaimContext/payout pure helper·UI asset은 그대로여서 pure test와 browser/node를 반복하지 않았다. 요청 범위에 따라 local full suite·smoke-full·전체 browser/multiplayer matrix·OS IME·실제 PostgreSQL/multi-server 경쟁·full-world migration·balance simulation은 미실행이다. 자동 복구·legacy conversion·Phase 5+ 구현도 없다.
+
 ## Phase 4 LootClaim + CurrencyLoot 검증
 
 새 구조와 legacy 대응은 [전리품 권리](loot-claims.md)를 따른다. 현재 작업은 시작 main `4d6a3057dbae08003cae8b5a082882135b31837b` 위 미커밋 Phase 4 diff로 격리 테스트 DB를 사용했다. 플레이 DB/schema에는 migration을 실행하지 않는다.
