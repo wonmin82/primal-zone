@@ -38,6 +38,11 @@
 
 변경된 소지품 Web 화면만 기존 Harness로 복사한 격리 서버에서 확인했다. setup의 collectstatic 후 실제 기존 정의의 동일1H 무기 두 개·대기 무기 한 개를 사용했다. 기본 desktop와390px에서 selector/주무기 버튼, 세 번째 장착 거절, 해제 시 승계, 재장착 시 기존 주무기 유지, 직접 주무기 명령의 동등한 결과를 확인했다. console error/warning 없음,390px 가로 overflow 없음이다. 검사 후 서버/탭/임시 DB를 정리했고 플레이 DB fingerprint는 불변이다. 이후 수정은 성공 메시지의 selector 번호·JS cache query·policy/저장 경계이며 브라우저에서 확인한 JS/배치 동작을 다시 바꾸지 않았다.
 
+### Phase 2 첫 HEAD CI 실패와 기대값 보완
+
+- 첫 구현 HEAD `00b9c7c5e2cd0d5f24ba3f09ffcafa4e37e360d8`의 [Game checks 37305214100](https://github.com/wonmin82/primal-zone/actions/runs/37305214100)은 check·순수179개가 성공했고 통합403개 중 Web template 검사1개가 실패했다. `tests.test_environment`가 이전 JS cache version `long-term-growth`를 기대했지만 template은 장비 UI 변경을 반영한 `equipment-phase2`였다. 기대값 갱신 누락이며 이 CI를 성공으로 표현하지 않는다. 같은 HEAD의 Quick smoke는36.428초 성공했다.
+- 후속 diff는 해당 기대값1줄과 이 검증 기록이다. 실제 JS/template/gameplay는 첫 HEAD와 동일하다. `scripts/dev.py test tests.test_environment --parallel 2 --reverse`: 19개 /14.530초·runner23.713초 성공. check와 diff check도 성공했다. 동일 장비 코드의 로컬 targeted·브라우저를 반복하지 않으며 수정 후 최신 HEAD 자동 CI는 PR Validation에 별도 기록한다. 이전 통합403개 실패 실행과 후속 성공 개수를 합산하지 않는다.
+
 ### 미실행 범위와 후속 단계
 
 로컬 full suite·smoke-full·브라우저 전체 regression·실제 OS IME·multiplayer 전체 E2E·PostgreSQL 실제 row-lock 경쟁·multi-server concurrency·full-world migration·전체 balance simulation은 요청대로 미실행이다. Full smoke helper는 최종 slot/명시 해제 계약에 맞췄지만 실행하지 않았다. 기존 자동 CI full suite/Quick smoke는 PR의 최신 HEAD에서 별도 확인하며 로컬 개수와 합산하지 않는다. 이번 장비/Entity 구조는 Phase 3의 inside magazine·active light hook을 받을 수 있지만 실제 flashlight state/ammo/reload/empty gun을 구현하거나 검증하지 않았다. 전체 legacy cutover와 최종 콘텐츠/balance는 Phase 6이다. 기획 변경은 없다.
