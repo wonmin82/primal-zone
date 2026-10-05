@@ -13,6 +13,12 @@ ItemEntity Foundation과 리뷰 P1/P2 수정을 완료했다. 사용자가 문�
 - 남은 범위는 실제 PostgreSQL row-lock 경쟁·multi-server concurrency, 후속 LootClaim identity 비교와 단계별 실제 콘텐츠/저장 전환이다. smoke-full·브라우저 전체·OS IME·full-world migration·balance simulation은 이번 마감에서 미실행이며 1단계 완료와 전체 통합 검증 완료를 혼동하지 않는다.
 - 최신 대상 반영·최종 문서 HEAD의 필수 CI·리뷰·충돌 조건을 확인한 뒤 merge commit 방식으로 병합한다. 소스 HEAD가 main에 포함되었는지 확인하고 요청된 원격·로컬 `codex/itementity-foundation`을 삭제하며 로컬 main은 fast-forward로 갱신한다. 이후 독립 작업은 다시 fetch한 최신 main에서 시작하고 다음 Phase를 임의로 구현하지 않는다.
 
+### 문서 마감 CI 실패와 검사 보완
+
+- 문서 마감 HEAD `e3e4dff29aa198194a00f90ed9993f196d3953e3`의 [Game checks 37293479966](https://github.com/wonmin82/primal-zone/actions/runs/37293479966)는 check·순수168개·Quick28.513초가 성공했으나 통합384개 중 기존 경제 테스트1개가 실패했다. `test_bad_amounts_and_recipients_leave_state_unchanged`의 입력 전후 profile 비교가 실제10초 경계를 지나 recovery updated_at/boundary가 달라졌다. ItemEntity나 문서 기능 실패가 아니며 실패한 CI를 성공으로 표현하지 않는다.
+- 해당 테스트에서 `typeclasses.explorers.time`을100으로 고정해 자연회복 시간 진행과 실패 입력의 원자성을 구분한다. 전체 profile 비교와 전리품 불변 검사는 그대로 유지하며 gameplay·경제·회복 코드와 밸런스는 바꾸지 않았다. 후속 diff는 이 테스트2줄과 실패/검증 기록 문서뿐이다.
+- `.venv\Scripts\python.exe scripts/dev.py test tests.test_economy --parallel 2 --reverse`: 18개 / 10.381초·runner23.727초 성공. `scripts/dev.py check`와 `git diff --check`도 성공했다. ItemEntity 실행 코드와 기존 핵심25개는 동일하여 로컬 재실행하지 않았으며 로컬 전체 suite도 반복하지 않는다. 후속 최종 HEAD의 자동 전체 CI와 병합된 main CI를 각각 확인하고 실제 run/job 링크는 PR Validation에 기록한다.
+
 ## PR #29 ItemEntity 리뷰 수정·검증 (과거 기록: 2026-10-05)
 
 [PR #29](https://github.com/wonmin82/primal-zone/pull/29)의 `codex/itementity-foundation`에서 이어간다. 시작 fetch 후 로컬·원격·PR HEAD는 리뷰 기준 `18cc26fe611d2617c18e381034c6205acf11c592`와 일치했고 staged/unstaged/untracked 변경은 없었다. 최신 base `origin/main`은 `25dd10061b7e63826011f04d69b2646883f2d80c`다. 최종 검토 fetch에서도 기준이 같고 main을 이미 포함하므로 rebase와 기존 이력 재작성은 하지 않는다. 이번 요청은 리뷰 수정 커밋·기존 PR 푸시까지이며 병합하지 않는다. 수정 후 HEAD와 해당 HEAD의 CI는 PR Validation을 기준으로 확인한다.

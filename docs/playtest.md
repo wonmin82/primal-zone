@@ -20,6 +20,8 @@ git diff --check
 
 2026-10-05 리뷰 구현 `8cfd14caaed33e5dd2789fe75a2fd5cc31422f92` 기준 로컬 targeted25개와 check가 성공했다. [해당 HEAD의 CI](https://github.com/wonmin82/primal-zone/actions/runs/37289716444)는 자동 전체552개·Quick smoke도 성공했다. 이는 로컬 전체 검사를 실행한 결과가 아니며 개수를 중복 합산하지 않는다. 이후 문서만 바뀐 마감에서는 링크·내용·diff를 검사하고 동일 코드의 로컬 게임 검사를 반복하지 않는다. 최종 PR HEAD와 병합된 main의 CI는 각 SHA로 별도 확인해 PR Validation에 기록한다. 실제 PostgreSQL row-lock 경쟁·multi-server concurrency·OS IME와 후속 통합 범위는 미검증이다.
 
+문서 마감 HEAD `e3e4dff29aa198194a00f90ed9993f196d3953e3`의 CI에서는 기존 경제 실패 입력의 전체 profile 비교가 실제 자연회복10초 경계를 지나 실패했다. 해당 테스트의 시각만 고정하고 전체 비교·전리품 불변 검사를 유지했다. 후속 `scripts/dev.py test tests.test_economy --parallel 2 --reverse`의18개와 check는 성공했으며 실제 기록은 Task State를 따른다. gameplay 원자성 검사를 약화하거나 회복 규칙을 변경하지 않았고 이전 CI 실패를 최종 HEAD의 성공 근거로 사용하지 않는다.
+
 ## 현재 절차: PR #28 견제와 교관
 
 1. 격리 캐릭터 두 명으로 같은 적에게 견제를 적용한다. 문자열 source ID별 효과가 공존하고 각자 자신의 Rank만 교체/갱신/보존하는지 확인한다. R10 두 명34.39%, 네 명56.95%, 보스 네 명32.92%는 순수 helper로 검사한다. public 적에 두 파티8명이 참여해도 source를 모두 유지하며 최종 감소율만 네 명 기준으로 제한한다. cap 상태에서도 모든 효과를 소비한다. boss=True/quest 없음과 boss=False/quest 존재 fixture는 각각 보스/일반 수치를 사용해야 한다.

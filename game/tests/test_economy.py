@@ -62,6 +62,8 @@ class EconomyTests(WorldCommandTest):
         self.assertEqual(room_loot(self.char1.location, False), [])
 
     def test_bad_amounts_and_recipients_leave_state_unchanged(self):
+        # 실패 원자성의 전체 profile 비교가 실제 자연회복 경계를 지나지 않도록 고정한다.
+        self.enterContext(patch("typeclasses.explorers.time", return_value=100))
         original = [p.profile() for p in (self.char1, self.char2)]
         for raw in ("0칩 버려", "-1칩 버려", "1.5칩 버려", "21칩 버려",
                     f"{self.char1.key}에게 칩 줘", "정산관에게 칩 줘"):
