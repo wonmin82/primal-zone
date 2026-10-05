@@ -1,5 +1,15 @@
 # 원시구역 구조와 설계 결정
 
+## Phase 3 광원·총기 (2026-10-06)
+
+`lighting_service/firearm_service → LightSnapshot/FirearmSnapshot/MagazineSnapshot/EquipmentSnapshot → pure rules/visibility/presentation` 경계로 연결한다. ORM은 persistence service에만 두며 rules/progression/modifier 계산에 넣지 않는다. flashlight power(초)/enabled와 magazine rounds는 ItemEntity.state가 단일 SSOT다. 총기는 rounds를 중복 저장하지 않고 inside/socket=magazine child를 조회한다. active_weapon과 active_light는 실제 Entity UUID 참조이며 같은 item transaction에서 reconcile한다.
+
+ON 잔량은 읽기 전용 projection이고 정상 관찰에서는 저장하지 않는다. switch/OFF/소진/이동/삭제/logout/shutdown에서 상태와 참조를 원자적으로 정리한다. source/destination/parent root의 Explorer owner를 ID 순으로 잠그고 전체 관련 UUID를 모아 잠근다. split/merge도 owner→UUID 순서를 사용한다. 총기 socket은 parent lock과 조건부 DB unique로 보호한다. 중앙 update_item_state는 full_clean/save를 적용하며 user load/unload는 명시적 root policy다.
+
+pure 전투 outcome의 shot_fired와 실제 magazine 감소를 기존 world_change에 묶는다. 빈 firearm은 공격 기회만 사용하고 mental/cooldown commit 전에 반환한다. 성공한 combat reload는 다음 기회 하나를 대체하며 no-op/실패는 기회를 유지한다. legacy firearm은 기본 ammo-free 계약을 유지한다. shared enemy HP·전리품 권리·성장·Defense V1·기존 가격은 바꾸지 않는다.
+
+legacy lighting은 기존 light_sources를 단일 adapter 경계에서 LightSnapshot으로 제공한다. profile inventory/equipment/storage/light_sources, Container.db.items와 Corpse/DroppedLoot legacy data의 SSOT는 Phase 6까지 유지한다. 명령으로 backend 선택/lazy migration/dual-write를 하지 않는다. 최종 V1 콘텐츠와 shop/drop wiring은 적용하지 않았다. 실제 API·명령·state·검증·Phase 4 운반 구조는 [광원·총기](lighting-firearms.md)를 따른다. 아래 과거 단계에서 광원/총기를 후속 단계라고 한 설명은 당시 범위다.
+
 ## Phase 2 장비·Modifier·Defense (2026-10-05)
 
 현재 장비 계산은 `equipment_service → EquipmentSnapshot → equipment/modifiers/rules/recovery/presentation` 경계로 연결한다. ORM은 service에 있고 rules/progression/recovery의 계산은 DB·Evennia와 독립적이다. profile version은 10이다. 아래 과거 구현 설명의 고정 방어와 두 legacy 장비 slot은 이번 단계의 최종 계산·slot 계약보다 우선하지 않는다.

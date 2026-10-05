@@ -322,6 +322,28 @@ class ItemEntityTests(GameCommandTest):
             self.assertIn(identity.hex, query["sql"])
         self.assertEqual(api.ordered_item_ids([first, second]), tuple(expected))
 
+    def test_stack_mutations_lock_owners_before_item_rows(self):
+        from world import equipment_service
+
+        source, destination = self.create(quantity=4), self.create(quantity=2)
+        events = []
+        original_owner, original_items = equipment_service.before_item_change, api.lock_items
+
+        def owners(*args, **kwargs):
+            events.append("owners")
+            return original_owner(*args, **kwargs)
+
+        def items(*args, **kwargs):
+            events.append("items")
+            return original_items(*args, **kwargs)
+
+        with patch.object(equipment_service, "before_item_change", side_effect=owners), patch.object(api, "lock_items", side_effect=items):
+            fragment = api.split_stack(source, 1)
+            self.assertEqual(events[0], "owners")
+            events.clear()
+            api.merge_stack(fragment, destination)
+            self.assertEqual(events[0], "owners")
+
     def test_database_unique_scope_allows_null_but_rejects_duplicates(self):
         ItemEntity.objects.bulk_create([self.raw()])
         ItemEntity.objects.bulk_create([self.raw()])
@@ -369,7 +391,8 @@ class ItemEntityTests(GameCommandTest):
 
     def test_tree_equip_checks_root_only_and_preserves_passive_child(self):
         root_definition = deepcopy(ITEMS["machete"])
-        child_definition = deepcopy(root_definition)
+        root_definition.update(weapon_type="firearm", firearm_family="pistol_9mm")
+        child_definition = deepcopy(ITEMS["mag_9_standard"])
         child_definition["operation_policy"]["equip"] = False
         with patch.dict(
             ITEMS, {"equip_root_test": root_definition, "socket_child_test": child_definition}

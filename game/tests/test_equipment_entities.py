@@ -127,8 +127,9 @@ class EquipmentEntityTests(GameCommandTest):
         self.assertEqual(ItemEntity.objects.count(), 2)
 
     def test_nested_equip_and_unequip_keep_passive_child(self):
-        self.definition("root")
-        self.definition("child", "accessory")
+        self.definition("root", weapon_type="firearm")
+        ITEMS["root"]["firearm_family"] = "pistol_9mm"
+        self.enterContext(patch.dict(ITEMS, {"child": deepcopy(ITEMS["mag_9_standard"])}))
         ITEMS["child"]["operation_policy"].update(equip=False, unequip=False)
         root = self.create("root")
         child = api.create_item("child", location_kind="inside", parent_item=root, socket="magazine")

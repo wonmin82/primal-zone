@@ -85,6 +85,8 @@ class EquipmentItem:
     hands_required: int = 0
     weapon_attack: float = 0
     modifiers: tuple = ()
+    state_summary: str = ""
+    firearm_family: str | None = None
 
     @property
     def equip_action(self):
@@ -95,7 +97,7 @@ class EquipmentItem:
         return "해제" if self.role == "weapon" else "벗어"
 
 
-def item_snapshot(identity, definition, *, item_id=None, sequence=0, quantity=1, location="equipment", slot=None):
+def item_snapshot(identity, definition, *, item_id=None, sequence=0, quantity=1, location="equipment", slot=None, state_summary=""):
     errors = definition_errors(identity, definition)
     if errors:
         reject(" / ".join(errors))
@@ -107,6 +109,7 @@ def item_snapshot(identity, definition, *, item_id=None, sequence=0, quantity=1,
         slot or properties.get("slot"), location, properties.get("role"),
         properties.get("weapon_type"), properties.get("hands_required", 0),
         properties.get("weapon_attack", 0), tuple(Modifier(**modifier) for modifier in modifiers),
+        state_summary, definition.get("firearm_family"),
     )
 
 
@@ -216,12 +219,20 @@ def inventory_rows(profile):
                      "remove_action": item.remove_action if item.slot else None,
                      "consume_action": data.get("consume_action"), "equipped": equipped,
                      "active_weapon": active, "weapon": item.role == "weapon",
-                     "light_source": data.get("light_source"), "power_source": data.get("power_source")})
+                     "light_source": data.get("light_source"), "power_source": data.get("power_source"),
+                     "state_summary": item.state_summary, "location": item.location})
+        if selected.source == "item_entities":
+            rows[-1]["firearm"] = bool(data.get("firearm_family"))
+            rows[-1]["magazine"] = bool(data.get("magazine"))
+            ammo_type = data.get("magazine", {}).get("ammo_type")
+            rows[-1]["ammo_name"] = next((entry["name"] for entry in ITEMS.values()
+                                          if ammo_type and entry.get("ammo_type") == ammo_type), None)
     return rows
 
 
 def equipment_rows(profile):
     selected = context(profile)
     return {slot: " · ".join(selected.label(item) + (" [주무기]" if item is selected.active else "")
+                             + (f" · {item.state_summary}" if item.state_summary else "")
                              for item in selected.items if item.slot == slot) or None
             for slot in SLOT_CAPACITY}

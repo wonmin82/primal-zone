@@ -15,6 +15,7 @@ from commands.character import (
 )
 from commands.combat import Attack, Breathe, Flee, Heal, Heavy, Insight, Shooting, Suppress, Use
 from commands.command_shortcuts import Sequence, Shortcuts
+from commands.firearms import FillMagazine, LoadMagazine, Reload
 from commands.inventory import (
     ActiveWeapon,
     Buy,
@@ -56,6 +57,9 @@ from commands.social import Say
 from commands.world_actions import Investigate, Repair, Rest, Return, Talk, Treat
 
 COMMANDS = [
+    Reload,
+    LoadMagazine,
+    FillMagazine,
     Abilities,
     Skills,
     Experience,

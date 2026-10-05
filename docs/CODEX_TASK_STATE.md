@@ -1,6 +1,65 @@
 # Current Task State
 
-확인일: 2026-10-05. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
+확인일: 2026-10-06. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
+
+## PR #31 문서 마감·병합 및 소스 브랜치 정리 (2026-10-06)
+
+사용자가 필요한 문서 업데이트 후 [PR #31](https://github.com/wonmin82/primal-zone/pull/31) 병합과 소스 브랜치 삭제를 요청했다. 아래 구현·리뷰 단계의 OPEN 유지·merge 금지 기록은 당시 요청 범위이며 이번 명시적 요청보다 우선하지 않는다. 다음 Phase는 별도 요청 전 시작하지 않는다.
+
+- 마감 시작 fetch에서 local/remote/PR HEAD는 `72fb9549e7d7def69478013e5afb31c855a30400`, main/base는 `b2ec5f5c0fc0e511a580d04891d655d7babc0cb3`다. 작업 트리는 clean이며 main 대비 ahead4/behind0, 다른 worktree에서 소스 브랜치를 사용하지 않는다. 최신 main을 이미 포함하므로 불필요한 rebase·이력 재작성은 하지 않는다.
+- 리뷰 HEAD의 [Game checks37376220133](https://github.com/wonmin82/primal-zone/actions/runs/37376220133)는 test/smoke success다. check·순수185개/1.039초·통합442개/191.541초·Quick24.411초를 해당 SHA에서 성공했다. 문서 마감 HEAD와 병합된 main의 CI는 각각 따로 확인해 PR Validation에 run/SHA·결과를 기록하며 이 리뷰 HEAD 성공으로 대신하지 않는다.
+- 이번 마감은 Task State·검증 기록·playtest 문서만 수정한다. 실행 코드·테스트·의존성·정적 파일이 리뷰 검증 당시와 같으므로 당시 targeted86개/pure18개 성공을 재사용한다. 로컬 게임 검사·브라우저·smoke·node·정적 파일 수집은 반복하지 않는다. 문서의 경로·명령·현재 API/검증 이력 구분과 git diff --check를 확인한다.
+- 최신 main 포함·non-draft·필수 CI·리뷰 대화·충돌 조건을 확인한 뒤 merge commit 방식으로 병합한다. 소스 HEAD의 main 포함을 확인한 뒤 원격·로컬 `codex/lighting-firearm`을 삭제하고 로컬 main은 fast-forward로 갱신한다. 실제 병합 commit·main CI·삭제 결과는 PR의 최신 마감 기록과 원격 상태를 기준으로 확인한다.
+- 실제 PostgreSQL 경쟁·multi-server·OS IME·전체 browser/multiplayer matrix·full-world migration·balance simulation 공백은 유지한다. legacy SSOT·profile version10·콘텐츠·밸런스·플레이 DB·비밀 설정은 이번 문서 마감에서 변경하지 않는다.
+
+## PR #31 Phase 3 리뷰 수정 (2026-10-06)
+
+시작 HEAD는 `17823459c81bbf866a7d308b29039b36ecddc97e`, branch는 기존 `codex/lighting-firearm`이며 clean이었다. fetch 후 PR/local/remote HEAD가 같고 main은 `b2ec5f5c0fc0e511a580d04891d655d7babc0cb3` 그대로다. 최신 main을 이미 포함하므로 불필요한 rebase·과거 commit 재작성·새 branch/PR 생성은 하지 않는다. 이번 요청은 리뷰3건 수정·문서·commit/push·최신 HEAD CI 확인까지이며 PR은 merge하지 않는다.
+
+review findings closed:
+
+- recovery command lifecycle: Store/Retrieve·광원·장전/채우기 명령은 일반 command recovery reconciliation으로 복귀했다. Phase 2 착탈/주무기의 equipment_change 특별 lifecycle과 기존 combat reload 정산은 유지한다. service별 새 회복 logic을 추가하지 않았다.
+- Weather native lighting: ObservationContext.lights와 단일 observed_at으로 광원 상세·시야·상태 push를 통일했다. snapshot 중복 조회와 raw legacy inventory 열거를 제거하며 native/legacy 저장 불변을 검사한다.
+- orphan enabled light: invalid/None 참조의 owned direct inventory ON을 elapsed settle/OFF/started_at=None으로 정규화한다. 유효 active는 유지하고 추가 orphan만 OFF로 정리한다. foreign/storage 광원은 탐색 대상이 아니며 기존 lock·world_change·이동 참조 hook 안에서 처리한다.
+
+최종 targeted86개(32.495초·runner41.471초), pure18개(0.199초), check/diff를 성공했다. 첫86개는 새 테스트 fixture/문구3곳에서 실패했고 해당36개 재검증(14.841초·runner23.752초) 후86개를 성공했다. 개수를 중복 합산하지 않는다. 정확한 명령과 개발 check 실패 이력은 [리뷰 검증 기록](phase3-validation.md#pr-31-리뷰-수정-2026-10-06)에 보존한다. 최신 리뷰 HEAD의 CI run/SHA·test/smoke는 [PR #31 Validation](https://github.com/wonmin82/primal-zone/pull/31)에 별도로 기록하며 시작 HEAD CI 성공으로 대체하지 않는다.
+
+firearm/reload/combat 구조·회복 공식·ItemEntity foundation·legacy SSOT·normalization은 유지했다. migration·dual-write·lazy migration·balance 변경·Phase 4+ 구현은 없다. local full suite·smoke-full·전체 browser matrix는 요청 범위 밖이고 JS/CSS/template 변경도 없어 node/브라우저를 반복하지 않았다. 실제 PostgreSQL 경쟁·multi-server·OS IME·full-world migration·balance simulation은 여전히 미검증이다. 아래 Phase 3 및 이전 Phase 기록은 당시 이력으로 보존한다.
+
+## Phase 3 — Lighting + Firearm (2026-10-06)
+
+시작 fetch에서 local/main/origin/main은 `b2ec5f5c0fc0e511a580d04891d655d7babc0cb3`이고 clean이었다. Phase 1 PR #29와 Phase 2 PR #30을 포함한 최신 main에서 새 `codex/lighting-firearm`을 만들었다. 시작 main CI37315480927은 과거 성공이며 새 PR HEAD 결과를 대신하지 않는다. 구현 마감 fetch에서도 origin/main 변경과 다른 열린 PR은 없었다. 이번 요청 범위는 commit/push/새 PR/최신 HEAD CI 확인까지이며 merge하지 않는다. Phase 4는 별도 요청 전 시작하지 않는다.
+
+### 구현과 저장 계약
+
+- `lighting_service`는 legacy/Entity facade이며 `LightSnapshot/LightItem`을 제공한다. native flashlight state는 power_type/remaining_power(초)/enabled/started_at이고 battery1800초다. independent instance·only-one-ON·읽기 전용 projection·소진/이동/logout/shutdown 정산과 `active_light_item_id` 실제 UUID를 구현했다. 정상 ON의 주기 관찰은 state를 매번 저장하지 않는다. 다른 소유자의 stale reference는 해당 광원을 변경하지 않고 참조만 정리한다.
+- `firearm_service`와 순수 `firearms`는 family·magazine/ammo·획득 형태·자동/명시 reload·loose load/전량 unload를 제공한다. magazine은 inside/socket=magazine이며 rounds 단일 SSOT다. parent lock과 새 조건부 DB unique migration0003이 magazine 하나를 보장한다. 기존 carbine/heavy_carbine의 family metadata만 추가하고 가격·공격력·이름을 유지한다. 최종 V1 weapon 콘텐츠/가격/modifier 적용과 shop/drop/quest wiring은 후속 단계에 남겼다.
+- `loaded_magazine()`/`firearm_snapshot()`은 domain snapshot, `loaded_magazine_item()`은 영속 row다. Phase 2 active_weapon()/active_weapon_item() 경계를 유지한다. pure rules/visibility/progression/modifier/recovery에 ORM을 추가하지 않았다.
+- shot_fired outcome을 실제 ammo 감소와 같은 world_change에 묶었다. firearm basic/shooting/suppress는1발이며 non-shot은0발이다. empty/no-mag는 기회만 소비하고 mental/cooldown commit 전에 거절한다. 성공한 combat reload는 다음 기회 하나를 대체하고 queue를 attack으로 정리하며 no-op/실패는 기회를 유지한다. 실제 miss mechanic을 추가하지 않았다.
+- 공통 item hook을 inventory source/destination/parent root owner와 active light까지 확장했다. owner ID 순→결합 UUID 순 lock, 같은 transaction 참조 reconcile·state validation·rollback을 유지한다. split/merge도 owner-first로 보완해 새 inventory service와 lock 역전을 막는다. lock 후 parent 변경도 거절한다. user load/unload는 명시적 root operation이며 None bypass를 사용하지 않는다. transfer/destructive tree-wide 정책과 merge_state contract는 유지한다.
+- loaded firearm sell/burn은 변경 전 구조적으로 거절하며 loaded magazine 자체는 허용한다. resale helper는 empty+rounds×ammo 계산만 제공한다. 실제 상점/소각 연결은 없다.
+- sequence selector는 inventory/equipment/inside 후손을 함께 정렬한다. 같은 광원·탄창을 이름/이름2로 구분하고 UUID/global sequence를 표시하지 않는다. state summary·주무기·Web 버튼을 같은 snapshot/서버 명령에 연결했다. 새 stateful 행만 줄바꿈하며 CSS/JS cache query를 갱신했다.
+- 정규화의 점 처리 충돌은 사용자의 답변 `Decision Log대로 점을 무시`를 적용했다. 공백/점/하이픈/밑줄은 무시하며 숫자/mm를 보존하고 전역 alias 충돌을 검사한다. 외부 Decision Log/통합 계획/Phase 3 초안은 수정하지 않았다. 새로운 기획 변경은 없다.
+
+### Legacy와 다음 단계 경계
+
+profile inventory/equipment/storage/light_sources, Container.db.items, Corpse/DroppedLoot legacy data와 legacy 이전·판매의 direct-read는 유지한다. 기존 lighting module이 단일 legacy adapter로 LightSnapshot을 제공하며 기존 firearm은 ammo-free 기본 경로를 유지한다. 명시적 backend에만 native Lighting/Firearm을 사용하고 lazy migration/임시 Entity/fake UUID/dual-write/profile schema 변경은 없다. 공통 ItemEntity API는 native 외부 이동/삭제 참조를 처리하지만 기존 사용자 transfer/loot/storage 전체를 cutover하지 않았다. Phase 6에서 migration·integrity·runtime SSOT 전환 후 compatibility를 제거한다.
+
+Phase 4는 firearm→magazine tree를 corpse/world loot로 그대로 옮기고 별도 LootClaim을 연결할 수 있다. loose ammo는 stack, rounds는 magazine state여서 partial stack claim을 후속 claim 계약으로 연결한다. 이번 단계에는 LootClaim/CurrencyLoot/Credential/shop V2/incinerator/full migration/balance tuning이 없다.
+
+### 실제 검증과 공백
+
+[Phase 3 실제 검증 기록](phase3-validation.md)에 명령·실패 이력·재검증을 분리했다. 최종 pure/domain103개(0.597초), targeted167개(69.968초·runner80.106초), check/node/diff 검사를 성공했다. 개수를 서로 합산하지 않는다. Lighting12/Firearm17 method가 여러 계약을 묶고 Phase 1/2 foundation/equipment/combat/environment/interactions/text/integration/recovery 회귀를 함께 실행했다.
+
+최소 browser fixture는 별도 SQLite/Portal/Server/정적 파일에서 Desktop1280×900·390×844의 duplicate 광원 selector·직접 명령/버튼 전환·재장전·inside 탄창 채우기/분리·재접속 보존과 새 버튼 줄바꿈을 확인했다. 플레이 DB fingerprint 불변·owned process/성공 임시 디렉터리 cleanup을 확인했다. 이 browser fixture는 Quick/full smoke 결과가 아니다.
+
+최신 PR HEAD의 CI test/smoke 결과는 PR Validation과 마감 기록에서 SHA/run을 대조한다. local full suite/smoke-full·Phase 7 전체 browser/multiplayer·OS IME·실제 PostgreSQL 경쟁·multi-server·full-world migration·balance simulation은 사용자 단계별 전략에 따라 미실행이다. 과거 Phase 1/2 성공 결과는 아래 역사 기록으로 보존하며 이번 검사 수에 더하지 않는다.
+
+[PR #31](https://github.com/wonmin82/primal-zone/pull/31)을 OPEN/non-draft로 생성했다. 최초 code HEAD `4ba72c875e288e9c385bbef5fa51e48280d3f02a`의 [CI37332786078](https://github.com/wonmin82/primal-zone/actions/runs/37332786078)는 순수185개 성공·통합434개 중 환경 조회1개 실패·smoke 성공이었다. 조회 테스트가 실제 회복의10초 경계를 넘었기 때문에 해당 테스트의 Explorer 시계를 저장된 시각으로 고정했다. runtime 회복 규칙과 profile 불변 단언은 바꾸지 않았다. 수정/마감 HEAD의 CI는 새 SHA로 별도 확인한다.
+
+CI 시간 의존 수정 후 `scripts/dev.py test tests.test_environment tests.test_lighting_entities --parallel 2 --reverse`의31개/21.013초·runner39.524초를 성공했고 check/diff도 성공했다. 앞선167개 성공 이후 실행 코드 변경은 없고 환경 테스트만 고정했다. 두 targeted 실행을 합산하지 않는다. 문서 마감에서는 README의 legacy 잔량 폐기와 native 잔량 보존을 구분하고 profile schema migration과 ItemEntity socket constraint migration도 구분했다.
+
+수정 code/test HEAD `c7cfcf50d7e5e4c0c8a210adb02681f512182b7c`의 [CI37333508233](https://github.com/wonmin82/primal-zone/actions/runs/37333508233)는 test/smoke success였다. 자동 순수185개/1.117초·통합434개/194.770초·Quick34.557초를 성공했고 local103/167/31개와 합산하지 않는다. 최신 fetch의 main은 시작 SHA 그대로이며 이미 포함하므로 불필요한 rebase/과거 commit 재작성은 없다. PR은 non-draft·MERGEABLE, 미해결 리뷰 대화0개였다. 이후 변경은 README·Task State·장비/검증 문서뿐이며 동일 코드 로컬 검사를 반복하지 않는다. 최종 문서 HEAD의 CI는 [PR #31 Validation](https://github.com/wonmin82/primal-zone/pull/31)의 새 run/SHA로 확인한다. PR은 병합하지 않고 Phase 4도 시작하지 않는다.
 
 ## PR #30 문서 마감·병합 및 소스 브랜치 정리 (2026-10-05)
 

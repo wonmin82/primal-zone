@@ -347,15 +347,10 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         super().at_post_unpuppet(account=account, session=session, **kwargs)
 
     def reconcile_lights(self, observed_at, *, turn_off=False):
-        from world import lighting
-        from world.multiplayer import world_change
+        from world.lighting_service import reconcile
 
-        with world_change():
-            profile = self.profile_snapshot()
-            if lighting.normalize(profile, observed_at, turn_off=turn_off):
-                self.save_profile(profile)
-                if not turn_off:
-                    after_change(lambda: self.msg("광원의 전원이 다 되어 빛이 꺼졌다."))
+        if reconcile(self, observed_at, turn_off=turn_off) and not turn_off:
+            after_change(lambda: self.msg("광원의 전원이 다 되어 빛이 꺼졌다."))
 
     def at_server_shutdown(self):
         self.cancel_pending_prompt()

@@ -1,10 +1,60 @@
 """데이터 아이템 광원과 교체형 전원. 시각 투영은 읽기 전용이며 변경은 명령/생명주기가 소유한다."""
 
 from copy import deepcopy
+from dataclasses import dataclass
 from math import ceil
 
 from world.content import ITEMS
 from world.rules import RuleError, consume, require_peace
+
+
+def project_power(state, now):
+    """Entity 상태를 초 단위로 투영한다. 조회 자체는 저장 상태를 변경하지 않는다."""
+    value = deepcopy(state)
+    if value["enabled"]:
+        value["remaining_power"] = max(0, value["remaining_power"] - max(0, now - value["started_at"]))
+        value["started_at"] = now
+    if value["remaining_power"] <= 0:
+        value.update(remaining_power=0, enabled=False, started_at=None)
+    return value
+
+
+@dataclass(frozen=True)
+class LightItem:
+    definition_id: str
+    identity: str | None
+    sequence: int
+    label: str
+    remaining_power: float
+    enabled: bool
+    power_type: str
+    power_source: str | None = None
+    capacity: float = 1800
+
+
+@dataclass(frozen=True)
+class LightSnapshot:
+    items: tuple = ()
+    active: LightItem | None = None
+    source: str = "legacy"
+
+
+def legacy_snapshot(profile, now):
+    items = []
+    for identity in ITEMS:
+        if ITEMS[identity].get("light_source") and profile.get("inventory", {}).get(identity):
+            state = projected(profile, identity, now)
+            items.append(LightItem(identity, None, 0, ITEMS[identity]["name"], state["charge_seconds"],
+                                   state["on"], ITEMS[identity]["light_source"]["power_type"], state["power_source"],
+                                   ITEMS.get(state["power_source"], {}).get("power_source", {}).get("capacity_seconds", 1800)))
+    return LightSnapshot(tuple(items), next((item for item in items if item.enabled), None))
+
+
+def snapshot_display(item):
+    return {"id": item.definition_id, "name": item.label, "active": item.enabled,
+            "power_source": {"id": item.power_source or "battery", "name": ITEMS[item.power_source or "battery"]["name"]} if item.remaining_power > 0 else None,
+            "remaining_minutes": ceil(item.remaining_power / 60),
+            "percent": ceil(item.remaining_power / item.capacity * 100)}
 
 
 def source_names():
@@ -101,7 +151,15 @@ def active_source(profile, now):
 
 def status(profile, identity, now):
     require_device(profile, identity)
-    info = display(profile, identity, now)
+    return _status_display(display(profile, identity, now))
+
+
+def snapshot_status(item):
+    """이미 투영된 공통 광원 정보로 상세를 표시하며 다시 조회하지 않는다."""
+    return _status_display(snapshot_display(item))
+
+
+def _status_display(info):
     lines = [f"상태 {'켜짐' if info['active'] else '꺼짐'}",
              f"전원 {info['power_source']['name'] if info['power_source'] else '없음'}"]
     if info["power_source"]:

@@ -31,15 +31,39 @@ def equipped_items(character):
 
 
 def entity_snapshot(character):
+    from world.item_entities.api import items_owned_by
+
     carried = tuple(
         eq.item_snapshot(row.definition_id, ITEMS[row.definition_id], item_id=row.pk,
                          sequence=row.sequence, quantity=row.quantity, location=row.location_kind,
-                         slot=row.slot)
-        for row in ItemEntity.objects.filter(owner_object=character,
-                                             location_kind__in=("inventory", "equipment")).order_by("sequence")
+                         slot=row.slot, state_summary=state_summary(row))
+        for row in items_owned_by(character)
+        if row.root().location_kind in ("inventory", "equipment")
     )
     return eq.EquipmentSnapshot(tuple(item for item in carried if item.location == "equipment"),
                                 carried, character.db.active_weapon_item_id)
+
+
+def state_summary(row):
+    definition = ITEMS[row.definition_id]
+    if definition.get("magazine"):
+        return f"{row.state['rounds']}/{definition['magazine']['capacity']}"
+    if definition.get("firearm_family"):
+        from world.firearm_service import loaded_magazine
+
+        magazine = loaded_magazine(row)
+        return (f"{ITEMS[magazine.definition_id]['name']} {magazine.rounds}/{magazine.capacity}"
+                if magazine else "탄창 없음")
+    if definition.get("light_source"):
+        from math import ceil
+        from time import time
+
+        from world.lighting import project_power
+
+        state = project_power(row.state, time())
+        capacity = definition['light_source'].get('max_power_seconds', 1800)
+        return f"{'켜짐' if state['enabled'] else '꺼짐'} · {ceil(state['remaining_power'] / capacity * 100)}%"
+    return ""
 
 
 def equipment_snapshot(character, profile=None):
@@ -72,7 +96,7 @@ def hand_usage(character, profile=None):
 
 
 def reconcile_references(character):
-    """공통 위치 변경/삭제 안에서 참조를 정리한다. 후속 active light도 이 경계를 확장한다."""
+    """공통 위치 변경/삭제 안에서 active weapon 참조를 정리한다."""
     snapshot = entity_snapshot(character)
     eligible = [item for item in snapshot.items if item.role == "weapon"]
     identity = snapshot.active.identity if snapshot.active else (eligible[0].identity if eligible else None)
@@ -84,32 +108,62 @@ class ItemChange:
     owners: tuple
     profiles: dict
     item_ids: tuple
+    light_ids: dict
 
 
-def before_item_change(old_item=None, *, location_kind=None, owner_object=None):
+def before_item_change(old_item=None, *, location_kind=None, owner_object=None, parent_item=None):
     """owner lock으로 빈 슬롯 경쟁도 직렬화하고 모든 장비 ID를 기존 lock 집합에 합친다."""
-    ids = set()
+    ids, equipment_ids = set(), set()
     if old_item is not None and old_item.location_kind == "equipment":
-        ids.add(old_item.owner_object_id)
+        equipment_ids.add(old_item.owner_object_id)
     if location_kind == "equipment" and owner_object is not None:
+        equipment_ids.add(owner_object.pk)
+    from typeclasses.explorers import Explorer
+
+    for row in (old_item, parent_item):
+        if row is not None:
+            if not isinstance(row, ItemEntity):
+                from world.item_entities.api import _current
+
+                row = _current(row)
+            root = row.root()
+            if isinstance(root.owner_object, Explorer):
+                ids.add(root.owner_object_id)
+    if isinstance(owner_object, Explorer):
         ids.add(owner_object.pk)
+    ids.update(equipment_ids)
     owners = tuple(ObjectDB.objects.select_for_update().get(pk=identity) for identity in sorted(ids))
     profiles = {}
     for owner in owners:
-        if entity_runtime(owner):
+        if owner.pk in equipment_ids and entity_runtime(owner):
             profile = owner.profile()
             owner.accrue_recovery(profile)
             recovery.commit(profile, rules.stats(profile))
             profiles[owner.pk] = profile
-    item_ids = tuple(ItemEntity.objects.filter(owner_object_id__in=ids,
-                                               location_kind="equipment").values_list("pk", flat=True))
-    return ItemChange(owners, profiles, item_ids)
+    from world.item_entities.api import items_owned_by
+
+    item_ids = tuple(identity for owner in owners
+                     for identity in items_owned_by(owner).values_list("pk", flat=True))
+    light_ids = {}
+    for owner in owners:
+        reference = owner.db.active_light_item_id
+        if reference:
+            from world.lighting_service import reference_row
+
+            row = reference_row(reference)
+            if row and row.owner_object_id == owner.pk and row.location_kind == "inventory":
+                light_ids[owner.pk] = str(row.pk)
+    return ItemChange(owners, profiles, item_ids, light_ids)
 
 
 def after_item_change(change):
     for owner in change.owners:
         eq.validate_loadout(entity_snapshot(owner).items)
         reconcile_references(owner)
+        if entity_runtime(owner):
+            from world.lighting_service import reconcile_locked
+
+            reconcile_locked(owner, previous_owned_id=change.light_ids.get(owner.pk))
         if owner.pk in change.profiles:
             profile = change.profiles[owner.pk]
             profile.equipment_context = entity_snapshot(owner)

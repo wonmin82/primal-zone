@@ -15,11 +15,14 @@ from typeclasses.interactables import INTERACTABLES, Container
 from typeclasses.loot import Corpse
 from typeclasses.scripts import WorldLifecycle
 from world import environment as env
+from world import equipment_service, lighting, lighting_service, recovery, rules
 from world.content import REGIONS, ROOMS
-from world.content.environment import WEATHERS
+from world.content.environment import VISIBILITIES, WEATHERS
 from world.content.integrity import errors
 from world.distant_presentation import DistantViewContext
 from world.environment_state import reconcile_environment, snapshot_for
+from world.item_entities import api
+from world.item_entities.models import ItemEntity
 from world.lifecycle import reconcile_world
 from world.multiplayer import world_change
 from world.state import multiplayer_state
@@ -175,6 +178,8 @@ class EnvironmentTests(WorldCommandTest):
 
     def test_local_remote_command_and_web_use_same_observed_at_without_profile_write(self):
         before = deepcopy(self.char1.profile())
+        # observation과 무관한 실제 10초 회복 경계가 실행 중 도래하지 않게 한다.
+        self.enterContext(patch("typeclasses.explorers.time", return_value=before["recovery"]["updated_at"]))
         state_before = deserialize(self.script.db.environment)
         local = self.command("보기")
         snapshot = snapshot_for(self.char1.location, 100)
@@ -213,6 +218,49 @@ class EnvironmentTests(WorldCommandTest):
                 ):
                     Explorer.push_state(self.char1, observed_at=100)
         self.assertEqual(deserialize(self.char1.db.profile), legacy)
+
+    def weather_light_case(self, native):
+        self.enterContext(patch("typeclasses.explorers.time", return_value=100))
+        self.enterContext(patch("world.lighting_service.time", return_value=100))
+        profile = rules.new_profile()
+        profile["recovery"] = recovery.initialize(100)
+        if native:
+            profile.update(inventory={}, equipment={"weapon": None, "armor": None})
+        else:
+            profile["inventory"].update(flashlight=1, battery=1)
+        self.char1.db.profile = profile
+        if native:
+            equipment_service.use_item_entities(self.char1)
+            row = api.create_item("flashlight", location_kind="inventory", owner_object=self.char1)
+            battery = api.create_item("battery", location_kind="inventory", owner_object=self.char1)
+            lighting_service.insert_power(self.char1, row, battery, 40)
+            lighting_service.switch(self.char1, row, True, 40)
+        else:
+            lighting_service.insert_power(self.char1, "flashlight", "battery", 40)
+            lighting_service.switch(self.char1, "flashlight", True, 40)
+        self.state["clock"]["game_epoch"] = 22 * 3600
+        self.state["zones"]["island"].update(weather="storm", next_change_at=100000)
+        self.script.db.environment = self.state
+        before = (deserialize(self.char1.db.profile), list(ItemEntity.objects.values()),
+                  self.char1.db.active_light_item_id, deserialize(self.script.db.environment))
+        with patch.object(lighting_service, "lighting_snapshot", wraps=lighting_service.lighting_snapshot) as snapshots:
+            output = self.command("날씨")
+        snapshots.assert_called_once()
+        self.assertEqual(snapshots.call_args.args[2], 100)
+        for detail in ("탐사용손전등", "상태 켜짐", "전원 건전지", "잔량 약 29분", "현재 시야 " + VISIBILITIES["clear"]):
+            self.assertIn(detail, output)
+        self.assertEqual(snapshot_for(self.char1.location, 100).visibility, "poor")
+        self.char1.push_state.assert_called_with(observed_at=100)
+        self.assertEqual(before, (deserialize(self.char1.db.profile), list(ItemEntity.objects.values()),
+                                 self.char1.db.active_light_item_id, deserialize(self.script.db.environment)))
+        if not native:
+            self.assertIn(lighting.status(self.char1.profile_snapshot(), "flashlight", 100), output)
+
+    def test_weather_native_light_details_share_read_only_observation_snapshot(self):
+        self.weather_light_case(native=True)
+
+    def test_weather_legacy_light_details_share_read_only_observation_snapshot(self):
+        self.weather_light_case(native=False)
 
     def test_weather_and_darkness_filter_targets_without_changing_claim_permissions(self):
         player = self.char1
@@ -403,10 +451,10 @@ class EnvironmentTests(WorldCommandTest):
 class EnvironmentWebTemplateTests(SimpleTestCase):
     def test_fresh_assets_and_field_guide_weather_entry_use_existing_command(self):
         html = render_to_string("webclient/webclient.html")
-        self.assertIn("webclient/css/primal.css?v=long-term-growth", html)
-        self.assertIn("webclient/js/primal.js?v=equipment-phase2", html)
+        self.assertIn("webclient/css/primal.css?v=lighting-firearms-phase3", html)
+        self.assertIn("webclient/js/primal.js?v=lighting-firearms-phase3", html)
         self.assertNotIn("webclient/js/primal.js?v=elevator", html)
-        self.assertNotIn("webclient/js/primal.js?v=lighting", html)
+        self.assertNotIn('webclient/js/primal.js?v=lighting"', html)
         self.assertNotIn("?v=compact", html)
         self.assertNotIn("?v=item-interactions", html)
         self.assertIn('data-command="날씨">환경 확인', html)

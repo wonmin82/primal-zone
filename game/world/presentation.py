@@ -12,7 +12,8 @@ from world.progression import (
 
 
 def _equipment_item_name(snapshot, item):
-    return ft.text(ft.token("item", snapshot.label(item)), " [주무기]" if item is snapshot.active else "")
+    return ft.text(ft.token("item", snapshot.label(item)), " [주무기]" if item is snapshot.active else "",
+                   f" · {item.state_summary}" if item.state_summary else "")
 
 
 def equipment(profile):
@@ -103,7 +104,10 @@ def inventory(profile):
         mark = " [착용]" if row["equipped"] else ""
         if row["active_weapon"]:
             mark += " [주무기]"
-        groups[group].append(ft.text(ft.token("item", row["selector"]), f"×{row['count']}", ft.token("success", mark) if mark else ""))
+        groups[group].append(ft.text(ft.token("item", row["selector"]), f"×{row['count']}",
+                                    ft.token("success", mark) if mark else "",
+                                    f" · {row['state_summary']}" if row["state_summary"] else "",
+                                    " [장전]" if row["location"] == "inside" else ""))
     lines = [ft.text(f"[{title}] ", ft.join(entries, " · ")) for title, entries in groups.items() if entries]
     return ft.compact("소지품", "", *(lines or ["비어 있다."]), summary=format_currency(profile["credits"]))
 

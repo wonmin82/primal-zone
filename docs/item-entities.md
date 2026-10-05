@@ -1,6 +1,6 @@
-# ItemEntity 기반과 Phase 2 장비
+# ItemEntity 기반·장비·상태형 아이템
 
-이번 단계는 기존 수량 딕셔너리를 이후 단계에서 대체할 영속 domain을 추가한다. 새 아이템 row의 SSOT는 `world.item_entities.models.ItemEntity`다. Phase 2 장비 서비스는 명시적으로 선택한 ItemEntity 또는 legacy 저장소를 공통 snapshot으로 계산한다. 기존 캐릭터의 runtime SSOT는 legacy profile이며 상점·광원·전리품·전체 저장 전환은 후속 단계다. 새 row와 자동 동기화하거나 dual-write하지 않는다. 상세 계약은 [장비·Modifier·Defense V1](equipment.md)을 따른다. profile version은 10이다.
+새 아이템 row의 SSOT는 `world.item_entities.models.ItemEntity`다. Phase 2 장비와 Phase 3 광원·총기 서비스는 명시적으로 선택한 ItemEntity 또는 legacy 저장소를 공통 snapshot으로 계산한다. 기존 캐릭터의 runtime SSOT는 legacy profile이며 상점·전리품·전체 저장 전환은 후속 단계다. 새 row와 자동 동기화하거나 dual-write하지 않는다. 상세 계약은 [장비·Modifier·Defense V1](equipment.md)과 [광원·총기](lighting-firearms.md)를 따른다. profile version은 10이다.
 
 ## 정의와 모델
 
@@ -34,6 +34,7 @@ Object type, 정의 존재·metadata, 비스택 quantity=1, max_stack, JSON 객�
 | split_stack(item, quantity) | 0보다 크고 현재 수량보다 작은 수량을 새 row로 분리 |
 | merge_stack(source, destination) | 호환 스택 합산 후 source 삭제, destination ID·sequence 유지 |
 | delete_item(item, operation=None) | 단일 row 삭제, 자식이 남아 있으면 PROTECT |
+| update_item_state(item, state) | 상위 서비스가 권한·결합 lock을 확보한 뒤 full_clean/save로 상태 변경 |
 | items_owned_by(owner_object) | 직접 소유 물품과 inside 후손을 sequence 순으로 조회 |
 | items_in_location(location_kind, owner_object=..., parent_item=...) | 정확한 canonical 위치를 sequence 순으로 조회 |
 | children_of(item) | 바로 아래 자식을 sequence 순으로 조회 |
@@ -51,6 +52,7 @@ operation은 호출자가 직접 조작하는 root의 행동이다. contained ch
 | operation | policy 검사 범위 | 의미 |
 | --- | --- | --- |
 | equip, unequip | root만 | root를 장착/해제하고 내부 물품은 따라 이동한다. child에 equip/unequip 허용을 요구하지 않는다. |
+| load, unload | root만 | 탄창 삽입/분리 또는 탄약 처리의 직접 조작 물품을 검사한다. 상위 서비스가 호환성·소유권·전투 제한을 검증한다. |
 | give, drop, store | root와 모든 descendants | 소유권·바닥/보관 위치 이전에서 내부 물품의 이동 제한도 유지한다. |
 | sell, burn, consume | root와 모든 descendants | 처분·소비를 통한 내부 물품 보호 우회를 막는다. 실제 판매·소각·소비 기능이나 재귀 삭제는 이번 단계에서 구현하지 않는다. |
 | loot | root와 모든 descendants | 획득으로 소유권을 이전할 때 내부 물품의 policy도 검사한다. 실제 LootClaim 권한은 후속 서비스에서 검증한다. |
@@ -69,7 +71,7 @@ operation은 호출자가 직접 조작하는 root의 행동이다. contained ch
 
 ## Migration과 후속 단계
 
-앱은 `world.item_entities.apps.ItemEntitiesConfig`다. `0001_initial`은 Evennia objects migration에 의존하는 두 테이블·constraint·index를 만들고 `0002_initialize_sequence`는 get_or_create로 발급기를 준비한다. 반복 초기화는 이미 사용한 순번을 초기화하지 않는다. 이번 개발에서는 테스트 DB에만 migration을 적용했으며 플레이 DB를 변경하지 않았다.
+앱은 `world.item_entities.apps.ItemEntitiesConfig`다. `0001_initial`은 Evennia objects migration에 의존하는 두 테이블·constraint·index를 만들고 `0002_initialize_sequence`는 get_or_create로 발급기를 준비한다. 반복 초기화는 이미 사용한 순번을 초기화하지 않는다. Phase 3의 `0003_magazine_socket`은 socket="magazine"인 parent/socket에만 조건부 unique를 추가한다. generic 다른 socket은 제한하지 않는다. 이번 개발에서는 격리 테스트 DB에만 migration을 적용했으며 플레이 DB를 변경하지 않았다.
 
 이 코드를 실행 환경에 반영할 때 정상 DB 백업·운영 절차에 따라 game에서 migration을 적용한 후 새 Entity API를 사용한다.
 
@@ -77,11 +79,17 @@ operation은 호출자가 직접 조작하는 root의 행동이다. contained ch
 ..\.venv\Scripts\python.exe -m evennia migrate --noinput
 ```
 
-이번 migration은 profile·공용 상자·시체·바닥 물품을 읽거나 옮기지 않는다. 기존 캐릭터의 명령은 legacy에만 쓰고, 명시적으로 Entity backend를 선택한 빈 신규/fixture 캐릭터의 장비 명령은 Entity에만 쓴다. 이중 쓰기는 없다. 후속 단계에서는 범위별 legacy migration·검증·cutover를 같은 transaction에서 구현하고 영구적인 두 SSOT를 만들지 않는다. Phase 2에서 최종 장비 슬롯·capacity·주무기 참조·modifier·Defense를 연결했다. 활성 광원·총기 상태/탄창·LootClaim·CurrencyLoot·Credential·신규 상점·최종 콘텐츠·밸런스는 각 후속 단계에서 연결한다.
+이번 migration은 profile·공용 상자·시체·바닥 물품을 읽거나 옮기지 않는다. 기존 캐릭터의 명령은 legacy에만 쓰고, 명시적으로 Entity backend를 선택한 빈 신규/fixture 캐릭터의 장비·광원·총기 명령은 Entity에만 쓴다. 이중 쓰기는 없다. 후속 단계에서는 범위별 legacy migration·검증·cutover를 같은 transaction에서 구현하고 영구적인 두 SSOT를 만들지 않는다. Phase 2의 장비·modifier·Defense와 Phase 3의 활성 광원·총기/탄창 상태를 연결했다. LootClaim·CurrencyLoot·Credential·신규 상점·최종 콘텐츠·밸런스는 각 후속 단계다.
 
 ## 검증 범위
 
-핵심 검사는 `tests.test_item_entities`, 정의 검사는 `world.test_item_definitions`다. 생성·DB location 제약·비스택/최대 수량·split/merge·순번·트리 순환/이동/PROTECT·profile/cache/callback rollback·정렬 lock·개인 보관 owner·DB 고유 키·nested 고유 범위·발급기 반복 초기화를 검사한다. 테스트 전용 비스택 root/child로 장착 시 내부 socket 보존을 재현하며 실제 총기·탄창 콘텐츠는 추가하지 않는다. tree-wide 행동의 descendant 거절 시 모든 row·고유 범위·순번 발급기 불변, unknown operation 거절·None 내부 작업, 전체 state 기본 비교와 merge 관련 상태 계약도 검사한다. 기존 `tests.test_item_interactions`, `tests.test_loot`와 정의/이동 순수 규칙 검사는 직접 영향 범위에 따라 선택한다. 실제 실행과 과거 결과는 [작업 상태](CODEX_TASK_STATE.md)에 구분해 기록한다.
+핵심 검사는 `tests.test_item_entities`, 정의 검사는 `world.test_item_definitions`다. 생성·DB location 제약·비스택/최대 수량·split/merge·순번·트리 순환/이동/PROTECT·profile/cache/callback rollback·정렬 lock·개인 보관 owner·DB 고유 키·nested 고유 범위·발급기 반복 초기화를 검사한다. 테스트 전용 비스택 root/child로 장착 시 내부 socket 보존을 재현하며 Phase 3에서는 실제 family/탄창 metadata fixture를 사용한다. tree-wide 행동의 descendant 거절 시 모든 row·고유 범위·순번 발급기 불변, unknown operation 거절·None 내부 작업, 전체 state 기본 비교와 merge 관련 상태 계약도 검사한다. 기존 `tests.test_item_interactions`, `tests.test_loot`와 정의/이동 순수 규칙 검사는 직접 영향 범위에 따라 선택한다. 실제 실행과 과거 결과는 [작업 상태](CODEX_TASK_STATE.md)에 구분해 기록한다.
+
+## Phase 3 상태·중첩·참조 확장
+
+손전등은 power_type/remaining_power(초)/enabled/started_at, 탄창은 rounds를 state에 저장한다. default_state와 모델 validation이 구조·범위를 검사하며 총기 rounds/ammo_count 중복 저장을 거절한다. inside/socket=magazine은 firearm parent와 compatible magazine child만 허용한다. state mutation은 update_item_state를 사용하고 서비스에서 owner→전체 UUID lock을 확보한다. 정상 광원 관찰은 projection만 사용하며 OFF·소진·외부 이동·logout/shutdown에 저장한다.
+
+before/after_item_change는 equipment뿐 아니라 inventory source/destination/parent root 소유자도 잠그고 active weapon/light를 같은 transaction에서 reconcile한다. split/merge도 owner→UUID 순서를 유지한다. 조회와 lock 사이 parent 변경도 거절하며 stale 입력은 ID로 최신 row를 확인한다. loaded firearm의 sell/burn은 row 변경 전에 구조적으로 거절하고 loaded magazine 자체의 sell/burn은 definition policy를 따른다. 일반 tree 이전은 내부 magazine state와 sequence를 보존한다. 중앙 merge_state·claim 확장 지점과 UUID/sequence/PROTECT/unique_scope 발급 계약은 유지한다.
 
 전체 suite·Web/browser 전체 회귀·다인 전체 시나리오·전체 저장 변환·balance simulation의 종합 matrix는 7단계 범위다. Phase 1 구현/리뷰에서는 로컬 Full을 생략했지만, Phase 2 리뷰의 명시적 요청으로 수정한 closeout를 포함한 smoke-full을 실제438.541초에 통과했다. 이 단일 Full 시나리오가 Phase 7 전체 검증을 대신하지 않는다. 기존 GitHub workflow의 자동 전체 suite·Quick smoke는 그대로 실행하며 로컬 targeted 결과와 구분한다. Phase 1 마감·Phase 2 구현/리뷰·문서 마감의 실행 결과는 작업 상태에서 구분한다. 최신 HEAD와 병합된 main의 CI는 각각 해당 SHA로 확인한다. 실제 PostgreSQL row-lock 경쟁과 다중 서버 동시성은 아직 검증하지 않았다. 상세 회귀 절차는 [Phase 1 테스트 안내](playtest.md#pr-29-리뷰-수정의-검증-기준)와 [Phase 2 리뷰 테스트 안내](playtest.md#pr-30-phase-2-리뷰의-검증-기준)를 따른다.
 

@@ -310,23 +310,33 @@ def queue_action(profile, action, now=None, target_profile=None):
     profile["queued_action"] = action
 
 
-def player_attack(profile, enemy_id, now, interval, rng=None, target_profile=None):
-    """One opportunity, regardless of whether it attacks or prepares/supports."""
-    rng = rng or Random()
-    action = profile["queued_action"]
+def consume_combat_opportunity(profile, now, interval):
     profile["queued_action"] = "attack"
     profile["player_round"] += 1
     profile["next_attack_at"] = now + interval
+
+
+def player_attack(profile, enemy_id, now, interval, rng=None, target_profile=None, *, shot_available=True):
+    """One opportunity, regardless of whether it attacks or prepares/supports."""
+    rng = rng or Random()
+    action = profile["queued_action"]
+    consume_combat_opportunity(profile, now, interval)
+    from world.firearms import needs_shot
+
+    active = equipment.context(profile).active
+    shot = needs_shot(action, active.weapon_type if active else None)
+    if shot and not shot_available:
+        return 0, {"action": "error", "message": "총기에 발사할 탄약이 없다. 재장전하세요.", "shot_fired": False}
     if action in ("heal", "breathing", "bandage"):
         try:
-            return 0, support_action(profile, action, now, target_profile)
+            return 0, {**support_action(profile, action, now, target_profile), "shot_fired": False}
         except RuleError as error:
-            return 0, {"action": "error", "message": str(error)}
+            return 0, {"action": "error", "message": str(error), "shot_fired": False}
     if action != "attack":
         try:
             validate_skill_action(profile, action, now)
         except RuleError as error:
-            return 0, {"action": "error", "message": str(error)}
+            return 0, {"action": "error", "message": str(error), "shot_fired": False}
         commit_skill_cost(profile, action, now)
     rank = skill_rank(profile, action) if action in SKILLS else 1
     if action == "insight":
@@ -334,7 +344,7 @@ def player_attack(profile, enemy_id, now, interval, rng=None, target_profile=Non
         effect["penetration"] = modified(profile, "skill.insight.penetration", effect["penetration"])
         effect["bonus"] = modified(profile, "skill.insight.damage", 1 + effect["bonus"]) - 1
         profile["insight"] = {"target": profile["combat_target"], **effect}
-        return 0, {"action": action, **effect}
+        return 0, {"action": action, **effect, "shot_fired": False}
     insight = profile.get("insight")
     if insight and insight["target"] != profile["combat_target"]:
         profile["insight"] = insight = None
@@ -350,7 +360,7 @@ def player_attack(profile, enemy_id, now, interval, rng=None, target_profile=Non
         raw = modified(profile, f"skill.{action}.damage", raw)
     raw *= bonus * pg.attack_multiplier(skill_rank(profile, "attack"))
     damage = apply_defense(raw, ENEMIES[enemy_id]["defense"], penetration)
-    outcome = {"action": action, "insight": bool(insight)}
+    outcome = {"action": action, "insight": bool(insight), "shot_fired": shot}
     if action == "suppress":
         outcome["suppression"] = pg.suppression_effect(rank, bool(ENEMIES[enemy_id].get("boss")))
         outcome["suppression"]["reduction"] = modified(profile, "skill.suppress.reduction", outcome["suppression"]["reduction"])

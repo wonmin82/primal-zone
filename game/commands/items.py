@@ -103,6 +103,26 @@ class Store(Drop):
 
     def run(self):
         from world import lighting
+        from world.equipment_service import entity_runtime, resolve_item
+
+        if entity_runtime(self.caller):
+            from world import lighting_service
+
+            from commands.firearms import load_loose, relation
+
+            try:
+                selected, value = relation(self.caller, self.args, self.particle)
+            except rules.RuleError:
+                selected = None
+            if selected is not None:
+                if ITEMS[selected.definition_id].get("light_source"):
+                    power = resolve_item(self.caller, value, self.key)
+                    lighting_service.insert_power(self.caller, selected, power)
+                    self.caller.msg("광원에 전원 하나를 넣었다.")
+                    return
+                if ITEMS[selected.definition_id].get("magazine"):
+                    load_loose(self.caller, selected, value)
+                    return
 
         objects = room_objects(self.caller)
         selector, value = parse_relation(
@@ -115,7 +135,9 @@ class Store(Drop):
             if selector.index:
                 raise rules.RuleError("소지품의 광원은 번호 없이 지정하세요.")
             power, _ = stack_selector(value, ITEMS, self.key, allow_all=False)
-            self.caller.change(lambda profile: lighting.insert_power(profile, identity, power, time()))
+            from world.lighting_service import insert_power
+
+            insert_power(self.caller, identity, power, time())
             self.caller.msg(ft.text(ft.item(identity), "에 ", ft.item(power), " 한 개를 넣었다."))
             return
         super().run()
@@ -130,11 +152,11 @@ class LightOn(GameCommand):
     enabled = True
 
     def run(self):
-        from world import lighting
+        from world import lighting_service as service
 
-        identity, _ = stack_selector(self.args, ITEMS, self.key, allow_all=False)
-        self.caller.change(lambda profile: lighting.switch(profile, identity, self.enabled, time()))
-        self.caller.msg(ft.text(ft.item(identity), ft.particle(ITEMS[identity]["name"], "을/를"),
+        item, label = service.resolve_light(self.caller, self.args, self.key)
+        service.switch(self.caller, item, self.enabled, time())
+        self.caller.msg(ft.text(ft.token("item", label), ft.particle(label, "을/를"),
                                " 켰다." if self.enabled else " 껐다."))
 
 
@@ -153,10 +175,10 @@ class LightStatus(GameCommand):
     summary = "광원의 상태, 전원 종류와 남은 사용 시간을 확인합니다."
 
     def run(self):
-        from world import lighting
+        from world import lighting_service as service
 
-        identity, _ = stack_selector(self.args, ITEMS, self.key, allow_all=False)
-        self.caller.msg(ft.compact(ft.item(identity), lighting.status(self.caller.profile_snapshot(), identity, time())))
+        item, label = service.resolve_light(self.caller, self.args, self.key)
+        self.caller.msg(ft.compact(ft.token("item", label), service.status(self.caller, item, time())))
 
 
 class Retrieve(Drop):
@@ -166,6 +188,22 @@ class Retrieve(Drop):
     withdraw = True
     usage = "보관상자에서 붕대 꺼내 · 보관상자 2에서 붕대 모두 꺼내 · 개인 보관함에서 붕대 꺼내"
     summary = "한 보관함에서 물건 하나 또는 같은 스택 전부를 꺼냅니다."
+
+    def run(self):
+        from world.equipment_service import entity_runtime
+
+        if entity_runtime(self.caller):
+            from commands.firearms import relation, unload
+
+            try:
+                item, value = relation(self.caller, self.args, self.particle)
+            except rules.RuleError:
+                item = None
+            if item is not None and (ITEMS[item.definition_id].get("magazine")
+                                     or ITEMS[item.definition_id].get("firearm_family")):
+                unload(self.caller, item, value)
+                return
+        super().run()
 
 
 class Eat(GameCommand):

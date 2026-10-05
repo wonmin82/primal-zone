@@ -6,7 +6,7 @@ from evennia.commands.default.general import CmdLook
 from world import presentation as view
 from world import rules
 from world import text as ft
-from world.content import ITEMS, REGIONS, ROOMS, ordered_directions
+from world.content import REGIONS, ROOMS, ordered_directions
 
 from commands.base import GameCommand
 
@@ -96,6 +96,24 @@ class Look(CmdLook):
                         )
                     self.caller.msg(output)
                 else:
+                    from world.equipment_service import (
+                        entity_runtime,
+                        resolve_item,
+                        selector_label,
+                        state_summary,
+                    )
+
+                    if entity_runtime(self.caller):
+                        from world.lighting_service import status as light_status
+
+                        item = resolve_item(self.caller, name, "보기")
+                        identity = item.definition_id
+                        detail = light_status(self.caller, item, observed_at) if ITEMS[identity].get("light_source") else state_summary(item)
+                        self.caller.msg(ft.compact(ft.token("item", selector_label(self.caller, item)),
+                                                   ITEMS[identity].get("description", "탐사 중 사용하는 물품이다."),
+                                                   detail, ITEMS[identity].get("firearm_family", "")))
+                        self.caller.push_state(observed_at=observed_at)
+                        return
                     identity = item_selector(name, inventory, "보기")
                     from world import lighting
 
@@ -142,11 +160,10 @@ class Weather(GameCommand):
         from world.content.environment import VISIBILITIES
         from world.observation import context_for
 
-        profile = self.caller.profile_snapshot()
-        sight = context_for(self.caller, observed_at=observed_at, environment=environment).snapshot
-        for identity, count in profile["inventory"].items():
-            if count and ITEMS[identity].get("light_source"):
-                lines.extend(["", ft.item(identity), lighting.status(profile, identity, observed_at)])
+        context = context_for(self.caller, observed_at=observed_at, environment=environment)
+        sight = context.snapshot
+        for light in context.lights.items:
+            lines.extend(["", ft.token("item", light.label), lighting.snapshot_status(light)])
         lines.append(f"현재 시야 {VISIBILITIES[sight.effective_visibility]}")
         self.caller.msg(ft.compact(ft.token("title", "환경"), *lines))
         self.caller.push_state(observed_at=observed_at)

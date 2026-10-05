@@ -5,8 +5,7 @@ from time import time
 
 from world.content import ITEMS
 from world.content.environment import LIGHT_GRADES, VISIBILITIES
-from world.lighting import active_source
-from world.lighting import display as light_display
+from world.lighting import legacy_snapshot, snapshot_display
 
 VISIBILITY_RANK = {"clear": 0, "reduced": 1, "poor": 2}
 LIGHT_RANK = {"bright": 0, "normal": 1, "dim": 2, "dark": 3}
@@ -30,13 +29,15 @@ class ObservationContext:
     observed_at: float
     distance: int = 0
     snapshot: ObservationSnapshot | None = None
+    lights: object | None = None
 
 
-def observe(environment, profile, observed_at, distance=0):
+def observe(environment, profile, observed_at, distance=0, lights=None):
     """순수 계산: 전원 잔량도 사본에서 투영하며 profile/Environment를 바꾸지 않는다."""
     ambient_light = environment.ambient_light if environment else "normal"
     visibility = environment.visibility if environment else "clear"
-    identity = active_source(profile, observed_at)
+    lights = lights if lights is not None else legacy_snapshot(profile, observed_at)
+    identity = lights.active.definition_id if lights.active else None
     strength = 0
     if identity:
         source = ITEMS[identity]["light_source"]
@@ -59,8 +60,11 @@ def context_for(viewer, room=None, observed_at=None, distance=0, *, environment=
     now = time() if observed_at is None else observed_at
     environment = snapshot_for(room, now) if environment is None else environment
     profile = viewer.profile_snapshot() if hasattr(viewer, "profile_snapshot") else {"inventory": {}}
+    from world.lighting_service import lighting_snapshot
+
+    lights = lighting_snapshot(viewer, profile, now)
     return ObservationContext(viewer, room, environment, now, distance,
-                              observe(environment, profile, now, distance))
+                              observe(environment, profile, now, distance, lights), lights)
 
 
 def perceives(snapshot, detectability):
@@ -83,11 +87,10 @@ def can_inspect_loot(context):
 
 def display(context, profile):
     sight = context.snapshot
-    light_ids = [key for key, count in profile["inventory"].items()
-                 if count > 0 and ITEMS[key].get("light_source")]
-    identity = sight.light_source or next(iter(light_ids), None)
+    lights = context.lights or legacy_snapshot(profile, context.observed_at)
+    selected = lights.active or next(iter(lights.items), None)
     return {
         "effective_light": {"id": sight.effective_light, "name": LIGHT_GRADES[sight.effective_light]},
         "effective_visibility": {"id": sight.effective_visibility, "name": VISIBILITIES[sight.effective_visibility]},
-        "light_source": light_display(profile, identity, context.observed_at) if identity else None,
+        "light_source": snapshot_display(selected) if selected else None,
     }

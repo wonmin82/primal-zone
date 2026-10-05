@@ -59,6 +59,8 @@ class ItemEntity(models.Model):
             models.Index(fields=["parent_item", "socket"], name="item_parent_socket"),
         ]
         constraints = [
+            models.UniqueConstraint(fields=["parent_item", "socket"], condition=Q(socket="magazine"),
+                                    name="item_one_magazine_socket"),
             models.CheckConstraint(condition=Q(quantity__gte=1), name="item_quantity_positive"),
             models.CheckConstraint(condition=Q(sequence__gte=1), name="item_sequence_positive"),
             models.CheckConstraint(
@@ -147,6 +149,19 @@ class ItemEntity(models.Model):
             raise ValidationError({"quantity": "스택 최대 수량을 초과했습니다."})
         if not isinstance(self.state, dict):
             raise ValidationError({"state": "아이템 상태는 JSON 객체여야 합니다."})
+        from world.item_states import state_errors
+
+        issues = state_errors(definition, self.state)
+        if issues:
+            raise ValidationError({"state": issues})
+        if self.socket == "magazine" and self.parent_item_id is not None:
+            parent = ITEMS[self.parent_item.definition_id]
+            magazine = definition.get("magazine", {})
+            if (not parent.get("firearm_family")
+                    or magazine.get("family") != parent["firearm_family"]):
+                raise ValidationError({"parent_item": "총기와 탄창 family가 호환되지 않습니다."})
+            if self.parent_item.children.filter(socket="magazine").exclude(pk=self.pk).exists():
+                raise ValidationError({"socket": "총기에 이미 탄창이 삽입되어 있습니다."})
         self.root()
         if self.owner_object_id is not None:
             expected = {
