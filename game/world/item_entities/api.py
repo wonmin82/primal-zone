@@ -22,6 +22,13 @@ def ordered_item_ids(items):
     return tuple(sorted({item_id(item) for item in items}))
 
 
+def _current(item):
+    try:
+        return ItemEntity.objects.get(pk=item_id(item))
+    except ItemEntity.DoesNotExist:
+        raise ValidationError("대상 아이템이 더 이상 존재하지 않습니다.") from None
+
+
 def lock_items(items):
     """먼저 ID를 수집·정렬한 다음 동일 순서로 row lock을 얻는다."""
     if not connection.in_atomic_block:
@@ -79,7 +86,7 @@ def _check_tree_operation(root, descendants, operation):
     if operation is None:
         # 신뢰된 내부 배치 전용이다. 위치·순환·고유 범위 검증은 우회하지 않는다.
         return
-    scope = TREE_OPERATION_SCOPES.get(operation)
+    scope = TREE_OPERATION_SCOPES.get(operation) if isinstance(operation, str) else None
     if scope is None:
         raise ValidationError("트리 적용 범위가 정의되지 않은 행동입니다.")
     _check_operation(root, operation)
@@ -100,8 +107,11 @@ def create_item(
     state=None,
 ):
     with world_change():
+        from world.equipment_service import after_item_change, before_item_change
+
+        change = before_item_change(location_kind=location_kind, owner_object=owner_object)
         ancestors = _ancestors(parent_item)
-        locked = {item.pk: item for item in lock_items(ancestors)}
+        locked = {item.pk: item for item in lock_items([*ancestors, *change.item_ids])}
         item = ItemEntity(
             definition_id=definition_id,
             quantity=quantity,
@@ -114,19 +124,29 @@ def create_item(
             sequence=_next_sequence(),
         )
         item.save(force_insert=True)
+        after_item_change(change)
         return item
 
 
-def _move(item, *, location_kind, owner_object, parent_item, slot, socket, operation, tree):
+def _move(item, *, location_kind, owner_object, parent_item, slot, socket, operation, tree, expected_source=None):
     with world_change():
+        from world.equipment_service import after_item_change, before_item_change
+
+        current = _current(item)
+        change = before_item_change(current, location_kind=location_kind, owner_object=owner_object)
         identities = _tree_ids(item)
         if not tree and len(identities) > 1:
             raise ValidationError("내부 아이템이 있는 물품은 트리 이동을 사용해야 합니다.")
         ancestors = _ancestors(parent_item)
         if item_id(item) in ancestors:
             raise ValidationError("아이템을 자신이나 자신의 하위 아이템 안으로 옮길 수 없습니다.")
-        locked = {row.pk: row for row in lock_items(identities | set(ancestors))}
+        locked = {row.pk: row for row in lock_items(identities | set(ancestors) | set(change.item_ids))}
         root = locked[item_id(item)]
+        source = (root.location_kind, root.owner_object_id)
+        if source != (current.location_kind, current.owner_object_id) or (
+            expected_source is not None and source != expected_source
+        ):
+            raise ValidationError("아이템의 위치나 소유자가 바뀌었습니다. 다시 선택하세요.")
         _check_tree_operation(
             root, (locked[identity] for identity in identities if identity != root.pk), operation
         )
@@ -142,6 +162,7 @@ def _move(item, *, location_kind, owner_object, parent_item, slot, socket, opera
         ):
             row.refresh_from_db()
             row.save()
+        after_item_change(change)
         return root
 
 
@@ -176,6 +197,7 @@ def move_item_tree(
     slot=None,
     socket=None,
     operation=None,
+    expected_source=None,
 ):
     return _move(
         item,
@@ -186,6 +208,7 @@ def move_item_tree(
         socket=socket,
         operation=operation,
         tree=True,
+        expected_source=expected_source,
     )
 
 
@@ -258,10 +281,17 @@ def merge_stack(source, destination):
 
 def delete_item(item, *, operation=None):
     with world_change():
-        locked = lock_items([item])[0]
+        from world.equipment_service import after_item_change, before_item_change
+
+        current = _current(item)
+        change = before_item_change(current)
+        locked = {row.pk: row for row in lock_items([item, *change.item_ids])}[item_id(item)]
+        if (locked.location_kind, locked.owner_object_id) != (current.location_kind, current.owner_object_id):
+            raise ValidationError("아이템의 위치나 소유자가 바뀌었습니다. 다시 선택하세요.")
         _check_operation(locked, operation)
         # PROTECT가 내부 물품의 암묵적 삭제를 차단한다. 재귀 삭제는 제공하지 않는다.
         locked.delete()
+        after_item_change(change)
 
 
 def items_in_location(location_kind, *, owner_object=None, parent_item=None):

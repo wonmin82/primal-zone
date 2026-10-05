@@ -8,7 +8,7 @@
 
 ### PR #29 리뷰 수정의 검증 기준
 
-`tests.test_item_entities`는 테스트 전용 비스택 root/child로 root의 `equip=true`·child의 `equip=false`를 재현한다. root를 `equipment/main_hand`로 옮긴 뒤 child의 `inside`·같은 parent·`socket="magazine"`·sequence가 유지되는지 확인한다. 실제 firearm/magazine 콘텐츠는 fixture로도 배포하지 않는다. `give/drop/store/sell/burn/loot/consume`의 descendant 제한은 거절 후 전체 row·unique scope·발급기 불변을 검사한다. 미정의 operation 거절과 `operation=None`의 신뢰된 내부 이전도 구분한다.
+`tests.test_item_entities`는 테스트 전용 비스택 root/child로 root의 `equip=true`·child의 `equip=false`를 재현한다. root를 `equipment/hands`로 옮긴 뒤 child의 `inside`·같은 parent·`socket="magazine"`·sequence가 유지되는지 확인한다. 실제 firearm/magazine 콘텐츠는 fixture로도 배포하지 않는다. `give/drop/store/sell/burn/loot/consume`의 descendant 제한은 거절 후 전체 row·unique scope·발급기 불변을 검사한다. 미정의 operation 거절과 `operation=None`의 신뢰된 내부 이전도 구분한다.
 
 merge는 현재 기본 계약의 전체 state 동일/차이와 테스트 안에서만 선택한 merge 관련 state 동일/차이를 각각 검사한다. LootClaim은 후속 단계이며 다른 claim의 병합 금지 계약만 유지한다. UUID·전역 sequence·split/merge identity·canonical 위치·cycle·PROTECT·개인 보관 owner·nested uniqueness·lock 순서·outer rollback·stale 입력은 같은 핵심 suite의 회귀 대상이다.
 

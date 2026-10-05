@@ -197,6 +197,7 @@ class Drink(Eat):
 
 
 class RemoveArmor(GameCommand):
+    equipment_change = True
     key = UNEQUIP_ACTIONS["armor"]
     aliases = ["remove"]
     expected_slot = "armor"
@@ -206,12 +207,15 @@ class RemoveArmor(GameCommand):
     summary = "현재 입은 방어구를 벗어 소지품에 남깁니다."
 
     def run(self):
-        identity, _ = stack_selector(self.args, ITEMS, self.key, allow_all=False)
-        self.caller.change(lambda profile: rules.unequip(profile, identity, self.expected_slot))
+        from world.equipment_service import resolve_item, selector_label, unequip_item
+
+        selected = resolve_item(self.caller, self.args, self.key)
+        label = selector_label(self.caller, selected)
+        unequip_item(self.caller, selected, self.expected_slot)
         self.caller.msg(
             ft.text(
-                ft.item(identity),
-                ft.particle(ITEMS[identity]["name"], "을/를"),
+                ft.token("item", label),
+                ft.particle(label, "을/를"),
                 " 벗었다." if self.expected_slot == "armor" else " 해제했다.",
             )
         )

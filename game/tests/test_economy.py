@@ -211,6 +211,7 @@ class EconomyTests(WorldCommandTest):
     def test_value_sale_and_server_actions_preserve_equipped_copy(self):
         self.char1.location = self.rooms["weapon_shop"]
         self.char1.change(lambda p: p["inventory"].update(blade=3))
+        self.command("낡은마체테 해제")
         self.command("강철마체테 무장")
         self.assertIn("60칩", self.command("무기상에게 강철마체테 가치"))
         self.assertIn("30칩", self.command("강철마체테 value"))

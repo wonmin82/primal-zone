@@ -11,7 +11,7 @@ ATTRIBUTES = {
 }
 SKILLS = {
     "attack": {"name": "공격", "max_rank": 30, "type": "passive", "group": "기초", "description": "최종 물리 피해 증가"},
-    "defense": {"name": "방어", "max_rank": 20, "type": "passive", "group": "기초", "description": "고정 방어 후 피해 비율 감소"},
+    "defense": {"name": "방어", "max_rank": 20, "type": "passive", "group": "기초", "description": "방어 곡선 적용 후 피해 비율 감소"},
     "heavy": {"name": "강타", "max_rank": 20, "type": "active", "group": "공격", "description": "총기 외 무기로 다음 공격 강화"},
     "shooting": {"name": "사격", "max_rank": 20, "type": "active", "group": "공격", "description": "총기로 방어를 관통하는 공격"},
     "insight": {"name": "간파", "max_rank": 10, "type": "preparation", "group": "공격", "description": "공격 한 차례를 포기하고 대상의 약점 분석"},
@@ -88,20 +88,21 @@ def suppression_effect(rank, boss=False):
     return {"rank": rank, "reduction": (0.10 + (rank - 1) * 0.01) * (0.5 if boss else 1), "attacks": 1 + (rank - 1) // 3}
 
 
-def apply_suppression(effects, source_id, rank, boss=False):
+def apply_suppression(effects, source_id, rank, boss=False, effect=None):
     """Replace only this source's effect; IDs remain strings across serialization."""
     updated = {str(source): dict(effect) for source, effect in (effects or {}).items()}
     source = str(source_id)
     current = updated.get(source)
+    incoming = dict(effect) if effect is not None else suppression_effect(rank, boss)
     if not current:
         status = "applied"
-        updated[source] = suppression_effect(rank, boss)
+        updated[source] = dict(incoming)
     elif rank > current["rank"]:
         status = "upgraded"
-        updated[source] = suppression_effect(rank, boss)
+        updated[source] = dict(incoming)
     elif rank == current["rank"]:
         status = "refreshed"
-        updated[source] = {**current, "attacks": suppression_effect(rank, boss)["attacks"]}
+        updated[source] = {**current, "attacks": incoming["attacks"]}
     else:
         status = "preserved"
     return updated, status
