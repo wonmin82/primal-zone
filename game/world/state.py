@@ -8,7 +8,8 @@ from typeclasses.parties import invitation_for, party_for
 
 from world.content import ENEMIES
 from world.currency import currency_names, format_currency
-from world.loot_assets import asset_name, asset_text, normalize_entry
+from world.loot_assets import asset_name, asset_text
+from world.loot_service import source_entries
 from world.multiplayer import object_by_id
 from world.targets import labels, room_objects
 
@@ -33,7 +34,7 @@ def loot_entries(source, player, now):
             "protected": now < entry["protection_until"],
             "can_take": can_take_entry(entry, player, now),
         }
-        for entry in (normalize_entry(raw) for raw in source.db.entries)
+        for entry in source_entries(source)
     ]
 
 
@@ -46,12 +47,12 @@ def loot_controls(player, now, objects=None):
     corpses = [obj for obj in room_loot(player.location) if obj in objects]
     ground = [obj for obj in room_loot(player.location, corpse=False) if obj in objects]
     corpse_controls = labels(corpses, lambda obj: "시체")
-    ground_entries = [(obj, i, normalize_entry(entry)) for obj in ground for i, entry in enumerate(obj.db.entries)]
+    ground_entries = [(obj, i, entry) for obj in ground for i, entry in enumerate(source_entries(obj))]
 
     def with_loot_controls(source):
         entries = loot_entries(source, player, now)
         pool = (
-            [(source, i, normalize_entry(e)) for i, e in enumerate(source.db.entries)]
+            [(source, i, entry) for i, entry in enumerate(source_entries(source))]
             if source in corpses
             else ground_entries
         )

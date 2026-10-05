@@ -2,6 +2,23 @@
 
 확인일: 2026-10-06. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
 
+## Phase 4 — LootClaim + CurrencyLoot (2026-10-06)
+
+시작 main/origin/main은 `4d6a3057dbae08003cae8b5a082882135b31837b`, clean이고 열린 PR은 없었다. Phase 1~3를 포함하며 main CI37378988784 attempt2 success를 확인했다. 이는 시작 기준의 과거 결과이고 이번 PR HEAD 성공을 대신하지 않는다. 새 branch는 `codex/loot-claim-currency`다. 최종 준비 fetch에서도 main은 같은 SHA다. 이번 요청 범위는 구현·검증·문서·commit/push·새 PR·최신 HEAD CI 확인까지이며 merge하지 않는다.
+
+- 별도 loot_entities Django app에 LootClaim OneToOne, CurrencyLoot, CurrencyLootShare와 schema migration을 추가했다. 기존 world/profile의 data migration은 없다. 실물은 root ItemEntity+optional claim, 화폐는 non-item 별도 row+share다. 상세 모델·API·legacy 필드 의미는 [전리품 권리](loot-claims.md)에 기록했다.
+- loot_service의 loot_snapshot/source_entries가 legacy/native 공통 조회 경계다. 생성은 빈 source의 populate_source와 Corpse.from_enemy(..., backend="item_entities")로 명시적으로 선택한다. 기존 사냥의 기본 생성·legacy db.entries SSOT는 유지하며 lazy conversion/dual-write는 없다. native 실물은 native recipient, legacy 실물은 legacy recipient에게만 회수하며 backend를 자동 전환하지 않는다. profile version10·기존 콘텐츠/가격/보상은 유지한다.
+- full pickup은 claim 제거 후 같은 ItemEntity 이동, partial은 source claim 유지→claim 없는 새 split→inventory 이동/merge다. root firearm+inside magazine tree와 sequence를 그대로 유지한다. generic merge도 ClaimContext의 root 배정 단위와 권리를 비교한다. 독립 entry는 동일 권리 필드라도 합치지 않으며 claim DB PK 변경 자체는 context 차이가 아니다.
+- share=0도 행을 유지해 원래 eligible player의 trigger 의미를 보존한다. protected 생성 시 share 합=quantity, 항상 잔여 합≤quantity다. 기존 currency_payouts/weighted_split을 사용하며 offline recipient credits·share·quantity를 한 transaction에서 변경한다. expiry는 caller 지급이고 free 부분 회수 시 과거 share는 0으로 정리한다. XP는 전리품 모델에 넣지 않는다.
+- owner ID→전체 UUID→claim/currency/share 순으로 잠그고 선택 후 출처·권리·수량·지분을 다시 검사한다. 지급 대상 변경 시 lock 순서를 뒤집지 않고 재선택한다. claim expiry는 source 단위, decay는 실물/tree·화폐 owner만 옮겨 권리·지분·기한을 보존한다. 빈 corpse는 기존 TTL, 빈 ground는 회수 후 정리한다.
+- reserved_party의 SET_NULL은 마지막 멤버 탈퇴로 Party가 삭제되는 기존 동작을 유지하기 위한 선택이다. 배정 player·share·기한은 유지한다. 실물/owner/player/share parent는 PROTECT다. 0 share와 root 배정 단위 해석은 Decision Log·통합안·현재 실행 지침을 함께 반영했으며 기획 변경은 없다.
+
+로컬 관련 회귀168개/60.964초(runner69.961초), 순수5개/0.001초를 성공했다. 이후 native 생성 guard/owner lock과 rollback 테스트를 보완하고 native40개/13.991초(runner22.960초)를 최종 성공했다. 개수를 중복 합산하지 않는다. 실패/재실행·명령·Web 확인은 [playtest](playtest.md#phase-4-lootclaim--currencyloot-검증)를 따른다. 최신 PR HEAD의 CI run/SHA·test/Quick smoke 결과는 PR Validation에 별도로 기록하며 로컬 개수와 합산하지 않는다.
+
+최소 Web은 격리 SQLite/fixture/owned Portal·Server에서 보호 실물 버튼·free 실물 회수·칩 부분/모두·0 share trigger와 offline 지급을 확인했다. console warning/error는 없고 성공 임시 DB/로그·프로세스·탭을 정리했다. play DB fingerprint는 같았다. JS/CSS/template 변경은 없으며 Quick/full smoke 실행 결과로 간주하지 않는다.
+
+local full suite·smoke-full·전체 browser/multiplayer matrix·OS IME·실제 PostgreSQL contention·multi-server race·full-world migration·balance simulation은 미검증이다. Phase 5 Credential/access/shop/incinerator와 Phase 6 콘텐츠·migration은 구현하지 않았다. Phase 5는 root/tree/claim을 바꾸지 않고 연결할 수 있고 Phase 6의 legacy entry→명시적 모델 생성/검증/cutover 경계가 마련되었다. 자동 migration/idempotency 전체 검증은 후속 범위다. 아래 Phase 1~3 기록은 당시 이력으로 보존한다.
+
 ## PR #31 문서 마감·병합 및 소스 브랜치 정리 (2026-10-06)
 
 사용자가 필요한 문서 업데이트 후 [PR #31](https://github.com/wonmin82/primal-zone/pull/31) 병합과 소스 브랜치 삭제를 요청했다. 아래 구현·리뷰 단계의 OPEN 유지·merge 금지 기록은 당시 요청 범위이며 이번 명시적 요청보다 우선하지 않는다. 다음 Phase는 별도 요청 전 시작하지 않는다.

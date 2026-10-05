@@ -127,6 +127,7 @@ def create_dropped_loot(room, entries, source_spawn=None):
 
 def take_loot(caller, item=None, corpse=True, now=None, *, request=None):
     """선택과 트리거 권한을 검증한 뒤 item 배정 또는 currency 잔여 몫을 지급한다."""
+    from world import loot_service
     from world.lifecycle import reconcile_room
     from world.observation import can_inspect_loot, can_perceive, context_for
     from world.target_presentation import count_word
@@ -155,7 +156,11 @@ def take_loot(caller, item=None, corpse=True, now=None, *, request=None):
         sources = [obj for obj in room_loot(caller.location, corpse) if can_perceive(obj, context)]
         if corpse:
             sources = select(sources, request.source)
-        entries_by_source = {source.id: [normalize_entry(e) for e in source.db.entries] for source in sources}
+        if any(loot_service.native_source(source) for source in sources):
+            loot_service.lock_sources(sources, caller)
+        snapshots = {source.id: loot_service.loot_snapshot(source) for source in sources}
+        entries_by_source = {identity: [entry.as_entry() for entry in snapshot.entries]
+                             for identity, snapshot in snapshots.items()}
         candidates = [
             (source, index)
             for source in sources
@@ -180,6 +185,12 @@ def take_loot(caller, item=None, corpse=True, now=None, *, request=None):
                             else currency[0] if currency else 1)
                 if quantity > entry["quantity"]:
                     raise rules.RuleError("선택한 전리품의 보급칩이 부족합니다.")
+                if snapshots[source.id].native:
+                    received.extend(loot_service.pickup(source, snapshots[source.id].entries[index],
+                                                       caller, quantity, now=now))
+                    if entry["kind"] == "currency":
+                        recovered_currency += quantity
+                    continue
                 if entry["kind"] == "currency":
                     rules.require_peace(caller.profile())
                     protected = now < entry["protection_until"]
@@ -200,15 +211,20 @@ def take_loot(caller, item=None, corpse=True, now=None, *, request=None):
                     recovered_currency += quantity
                 else:
                     target = recipient_for_item(entry, caller, now)
+                    from world.equipment_service import entity_runtime
+
+                    if entity_runtime(target):
+                        raise rules.RuleError("legacy 실물 전리품은 Phase 6 변환 전 native 소지품으로 회수할 수 없습니다.")
                     profile = target.profile()
                     rules.add_item(profile, entry["id"], quantity)
                     target.save_profile(profile)
                     received.append((target, entry["id"], quantity))
                 if entry["quantity"] > quantity:
                     remaining.append({**entry, "quantity": entry["quantity"] - quantity})
-            if changed:
+            if changed and not snapshots[source.id].native:
                 source.db.entries = remaining
-            if changed and not corpse and not remaining:
+            empty = not loot_service.loot_snapshot(source).entries if snapshots[source.id].native else not remaining
+            if changed and not corpse and empty:
                 source.delete()
         if not received:
             raise rules.RuleError("가져갈 물건이 없거나 다른 탐사자의 보호된 전리품입니다.")
@@ -287,25 +303,53 @@ class Corpse(DistantPresenceMixin, DefaultObject):
         self.db.entries = []
 
     @classmethod
-    def from_enemy(cls, enemy, groups, now, rng=None):
+    def from_enemy(cls, enemy, groups, now, rng=None, *, backend="legacy"):
+        """native generation은 명시적으로 선택한다. 기존 사냥의 backend는 바꾸지 않는다."""
+        with world_change():
+            return cls._from_enemy(enemy, groups, now, rng, backend=backend)
+
+    @classmethod
+    def _from_enemy(cls, enemy, groups, now, rng, *, backend):
+        if backend not in ("legacy", "item_entities"):
+            raise rules.RuleError("알 수 없는 전리품 저장 방식입니다.")
         corpse = create_object(cls, key=f"{enemy.key}의 시체", location=enemy.location)
         corpse.db.source_spawn = enemy.db.spawn_id
         corpse.db.source_enemy = enemy.db.enemy_id
         corpse.db.created_at = now
         corpse.db.decay_at = now + CORPSE_TTL_SECONDS
-        corpse.db.entries = build_entries(enemy, groups, now, rng)
+        if backend == "item_entities":
+            from world.loot_service import lock_sources
+
+            owners = {identity for members in groups.values() for identity in members}
+            owners.update(int(group.split(":")[1]) for group in groups if group.startswith("party:"))
+            lock_sources([corpse], extra_owners=owners)
+        entries = build_entries(enemy, groups, now, rng)
+        if backend == "item_entities":
+            from world.loot_service import populate_source
+
+            populate_source(corpse, entries)
+        else:
+            corpse.db.entries = entries
         after_change(corpse.schedule_lifecycle)
         return corpse
 
     def reconcile(self, now=None):
         now = time() if now is None else now
         with world_change():
-            if not self.pk or not object_by_id(self.pk) or now < self.db.decay_at:
+            if not self.pk or not object_by_id(self.pk):
+                return
+            from world.loot_service import decay_source, native_source, reconcile_claims
+
+            reconcile_claims(self, now=now)
+            if now < self.db.decay_at:
                 return
             room = self.location
-            for entry in deserialize(self.db.entries):
-                create_dropped_loot(room, [entry], self.db.source_spawn)
-            self.db.entries = []
+            if native_source(self):
+                decay_source(self, now=now)
+            else:
+                for entry in deserialize(self.db.entries):
+                    create_dropped_loot(room, [entry], self.db.source_spawn)
+                self.db.entries = []
             task = self.ndb.lifecycle_task
             self.ndb.lifecycle_task = None
             if task:
@@ -332,10 +376,16 @@ class Corpse(DistantPresenceMixin, DefaultObject):
 
 class DroppedLoot(DistantPresenceMixin, DefaultObject):
     detectability = "subtle"
+
+    def reconcile(self, now=None):
+        from world.loot_service import reconcile_claims
+
+        reconcile_claims(self, now=time() if now is None else now)
+
     def return_appearance(self, looker, **kwargs):
         from world.state import loot_controls, loot_entries
 
-        now = time()
+        now = kwargs.get("observed_at", time())
         control = loot_controls(looker, now).get(self.id)
         entries = control["loot"] if control else loot_entries(self, looker, now)
         lines = ["남아 있는 물건을 살펴본다.", ""]

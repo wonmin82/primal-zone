@@ -1,5 +1,13 @@
 # 원시구역 구조와 설계 결정
 
+## Phase 4 전리품 권리·화폐 (2026-10-06)
+
+Corpse/DroppedLoot는 공간 owner이며 실물은 ItemEntity, root 권리는 LootClaim, 보급칩은 CurrencyLoot와 player별 CurrencyLootShare다. 0인 share도 원래 요청 자격을 보존한다. 만료 조회는 읽기 전용이고 lifecycle에서 해당 source의 expired claim을 삭제한다. 부분 회수는 source claim 유지→claim 없는 split→inventory 이동/merge이며 전체 회수는 identity/sequence를 유지한다. decay는 tree·권리·화폐 share·보호 기한을 보존한다.
+
+`loot_service → LootSourceSnapshot/LootEntrySnapshot → 기존 권리/payout helper·command·presentation` 경계다. owner→UUID→claim/currency/share lock과 mutation은 persistence 계층에 있고 pure rules에 ORM을 넣지 않는다. generic merge도 root 배정 단위와 권리를 비교한다. 화폐 quantity·share·모든 recipient credits는 기존 world_change 하나에서 처리한다.
+
+현재 사냥과 기존 blob은 legacy SSOT를 유지한다. 신뢰된 native 생성만 새 모델을 선택하며 dual-write/lazy conversion은 없다. backend가 다른 실물 recipient로는 자동 변환하지 않는다. inventory/storage·world blob의 명시적 전체 migration/cutover는 Phase 6이다. 모델·API·기존 필드 대응·해석·검증 공백은 [전리품 권리](loot-claims.md)를 따른다.
+
 ## Phase 3 광원·총기 (2026-10-06)
 
 `lighting_service/firearm_service → LightSnapshot/FirearmSnapshot/MagazineSnapshot/EquipmentSnapshot → pure rules/visibility/presentation` 경계로 연결한다. ORM은 persistence service에만 두며 rules/progression/modifier 계산에 넣지 않는다. flashlight power(초)/enabled와 magazine rounds는 ItemEntity.state가 단일 SSOT다. 총기는 rounds를 중복 저장하지 않고 inside/socket=magazine child를 조회한다. active_weapon과 active_light는 실제 Entity UUID 참조이며 같은 item transaction에서 reconcile한다.

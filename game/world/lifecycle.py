@@ -3,7 +3,7 @@
 from time import time
 
 from typeclasses.enemies import Enemy, room_enemies
-from typeclasses.loot import Corpse, room_loot
+from typeclasses.loot import Corpse, DroppedLoot, room_loot
 from typeclasses.parties import Party
 
 
@@ -11,6 +11,8 @@ def reconcile_room(room, now=None):
     now = time() if now is None else now
     for corpse in room_loot(room):
         corpse.reconcile(now)
+    for dropped in room_loot(room, corpse=False):
+        dropped.reconcile(now)
     for enemy in room_enemies(room, alive_only=False):
         enemy.reconcile(now)
 
@@ -40,7 +42,9 @@ def reconcile_world(now=None, restart=False):
                                           for obj in enemy.location.contents)
         if enemy.db.state == "respawning" or enemy.db.combatants or observed:
             enemy.reconcile(now)
-    # 보호 종료는 metadata를 삭제하지 않고 timestamp 비교만으로 FFA가 된다.
+    for dropped in DroppedLoot.objects.all():
+        dropped.reconcile(now)
+    # legacy는 timestamp로 FFA, native의 expired claim은 출처 단위로 정리한다.
     from typeclasses.explorers import Explorer
 
     for player in Explorer.objects.all():

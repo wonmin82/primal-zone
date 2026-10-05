@@ -253,7 +253,7 @@ def merge_state(item):
 
 
 def same_merge_context(source, destination):
-    """정의·위치·merge 상태를 비교한다. LootClaim 도입 시 claim identity도 비교한다."""
+    """정의·위치·merge 상태와 권리/배정 단위를 비교한다."""
     fields = (
         "definition_id",
         "location_kind",
@@ -262,7 +262,10 @@ def same_merge_context(source, destination):
         "slot",
         "socket",
     )
-    return all(
+    from world.loot_claims import same_claim_context
+    from world.loot_service import claim_context
+
+    return same_claim_context(claim_context(source), claim_context(destination)) and all(
         getattr(source, field) == getattr(destination, field) for field in fields
     ) and merge_state(source) == merge_state(destination)
 

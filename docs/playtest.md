@@ -1,5 +1,40 @@
 # 원시구역 테스트 안내
 
+## Phase 4 LootClaim + CurrencyLoot 검증
+
+새 구조와 legacy 대응은 [전리품 권리](loot-claims.md)를 따른다. 현재 작업은 시작 main `4d6a3057dbae08003cae8b5a082882135b31837b` 위 미커밋 Phase 4 diff로 격리 테스트 DB를 사용했다. 플레이 DB/schema에는 migration을 실행하지 않는다.
+
+| 실행 | 실제 결과 |
+| --- | --- |
+| `.venv/Scripts/python.exe scripts/dev.py check` | 최종 성공 |
+| game에서 `../.venv/Scripts/python.exe -m unittest world.test_loot_claims world.test_currency_loot` | 순수5개/0.001초 성공 |
+| `.venv/Scripts/python.exe scripts/dev.py test tests.test_loot_entities tests.test_currency_loot tests.test_loot tests.test_combat tests.test_parties tests.test_item_entities tests.test_item_interactions tests.test_economy tests.test_lifecycle tests.test_targets tests.test_web_state tests.test_integration --parallel 2 --reverse` | 관련168개/60.964초, runner69.961초 성공 |
+| 이후 native 생성 guard/owner lock·추가 rollback 테스트 보완 후 `scripts/dev.py test tests.test_loot_entities tests.test_currency_loot --parallel 2 --reverse` | 최종40개/13.991초, runner22.960초 성공. 168개와 중복 합산하지 않는다. |
+| 격리 settings_test의 `makemigrations loot_entities item_entities --check --dry-run` | 해당 두 app에 model/schema 차이 없음 |
+| `git diff --check` | 성공 |
+
+개발 중 실물18개는 성공했다. 이어34개는 기존 금액+번호 혼용 금지 문법을 잘못 쓴 새 fixture1개에서 실패했다. 예시 이름 tests.test_multiplayer/test_party를 넣은106개 실행은 로더 오류2개, 실제 shared combat module을 잘못 tests.test_shared_combat으로 지정한112개 실행도 로더 오류1개였다. 실제 module은 test_combat/test_parties/test_economy로 확인해 위168개를 성공했다. 마지막 native38개는13.252초(runner22.306초) 성공했고 추가 rollback case의 메서드 배치 오류로 첫40개는 NameError1개에서 실패했다. 이력과 성공 개수를 섞거나 누적하지 않는다. 개발 check의 import 정렬4개와 테스트 블록의 unused/undefined 변수2개도 수정했다.
+
+최종40개는 해당 메서드 배치를 복구한 뒤 성공했다. 그 뒤에는 문서만 마감했으며 같은 실행 코드를 반복 검사하지 않는다. 도메인 두 app의 schema 검사 전 전체 앱 dry-run에서 Evennia 기존 Tag index rename 제안이 출력됐지만 파일을 생성하거나 외부 패키지를 변경하지 않았다. 이번 schema와 ItemEntity app을 지정한 위 검사는 차이 없음을 확인했다.
+
+회귀는 claim cardinality/location·PROTECT·party 해산·보호/자유·partial/full pickup·inventory merge·root 배정 단위·firearm tree·sequence rollback·source/claim/quantity stale·double pickup·corpse delete 후 rollback·부분/전량 화폐·0 share eligibility·offline/missing recipient·다중 payout rollback·currency decay·legacy no-lazy-conversion·selector/Web payload를 포함한다. UUID·sequence·canonical location·unique scope·tree policy·unknown operation·merge_state와 기존 공유 전투/파티/경제/명령 회귀도168개에 포함했다.
+
+### 최소 Web 확인
+
+기존 Quick harness로 별도 SQLite·fixture 계정·owned Portal/Server와 정적 파일을 준비해 기존 UI를 확인했다. full/Quick smoke scenario는 실행하지 않았으며 smoke 성공으로 기록하지 않는다. JS/CSS/template은 바꾸지 않았다.
+
+- 보호된 강철마체테의 배정 대상 검증나 표시와 회수 버튼 비활성화를 확인했다.
+- 자유 ammo×10의 회수 버튼은 native inventory×1/ground×9로 반영됐다.
+- share0인 검증가의 `시체에서 3칩 가져`는 offline 검증나에게3칩을 지급하고17칩을 남겼다. 자기 wallet은 그대로였다.
+- `2칩 가져`와 `칩 모두 가져`는 free6칩을2/4로 회수해 wallet150→152→156으로 표시됐다. `시체에서 칩 모두 가져`는 남은17칩을 검증나에게 지급하고 화폐 버튼을 제거했으며 보호된 실물은 남았다.
+- console warning/error 없음. 임시 탭·owned process·성공 DB/로그 정리 완료, play DB fingerprint 불변. 전체 viewport/IME/multiplayer matrix는 실행하지 않았다.
+
+### CI와 미실행
+
+최신 PR HEAD의 Game checks/test/Quick smoke run ID·HEAD SHA·결과는 PR Validation에 별도로 기록한다. 시작 main CI37378988784 attempt2 success는 과거 baseline이고 이번 결과가 아니다. 자동 전체 suite의 개수와 로컬168개·native 재검증·순수5개는 합산하지 않는다.
+
+요청한 단계별 전략에 따라 local full suite·smoke-full·전체 browser/multiplayer matrix·OS IME·실제 PostgreSQL contention·multi-server concurrency·full-world migration·balance simulation은 미실행이다. Credential/access/shop V2/incinerator·drop/content/balance tuning은 구현하지 않았다.
+
 ## Phase 3 Lighting + Firearm 검증
 
 [Phase 3 실제 검증 기록](phase3-validation.md)에 명령·개수·실패/재검증·최소 Web 확인과 미실행 범위를 구분했다. 순수/domain103개와 격리 DB targeted167개 성공을 서로 합산하지 않는다. 새 Lighting/Firearm 계약은 [광원·총기](lighting-firearms.md)를 따른다. 사용자 요청대로 이번 단계의 local full suite·smoke-full은 생략하고 최신 PR HEAD의 자동 전체 suite/Quick smoke를 별도 확인한다.

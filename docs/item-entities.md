@@ -24,6 +24,8 @@ Object type, 정의 존재·metadata, 비스택 quantity=1, max_stack, JSON 객�
 
 ## API
 
+Phase 4 실물 권리는 별도 `LootClaim`이며 ItemEntity.state가 아니다. corpse_loot/world_loot root에만 연결하고 inside child는 root 권리를 따른다. claim이 남은 inventory/equipment/storage 이동은 save validation으로 거절한다. 전체 pickup은 claim 제거 후 같은 Entity 이동, 부분 pickup은 source claim 유지와 claim 없는 split destination 이동/merge다. `same_merge_context()`는 merge_state와 root 배정 단위·권리의 ClaimContext를 함께 비교한다. 다른 claim/allocation unit은 권리 필드가 같아도 병합하지 않는다. generic split은 claim을 자동 복사하지 않는다. 자세한 API·expiry/decay·화폐 모델은 [전리품 권리](loot-claims.md)를 따른다.
+
 `world.item_entities.api`가 다음 연산을 제공한다. 변경 함수의 item/parent 인자는 저장된 ItemEntity 또는 UUID를 받는다. owner_object는 영속 Evennia Object다.
 
 | API | 동작 |
@@ -43,7 +45,7 @@ Object type, 정의 존재·metadata, 비스택 quantity=1, max_stack, JSON 객�
 
 스택 병합은 동일 정의·canonical 위치·merge 관련 상태와 max_stack을 요구하고 자식 있는 스택은 거절한다. `same_merge_context()`는 raw JSON을 직접 비교하지 않고 `merge_state(item)` 계약의 결과를 비교한다. 현재 기본 계약은 전체 state의 복사본이므로 기존과 같이 모든 state 값이 같아야 한다. 향후 정의별 계약에서 provenance·UI/debug·migration metadata 등 병합과 무관한 값을 제외할 수 있으며, 이번 단계에는 새 state schema나 정의별 선택 규칙을 추가하지 않는다. destination의 ID·sequence·state는 유지하고 수량만 합산한다. 분할 source 순번은 유지되고 새 row만 새 순번을 얻는다.
 
-향후 LootClaim 도입 시 `same_merge_context()`에서 merge 상태와 별도로 claim identity도 비교한다. 같은 아이템 유형·merge 관련 상태여도 다른 LootClaim이면 병합할 수 없어야 한다. 현재는 LootClaim 모델·claim 비교 코드·전리품 회수 동작을 추가하지 않는다.
+Phase 4는 `same_merge_context()`에서 merge 상태와 별도로 ClaimContext의 root 배정 단위와 권리를 비교한다. 같은 아이템 유형·merge 관련 상태여도 다른 LootClaim/allocation unit이면 병합할 수 없다. 별도 loot_entities app의 모델과 loot_service가 회수·부분 회수·만료·decay를 처리한다.
 
 `world.item_entities.policy.can_item_operation(item_or_definition_id, operation)`은 중앙 policy API다. 정의에 허용되지 않은 행동과 알 수 없는 정의는 False다. move/delete의 operation을 명시하면 해당 아이템의 policy를 검사한다. 이동 API는 중앙 `TREE_OPERATION_SCOPES`에 트리 적용 범위까지 정의된 행동만 허용하며, 범위가 없는 행동은 fail-closed로 거절한다.
 
@@ -55,7 +57,7 @@ operation은 호출자가 직접 조작하는 root의 행동이다. contained ch
 | load, unload | root만 | 탄창 삽입/분리 또는 탄약 처리의 직접 조작 물품을 검사한다. 상위 서비스가 호환성·소유권·전투 제한을 검증한다. |
 | give, drop, store | root와 모든 descendants | 소유권·바닥/보관 위치 이전에서 내부 물품의 이동 제한도 유지한다. |
 | sell, burn, consume | root와 모든 descendants | 처분·소비를 통한 내부 물품 보호 우회를 막는다. 실제 판매·소각·소비 기능이나 재귀 삭제는 이번 단계에서 구현하지 않는다. |
-| loot | root와 모든 descendants | 획득으로 소유권을 이전할 때 내부 물품의 policy도 검사한다. 실제 LootClaim 권한은 후속 서비스에서 검증한다. |
+| loot | root와 모든 descendants | 획득으로 소유권을 이전할 때 내부 물품의 policy도 검사한다. 실제 LootClaim 권한은 loot_service에서 lock 후 검증한다. |
 
 `operation=None`은 migration/bootstrap 등 신뢰된 내부 작업의 policy 생략용이다. canonical 위치·순환·고유 범위·트랜잭션 검증은 그대로 적용된다. 사용자 action에서 거절을 피하는 일반 해법으로 사용하지 않는다. 실제 명령 서비스가 같은 방·지각·전투·전리품 권리·소유자 등 권한과 목적지를 검증한 뒤 정확한 operation을 전달해야 한다. 이 표는 policy 적용 범위다. Phase 2의 실제 장비/해제 명령도 동일한 root contract를 사용한다.
 
@@ -79,7 +81,7 @@ operation은 호출자가 직접 조작하는 root의 행동이다. contained ch
 ..\.venv\Scripts\python.exe -m evennia migrate --noinput
 ```
 
-이번 migration은 profile·공용 상자·시체·바닥 물품을 읽거나 옮기지 않는다. 기존 캐릭터의 명령은 legacy에만 쓰고, 명시적으로 Entity backend를 선택한 빈 신규/fixture 캐릭터의 장비·광원·총기 명령은 Entity에만 쓴다. 이중 쓰기는 없다. 후속 단계에서는 범위별 legacy migration·검증·cutover를 같은 transaction에서 구현하고 영구적인 두 SSOT를 만들지 않는다. Phase 2의 장비·modifier·Defense와 Phase 3의 활성 광원·총기/탄창 상태를 연결했다. LootClaim·CurrencyLoot·Credential·신규 상점·최종 콘텐츠·밸런스는 각 후속 단계다.
+ItemEntity migration과 Phase 4 loot_entities schema는 profile·공용 상자·기존 시체·바닥 물품을 읽거나 옮기지 않는다. 기존 캐릭터는 legacy에만 쓰고, 명시적으로 Entity backend를 선택한 빈 신규/fixture 캐릭터의 장비·광원·총기와 native 전리품은 새 모델에만 쓴다. 이중 쓰기는 없다. Phase 6에서 범위별 legacy migration·검증·cutover를 구현한다. Phase 2 장비·modifier·Defense, Phase 3 활성 광원·총기/탄창, Phase 4 LootClaim·CurrencyLoot를 연결했다. Credential·신규 상점·최종 콘텐츠·밸런스는 후속 단계다.
 
 ## 검증 범위
 

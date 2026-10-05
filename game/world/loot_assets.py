@@ -46,4 +46,6 @@ def asset_name(entry):
 
 def asset_text(entry):
     return (ft.token("reward", format_currency(entry["quantity"]))
-            if entry["kind"] == "currency" else ft.text(ft.item(entry["id"]), f" ×{entry['quantity']}"))
+            if entry["kind"] == "currency" else ft.text(
+                ft.token("item", entry["label"]) if entry.get("label") else ft.item(entry["id"]),
+                f" ×{entry['quantity']}"))
