@@ -175,6 +175,8 @@ class EnvironmentTests(WorldCommandTest):
 
     def test_local_remote_command_and_web_use_same_observed_at_without_profile_write(self):
         before = deepcopy(self.char1.profile())
+        # observation과 무관한 실제 10초 회복 경계가 실행 중 도래하지 않게 한다.
+        self.enterContext(patch("typeclasses.explorers.time", return_value=before["recovery"]["updated_at"]))
         state_before = deserialize(self.script.db.environment)
         local = self.command("보기")
         snapshot = snapshot_for(self.char1.location, 100)
