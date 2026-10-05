@@ -13,7 +13,7 @@
 - owner ID→전체 UUID→claim/currency/share 순으로 잠그고 선택 후 출처·권리·수량·지분을 다시 검사한다. 지급 대상 변경 시 lock 순서를 뒤집지 않고 재선택한다. claim expiry는 source 단위, decay는 실물/tree·화폐 owner만 옮겨 권리·지분·기한을 보존한다. 빈 corpse는 기존 TTL, 빈 ground는 회수 후 정리한다.
 - reserved_party의 SET_NULL은 마지막 멤버 탈퇴로 Party가 삭제되는 기존 동작을 유지하기 위한 선택이다. 배정 player·share·기한은 유지한다. 실물/owner/player/share parent는 PROTECT다. 0 share와 root 배정 단위 해석은 Decision Log·통합안·현재 실행 지침을 함께 반영했으며 기획 변경은 없다.
 
-로컬 관련 회귀168개/60.964초(runner69.961초), 순수5개/0.001초를 성공했다. 이후 native 생성 guard/owner lock과 rollback 테스트를 보완하고 native40개/13.991초(runner22.960초)를 최종 성공했다. 개수를 중복 합산하지 않는다. 실패/재실행·명령·Web 확인은 [playtest](playtest.md#phase-4-lootclaim--currencyloot-검증)를 따른다. 최신 PR HEAD의 CI run/SHA·test/Quick smoke 결과는 PR Validation에 별도로 기록하며 로컬 개수와 합산하지 않는다.
+로컬 관련 회귀168개/60.964초(runner69.961초), 순수5개/0.001초를 성공했다. 이후 native 생성 guard/owner lock과 rollback 테스트를 보완하고 native40개/13.991초(runner22.960초)를 최종 성공했다. 개수를 중복 합산하지 않는다. 실패/재실행·명령·Web 확인은 [playtest](playtest.md#phase-4-lootclaim--currencyloot-검증)를 따른다. [PR #32](https://github.com/wonmin82/primal-zone/pull/32)의 구현 HEAD `8e199b6df30a649fc567ef3baee75f3353286982`에서 [Game checks37384065998](https://github.com/wonmin82/primal-zone/actions/runs/37384065998)가 test/smoke success다. 자동 check·순수190개/1.038초·통합482개/197.032초·Quick27.517초를 확인했다. 문서 마감 commit은 실행 코드가 동일하여 로컬 테스트를 반복하지 않으며, 최종 문서 HEAD의 CI run/SHA는 PR Validation에 별도로 기록한다. 로컬 개수와 합산하지 않는다.
 
 최소 Web은 격리 SQLite/fixture/owned Portal·Server에서 보호 실물 버튼·free 실물 회수·칩 부분/모두·0 share trigger와 offline 지급을 확인했다. console warning/error는 없고 성공 임시 DB/로그·프로세스·탭을 정리했다. play DB fingerprint는 같았다. JS/CSS/template 변경은 없으며 Quick/full smoke 실행 결과로 간주하지 않는다.
 

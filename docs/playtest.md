@@ -31,7 +31,7 @@
 
 ### CI와 미실행
 
-최신 PR HEAD의 Game checks/test/Quick smoke run ID·HEAD SHA·결과는 PR Validation에 별도로 기록한다. 시작 main CI37378988784 attempt2 success는 과거 baseline이고 이번 결과가 아니다. 자동 전체 suite의 개수와 로컬168개·native 재검증·순수5개는 합산하지 않는다.
+[PR #32](https://github.com/wonmin82/primal-zone/pull/32)의 구현 HEAD `8e199b6df30a649fc567ef3baee75f3353286982`에서 [Game checks37384065998](https://github.com/wonmin82/primal-zone/actions/runs/37384065998)가 test/smoke success다. 자동 check·순수190개/1.038초·통합482개/197.032초·Quick27.517초를 확인했다. 문서 마감 commit은 실행 코드가 동일하여 로컬 테스트를 반복하지 않으며, 최종 문서 HEAD의 CI run/SHA는 PR Validation에 별도로 기록한다. 시작 main CI37378988784 attempt2 success는 과거 baseline이고 이번 결과가 아니다. 자동 전체 suite의 개수와 로컬168개·native 재검증·순수5개는 합산하지 않는다.
 
 요청한 단계별 전략에 따라 local full suite·smoke-full·전체 browser/multiplayer matrix·OS IME·실제 PostgreSQL contention·multi-server concurrency·full-world migration·balance simulation은 미실행이다. Credential/access/shop V2/incinerator·drop/content/balance tuning은 구현하지 않았다.
 
