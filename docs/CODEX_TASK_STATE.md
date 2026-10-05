@@ -2,6 +2,20 @@
 
 확인일: 2026-10-06. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
 
+## PR #31 Phase 3 리뷰 수정 (2026-10-06)
+
+시작 HEAD는 `17823459c81bbf866a7d308b29039b36ecddc97e`, branch는 기존 `codex/lighting-firearm`이며 clean이었다. fetch 후 PR/local/remote HEAD가 같고 main은 `b2ec5f5c0fc0e511a580d04891d655d7babc0cb3` 그대로다. 최신 main을 이미 포함하므로 불필요한 rebase·과거 commit 재작성·새 branch/PR 생성은 하지 않는다. 이번 요청은 리뷰3건 수정·문서·commit/push·최신 HEAD CI 확인까지이며 PR은 merge하지 않는다.
+
+review findings closed:
+
+- recovery command lifecycle: Store/Retrieve·광원·장전/채우기 명령은 일반 command recovery reconciliation으로 복귀했다. Phase 2 착탈/주무기의 equipment_change 특별 lifecycle과 기존 combat reload 정산은 유지한다. service별 새 회복 logic을 추가하지 않았다.
+- Weather native lighting: ObservationContext.lights와 단일 observed_at으로 광원 상세·시야·상태 push를 통일했다. snapshot 중복 조회와 raw legacy inventory 열거를 제거하며 native/legacy 저장 불변을 검사한다.
+- orphan enabled light: invalid/None 참조의 owned direct inventory ON을 elapsed settle/OFF/started_at=None으로 정규화한다. 유효 active는 유지하고 추가 orphan만 OFF로 정리한다. foreign/storage 광원은 탐색 대상이 아니며 기존 lock·world_change·이동 참조 hook 안에서 처리한다.
+
+최종 targeted86개(32.495초·runner41.471초), pure18개(0.199초), check/diff를 성공했다. 첫86개는 새 테스트 fixture/문구3곳에서 실패했고 해당36개 재검증(14.841초·runner23.752초) 후86개를 성공했다. 개수를 중복 합산하지 않는다. 정확한 명령과 개발 check 실패 이력은 [리뷰 검증 기록](phase3-validation.md#pr-31-리뷰-수정-2026-10-06)에 보존한다. 최신 리뷰 HEAD의 CI run/SHA·test/smoke는 [PR #31 Validation](https://github.com/wonmin82/primal-zone/pull/31)에 별도로 기록하며 시작 HEAD CI 성공으로 대체하지 않는다.
+
+firearm/reload/combat 구조·회복 공식·ItemEntity foundation·legacy SSOT·normalization은 유지했다. migration·dual-write·lazy migration·balance 변경·Phase 4+ 구현은 없다. local full suite·smoke-full·전체 browser matrix는 요청 범위 밖이고 JS/CSS/template 변경도 없어 node/브라우저를 반복하지 않았다. 실제 PostgreSQL 경쟁·multi-server·OS IME·full-world migration·balance simulation은 여전히 미검증이다. 아래 Phase 3 및 이전 Phase 기록은 당시 이력으로 보존한다.
+
 ## Phase 3 — Lighting + Firearm (2026-10-06)
 
 시작 fetch에서 local/main/origin/main은 `b2ec5f5c0fc0e511a580d04891d655d7babc0cb3`이고 clean이었다. Phase 1 PR #29와 Phase 2 PR #30을 포함한 최신 main에서 새 `codex/lighting-firearm`을 만들었다. 시작 main CI37315480927은 과거 성공이며 새 PR HEAD 결과를 대신하지 않는다. 구현 마감 fetch에서도 origin/main 변경과 다른 열린 PR은 없었다. 이번 요청 범위는 commit/push/새 PR/최신 HEAD CI 확인까지이며 merge하지 않는다. Phase 4는 별도 요청 전 시작하지 않는다.

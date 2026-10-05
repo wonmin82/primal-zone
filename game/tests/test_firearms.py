@@ -8,7 +8,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from world import equipment_service as equipment
 from world import firearm_service as service
-from world import rules
+from world import recovery, rules
 from world.item_entities import api
 from world.item_entities.models import ItemEntity
 from world.multiplayer import world_change
@@ -28,6 +28,21 @@ class FirearmTests(NativeItemTest):
         profile.update(combat_target=123, queued_action=action, next_attack_at=100)
         self.char1.save_profile(profile)
         return self.char1.profile()
+
+    def test_noncombat_reload_reconciles_elapsed_command_boundary(self):
+        gun = self.gun("empty")
+        magazine = self.mag(12)
+        before = self.char1.profile_snapshot()
+        now = 100 + 6 * recovery.RECOVERY_INTERVAL + 1
+        with patch("typeclasses.explorers.time", return_value=now), patch("world.firearm_service.time", return_value=now):
+            self.char1.execute_cmd("시험권총 재장전")
+        after = self.char1.profile_snapshot()
+        self.assertEqual(service.loaded_magazine_item(gun).pk, magazine.pk)
+        for resource in recovery.RESOURCES:
+            self.assertGreater(after[resource], before[resource])
+        self.assertEqual(after["recovery"]["updated_at"], now)
+        self.assertEqual(after["skill_ready_at"], before["skill_ready_at"])
+        self.assertEqual(after["player_round"], before["player_round"])
 
     def test_acquisition_all_modes_and_rollback_sequence(self):
         for mode, rounds in (("full_standard", None), ("empty", None), ("partial", 7), ("no_mag", None)):

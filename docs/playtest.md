@@ -6,6 +6,14 @@
 
 native fixture에서 두 광원의 독립 잔량/only-one-ON·readonly projection·소진·배터리 원자성·logout/shutdown·외부 이동/삭제/실패 rollback을 확인한다. 세 firearm family·한 magazine socket·acquisition 형태·자동/명시 reload·동률 sequence·no-op·combat opportunity·loose ammo 전량 unload/merge·실제 발사/빈 총기 resource ordering을 확인한다. legacy 손전등/총기와 Phase 1/2 회귀도 포함한다. 기존 플레이어를 초기화하거나 자동 Entity 변환해 검증하지 않는다.
 
+PR #31 리뷰 회귀는 실제 dispatcher에서 `RECOVERY_INTERVAL`을 넘긴 시각으로 legacy 개인 보관 넣기/꺼내기, legacy/native 광원 켜기/끄기와 비전투 재장전의 즉시 회복을 검사한다. 별도의 시계 고정 조회 fixture로 native/legacy `날씨`의 광원 이름·켜짐·전원·잔량·현재 시야, LightSnapshot 단일 조회와 저장 불변을 검사한다. malformed/missing/None active 참조의 owned orphan OFF·경과 정산, 유효 active 보존·추가 orphan OFF와 foreign/storage 보호도 확인한다.
+
+```powershell
+.\.venv\Scripts\python.exe scripts/dev.py test tests.test_environment tests.test_lighting_entities tests.test_firearms tests.test_item_interactions tests.test_recovery --parallel 2 --reverse
+```
+
+이번 리뷰의 실제 결과·이전 실패 이력·최신 HEAD CI는 [Phase 3 실제 검증 기록](phase3-validation.md)을 따른다. JS/CSS/template 변경이 없어 이번에는 node·브라우저·정적 파일 수집을 반복하지 않으며 local full suite·smoke-full도 실행하지 않는다.
+
 ## ItemEntity 1단계 검증
 
 1단계는 gameplay cutover 없이 독립 Django domain만 추가한다. `tests.test_item_entities`로 위치·스택·순번·트리·고유 범위·rollback을, 기존 `tests.test_item_interactions tests.test_loot`로 이전/전리품 호환을 검사한다. 정의·이동 순수 검사는 game에서 `python -m unittest world.test_item_definitions world.test_rules world.test_headquarters world.test_shops`로 실행한다. 일반 플레이 DB에 테스트 fixture나 migration을 적용하지 않는다.

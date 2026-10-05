@@ -151,7 +151,15 @@ def active_source(profile, now):
 
 def status(profile, identity, now):
     require_device(profile, identity)
-    info = display(profile, identity, now)
+    return _status_display(display(profile, identity, now))
+
+
+def snapshot_status(item):
+    """이미 투영된 공통 광원 정보로 상세를 표시하며 다시 조회하지 않는다."""
+    return _status_display(snapshot_display(item))
+
+
+def _status_display(info):
     lines = [f"상태 {'켜짐' if info['active'] else '꺼짐'}",
              f"전원 {info['power_source']['name'] if info['power_source'] else '없음'}"]
     if info["power_source"]:

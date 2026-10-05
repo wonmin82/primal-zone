@@ -70,10 +70,11 @@ def reconcile_locked(character, now=None, *, turn_off=False, previous_owned_id=N
         valid = valid and projected["enabled"]
     if turn_off or not valid:
         character.db.active_light_item_id = None
-    if turn_off:
-        for light in ItemEntity.objects.filter(owner_object=character, location_kind="inventory"):
-            if ITEMS[light.definition_id].get("light_source") and light.state.get("enabled"):
-                _settle(light, now, turn_off=True)
+    # owner·UUID lock이 확보된 직접 inventory만 정규화한다. 다른 owner의 참조는 수정하지 않는다.
+    for light in ItemEntity.objects.filter(owner_object=character, location_kind="inventory"):
+        if (ITEMS[light.definition_id].get("light_source") and light.state.get("enabled")
+                and (turn_off or not valid or light.pk != row.pk)):
+            _settle(light, now, turn_off=True)
 
 
 @domain_errors

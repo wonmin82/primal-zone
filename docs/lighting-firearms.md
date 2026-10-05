@@ -20,6 +20,10 @@ ON일 때 `started_at`을 기준으로 경과 시간을 뺀 읽기 전용 projec
 
 `lighting_snapshot()`은 legacy adapter 또는 Entity 정보를 같은 LightSnapshot으로 제공한다. observation은 한 관찰 시각의 snapshot을 visibility와 Web 표시에서 재사용한다. 기존 legacy의 definition 단위 light_sources와 명령 의미는 유지하며 Entity state를 복제하지 않는다. 두 손전등의 잔량·켜짐은 독립적이고 `손전등`/`손전등 2` selector로 구분한다. 확인은 상태·전원·분 단위 잔량, 소지품은 ON/OFF와 백분율을 표시한다.
 
+`날씨`/`환경` 상세는 `ObservationContext.lights`의 같은 LightSnapshot을 `lighting.snapshot_status()`로 표시한다. 환경·광원 projection·시야·상태 push는 한 명령의 `observed_at`을 사용하며 상세 출력을 위해 광원을 다시 조회하지 않는다. 조회 자체는 profile·Entity state·active reference를 쓰지 않는다.
+
+reconciliation 이후 사용할 수 있는 owned direct inventory 광원의 enabled Entity는 유효한 active_light 참조와 일치한다. malformed/missing/None 참조에서는 owned orphan ON 광원의 elapsed power를 정산하고 OFF·started_at=None·참조None으로 정규화한다. 자동으로 다른 광원을 선택하지 않는다. 유효한 active가 있어도 추가 orphan ON은 OFF로 정리하며 정상 active의 잔량을 매번 저장하지 않는다. 다른 소유자·storage·world/corpse loot 광원은 orphan 탐색 대상이 아니다. 기존 이동 hook의 이전 소유 광원 정산은 그대로 유지한다.
+
 ## 총기·탄창·탄약
 
 | family | ammo_type | 탄창과 capacity |
@@ -43,6 +47,8 @@ Firearm (inventory 또는 equipment root)
 `create_firearm()`은 no_mag/empty/partial/full_standard 획득 형태를 제공한다. 표준 탄창 생성·rounds·inside 배치와 ItemSequence 발급을 같은 transaction에 묶는다. partial은 0<rounds<capacity를 요구한다. 실제 shop/quest/enemy drop/migration wiring은 없고 호출자가 content-defined 획득 형태를 선택한다.
 
 ## 명령과 재장전
+
+Phase 3 광원·전원·reload/load/unload 명령과 일반 Store/Retrieve는 기존 일반 command recovery reconciliation을 따른다. `equipment_change=True`의 특별 lifecycle은 실제 equipment stat/max/recovery 경계를 바꾸는 착탈·주무기 명령에만 남긴다. ItemEntity mutation 자체는 recovery bypass 사유가 아니다. 각 Phase 3 service에 별도 회복 정산을 복제하지 않으며 combat reload의 기존 accrue_recovery/기회 소비/save_profile 경로도 유지한다.
 
 명령은 공통 target parser와 instance selector를 사용한다. 실제 등록된 기존 총기를 예시로 한다. native 명령은 legacy 총기에 명확한 Phase 6 변환 필요 오류를 내며 자동 변환하지 않는다.
 

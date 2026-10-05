@@ -20,7 +20,6 @@ def relation(character, value, particle):
 
 
 class Reload(GameCommand):
-    equipment_change = True
     key = "재장전"
     category = "전투·회복"
     input_style = "target"

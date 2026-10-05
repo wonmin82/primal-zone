@@ -43,6 +43,32 @@ class RecoveryTests(WorldCommandTest):
         self.char1.reconcile_recovery(120)
         self.assertEqual((self.char1.profile()["hp"], self.char1.profile()["mental"]), (11, 12))
 
+    def test_legacy_store_retrieve_reconcile_elapsed_command_boundary(self):
+        self.char1.location = self.rooms["storage_room"]
+        self.char1.change(lambda p: p["inventory"].update(bandage=2))
+        for index, command in enumerate(("개인 보관함에 붕대 넣어", "개인 보관함에서 붕대 꺼내"), start=1):
+            before = self.char1.profile_snapshot()
+            self.clock.return_value = 100 + index * (6 * recovery.RECOVERY_INTERVAL + 1)
+            self.char1.execute_cmd(command)
+            after = self.char1.profile_snapshot()
+            self.assertEqual(after["storage"].get("bandage", 0), 1 if index == 1 else 0)
+            self.assertEqual(after["inventory"]["bandage"], 1 if index == 1 else 2)
+            for resource in recovery.RESOURCES:
+                self.assertGreater(after[resource], before[resource])
+            self.assertEqual(after["recovery"]["updated_at"], self.clock.return_value)
+
+    def test_legacy_light_commands_reconcile_elapsed_command_boundary(self):
+        self.char1.change(lambda p: p["inventory"].update(flashlight=1, battery=1))
+        for index, command in enumerate(("손전등에 건전지 넣어", "손전등 켜", "손전등 꺼"), start=1):
+            before = self.char1.profile_snapshot()
+            self.clock.return_value = 100 + index * (2 * recovery.RECOVERY_INTERVAL + 1)
+            with patch("commands.items.time", return_value=self.clock.return_value):
+                self.char1.execute_cmd(command)
+            after = self.char1.profile_snapshot()
+            for resource in recovery.RESOURCES:
+                self.assertGreater(after[resource], before[resource])
+            self.assertEqual(after["light_sources"]["flashlight"]["on"], index == 2)
+
     def test_movement_failure_rolls_back_location_and_recovery(self):
         before = deepcopy(self.char1.profile_snapshot())
         self.clock.return_value = 109

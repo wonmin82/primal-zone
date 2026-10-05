@@ -95,7 +95,6 @@ class Give(Drop):
 
 
 class Store(Drop):
-    equipment_change = True
     key = "넣어"
     aliases = ["store"]
     particle = "에"
@@ -145,7 +144,6 @@ class Store(Drop):
 
 
 class LightOn(GameCommand):
-    equipment_change = True
     key = "켜"
     category = "이동·탐사"
     input_style = "target"
@@ -184,7 +182,6 @@ class LightStatus(GameCommand):
 
 
 class Retrieve(Drop):
-    equipment_change = True
     key = "꺼내"
     aliases = ["retrieve"]
     particle = "에서"

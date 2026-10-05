@@ -1,12 +1,13 @@
 """손전등 독립 상태·참조·배터리·legacy 경계를 격리 DB에서 검증한다."""
 
 from unittest.mock import patch
+from uuid import uuid4
 
 from django.core.exceptions import ValidationError
 from evennia.utils.create import create_object
 from typeclasses.loot import DroppedLoot
 from world import lighting_service as service
-from world import observation, rules
+from world import observation, recovery, rules
 from world.content import ITEMS
 from world.environment import EnvironmentSnapshot
 from world.item_entities import api
@@ -45,6 +46,58 @@ class LightingEntityTests(NativeItemTest):
         self.assertEqual(self.char1.db.active_light_item_id, str(second.pk))
         self.assertEqual(ItemEntity.objects.filter(state__enabled=True).count(), 1)
         self.assertEqual(service.lighting_snapshot(self.char1, now=280).active.remaining_power, 1740)
+
+    def test_light_commands_reconcile_elapsed_recovery_boundary(self):
+        row = self.charged()
+        for index, action in enumerate(("켜", "꺼"), start=1):
+            now = 100 + index * (6 * recovery.RECOVERY_INTERVAL + 1)
+            before = self.char1.profile_snapshot()
+            with patch("typeclasses.explorers.time", return_value=now), patch("commands.items.time", return_value=now):
+                self.char1.execute_cmd("손전등 " + action)
+            after = self.char1.profile_snapshot()
+            for resource in recovery.RESOURCES:
+                self.assertGreater(after[resource], before[resource])
+            self.assertEqual(after["recovery"]["updated_at"], now)
+            row.refresh_from_db()
+            self.assertEqual(row.state["enabled"], action == "켜")
+
+    def test_invalid_or_missing_reference_settles_owned_orphan_off(self):
+        for reference in ("stale-not-uuid", str(uuid4()), None):
+            with self.subTest(reference=reference):
+                row = self.charged()
+                service.switch(self.char1, row, True, 100)
+                self.char1.db.active_light_item_id = reference
+                before = self.atomic_state()
+                self.assertIsNone(service.lighting_snapshot(self.char1, now=200).active)
+                self.assertEqual(before, self.atomic_state())
+                service.reconcile(self.char1, 200)
+                row.refresh_from_db()
+                self.assertEqual(row.state["remaining_power"], 1700)
+                self.assertFalse(row.state["enabled"])
+                self.assertIsNone(row.state["started_at"])
+                self.assertIsNone(self.char1.db.active_light_item_id)
+
+    def test_valid_reference_kept_while_extra_inventory_orphan_turns_off(self):
+        active, orphan, stored = self.charged(), self.charged(), self.charged()
+        api.move_item(stored, location_kind="personal_storage", owner_object=self.char1, operation="store")
+        for row in (orphan, stored):
+            row.refresh_from_db()
+            api.update_item_state(row, {**row.state, "enabled": True, "started_at": 100})
+        active.refresh_from_db()
+        api.update_item_state(active, {**active.state, "enabled": True, "started_at": 100})
+        self.char1.db.active_light_item_id = str(active.pk)
+        stored.refresh_from_db()
+        before = dict(stored.state)
+        service.reconcile(self.char1, 200)
+        active.refresh_from_db()
+        orphan.refresh_from_db()
+        stored.refresh_from_db()
+        self.assertTrue(active.state["enabled"])
+        self.assertEqual(active.state["remaining_power"], 1800)
+        self.assertEqual(self.char1.db.active_light_item_id, str(active.pk))
+        self.assertEqual((orphan.state["remaining_power"], orphan.state["enabled"], orphan.state["started_at"]),
+                         (1700, False, None))
+        self.assertEqual(stored.state, before)
 
     def test_lazy_read_exhaustion_and_domain_reconciliation(self):
         row = self.charged()
