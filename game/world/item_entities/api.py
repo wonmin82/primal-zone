@@ -9,7 +9,7 @@ from django.db.models import F
 
 from world.content import ITEMS
 from world.item_entities.models import ItemEntity, ItemSequence
-from world.item_entities.policy import can_item_operation
+from world.item_entities.policy import TREE_OPERATION_SCOPES, can_item_operation
 from world.multiplayer import world_change
 
 
@@ -74,6 +74,20 @@ def _check_operation(item, operation):
         raise ValidationError("이 아이템에는 해당 행동을 할 수 없습니다.")
 
 
+def _check_tree_operation(root, descendants, operation):
+    """root의 직접 행동과 contained child의 수동 이동 보호를 구분한다."""
+    if operation is None:
+        # 신뢰된 내부 배치 전용이다. 위치·순환·고유 범위 검증은 우회하지 않는다.
+        return
+    scope = TREE_OPERATION_SCOPES.get(operation)
+    if scope is None:
+        raise ValidationError("트리 적용 범위가 정의되지 않은 행동입니다.")
+    _check_operation(root, operation)
+    if scope == "tree":
+        for descendant in descendants:
+            _check_operation(descendant, operation)
+
+
 def create_item(
     definition_id,
     *,
@@ -113,9 +127,9 @@ def _move(item, *, location_kind, owner_object, parent_item, slot, socket, opera
             raise ValidationError("아이템을 자신이나 자신의 하위 아이템 안으로 옮길 수 없습니다.")
         locked = {row.pk: row for row in lock_items(identities | set(ancestors))}
         root = locked[item_id(item)]
-        # 이동으로 소유자가 바뀌는 내부 아이템도 같은 policy를 적용한다.
-        for identity in identities:
-            _check_operation(locked[identity], operation)
+        _check_tree_operation(
+            root, (locked[identity] for identity in identities if identity != root.pk), operation
+        )
         root.location_kind = location_kind
         root.owner_object = owner_object
         root.parent_item = locked[item_id(parent_item)] if parent_item is not None else None
@@ -203,8 +217,13 @@ def split_stack(item, quantity):
         )
 
 
+def merge_state(item):
+    """merge 관련 상태의 계약. 현재는 전체 state이며 향후 정의별로 선택할 수 있다."""
+    return deepcopy(item.state)
+
+
 def same_merge_context(source, destination):
-    """현재는 모든 state를 비교한다. LootClaim 도입 시 이 경계에서 권리도 비교한다."""
+    """정의·위치·merge 상태를 비교한다. LootClaim 도입 시 claim identity도 비교한다."""
     fields = (
         "definition_id",
         "location_kind",
@@ -212,9 +231,10 @@ def same_merge_context(source, destination):
         "parent_item_id",
         "slot",
         "socket",
-        "state",
     )
-    return all(getattr(source, field) == getattr(destination, field) for field in fields)
+    return all(
+        getattr(source, field) == getattr(destination, field) for field in fields
+    ) and merge_state(source) == merge_state(destination)
 
 
 def merge_stack(source, destination):

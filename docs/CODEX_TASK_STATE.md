@@ -2,7 +2,21 @@
 
 확인일: 2026-10-05. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
 
-## ItemEntity 1단계 구현·검증 (2026-10-05)
+## PR #29 ItemEntity 리뷰 수정·검증 (2026-10-05)
+
+[PR #29](https://github.com/wonmin82/primal-zone/pull/29)의 `codex/itementity-foundation`에서 이어간다. 시작 fetch 후 로컬·원격·PR HEAD는 리뷰 기준 `18cc26fe611d2617c18e381034c6205acf11c592`와 일치했고 staged/unstaged/untracked 변경은 없었다. 최신 base `origin/main`은 `25dd10061b7e63826011f04d69b2646883f2d80c`다. 최종 검토 fetch에서도 기준이 같고 main을 이미 포함하므로 rebase와 기존 이력 재작성은 하지 않는다. 이번 요청은 리뷰 수정 커밋·기존 PR 푸시까지이며 병합하지 않는다. 수정 후 HEAD와 해당 HEAD의 CI는 PR Validation을 기준으로 확인한다.
+
+- 리뷰 P1: 기존 `_move()`가 root와 모든 descendants에 같은 operation을 요구해 root `equip=true`·child `equip=false`인 정상 내부 구조의 장착을 거절했다. 중앙 `TREE_OPERATION_SCOPES`와 `_check_tree_operation()`으로 root의 직접 행동과 child의 수동 이동을 구분했다. `equip`은 root만, `give/drop/store/sell/burn/loot/consume`는 root와 모든 descendants를 검사한다. policy를 모두 검사한 뒤 위치를 변경하며 child의 inside·parent·socket과 트리 고유 범위의 원자성을 보존한다. 적용 범위가 정의되지 않은 operation은 거절한다.
+- `operation=None`은 신뢰된 migration/bootstrap 등 내부 작업의 policy 생략 의미를 유지한다. 위치·순환·고유 범위 검증은 유지하며 사용자 action의 거절 우회에 사용하지 않는다. 실제 권한·목적지 검증은 호출 서비스의 책임이다. 판매·소각·소비·획득 등의 신규 gameplay 기능은 추가하지 않았다.
+- 리뷰 P2: `same_merge_context()`가 raw state 전체를 직접 merge identity로 고정하지 않고 `merge_state(item)` 계약을 사용하도록 분리했다. 현재 기본값은 전체 state의 복사본 비교로 기존 동작이 동일하다. 테스트 안에서만 merge 관련 값 선택을 재현했다. 향후 LootClaim은 same_merge_context에서 claim identity를 별도로 비교하며 서로 다른 claim의 병합은 금지해야 한다. 이번에는 LootClaim·새 state schema·정의별 state 선택 구현을 추가하지 않았다.
+- 신규 regression 5개: 테스트 전용 비스택 root/child의 `main_hand` 장착과 magazine socket 보존·root policy 거절, 7개 tree-wide operation의 descendant 제한과 전체 DB row/unique scope/발급기 불변, unknown 거절·None 내부 이전, 기본 전체 state 동일/차이 병합, 선택된 merge 관련 상태의 동일/차이 병합을 확인했다. 기존 2개 검사에는 stale 수량 객체 입력과 삭제된 ItemEntity 객체 입력의 회귀를 보강했다. 실제 firearm/magazine 콘텐츠는 추가하지 않았다.
+- 최종 리뷰 수정 미커밋 코드 기준 `.venv\Scripts\python.exe scripts/dev.py test tests.test_item_entities --parallel 2 --reverse`: 25개 / 6.855초, runner16.303초 성공. 신규5개와 기존20개를 포함한 결과이며 과거20/45/55개와 합산하지 않는다. UUID·전역 순번·move 순번 유지·split 새 순번·merge destination ID/순번·canonical 위치·cycle·owner/parent PROTECT·개인 보관 owner·nested uniqueness·deterministic lock·outer world_change/sequence rollback·stale 입력·unknown/None 경계를 확인했다.
+- `.venv\Scripts\python.exe scripts/dev.py check`: 성공. 문서 갱신 후 `git diff --check`도 성공했다. 변경은 API·policy·해당 테스트와 두 문서뿐이며 최종 targeted 성공 이후 실행 코드 변경은 없다.
+- 수정 전 2개 regression은 기존 장착 거절·merge 계약 미사용으로 예상대로 실패했다. 첫25개에서는 테스트용 고유 child에 기존 jungle_cell의 stackable을 남긴 fixture 오류1개가 발생했다. 테스트 정의를 비스택으로 고친 뒤 관련3개 / 0.896초·runner9.999초와 위 최종25개가 통과했다. 첫 check의 import 공백 오류도 수정 후 통과했다. 실패 결과를 성공 개수에 더하지 않는다.
+- 직접 변경이 없는 legacy 명령·전리품 테스트는 이번에 별도 재실행하지 않았다. 사용자 지정 범위에 따라 로컬 전체 suite·Quick/Full smoke·브라우저 전체·OS IME·full-world/legacy migration·balance simulation은 미실행이다. PostgreSQL 실제 row-lock 경쟁과 multi-server concurrency는 미검증이다. 기존 CI의 전체 검사·Quick smoke는 그대로 자동 실행되며 최신 HEAD 결과를 로컬 결과와 구분해 PR에 기록한다. 아래 최초 구현 기록은 당시 결과로 보존한다.
+- gameplay inventory/equipment/storage·Container.db.items·Corpse/DroppedLoot entry의 cutover/dual-write, profile schema·밸런스·Phase 2 이후 기능은 변경하지 않았다. 플레이 DB·비밀 설정을 변경하거나 테스트 초기화에 사용하지 않았다. 통합 기획 대비 변경 제안이나 범위 축소는 없다.
+
+## ItemEntity 1단계 구현·검증 (과거 기록: 2026-10-05, 리뷰 전)
 
 사용자가 제공한 통합 기획안과 1단계 실행 문서를 기준으로 ItemEntity 영속 기반을 구현하고 커밋·푸시·PR 생성까지 진행한다. 2단계 이후의 선행 구현이나 병합은 요청 범위가 아니다. 시작 fetch 후 main/origin/main은 `25dd10061b7e63826011f04d69b2646883f2d80c`로 일치했고 작업 트리는 깨끗했다. 이 최신 기준에서 `codex/itementity-foundation`을 생성했다.
 

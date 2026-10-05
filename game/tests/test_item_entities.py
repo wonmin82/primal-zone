@@ -188,6 +188,7 @@ class ItemEntityTests(GameCommandTest):
         source = self.create(quantity=3)
         destination = self.create(quantity=2)
         identity, sequence = destination.pk, destination.sequence
+        source.quantity, destination.quantity = 99, 99  # stale 입력 대신 잠근 DB row를 사용한다.
         result = api.merge_stack(source, destination)
         self.assertEqual((result.pk, result.sequence, result.quantity), (identity, sequence, 5))
         self.assertFalse(ItemEntity.objects.filter(pk=source.pk).exists())
@@ -366,6 +367,139 @@ class ItemEntityTests(GameCommandTest):
         root.refresh_from_db()
         self.assertEqual(root.owner_object_id, self.char1.id)
 
+    def test_tree_equip_checks_root_only_and_preserves_passive_child(self):
+        root_definition = deepcopy(ITEMS["machete"])
+        child_definition = deepcopy(root_definition)
+        child_definition["operation_policy"]["equip"] = False
+        with patch.dict(
+            ITEMS, {"equip_root_test": root_definition, "socket_child_test": child_definition}
+        ):
+            root = self.create("equip_root_test")
+            child = self.create(
+                "socket_child_test",
+                location_kind="inside",
+                owner_object=None,
+                parent_item=root,
+                socket="magazine",
+            )
+            sequences = (root.sequence, child.sequence)
+            self.assertFalse(can_item_operation(child, "equip"))
+            api.move_item_tree(
+                root,
+                location_kind="equipment",
+                owner_object=self.char1,
+                slot="main_hand",
+                operation="equip",
+            )
+            root.refresh_from_db()
+            child.refresh_from_db()
+            self.assertEqual((root.location_kind, root.slot), ("equipment", "main_hand"))
+            self.assertEqual(root.owner_object_id, self.char1.pk)
+            self.assertEqual(
+                (child.location_kind, child.parent_item_id, child.socket, child.owner_object_id),
+                ("inside", root.pk, "magazine", None),
+            )
+            self.assertEqual((root.sequence, child.sequence), sequences)
+            with patch.dict(root_definition["operation_policy"], {"equip": False}):
+                with self.assertRaises(ValidationError):
+                    api.move_item_tree(
+                        root, location_kind="inventory", owner_object=self.char1, operation="equip"
+                    )
+            root.refresh_from_db()
+            self.assertEqual((root.location_kind, root.slot), ("equipment", "main_hand"))
+
+    def test_tree_transfer_restriction_preserves_all_rows_and_unique_scopes(self):
+        operations = ("give", "drop", "store", "sell", "burn", "loot", "consume")
+        root_definition = {**deepcopy(ITEMS["machete"]), "unique_per_owner": True}
+        root_definition["operation_policy"].update(dict.fromkeys(operations, True))
+        child_definition = {
+            **deepcopy(ITEMS["jungle_cell"]),
+            "stackable": False,
+            "unique_per_owner": True,
+        }
+        child_definition["operation_policy"].update(dict.fromkeys(operations, False))
+        with patch.dict(
+            ITEMS,
+            {"transfer_root_test": root_definition, "restricted_child_test": child_definition},
+        ):
+            root = self.create("transfer_root_test")
+            child = self.create(
+                "restricted_child_test",
+                location_kind="inside",
+                owner_object=None,
+                parent_item=root,
+                socket="power",
+            )
+            ground = create_object(DroppedLoot, key="검증바닥")
+            self.assertEqual(child.unique_scope_key, f"{self.char1.pk}:restricted_child_test")
+            before = list(ItemEntity.objects.order_by("sequence").values())
+            counter = ItemSequence.objects.get(pk=1).last_value
+            for operation in operations:
+                location, owner = {
+                    "drop": ("world_loot", ground),
+                    "store": ("personal_storage", self.char1),
+                }.get(operation, ("inventory", self.char2))
+                with self.subTest(operation=operation):
+                    self.assertTrue(can_item_operation(root, operation))
+                    with self.assertRaises(ValidationError):
+                        api.move_item_tree(
+                            root, location_kind=location, owner_object=owner, operation=operation
+                        )
+                    self.assertEqual(list(ItemEntity.objects.order_by("sequence").values()), before)
+                    self.assertEqual(ItemSequence.objects.get(pk=1).last_value, counter)
+
+    def test_tree_unknown_operation_fails_closed_and_none_is_trusted_internal(self):
+        root = self.create("machete")
+        child = self.create(
+            "jungle_cell",
+            location_kind="inside",
+            owner_object=None,
+            parent_item=root,
+            socket="power",
+        )
+        with self.assertRaises(ValidationError):
+            api.move_item_tree(
+                root, location_kind="inventory", owner_object=self.char2, operation="unknown"
+            )
+        root.refresh_from_db()
+        self.assertEqual(root.owner_object_id, self.char1.pk)
+        api.move_item_tree(root, location_kind="inventory", owner_object=self.char2, operation=None)
+        root.refresh_from_db()
+        child.refresh_from_db()
+        self.assertEqual(root.owner_object_id, self.char2.pk)
+        self.assertEqual(
+            (child.location_kind, child.parent_item_id, child.socket), ("inside", root.pk, "power")
+        )
+
+    def test_default_merge_state_requires_complete_state_equality(self):
+        state = {"batch": 1, "metadata": {"origin": "test"}}
+        destination = self.create(quantity=2, state=state)
+        different = self.create(quantity=3, state={**state, "metadata": {"origin": "other"}})
+        with self.assertRaises(ValidationError):
+            api.merge_stack(different, destination)
+        self.assertTrue(ItemEntity.objects.filter(pk=different.pk).exists())
+        destination.refresh_from_db()
+        self.assertEqual(destination.quantity, 2)
+        source = self.create(quantity=3, state=deepcopy(state))
+        self.assertEqual(api.merge_stack(source, destination).quantity, 5)
+
+    def test_merge_state_contract_can_select_relevant_state(self):
+        destination = self.create(quantity=2, state={"batch": 1, "metadata": "destination"})
+        source = self.create(quantity=3, state={"batch": 1, "metadata": "source"})
+        different = self.create(quantity=4, state={"batch": 2, "metadata": "source"})
+        # 테스트 안에서만 향후 정의별 계약을 재현한다. 영속 state schema는 추가하지 않는다.
+        with patch(
+            "world.item_entities.api.merge_state",
+            side_effect=lambda item: {"batch": item.state["batch"]},
+        ) as contract:
+            with self.assertRaises(ValidationError):
+                api.merge_stack(different, destination)
+            self.assertTrue(ItemEntity.objects.filter(pk=different.pk).exists())
+            result = api.merge_stack(source, destination)
+            self.assertEqual(result.quantity, 5)
+            self.assertEqual(result.state, destination.state)
+            self.assertEqual(contract.call_count, 4)
+
     def test_sequence_initialization_is_idempotent_and_does_not_reset_used_counter(self):
         initialize = import_module(
             "world.item_entities.migrations.0002_initialize_sequence"
@@ -387,6 +521,7 @@ class ItemEntityTests(GameCommandTest):
         for operation in (
             lambda: api.split_stack(identity, 1),
             lambda: api.move_item(identity, location_kind="inventory", owner_object=self.char1),
+            lambda: api.move_item(second, location_kind="inventory", owner_object=self.char1),
             lambda: api.create_item(
                 "bandage", location_kind="inside", parent_item=identity, socket="part"
             ),

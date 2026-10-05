@@ -2,6 +2,19 @@
 
 from world.content import ITEMS
 
+# equip은 root의 장착 행동이고 나머지는 내부 물품의 이전·처분 보호도 검사한다.
+# 새 행동은 policy 허용 여부와 함께 트리 적용 범위를 먼저 정의해야 한다.
+TREE_OPERATION_SCOPES = {
+    "equip": "root",
+    "give": "tree",
+    "drop": "tree",
+    "store": "tree",
+    "sell": "tree",
+    "burn": "tree",
+    "loot": "tree",
+    "consume": "tree",
+}
+
 
 def can_item_operation(item, operation):
     identity = item if isinstance(item, str) else item.definition_id

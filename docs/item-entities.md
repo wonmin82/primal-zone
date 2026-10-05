@@ -40,9 +40,22 @@ Object type, 정의 존재·metadata, 비스택 quantity=1, max_stack, JSON 객�
 
 생성·이동 시 location 필드를 모두 명시적으로 구성한다. 이동에서 생략한 owner/parent/slot/socket은 None으로 지우므로 이전 위치의 값이 남지 않는다. query는 UUID를 번호 정렬에 사용하지 않는다. 기존 `world.targets` selector parsing은 변경하지 않았으며 후속 명령 연결에서 해당 공통 문법과 새 sequence 순서를 함께 사용한다.
 
-스택 병합은 동일 정의·canonical 위치·전체 state와 max_stack을 요구하고 자식 있는 스택은 거절한다. 분할 source 순번은 유지되고 새 row만 새 순번을 얻는다. `same_merge_context()`가 향후 LootClaim의 일치 여부도 검사할 확장 경계다. 현재는 LootClaim 모델·전리품 회수 동작을 추가하지 않는다.
+스택 병합은 동일 정의·canonical 위치·merge 관련 상태와 max_stack을 요구하고 자식 있는 스택은 거절한다. `same_merge_context()`는 raw JSON을 직접 비교하지 않고 `merge_state(item)` 계약의 결과를 비교한다. 현재 기본 계약은 전체 state의 복사본이므로 기존과 같이 모든 state 값이 같아야 한다. 향후 정의별 계약에서 provenance·UI/debug·migration metadata 등 병합과 무관한 값을 제외할 수 있으며, 이번 단계에는 새 state schema나 정의별 선택 규칙을 추가하지 않는다. destination의 ID·sequence·state는 유지하고 수량만 합산한다. 분할 source 순번은 유지되고 새 row만 새 순번을 얻는다.
 
-`world.item_entities.policy.can_item_operation(item_or_definition_id, operation)`은 중앙 policy API다. 알 수 없는 행동과 정의는 False다. move/delete의 operation을 명시하면 policy를 검사하고, 트리 이동에서는 내부 물품도 검사한다. operation=None은 신뢰하는 내부 배치·migration용이며 사용자 명령의 권한 우회 수단으로 사용하지 않는다. 실제 명령 서비스가 같은 방·지각·전투·전리품 권리 등을 검증한 뒤 적절한 operation을 전달해야 한다.
+향후 LootClaim 도입 시 `same_merge_context()`에서 merge 상태와 별도로 claim identity도 비교한다. 같은 아이템 유형·merge 관련 상태여도 다른 LootClaim이면 병합할 수 없어야 한다. 현재는 LootClaim 모델·claim 비교 코드·전리품 회수 동작을 추가하지 않는다.
+
+`world.item_entities.policy.can_item_operation(item_or_definition_id, operation)`은 중앙 policy API다. 정의에 허용되지 않은 행동과 알 수 없는 정의는 False다. move/delete의 operation을 명시하면 해당 아이템의 policy를 검사한다. 이동 API는 중앙 `TREE_OPERATION_SCOPES`에 트리 적용 범위까지 정의된 행동만 허용하며, 범위가 없는 행동은 fail-closed로 거절한다.
+
+operation은 호출자가 직접 조작하는 root의 행동이다. contained child는 root를 따라 수동적으로 이동하며 `inside`·같은 parent·socket을 유지한다. root의 장착은 child 자체의 장착과 다르므로 child의 `equip=false`를 허용한다. 이전·처분에서는 내부 물품의 보호도 유지한다. `_check_tree_operation()`은 모든 policy 검사를 row 변경 전에 수행한다.
+
+| operation | policy 검사 범위 | 의미 |
+| --- | --- | --- |
+| equip | root만 | root를 장착하고 내부 물품은 따라 이동한다. child에 equip 허용을 요구하지 않는다. |
+| give, drop, store | root와 모든 descendants | 소유권·바닥/보관 위치 이전에서 내부 물품의 이동 제한도 유지한다. |
+| sell, burn, consume | root와 모든 descendants | 처분·소비를 통한 내부 물품 보호 우회를 막는다. 실제 판매·소각·소비 기능이나 재귀 삭제는 이번 단계에서 구현하지 않는다. |
+| loot | root와 모든 descendants | 획득으로 소유권을 이전할 때 내부 물품의 policy도 검사한다. 실제 LootClaim 권한은 후속 서비스에서 검증한다. |
+
+`operation=None`은 migration/bootstrap 등 신뢰된 내부 작업의 policy 생략용이다. canonical 위치·순환·고유 범위·트랜잭션 검증은 그대로 적용된다. 사용자 action에서 거절을 피하는 일반 해법으로 사용하지 않는다. 실제 명령 서비스가 같은 방·지각·전투·전리품 권리·소유자 등 권한과 목적지를 검증한 뒤 정확한 operation을 전달해야 한다. 이 표는 policy 적용 범위이며 신규 사용자 행동이나 장비 슬롯 체계를 추가하지 않는다.
 
 ## 순번·트랜잭션·고유 범위
 
@@ -68,6 +81,6 @@ Object type, 정의 존재·metadata, 비스택 quantity=1, max_stack, JSON 객�
 
 ## 검증 범위
 
-핵심 검사는 `tests.test_item_entities`, 정의 검사는 `world.test_item_definitions`다. 생성·DB location 제약·비스택/최대 수량·split/merge·순번·트리 순환/이동/PROTECT·profile/cache/callback rollback·정렬 lock·개인 보관 owner·DB 고유 키·nested 고유 범위·발급기 반복 초기화를 검사한다. 직접 영향받는 기존 `tests.test_item_interactions`, `tests.test_loot`와 정의/이동 순수 규칙 검사를 함께 실행한다. 실제 결과는 [작업 상태](CODEX_TASK_STATE.md)에 기록한다.
+핵심 검사는 `tests.test_item_entities`, 정의 검사는 `world.test_item_definitions`다. 생성·DB location 제약·비스택/최대 수량·split/merge·순번·트리 순환/이동/PROTECT·profile/cache/callback rollback·정렬 lock·개인 보관 owner·DB 고유 키·nested 고유 범위·발급기 반복 초기화를 검사한다. 테스트 전용 비스택 root/child로 장착 시 내부 socket 보존을 재현하며 실제 총기·탄창 콘텐츠는 추가하지 않는다. tree-wide 행동의 descendant 거절 시 모든 row·고유 범위·순번 발급기 불변, unknown operation 거절·None 내부 작업, 전체 state 기본 비교와 merge 관련 상태 계약도 검사한다. 기존 `tests.test_item_interactions`, `tests.test_loot`와 정의/이동 순수 규칙 검사는 직접 영향 범위에 따라 선택한다. 실제 실행과 과거 결과는 [작업 상태](CODEX_TASK_STATE.md)에 구분해 기록한다.
 
 단계별 계획에 따라 전체 suite·smoke-full·Web/browser 전체 회귀·다인 전체 시나리오·전체 저장 변환·balance simulation은 7단계에서 수행한다. 이번 단계에서 gameplay cutover·정적 파일 변경이 없어 서버/브라우저 검사를 실행하지 않는다.
