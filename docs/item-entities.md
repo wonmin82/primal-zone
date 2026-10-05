@@ -83,7 +83,7 @@ operation은 호출자가 직접 조작하는 root의 행동이다. contained ch
 
 핵심 검사는 `tests.test_item_entities`, 정의 검사는 `world.test_item_definitions`다. 생성·DB location 제약·비스택/최대 수량·split/merge·순번·트리 순환/이동/PROTECT·profile/cache/callback rollback·정렬 lock·개인 보관 owner·DB 고유 키·nested 고유 범위·발급기 반복 초기화를 검사한다. 테스트 전용 비스택 root/child로 장착 시 내부 socket 보존을 재현하며 실제 총기·탄창 콘텐츠는 추가하지 않는다. tree-wide 행동의 descendant 거절 시 모든 row·고유 범위·순번 발급기 불변, unknown operation 거절·None 내부 작업, 전체 state 기본 비교와 merge 관련 상태 계약도 검사한다. 기존 `tests.test_item_interactions`, `tests.test_loot`와 정의/이동 순수 규칙 검사는 직접 영향 범위에 따라 선택한다. 실제 실행과 과거 결과는 [작업 상태](CODEX_TASK_STATE.md)에 구분해 기록한다.
 
-단계별 계획에 따라 로컬 전체 suite·smoke-full·Web/browser 전체 회귀·다인 전체 시나리오·전체 저장 변환·balance simulation은 7단계의 종합 검증 범위다. 기존 GitHub workflow의 자동 전체 suite·Quick smoke는 그대로 실행하며 로컬 targeted 결과와 구분한다. 아래 Phase 1 문서 마감 당시의 검증과 이번 Phase 2의 실행 결과는 작업 상태에서 구분한다. 최신 HEAD와 병합된 main의 CI는 각각 해당 SHA로 확인한다. 실제 PostgreSQL row-lock 경쟁과 다중 서버 동시성은 아직 검증하지 않았다. 상세 회귀 절차는 [테스트 안내](playtest.md#pr-29-리뷰-수정의-검증-기준)를 따른다.
+전체 suite·Web/browser 전체 회귀·다인 전체 시나리오·전체 저장 변환·balance simulation의 종합 matrix는 7단계 범위다. Phase 1 구현/리뷰에서는 로컬 Full을 생략했지만, Phase 2 리뷰의 명시적 요청으로 수정한 closeout를 포함한 smoke-full을 실제438.541초에 통과했다. 이 단일 Full 시나리오가 Phase 7 전체 검증을 대신하지 않는다. 기존 GitHub workflow의 자동 전체 suite·Quick smoke는 그대로 실행하며 로컬 targeted 결과와 구분한다. Phase 1 마감·Phase 2 구현/리뷰·문서 마감의 실행 결과는 작업 상태에서 구분한다. 최신 HEAD와 병합된 main의 CI는 각각 해당 SHA로 확인한다. 실제 PostgreSQL row-lock 경쟁과 다중 서버 동시성은 아직 검증하지 않았다. 상세 회귀 절차는 [Phase 1 테스트 안내](playtest.md#pr-29-리뷰-수정의-검증-기준)와 [Phase 2 리뷰 테스트 안내](playtest.md#pr-30-phase-2-리뷰의-검증-기준)를 따른다.
 
 ## Phase 2 연결
 

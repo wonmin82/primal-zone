@@ -2,7 +2,18 @@
 
 확인일: 2026-10-05. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
 
-## PR #30 Phase 2 리뷰 수정 (2026-10-05)
+## PR #30 문서 마감·병합 및 소스 브랜치 정리 (2026-10-05)
+
+사용자가 [PR #30](https://github.com/wonmin82/primal-zone/pull/30)의 필요한 문서 업데이트 후 병합과 소스 브랜치 삭제를 요청했다. 아래 구현·리뷰 단계의 OPEN 유지·merge 금지 설명은 당시 요청 범위이며 이번 명시적 요청보다 우선하지 않는다. 병합 여부·merge commit·병합된 main CI·브랜치 삭제 결과는 PR의 최신 마감 기록과 실제 원격 상태를 기준으로 확인한다. 이후 독립 작업은 다시 fetch한 최신 main에서 시작하며 다음 Phase를 임의로 구현하지 않는다.
+
+- 마감 시작 fetch에서 로컬·원격·PR HEAD는 `96a8fd2b1c7d5915121f622cb2cd337fd1b1bdd4`, base/origin/main은 `cf4dc078b8347fb63ae459c55d71a8b160950a5a`다. 작업 트리는 clean이며 main 대비 ahead3/behind0, 다른 worktree에서 소스 브랜치를 사용하지 않는다. 최신 main을 이미 포함하므로 불필요한 rebase나 과거 commit 재작성은 하지 않는다. PR은 non-draft·MERGEABLE·CLEAN, 미해결 리뷰 대화0개였다.
+- 리뷰 코드 HEAD와 [Game checks 37312294397](https://github.com/wonmin82/primal-zone/actions/runs/37312294397)의 SHA 일치를 다시 확인했다. test/smoke는 success였으며 순수179개/1.029초·통합404개/172.900초·Quick30.526초를 통과했다. 문서 마감 HEAD와 병합된 main의 CI는 각각 별도로 확인하고 이 성공으로 대신하지 않는다.
+- 이번 diff는 Task State·playtest·item-entities 문서다. 2026-10-05 리뷰의 실행 코드·의존성·설정·정적 파일이 동일하므로 당시 targeted82개/39개와 Full438.541초 성공 근거를 재사용한다. 로컬 게임 테스트·smoke·브라우저·node·정적 파일 수집은 반복하지 않는다. 링크·명령·현재 API/표시 계약과 과거 검증 구분을 확인하고 git diff --check를 실행한다. 이전 실행을 이번 새 실행으로 표현하거나 개수를 중복 합산하지 않는다.
+- 검증 안내에 명시 해제 후 장착, legacy/Entity 공통 snapshot과 Entity row 전용 조회, 동일 무기 두 번째 instance의 상태·장비·소지품·Web 주무기 표시를 정리했다. Phase 2 리뷰에서 실제 Full smoke를 실행한 사실을 일반 단계별 미실행 범위와 구분한다. profile version10·legacy SSOT·transaction·콘텐츠·밸런스는 변경하지 않고 플레이 DB·비밀 설정도 건드리지 않는다.
+- 최신 대상 반영·문서 HEAD의 필수 CI·리뷰·충돌 조건을 확인한 뒤 merge commit 방식으로 병합한다. 소스 HEAD가 main에 포함됐는지 확인하고 요청된 원격·로컬 codex/equipment-modifier-defense를 제거하며 로컬 main은 fast-forward로 갱신한다.
+- 남은 검증 공백은 실제 PostgreSQL row-lock 경쟁·multi-server concurrency·OS IME·전체 브라우저/Phase 7 matrix·Phase 6 migration·전체 balance simulation이다. Full 성공이 이 검증들을 대신하지 않으며 실제 Lighting/Firearm·LootClaim·CurrencyLoot·Credential·상점·소각·전체 cutover는 각 후속 단계다.
+
+## PR #30 Phase 2 리뷰 수정 (과거 기록: 2026-10-05)
 
 시작 fetch에서 branch는 `codex/equipment-modifier-defense`, 로컬·원격·PR HEAD는 `e21c98e215fabd3be069bd5f7b97fd452c703532`, origin/main/base는 `cf4dc078b8347fb63ae459c55d71a8b160950a5a`였다. 작업 트리는 clean이고 base 이후 main 변경이 없었다. 첨부 인계 ZIP의 Decision Log/통합 계획은 앞서 사용한 문서와 byte 단위로 동일함을 확인했다. 첨부의 Phase 2 일반 검증 범위보다 이번 사용자 리뷰 요청의 Full smoke 실행 요구를 우선한다. 기존 PR에 리뷰 수정 commit을 추가하고 merge하지 않는다. 최종 HEAD·CI는 PR의 최신 Review fixes/Validation 기록과 실제 원격 상태로 확인한다.
 
