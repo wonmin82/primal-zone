@@ -26,6 +26,19 @@ def positive_number(value):
     return isinstance(value, Real) and not isinstance(value, bool) and isfinite(value) and value > 0
 
 
+def alias_errors(items):
+    from world.targets import normalized
+
+    seen, issues = {}, []
+    for identity, definition in items.items():
+        for name in (identity, definition["name"], *definition.get("aliases", ())):
+            key = normalized(name)
+            if key in seen and seen[key] != identity:
+                issues.append(f"{identity}: 정규화 이름/alias가 {seen[key]}와 충돌합니다: {name}")
+            seen[key] = identity
+    return issues
+
+
 def recovery_errors(identity, definition, field):
     data = definition.get(field, {})
     if not isinstance(data, dict) or any(
@@ -284,6 +297,7 @@ def errors(interactables):
         light = data.get("light_source")
         if light and (not positive_number(light.get("strength")) or type(light.get("range")) is not int or light["range"] < 0 or not isinstance(light.get("power_type"), str) or not light["power_type"].strip()):
             issues.append(f"{key}: 광원 정의가 유효하지 않습니다.")
+    issues.extend(alias_errors(ITEMS))
     for identity, data in interactables.items():
         if data.get("room") in ROOF_ROOMS:
             issues.append(f"{identity}: 옥상 검증 Room {data['room']}에는 interactable/NPC를 배치할 수 없습니다.")

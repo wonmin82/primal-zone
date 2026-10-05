@@ -1,6 +1,35 @@
 # Current Task State
 
-확인일: 2026-10-05. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
+확인일: 2026-10-06. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
+
+## Phase 3 — Lighting + Firearm (2026-10-06)
+
+시작 fetch에서 local/main/origin/main은 `b2ec5f5c0fc0e511a580d04891d655d7babc0cb3`이고 clean이었다. Phase 1 PR #29와 Phase 2 PR #30을 포함한 최신 main에서 새 `codex/lighting-firearm`을 만들었다. 시작 main CI37315480927은 과거 성공이며 새 PR HEAD 결과를 대신하지 않는다. 구현 마감 fetch에서도 origin/main 변경과 다른 열린 PR은 없었다. 이번 요청 범위는 commit/push/새 PR/최신 HEAD CI 확인까지이며 merge하지 않는다. Phase 4는 별도 요청 전 시작하지 않는다.
+
+### 구현과 저장 계약
+
+- `lighting_service`는 legacy/Entity facade이며 `LightSnapshot/LightItem`을 제공한다. native flashlight state는 power_type/remaining_power(초)/enabled/started_at이고 battery1800초다. independent instance·only-one-ON·읽기 전용 projection·소진/이동/logout/shutdown 정산과 `active_light_item_id` 실제 UUID를 구현했다. 정상 ON의 주기 관찰은 state를 매번 저장하지 않는다. 외국 소유자의 stale reference는 해당 광원을 변경하지 않고 참조만 정리한다.
+- `firearm_service`와 순수 `firearms`는 family·magazine/ammo·획득 형태·자동/명시 reload·loose load/전량 unload를 제공한다. magazine은 inside/socket=magazine이며 rounds 단일 SSOT다. parent lock과 새 조건부 DB unique migration0003이 magazine 하나를 보장한다. 기존 carbine/heavy_carbine의 family metadata만 추가하고 가격·공격력·이름을 유지한다. 최종 V1 weapon 콘텐츠/가격/modifier 적용과 shop/drop/quest wiring은 후속 단계에 남겼다.
+- `loaded_magazine()`/`firearm_snapshot()`은 domain snapshot, `loaded_magazine_item()`은 영속 row다. Phase 2 active_weapon()/active_weapon_item() 경계를 유지한다. pure rules/visibility/progression/modifier/recovery에 ORM을 추가하지 않았다.
+- shot_fired outcome을 실제 ammo 감소와 같은 world_change에 묶었다. firearm basic/shooting/suppress는1발이며 non-shot은0발이다. empty/no-mag는 기회만 소비하고 mental/cooldown commit 전에 거절한다. 성공한 combat reload는 다음 기회 하나를 대체하고 queue를 attack으로 정리하며 no-op/실패는 기회를 유지한다. 실제 miss mechanic을 추가하지 않았다.
+- 공통 item hook을 inventory source/destination/parent root owner와 active light까지 확장했다. owner ID 순→결합 UUID 순 lock, 같은 transaction 참조 reconcile·state validation·rollback을 유지한다. split/merge도 owner-first로 보완해 새 inventory service와 lock 역전을 막는다. lock 후 parent 변경도 거절한다. user load/unload는 명시적 root operation이며 None bypass를 사용하지 않는다. transfer/destructive tree-wide 정책과 merge_state contract는 유지한다.
+- loaded firearm sell/burn은 변경 전 구조적으로 거절하며 loaded magazine 자체는 허용한다. resale helper는 empty+rounds×ammo 계산만 제공한다. 실제 상점/소각 연결은 없다.
+- sequence selector는 inventory/equipment/inside 후손을 함께 정렬한다. 같은 광원·탄창을 이름/이름2로 구분하고 UUID/global sequence를 표시하지 않는다. state summary·주무기·Web 버튼을 같은 snapshot/서버 명령에 연결했다. 새 stateful 행만 줄바꿈하며 CSS/JS cache query를 갱신했다.
+- 정규화의 점 처리 충돌은 사용자의 답변 `Decision Log대로 점을 무시`를 적용했다. 공백/점/하이픈/밑줄은 무시하며 숫자/mm를 보존하고 전역 alias 충돌을 검사한다. 외부 Decision Log/통합 계획/Phase 3 초안은 수정하지 않았다. 새로운 기획 변경은 없다.
+
+### Legacy와 다음 단계 경계
+
+profile inventory/equipment/storage/light_sources, Container.db.items, Corpse/DroppedLoot legacy data와 legacy 이전·판매의 direct-read는 유지한다. 기존 lighting module이 단일 legacy adapter로 LightSnapshot을 제공하며 기존 firearm은 ammo-free 기본 경로를 유지한다. 명시적 backend에만 native Lighting/Firearm을 사용하고 lazy migration/임시 Entity/fake UUID/dual-write/profile schema 변경은 없다. 공통 ItemEntity API는 native 외부 이동/삭제 참조를 처리하지만 기존 사용자 transfer/loot/storage 전체를 cutover하지 않았다. Phase 6에서 migration·integrity·runtime SSOT 전환 후 compatibility를 제거한다.
+
+Phase 4는 firearm→magazine tree를 corpse/world loot로 그대로 옮기고 별도 LootClaim을 연결할 수 있다. loose ammo는 stack, rounds는 magazine state여서 partial stack claim을 후속 claim 계약으로 연결한다. 이번 단계에는 LootClaim/CurrencyLoot/Credential/shop V2/incinerator/full migration/balance tuning이 없다.
+
+### 실제 검증과 공백
+
+[Phase 3 실제 검증 기록](phase3-validation.md)에 명령·실패 이력·재검증을 분리했다. 최종 pure/domain103개(0.597초), targeted167개(69.968초·runner80.106초), check/node/diff 검사를 성공했다. 개수를 서로 합산하지 않는다. Lighting12/Firearm17 method가 여러 계약을 묶고 Phase 1/2 foundation/equipment/combat/environment/interactions/text/integration/recovery 회귀를 함께 실행했다.
+
+최소 browser fixture는 별도 SQLite/Portal/Server/정적 파일에서 Desktop1280×900·390×844의 duplicate 광원 selector·직접 명령/버튼 전환·재장전·inside 탄창 채우기/분리·재접속 보존과 새 버튼 줄바꿈을 확인했다. 플레이 DB fingerprint 불변·owned process/성공 임시 디렉터리 cleanup을 확인했다. 이 browser fixture는 Quick/full smoke 결과가 아니다.
+
+최신 PR HEAD의 CI test/smoke 결과는 PR Validation과 마감 기록에서 SHA/run을 대조한다. local full suite/smoke-full·Phase 7 전체 browser/multiplayer·OS IME·실제 PostgreSQL 경쟁·multi-server·full-world migration·balance simulation은 사용자 단계별 전략에 따라 미실행이다. 과거 Phase 1/2 성공 결과는 아래 역사 기록으로 보존하며 이번 검사 수에 더하지 않는다.
 
 ## PR #30 문서 마감·병합 및 소스 브랜치 정리 (2026-10-05)
 

@@ -1,5 +1,11 @@
 # 원시구역 테스트 안내
 
+## Phase 3 Lighting + Firearm 검증
+
+[Phase 3 실제 검증 기록](phase3-validation.md)에 명령·개수·실패/재검증·최소 Web 확인과 미실행 범위를 구분했다. 순수/domain103개와 격리 DB targeted167개 성공을 서로 합산하지 않는다. 새 Lighting/Firearm 계약은 [광원·총기](lighting-firearms.md)를 따른다. 사용자 요청대로 이번 단계의 local full suite·smoke-full은 생략하고 최신 PR HEAD의 자동 전체 suite/Quick smoke를 별도 확인한다.
+
+native fixture에서 두 광원의 독립 잔량/only-one-ON·readonly projection·소진·배터리 원자성·logout/shutdown·외부 이동/삭제/실패 rollback을 확인한다. 세 firearm family·한 magazine socket·acquisition 형태·자동/명시 reload·동률 sequence·no-op·combat opportunity·loose ammo 전량 unload/merge·실제 발사/빈 총기 resource ordering을 확인한다. legacy 손전등/총기와 Phase 1/2 회귀도 포함한다. 기존 플레이어를 초기화하거나 자동 Entity 변환해 검증하지 않는다.
+
 ## ItemEntity 1단계 검증
 
 1단계는 gameplay cutover 없이 독립 Django domain만 추가한다. `tests.test_item_entities`로 위치·스택·순번·트리·고유 범위·rollback을, 기존 `tests.test_item_interactions tests.test_loot`로 이전/전리품 호환을 검사한다. 정의·이동 순수 검사는 game에서 `python -m unittest world.test_item_definitions world.test_rules world.test_headquarters world.test_shops`로 실행한다. 일반 플레이 DB에 테스트 fixture나 migration을 적용하지 않는다.

@@ -5,7 +5,7 @@ ITEMS = {
         "value": 30,
         "name": "탐사용손전등", "aliases": ["손전등"], "slot": "tool",
         "description": "교체형 전원을 넣어 켜는 탐사용 광원이다. 현재 장소와 인접한 곳을 비춘다.",
-        "light_source": {"strength": 2, "range": 1, "power_type": "flashlight_battery"},
+        "light_source": {"strength": 2, "range": 1, "power_type": "flashlight_battery", "max_power_seconds": 1800},
     },
     "battery": {
         "value": 6,
@@ -42,6 +42,28 @@ ITEMS = {
     },
 }
 
+# Phase 3 구조용 탄창·탄약. 실제 shop/drop 연결과 기존 가격·공격력은 변경하지 않는다.
+for identity, name, alias, family, ammo_type, capacity in (
+    ("mag_9_small", "9mm 소형탄창", "권총소형", "pistol_9mm", "9mm", 8),
+    ("mag_9_standard", "9mm 표준탄창", "권총표준", "pistol_9mm", "9mm", 12),
+    ("mag_9_extended", "9mm 확장탄창", "권총확장", "pistol_9mm", "9mm", 18),
+    ("mag_556_short", "5.56mm 단축탄창", "카빈단축", "carbine_556", "556mm", 15),
+    ("mag_556_standard", "5.56mm 표준탄창", "카빈표준", "carbine_556", "556mm", 20),
+    ("mag_556_extended", "5.56mm 확장탄창", "카빈확장", "carbine_556", "556mm", 30),
+    ("mag_762_standard", "7.62mm 표준탄창", "중량표준", "rifle_762", "762mm", 8),
+    ("mag_762_extended", "7.62mm 확장탄창", "중량확장", "rifle_762", "762mm", 12),
+):
+    ITEMS[identity] = {"name": name, "aliases": [alias], "slot": "magazine", "stackable": False,
+                       "magazine": {"family": family, "ammo_type": ammo_type, "capacity": capacity}}
+for identity, name, alias, ammo_type in (
+    ("ammo_9", "9mm 권총탄", "권총탄", "9mm"),
+    ("ammo_556", "5.56mm 카빈탄", "카빈탄", "556mm"),
+    ("ammo_762", "7.62mm 소총탄", "중량탄", "762mm"),
+):
+    ITEMS[identity] = {"name": name, "aliases": [alias], "slot": "ammo", "ammo_type": ammo_type}
+ITEMS["carbine"]["firearm_family"] = "carbine_556"
+ITEMS["heavy_carbine"]["firearm_family"] = "rifle_762"
+
 # 일반 물품은 이동 가능하고 임무 핵심 물품은 정의에서 명시적으로 차단한다.
 for definition in ITEMS.values():
     definition.setdefault("transferable", True)
@@ -57,6 +79,8 @@ for definition in ITEMS.values():
         "unequip": definition["slot"] in ("weapon", "armor"),
         "loot": definition["transferable"],
         "burn": definition["transferable"],
+        "load": bool(definition.get("magazine") or definition.get("ammo_type")),
+        "unload": bool(definition.get("magazine") or definition.get("ammo_type")),
     })
 
 # 행동 선택은 아이템 이름이 아니라 slot만 사용한다.
@@ -65,13 +89,15 @@ UNEQUIP_ACTIONS = {"weapon": "해제", "armor": "벗어"}
 
 
 def find_id(catalog, name):
-    """Accept a stable ID or an exact Korean display name, ignoring spaces."""
-    normalized = name.replace(" ", "").lower()
+    """stable ID·표시명·alias에 공통 대상 정규화를 적용한다."""
+    from world.targets import normalized as normalize
+
+    normalized = normalize(name)
     return next(
         (
             key
             for key, value in catalog.items()
-            if normalized in [str(name).replace(" ", "").lower()
+            if normalized in [normalize(name)
                               for name in (key, value["name"], *value.get("aliases", []))]
         ),
         None,

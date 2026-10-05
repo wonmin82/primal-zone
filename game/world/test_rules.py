@@ -191,7 +191,7 @@ class RuleTests(TestCase):
         for identity, data in ITEMS.items():
             self.assertEqual(find_id(ITEMS, identity), identity)
             self.assertEqual(find_id(ITEMS, data["name"]), identity)
-            self.assertIn(data["slot"], {"weapon", "armor", "consumable", "material", "trophy", "tool"})
+            self.assertIn(data["slot"], {"weapon", "armor", "consumable", "material", "trophy", "tool", "magazine", "ammo"})
             if data["slot"] in EQUIPMENT_ACTIONS:
                 self.assertTrue(
                     all(isinstance(data[k], int) and data[k] >= 0 for k in ("attack", "defense"))

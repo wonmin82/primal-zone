@@ -89,6 +89,9 @@ def _check_tree_operation(root, descendants, operation):
     scope = TREE_OPERATION_SCOPES.get(operation) if isinstance(operation, str) else None
     if scope is None:
         raise ValidationError("트리 적용 범위가 정의되지 않은 행동입니다.")
+    if (operation in ("sell", "burn") and ITEMS[root.definition_id].get("firearm_family")
+            and root.children.filter(socket="magazine").exists()):
+        raise ValidationError("탄창을 먼저 분리한 뒤 총기를 판매하거나 소각하세요.")
     _check_operation(root, operation)
     if scope == "tree":
         for descendant in descendants:
@@ -109,7 +112,7 @@ def create_item(
     with world_change():
         from world.equipment_service import after_item_change, before_item_change
 
-        change = before_item_change(location_kind=location_kind, owner_object=owner_object)
+        change = before_item_change(location_kind=location_kind, owner_object=owner_object, parent_item=parent_item)
         ancestors = _ancestors(parent_item)
         locked = {item.pk: item for item in lock_items([*ancestors, *change.item_ids])}
         item = ItemEntity(
@@ -120,7 +123,7 @@ def create_item(
             parent_item=locked.get(item_id(parent_item)) if parent_item is not None else None,
             slot=slot,
             socket=socket,
-            state=deepcopy({} if state is None else state),
+            state=deepcopy(_default_state(definition_id) if state is None else state),
             sequence=_next_sequence(),
         )
         item.save(force_insert=True)
@@ -133,7 +136,7 @@ def _move(item, *, location_kind, owner_object, parent_item, slot, socket, opera
         from world.equipment_service import after_item_change, before_item_change
 
         current = _current(item)
-        change = before_item_change(current, location_kind=location_kind, owner_object=owner_object)
+        change = before_item_change(current, location_kind=location_kind, owner_object=owner_object, parent_item=parent_item)
         identities = _tree_ids(item)
         if not tree and len(identities) > 1:
             raise ValidationError("내부 아이템이 있는 물품은 트리 이동을 사용해야 합니다.")
@@ -143,7 +146,8 @@ def _move(item, *, location_kind, owner_object, parent_item, slot, socket, opera
         locked = {row.pk: row for row in lock_items(identities | set(ancestors) | set(change.item_ids))}
         root = locked[item_id(item)]
         source = (root.location_kind, root.owner_object_id)
-        if source != (current.location_kind, current.owner_object_id) or (
+        if (source != (current.location_kind, current.owner_object_id)
+                or root.parent_item_id != current.parent_item_id) or (
             expected_source is not None and source != expected_source
         ):
             raise ValidationError("아이템의 위치나 소유자가 바뀌었습니다. 다시 선택하세요.")
@@ -214,14 +218,17 @@ def move_item_tree(
 
 def split_stack(item, quantity):
     with world_change():
+        from world.equipment_service import before_item_change
+
+        current = _current(item)
+        change = before_item_change(current)
         # inside 스택도 source를 잠근 뒤 더 작은 부모 ID를 추가로 잠그지 않는다.
-        parent = (
-            ItemEntity.objects.filter(pk=item_id(item))
-            .values_list("parent_item_id", flat=True)
-            .first()
-        )
-        locked = {row.pk: row for row in lock_items([item, *_ancestors(parent)])}
+        parent = current.parent_item_id
+        locked = {row.pk: row for row in lock_items([item, *_ancestors(parent), *change.item_ids])}
         source = locked[item_id(item)]
+        if (source.location_kind, source.owner_object_id, source.parent_item_id) != (
+                current.location_kind, current.owner_object_id, current.parent_item_id):
+            raise ValidationError("아이템의 위치나 소유자가 바뀌었습니다. 다시 선택하세요.")
         if not ITEMS[source.definition_id]["stackable"] or source.children.exists():
             raise ValidationError("이 아이템은 나눌 수 없습니다.")
         if type(quantity) is not int or not 0 < quantity < source.quantity:
@@ -262,10 +269,18 @@ def same_merge_context(source, destination):
 
 def merge_stack(source, destination):
     with world_change():
+        from world.equipment_service import before_item_change
+
         if item_id(source) == item_id(destination):
             raise ValidationError("같은 스택끼리는 합칠 수 없습니다.")
-        locked = {item.pk: item for item in lock_items([source, destination])}
+        current_source, current_destination = _current(source), _current(destination)
+        change = before_item_change(current_source, parent_item=current_destination)
+        locked = {item.pk: item for item in lock_items([source, destination, *change.item_ids])}
         source, destination = locked[item_id(source)], locked[item_id(destination)]
+        for row, current in ((source, current_source), (destination, current_destination)):
+            if (row.location_kind, row.owner_object_id, row.parent_item_id) != (
+                    current.location_kind, current.owner_object_id, current.parent_item_id):
+                raise ValidationError("아이템의 위치나 소유자가 바뀌었습니다. 다시 선택하세요.")
         if (
             not ITEMS[source.definition_id]["stackable"]
             or not same_merge_context(source, destination)
@@ -286,12 +301,35 @@ def delete_item(item, *, operation=None):
         current = _current(item)
         change = before_item_change(current)
         locked = {row.pk: row for row in lock_items([item, *change.item_ids])}[item_id(item)]
-        if (locked.location_kind, locked.owner_object_id) != (current.location_kind, current.owner_object_id):
+        if (locked.location_kind, locked.owner_object_id, locked.parent_item_id) != (
+                current.location_kind, current.owner_object_id, current.parent_item_id):
             raise ValidationError("아이템의 위치나 소유자가 바뀌었습니다. 다시 선택하세요.")
-        _check_operation(locked, operation)
+        _check_tree_operation(locked, (), operation)
         # PROTECT가 내부 물품의 암묵적 삭제를 차단한다. 재귀 삭제는 제공하지 않는다.
         locked.delete()
         after_item_change(change)
+
+
+def _default_state(definition_id):
+    from world.item_entities.policy import definition_errors
+    from world.item_states import default_state
+
+    definition = ITEMS.get(definition_id)
+    if definition is None:
+        return {}
+    issues = definition_errors(definition_id, definition)
+    if issues:
+        raise ValidationError({"definition_id": issues})
+    return default_state(definition)
+
+
+def update_item_state(item, state):
+    """상위 domain이 권한과 결합 lock 집합을 확보한 뒤 사용하는 상태 변경 경계."""
+    with world_change():
+        row = lock_items([item])[0]
+        row.state = deepcopy(state)
+        row.save()
+        return row
 
 
 def items_in_location(location_kind, *, owner_object=None, parent_item=None):

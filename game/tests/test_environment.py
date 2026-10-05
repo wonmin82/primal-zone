@@ -403,10 +403,10 @@ class EnvironmentTests(WorldCommandTest):
 class EnvironmentWebTemplateTests(SimpleTestCase):
     def test_fresh_assets_and_field_guide_weather_entry_use_existing_command(self):
         html = render_to_string("webclient/webclient.html")
-        self.assertIn("webclient/css/primal.css?v=long-term-growth", html)
-        self.assertIn("webclient/js/primal.js?v=equipment-phase2", html)
+        self.assertIn("webclient/css/primal.css?v=lighting-firearms-phase3", html)
+        self.assertIn("webclient/js/primal.js?v=lighting-firearms-phase3", html)
         self.assertNotIn("webclient/js/primal.js?v=elevator", html)
-        self.assertNotIn("webclient/js/primal.js?v=lighting", html)
+        self.assertNotIn('webclient/js/primal.js?v=lighting"', html)
         self.assertNotIn("?v=compact", html)
         self.assertNotIn("?v=item-interactions", html)
         self.assertIn('data-command="날씨">환경 확인', html)

@@ -26,7 +26,7 @@ class LootRequest:
 
 
 def normalized(value):
-    return "".join(str(value).split()).casefold()
+    return "".join(str(value).split()).translate(str.maketrans("", "", ".-_" )).casefold()
 
 
 def parse_selector(value, known_names=()):

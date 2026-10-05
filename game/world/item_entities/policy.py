@@ -2,7 +2,7 @@
 
 from world.content import ITEMS
 
-# equip/unequip은 root의 행동이고 나머지는 내부 물품의 이전·처분 보호도 검사한다.
+# equip/unequip/load/unload는 root 행동이며 이전·처분은 내부 물품 보호도 검사한다.
 # 새 행동은 policy 허용 여부와 함께 트리 적용 범위를 먼저 정의해야 한다.
 TREE_OPERATION_SCOPES = {
     "equip": "root",
@@ -14,6 +14,8 @@ TREE_OPERATION_SCOPES = {
     "burn": "tree",
     "loot": "tree",
     "consume": "tree",
+    "load": "root",
+    "unload": "root",
 }
 
 
@@ -21,6 +23,10 @@ def can_item_operation(item, operation):
     if not isinstance(operation, str) or operation not in TREE_OPERATION_SCOPES:
         return False
     identity = item if isinstance(item, str) else item.definition_id
+    if (not isinstance(item, str) and operation in ("sell", "burn")
+            and ITEMS.get(identity, {}).get("firearm_family")
+            and item.children.filter(socket="magazine").exists()):
+        return False
     return ITEMS.get(identity, {}).get("operation_policy", {}).get(operation) is True
 
 
@@ -43,5 +49,6 @@ def definition_errors(identity, definition):
     ):
         issues.append(f"{identity}: operation_policy는 행동별 참/거짓이어야 합니다.")
     from world.equipment import definition_errors as equipment_errors
+    from world.item_states import definition_errors as state_errors
 
-    return issues + equipment_errors(identity, definition)
+    return issues + equipment_errors(identity, definition) + state_errors(identity, definition)

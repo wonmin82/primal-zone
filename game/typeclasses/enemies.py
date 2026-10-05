@@ -286,8 +286,10 @@ class Enemy(DistantPresenceMixin, DefaultObject):
                 profile["player_round"] += 1
                 damage, outcome = 0, {"action": "error", "message": error}
             else:
-                damage, outcome = rules.player_attack(
-                    profile, self.db.enemy_id, now, COMBAT_INTERVAL, rng, recipient_profile
+                from world.firearm_service import player_attack
+
+                damage, outcome = player_attack(
+                    player, profile, self.db.enemy_id, now, COMBAT_INTERVAL, rng, recipient_profile
                 )
             profile["heal_target"] = None
             if recipient_profile is not None and outcome["action"] == "heal":

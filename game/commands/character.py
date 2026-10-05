@@ -96,6 +96,24 @@ class Look(CmdLook):
                         )
                     self.caller.msg(output)
                 else:
+                    from world.equipment_service import (
+                        entity_runtime,
+                        resolve_item,
+                        selector_label,
+                        state_summary,
+                    )
+
+                    if entity_runtime(self.caller):
+                        from world.lighting_service import status as light_status
+
+                        item = resolve_item(self.caller, name, "보기")
+                        identity = item.definition_id
+                        detail = light_status(self.caller, item, observed_at) if ITEMS[identity].get("light_source") else state_summary(item)
+                        self.caller.msg(ft.compact(ft.token("item", selector_label(self.caller, item)),
+                                                   ITEMS[identity].get("description", "탐사 중 사용하는 물품이다."),
+                                                   detail, ITEMS[identity].get("firearm_family", "")))
+                        self.caller.push_state(observed_at=observed_at)
+                        return
                     identity = item_selector(name, inventory, "보기")
                     from world import lighting
 

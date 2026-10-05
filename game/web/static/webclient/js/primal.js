@@ -225,8 +225,11 @@
     const rows = state.inventory.map((item) => {
       const row = document.createElement("li"), name = document.createElement("span");
       if (item.light_source || item.power_source) row.classList.add("lighting-item");
+      if (item.firearm || item.magazine) row.classList.add("stateful-item");
       const selector = item.selector || item.name;
       name.append(semantic("item", selector), " ×" + item.count);
+      if (item.state_summary) name.append(" · " + item.state_summary);
+      if (item.location === "inside") name.append(" [장전]");
       row.append(name);
       if (item.equipped) {
         const mark = document.createElement("small"); mark.textContent = item.active_weapon ? "주무기" : "착용 중"; row.append(mark);
@@ -236,14 +239,17 @@
       else if (item.consume_action) row.append(button(item.consume_action, item.name + " " + item.consume_action));
       else if (item.id === "bandage") row.append(button("사용", "붕대 사용"));
       if (item.light_source) {
-        const active = observation?.light_source?.id === item.id && observation.light_source.active;
-        row.append(button(active ? "끄기" : "켜기", item.name + (active ? " 꺼" : " 켜")), button("확인", item.name + " 확인"));
+        const active = observation?.light_source?.name === selector && observation.light_source.active;
+        row.append(button(active ? "끄기" : "켜기", selector + (active ? " 꺼" : " 켜")), button("확인", selector + " 확인"));
       }
       if (item.power_source) {
         for (const source of state.inventory.filter((device) => device.light_source?.power_type === item.power_source.type)) {
-          row.append(button(source.name + "에 넣기", source.name + "에 " + item.name + " 넣어"));
+          const deviceSelector = source.selector || source.name;
+          row.append(button(deviceSelector + "에 넣기", deviceSelector + "에 " + selector + " 넣어"));
         }
       }
+      if (item.firearm) row.append(button("재장전", selector + " 재장전"), button("탄창 꺼내기", selector + "에서 탄창 꺼내"));
+      if (item.magazine) row.append(button("채우기", selector + " 채워"), button("잔탄 꺼내기", selector + "에서 " + item.ammo_name + " 꺼내"));
       return row;
     });
     const emptySlots = Object.entries(state.equipment || {}).filter(([, name]) => !name);
