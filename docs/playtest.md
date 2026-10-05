@@ -16,6 +16,8 @@ git diff --check
 - 새 회귀는 marker 없는 실제 실물/화폐·잘못된 source owner 위치 row·양방향 integrity·빈 generation·reject 후 rows/quantity/state/claim/sequence/marker 불변, stale 입력의 corpse/world claimed split 거절, claim 없는 inventory split, partial pickup/merge와 full pickup의 split 미사용을 확인한다. 기존 legacy partial/권리·CurrencyLoot·ItemEntity rollback 회귀도 포함했다.
 - 최신 리뷰 HEAD CI run/SHA·test/Quick smoke 결과는 [PR #32 Review fixes/Validation](https://github.com/wonmin82/primal-zone/pull/32)에 별도로 기록한다. 시작 HEAD의 CI37385084401 성공은 과거 기준이며 이번 HEAD 성공으로 대신하지 않는다.
 
+리뷰 HEAD `f33ad30464088cb6b9bbb74e699590de94c29a40`의 [Game checks37389067401](https://github.com/wonmin82/primal-zone/actions/runs/37389067401)는 자동 check·순수190개/0.679초·통합487개/155.726초·Quick29.217초 성공이다. 로컬97개와 합산하지 않는다. 2026-10-06 후속 문서 마감/병합 요청에서는 실행 코드가 같아 로컬 검사를 반복하지 않는다. 문서 HEAD와 merge commit의 CI는 각각 새 run/SHA를 PR Validation/마감 기록에서 확인한다. 이전 실패 이력과 PostgreSQL/multi-server·IME·migration·balance 공백은 유지한다.
+
 ClaimContext/payout pure helper·UI asset은 그대로여서 pure test와 browser/node를 반복하지 않았다. 요청 범위에 따라 local full suite·smoke-full·전체 browser/multiplayer matrix·OS IME·실제 PostgreSQL/multi-server 경쟁·full-world migration·balance simulation은 미실행이다. 자동 복구·legacy conversion·Phase 5+ 구현도 없다.
 
 ## Phase 4 LootClaim + CurrencyLoot 검증

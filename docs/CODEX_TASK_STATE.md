@@ -2,6 +2,16 @@
 
 확인일: 2026-10-06. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
 
+## PR #32 문서 마감·병합 및 소스 브랜치 정리 (2026-10-06)
+
+사용자가 문서 마감 후 [PR #32](https://github.com/wonmin82/primal-zone/pull/32) 병합과 소스 브랜치 삭제를 요청했다. 아래 구현·리뷰 단계의 merge 금지/OPEN 유지 설명은 당시 요청 범위이며 이번 명시적 병합 요청을 제한하지 않는다. Phase 5는 별도 요청 전 시작하지 않는다.
+
+- 마감 시작 fetch에서 local/remote/PR HEAD는 `f33ad30464088cb6b9bbb74e699590de94c29a40`, main/base는 `4d6a3057dbae08003cae8b5a082882135b31837b`다. working tree는 clean이고 main 대비 ahead4/behind0이며 다른 worktree에서 소스 branch를 사용하지 않는다. 최신 main을 포함하여 불필요한 rebase/이력 재작성을 하지 않는다.
+- 리뷰 HEAD의 [Game checks37389067401](https://github.com/wonmin82/primal-zone/actions/runs/37389067401)는 test/smoke success다. check·순수190개/0.679초·통합487개/155.726초·Quick29.217초를 해당 SHA에서 확인했다. 문서 마감 HEAD와 병합된 main의 CI는 각각 새 run/SHA로 확인해 PR Validation/마감 기록에 남기며 리뷰 HEAD 결과로 대신하지 않는다.
+- 이번 마감은 Task State/playtest만 갱신한다. loot-claims의 실제 storage guard·claimed split trusted 경계·legacy/Phase 6 설명도 현재 코드와 대조했다. 실행 코드/테스트/의존성/UI asset이 리뷰 검증 당시와 같아 당시 targeted97개 성공을 재사용한다. 문서 경로·링크·기준 SHA/검증 이력과 git diff --check를 확인하며 로컬 게임 검사·browser·smoke·node는 반복하지 않는다.
+- 최신 main 포함·non-draft·필수 CI·리뷰 대화·충돌 조건을 확인한 뒤 merge commit 방식으로 병합한다. 병합된 소스 HEAD가 main에 포함된 것을 확인한 뒤 원격/로컬 codex/loot-claim-currency를 삭제하고 로컬 main을 fast-forward로 갱신한다. 실제 병합 commit·main CI·삭제 결과는 PR 최신 마감 기록과 원격 상태를 기준으로 확인한다.
+- 실제 PostgreSQL 경쟁·multi-server·OS IME·전체 browser/multiplayer matrix·full-world migration·balance simulation 공백과 legacy SSOT/profile version10은 유지한다. 플레이 DB·비밀 설정·밸런스를 변경하지 않으며 Phase 5+ 기능을 구현하지 않는다. 아래 기록은 당시 이력으로 보존한다.
+
 ## PR #32 Phase 4 리뷰 수정 (2026-10-06)
 
 시작 HEAD는 `13cb330eb5a28784bab48688a8afa11291582d14`, branch는 기존 `codex/loot-claim-currency`이며 clean이었다. fetch 후 local/remote/PR HEAD가 같고 origin/main은 `4d6a3057dbae08003cae8b5a082882135b31837b`다. 시작 HEAD의 CI37385084401 test/smoke success는 과거 검증이며 이번 수정 HEAD의 성공을 대신하지 않는다. 기존 PR/branch에서 리뷰2건만 수정하며 merge하지 않는다.
