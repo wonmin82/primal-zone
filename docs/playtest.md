@@ -6,6 +6,20 @@
 
 이번 단계의 사용자 계획은 로컬 targeted tests만 요구하고 전체 suite·smoke-full·Web/browser 전체 회귀·다인 전체 시나리오·전체 migration·balance simulation은 7단계로 미룬다. 실제 실행 결과와 기준 차이는 [작업 상태](CODEX_TASK_STATE.md), 모델/API 계약은 [ItemEntity 기반](item-entities.md)을 따른다. 아래 기존 gameplay 검증 기록은 당시 결과다.
 
+### PR #29 리뷰 수정의 검증 기준
+
+`tests.test_item_entities`는 테스트 전용 비스택 root/child로 root의 `equip=true`·child의 `equip=false`를 재현한다. root를 `equipment/main_hand`로 옮긴 뒤 child의 `inside`·같은 parent·`socket="magazine"`·sequence가 유지되는지 확인한다. 실제 firearm/magazine 콘텐츠는 fixture로도 배포하지 않는다. `give/drop/store/sell/burn/loot/consume`의 descendant 제한은 거절 후 전체 row·unique scope·발급기 불변을 검사한다. 미정의 operation 거절과 `operation=None`의 신뢰된 내부 이전도 구분한다.
+
+merge는 현재 기본 계약의 전체 state 동일/차이와 테스트 안에서만 선택한 merge 관련 state 동일/차이를 각각 검사한다. LootClaim은 후속 단계이며 다른 claim의 병합 금지 계약만 유지한다. UUID·전역 sequence·split/merge identity·canonical 위치·cycle·PROTECT·개인 보관 owner·nested uniqueness·lock 순서·outer rollback·stale 입력은 같은 핵심 suite의 회귀 대상이다.
+
+```powershell
+.\.venv\Scripts\python.exe scripts/dev.py check
+.\.venv\Scripts\python.exe scripts/dev.py test tests.test_item_entities --parallel 2 --reverse
+git diff --check
+```
+
+2026-10-05 리뷰 구현 `8cfd14caaed33e5dd2789fe75a2fd5cc31422f92` 기준 로컬 targeted25개와 check가 성공했다. [해당 HEAD의 CI](https://github.com/wonmin82/primal-zone/actions/runs/37289716444)는 자동 전체552개·Quick smoke도 성공했다. 이는 로컬 전체 검사를 실행한 결과가 아니며 개수를 중복 합산하지 않는다. 이후 문서만 바뀐 마감에서는 링크·내용·diff를 검사하고 동일 코드의 로컬 게임 검사를 반복하지 않는다. 최종 PR HEAD와 병합된 main의 CI는 각 SHA로 별도 확인해 PR Validation에 기록한다. 실제 PostgreSQL row-lock 경쟁·multi-server concurrency·OS IME와 후속 통합 범위는 미검증이다.
+
 ## 현재 절차: PR #28 견제와 교관
 
 1. 격리 캐릭터 두 명으로 같은 적에게 견제를 적용한다. 문자열 source ID별 효과가 공존하고 각자 자신의 Rank만 교체/갱신/보존하는지 확인한다. R10 두 명34.39%, 네 명56.95%, 보스 네 명32.92%는 순수 helper로 검사한다. public 적에 두 파티8명이 참여해도 source를 모두 유지하며 최종 감소율만 네 명 기준으로 제한한다. cap 상태에서도 모든 효과를 소비한다. boss=True/quest 없음과 boss=False/quest 존재 fixture는 각각 보스/일반 수치를 사용해야 한다.

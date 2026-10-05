@@ -83,4 +83,4 @@ operation은 호출자가 직접 조작하는 root의 행동이다. contained ch
 
 핵심 검사는 `tests.test_item_entities`, 정의 검사는 `world.test_item_definitions`다. 생성·DB location 제약·비스택/최대 수량·split/merge·순번·트리 순환/이동/PROTECT·profile/cache/callback rollback·정렬 lock·개인 보관 owner·DB 고유 키·nested 고유 범위·발급기 반복 초기화를 검사한다. 테스트 전용 비스택 root/child로 장착 시 내부 socket 보존을 재현하며 실제 총기·탄창 콘텐츠는 추가하지 않는다. tree-wide 행동의 descendant 거절 시 모든 row·고유 범위·순번 발급기 불변, unknown operation 거절·None 내부 작업, 전체 state 기본 비교와 merge 관련 상태 계약도 검사한다. 기존 `tests.test_item_interactions`, `tests.test_loot`와 정의/이동 순수 규칙 검사는 직접 영향 범위에 따라 선택한다. 실제 실행과 과거 결과는 [작업 상태](CODEX_TASK_STATE.md)에 구분해 기록한다.
 
-단계별 계획에 따라 전체 suite·smoke-full·Web/browser 전체 회귀·다인 전체 시나리오·전체 저장 변환·balance simulation은 7단계에서 수행한다. 이번 단계에서 gameplay cutover·정적 파일 변경이 없어 서버/브라우저 검사를 실행하지 않는다.
+단계별 계획에 따라 로컬 전체 suite·smoke-full·Web/browser 전체 회귀·다인 전체 시나리오·전체 저장 변환·balance simulation은 7단계의 종합 검증 범위다. 기존 GitHub workflow의 자동 전체 suite·Quick smoke는 그대로 실행하며 로컬 targeted 결과와 구분한다. 문서 마감은 실행 코드·정적 파일 변경이 없어 로컬 게임·서버·브라우저 검사를 반복하지 않는다. 최신 HEAD와 병합된 main의 CI는 각각 해당 SHA로 확인한다. 실제 PostgreSQL row-lock 경쟁과 다중 서버 동시성은 아직 검증하지 않았다. 상세 회귀 절차는 [테스트 안내](playtest.md#pr-29-리뷰-수정의-검증-기준)를 따른다.

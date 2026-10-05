@@ -2,7 +2,18 @@
 
 확인일: 2026-10-05. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
 
-## PR #29 ItemEntity 리뷰 수정·검증 (2026-10-05)
+## PR #29 문서 마감·병합 및 소스 브랜치 정리 (2026-10-05)
+
+ItemEntity Foundation과 리뷰 P1/P2 수정을 완료했다. 사용자가 문서 갱신 후 [PR #29](https://github.com/wonmin82/primal-zone/pull/29) 병합·소스 브랜치 삭제를 요청했다. 아래 리뷰 단계의 병합 미요청·OPEN 유지 표현은 당시 범위이며 이번 명시적 요청보다 우선하지 않는다. 병합 완료 여부·merge commit·병합된 main의 CI·브랜치 정리 결과는 PR의 최신 Validation 기록과 실제 원격 상태가 기준이다.
+
+- 마감 시작 fetch의 로컬·원격·PR HEAD는 `8cfd14caaed33e5dd2789fe75a2fd5cc31422f92`, 최신 base `origin/main`은 `25dd10061b7e63826011f04d69b2646883f2d80c`다. 작업 트리는 깨끗하고 main 대비 ahead2/behind0이다. 최신 main을 이미 포함하여 불필요한 rebase나 기존 커밋 재작성은 하지 않는다. PR은 non-draft·MERGEABLE·CLEAN이며 미해결 리뷰 대화0개였다.
+- 리뷰 구현 HEAD와 [Game checks 37289716444](https://github.com/wonmin82/primal-zone/actions/runs/37289716444)의 headSha 일치를 다시 확인했다. [test](https://github.com/wonmin82/primal-zone/actions/runs/37289716444/job/111696999774)·[smoke](https://github.com/wonmin82/primal-zone/actions/runs/37289716444/job/111696999548)는 success다. 당시 CI는 순수168개·통합384개, 총552개와 Quick28.824초를 통과했다. 문서 마감 HEAD와 merge commit의 CI는 각각 해당 SHA로 별도 확인하며 이전 성공으로 대신하지 않는다.
+- 이번 마감 diff는 Task State·playtest·item-entities의 Markdown뿐이다. 2026-10-05 리뷰 구현과 실행 코드·의존성·설정·정적 파일이 동일하므로 당시 check·targeted25개 성공 근거를 재사용하고 로컬 게임 테스트·smoke·브라우저·정적 파일 수집은 반복하지 않는다. 링크·명령·현재 정책을 대조하고 `git diff --check`를 실행한다. 새 결과와 과거 테스트 개수를 합산하지 않는다.
+- 검증 안내에 root equip/contained child의 수동 이동, tree-wide 보호·실패 원자성, merge_state 기본/확장 계약과 로컬 targeted/자동 CI의 구분을 반영한다. gameplay cutover·dual-write·profile v10·콘텐츠·밸런스는 변경하지 않는다. 플레이 DB·비밀 설정·runtime은 문서 마감과 Git 정리 대상이 아니다.
+- 남은 범위는 실제 PostgreSQL row-lock 경쟁·multi-server concurrency, 후속 LootClaim identity 비교와 단계별 실제 콘텐츠/저장 전환이다. smoke-full·브라우저 전체·OS IME·full-world migration·balance simulation은 이번 마감에서 미실행이며 1단계 완료와 전체 통합 검증 완료를 혼동하지 않는다.
+- 최신 대상 반영·최종 문서 HEAD의 필수 CI·리뷰·충돌 조건을 확인한 뒤 merge commit 방식으로 병합한다. 소스 HEAD가 main에 포함되었는지 확인하고 요청된 원격·로컬 `codex/itementity-foundation`을 삭제하며 로컬 main은 fast-forward로 갱신한다. 이후 독립 작업은 다시 fetch한 최신 main에서 시작하고 다음 Phase를 임의로 구현하지 않는다.
+
+## PR #29 ItemEntity 리뷰 수정·검증 (과거 기록: 2026-10-05)
 
 [PR #29](https://github.com/wonmin82/primal-zone/pull/29)의 `codex/itementity-foundation`에서 이어간다. 시작 fetch 후 로컬·원격·PR HEAD는 리뷰 기준 `18cc26fe611d2617c18e381034c6205acf11c592`와 일치했고 staged/unstaged/untracked 변경은 없었다. 최신 base `origin/main`은 `25dd10061b7e63826011f04d69b2646883f2d80c`다. 최종 검토 fetch에서도 기준이 같고 main을 이미 포함하므로 rebase와 기존 이력 재작성은 하지 않는다. 이번 요청은 리뷰 수정 커밋·기존 PR 푸시까지이며 병합하지 않는다. 수정 후 HEAD와 해당 HEAD의 CI는 PR Validation을 기준으로 확인한다.
 
