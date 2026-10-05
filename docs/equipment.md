@@ -2,7 +2,7 @@
 
 ## 계산과 저장 경계
 
-`world.equipment_service`가 ItemEntity/Explorer Attribute를 조회하고, frozen `EquipmentItem`·`EquipmentSnapshot`을 제공한다. `world.equipment`, `world.modifiers`, `world.rules`, `world.progression`, `world.recovery`는 ORM·Evennia·네트워크를 import하지 않는다. `EquipmentProfile`은 한 작업에서 같은 snapshot을 사용하는 일시적인 dict context이며 저장할 때 일반 dict로 바꾼다. profile version은 10이고 저장 schema 변경이나 migration은 없다.
+`world.equipment_service`가 ItemEntity/Explorer Attribute를 조회하고, frozen `EquipmentItem`·`EquipmentSnapshot`을 제공한다. `world.equipment`, `world.modifiers`, `world.rules`, `world.progression`, `world.recovery`는 ORM·Evennia·네트워크를 import하지 않는다. `EquipmentProfile`은 한 작업에서 같은 snapshot을 사용하는 일시적인 dict context이며 저장할 때 일반 dict로 바꾼다. profile version은 10이고 profile schema migration은 없다. Phase 3의 ItemEntity magazine socket 제약 migration은 [영속 기반](item-entities.md)에 별도로 기록한다.
 
 현재 플레이어는 `profile["equipment"]`가 runtime SSOT다. 단일 `equipment_legacy` adapter가 legacy 정의와 장비를 같은 snapshot으로 변환한다. 빈 신규/테스트 캐릭터에만 신뢰된 `use_item_entities()`로 `equipment_backend="item_entities"`를 명시적으로 지정할 수 있다. 사용자 명령이 이 설정을 바꾸거나 데이터를 자동 변환하지 않는다. 한 명령은 선택한 저장소 한 곳만 갱신하며 profile 장비와 ItemEntity에 dual-write하지 않는다. 기존 캐릭터 전체 변환과 runtime cutover는 Phase 6이다.
 

@@ -8,7 +8,7 @@
 
 ### 구현과 저장 계약
 
-- `lighting_service`는 legacy/Entity facade이며 `LightSnapshot/LightItem`을 제공한다. native flashlight state는 power_type/remaining_power(초)/enabled/started_at이고 battery1800초다. independent instance·only-one-ON·읽기 전용 projection·소진/이동/logout/shutdown 정산과 `active_light_item_id` 실제 UUID를 구현했다. 정상 ON의 주기 관찰은 state를 매번 저장하지 않는다. 외국 소유자의 stale reference는 해당 광원을 변경하지 않고 참조만 정리한다.
+- `lighting_service`는 legacy/Entity facade이며 `LightSnapshot/LightItem`을 제공한다. native flashlight state는 power_type/remaining_power(초)/enabled/started_at이고 battery1800초다. independent instance·only-one-ON·읽기 전용 projection·소진/이동/logout/shutdown 정산과 `active_light_item_id` 실제 UUID를 구현했다. 정상 ON의 주기 관찰은 state를 매번 저장하지 않는다. 다른 소유자의 stale reference는 해당 광원을 변경하지 않고 참조만 정리한다.
 - `firearm_service`와 순수 `firearms`는 family·magazine/ammo·획득 형태·자동/명시 reload·loose load/전량 unload를 제공한다. magazine은 inside/socket=magazine이며 rounds 단일 SSOT다. parent lock과 새 조건부 DB unique migration0003이 magazine 하나를 보장한다. 기존 carbine/heavy_carbine의 family metadata만 추가하고 가격·공격력·이름을 유지한다. 최종 V1 weapon 콘텐츠/가격/modifier 적용과 shop/drop/quest wiring은 후속 단계에 남겼다.
 - `loaded_magazine()`/`firearm_snapshot()`은 domain snapshot, `loaded_magazine_item()`은 영속 row다. Phase 2 active_weapon()/active_weapon_item() 경계를 유지한다. pure rules/visibility/progression/modifier/recovery에 ORM을 추가하지 않았다.
 - shot_fired outcome을 실제 ammo 감소와 같은 world_change에 묶었다. firearm basic/shooting/suppress는1발이며 non-shot은0발이다. empty/no-mag는 기회만 소비하고 mental/cooldown commit 전에 거절한다. 성공한 combat reload는 다음 기회 하나를 대체하고 queue를 attack으로 정리하며 no-op/실패는 기회를 유지한다. 실제 miss mechanic을 추가하지 않았다.
@@ -30,6 +30,12 @@ Phase 4는 firearm→magazine tree를 corpse/world loot로 그대로 옮기고 �
 최소 browser fixture는 별도 SQLite/Portal/Server/정적 파일에서 Desktop1280×900·390×844의 duplicate 광원 selector·직접 명령/버튼 전환·재장전·inside 탄창 채우기/분리·재접속 보존과 새 버튼 줄바꿈을 확인했다. 플레이 DB fingerprint 불변·owned process/성공 임시 디렉터리 cleanup을 확인했다. 이 browser fixture는 Quick/full smoke 결과가 아니다.
 
 최신 PR HEAD의 CI test/smoke 결과는 PR Validation과 마감 기록에서 SHA/run을 대조한다. local full suite/smoke-full·Phase 7 전체 browser/multiplayer·OS IME·실제 PostgreSQL 경쟁·multi-server·full-world migration·balance simulation은 사용자 단계별 전략에 따라 미실행이다. 과거 Phase 1/2 성공 결과는 아래 역사 기록으로 보존하며 이번 검사 수에 더하지 않는다.
+
+[PR #31](https://github.com/wonmin82/primal-zone/pull/31)을 OPEN/non-draft로 생성했다. 최초 code HEAD `4ba72c875e288e9c385bbef5fa51e48280d3f02a`의 [CI37332786078](https://github.com/wonmin82/primal-zone/actions/runs/37332786078)는 순수185개 성공·통합434개 중 환경 조회1개 실패·smoke 성공이었다. 조회 테스트가 실제 회복의10초 경계를 넘었기 때문에 해당 테스트의 Explorer 시계를 저장된 시각으로 고정했다. runtime 회복 규칙과 profile 불변 단언은 바꾸지 않았다. 수정/마감 HEAD의 CI는 새 SHA로 별도 확인한다.
+
+CI 시간 의존 수정 후 `scripts/dev.py test tests.test_environment tests.test_lighting_entities --parallel 2 --reverse`의31개/21.013초·runner39.524초를 성공했고 check/diff도 성공했다. 앞선167개 성공 이후 실행 코드 변경은 없고 환경 테스트만 고정했다. 두 targeted 실행을 합산하지 않는다. 문서 마감에서는 README의 legacy 잔량 폐기와 native 잔량 보존을 구분하고 profile schema migration과 ItemEntity socket constraint migration도 구분했다.
+
+수정 code/test HEAD `c7cfcf50d7e5e4c0c8a210adb02681f512182b7c`의 [CI37333508233](https://github.com/wonmin82/primal-zone/actions/runs/37333508233)는 test/smoke success였다. 자동 순수185개/1.117초·통합434개/194.770초·Quick34.557초를 성공했고 local103/167/31개와 합산하지 않는다. 최신 fetch의 main은 시작 SHA 그대로이며 이미 포함하므로 불필요한 rebase/과거 commit 재작성은 없다. PR은 non-draft·MERGEABLE, 미해결 리뷰 대화0개였다. 이후 변경은 README·Task State·장비/검증 문서뿐이며 동일 코드 로컬 검사를 반복하지 않는다. 최종 문서 HEAD의 CI는 [PR #31 Validation](https://github.com/wonmin82/primal-zone/pull/31)의 새 run/SHA로 확인한다. PR은 병합하지 않고 Phase 4도 시작하지 않는다.
 
 ## PR #30 문서 마감·병합 및 소스 브랜치 정리 (2026-10-05)
 
