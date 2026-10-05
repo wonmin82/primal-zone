@@ -2,6 +2,48 @@
 
 확인일: 2026-10-06. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
 
+## PR #32 문서 마감·병합 및 소스 브랜치 정리 (2026-10-06)
+
+사용자가 문서 마감 후 [PR #32](https://github.com/wonmin82/primal-zone/pull/32) 병합과 소스 브랜치 삭제를 요청했다. 아래 구현·리뷰 단계의 merge 금지/OPEN 유지 설명은 당시 요청 범위이며 이번 명시적 병합 요청을 제한하지 않는다. Phase 5는 별도 요청 전 시작하지 않는다.
+
+- 마감 시작 fetch에서 local/remote/PR HEAD는 `f33ad30464088cb6b9bbb74e699590de94c29a40`, main/base는 `4d6a3057dbae08003cae8b5a082882135b31837b`다. working tree는 clean이고 main 대비 ahead4/behind0이며 다른 worktree에서 소스 branch를 사용하지 않는다. 최신 main을 포함하여 불필요한 rebase/이력 재작성을 하지 않는다.
+- 리뷰 HEAD의 [Game checks37389067401](https://github.com/wonmin82/primal-zone/actions/runs/37389067401)는 test/smoke success다. check·순수190개/0.679초·통합487개/155.726초·Quick29.217초를 해당 SHA에서 확인했다. 문서 마감 HEAD와 병합된 main의 CI는 각각 새 run/SHA로 확인해 PR Validation/마감 기록에 남기며 리뷰 HEAD 결과로 대신하지 않는다.
+- 이번 마감은 Task State/playtest만 갱신한다. loot-claims의 실제 storage guard·claimed split trusted 경계·legacy/Phase 6 설명도 현재 코드와 대조했다. 실행 코드/테스트/의존성/UI asset이 리뷰 검증 당시와 같아 당시 targeted97개 성공을 재사용한다. 문서 경로·링크·기준 SHA/검증 이력과 git diff --check를 확인하며 로컬 게임 검사·browser·smoke·node는 반복하지 않는다.
+- 최신 main 포함·non-draft·필수 CI·리뷰 대화·충돌 조건을 확인한 뒤 merge commit 방식으로 병합한다. 병합된 소스 HEAD가 main에 포함된 것을 확인한 뒤 원격/로컬 codex/loot-claim-currency를 삭제하고 로컬 main을 fast-forward로 갱신한다. 실제 병합 commit·main CI·삭제 결과는 PR 최신 마감 기록과 원격 상태를 기준으로 확인한다.
+- 실제 PostgreSQL 경쟁·multi-server·OS IME·전체 browser/multiplayer matrix·full-world migration·balance simulation 공백과 legacy SSOT/profile version10은 유지한다. 플레이 DB·비밀 설정·밸런스를 변경하지 않으며 Phase 5+ 기능을 구현하지 않는다. 아래 기록은 당시 이력으로 보존한다.
+
+## PR #32 Phase 4 리뷰 수정 (2026-10-06)
+
+시작 HEAD는 `13cb330eb5a28784bab48688a8afa11291582d14`, branch는 기존 `codex/loot-claim-currency`이며 clean이었다. fetch 후 local/remote/PR HEAD가 같고 origin/main은 `4d6a3057dbae08003cae8b5a082882135b31837b`다. 시작 HEAD의 CI37385084401 test/smoke success는 과거 검증이며 이번 수정 HEAD의 성공을 대신하지 않는다. 기존 PR/branch에서 리뷰2건만 수정하며 merge하지 않는다.
+
+- P1: `populate_source()`는 owner lock 후 legacy entries와 `has_native_assets()`의 실제 ItemEntity/CurrencyLoot 존재 여부를 marker와 독립적으로 검사한다. 위치 필터 없이 source 직접 owner 연결을 확인해 잘못된 위치의 row도 거절한다. 양방향 marker/storage 불일치는 integrity 오류로만 보고하며 빈 native source는 허용한다. 자동 repair/conversion은 없다.
+- P2: generic `split_stack()`은 잠근 current row의 claim을 새 row/sequence 발급 전에 검사해 거절한다. `allow_claimed=False`가 기본이고 True는 loot partial pickup transaction에서만 사용한다. claim 없는 fragment를 즉시 operation="loot"로 inventory 이동/merge하며 source claim을 유지한다. full pickup은 split 없이 identity/sequence를 유지하고 정상 inventory split도 기존대로다.
+- regression은 숨겨진 실물/화폐·잘못된 위치 row·marker 양방향 불일치·빈 source generation·거절 후 모든 rows/sequence/marker 불변·corpse/world claimed split·stale 입력·inventory split·partial/full pickup을 포함한다. 기존 move/split/merge failure rollback도 같은 targeted 실행에서 확인했다.
+- CurrencyLoot/zero-share·merge/ClaimContext·party allocation·legacy blob·Phase 6 boundary·콘텐츠/밸런스는 바꾸지 않았다. 사용자 action에 operation=None 우회를 추가하지 않았다. 원래 삭제 보호 테스트2개는 Evennia 삭제가 PROTECT 전에 Attribute를 지우므로 실제 domain과 같은 world_change 경계에서 실행하도록 fixture만 보정했다. production 삭제 경로나 transaction framework는 변경하지 않는다.
+
+`check`, `git diff --check` 성공. `scripts/dev.py test tests.test_loot_entities tests.test_currency_loot tests.test_item_entities tests.test_loot tests.test_item_interactions --parallel 2 --reverse`는 최종97개/34.030초(runner43.880초) 성공했다. 이전 개수와 합산하지 않는다. 수정 전 재현3개(실패 subcase5개), 첫97개의 기존 삭제 fixture2개 실패, 해당2개 재검증 성공 이력은 [playtest](playtest.md#pr-32-phase-4-리뷰-수정-검증)에 보존한다. 최종 리뷰 HEAD CI의 run/SHA와 test/Quick smoke 실제 결과는 [PR #32 Validation](https://github.com/wonmin82/primal-zone/pull/32)의 Review fixes에 별도로 기록한다.
+
+순수 ClaimContext/payout helper는 바뀌지 않아 pure tests를 반복하지 않았다. JS/CSS/template/UI 변경이 없어 browser/node도 반복하지 않았다. local full suite·smoke-full·전체 browser/multiplayer matrix·OS IME·실제 PostgreSQL contention·multi-server race·full-world migration·balance simulation 공백은 유지한다. Phase 5+는 구현하지 않는다. 아래 Phase 4 구현 및 이전 단계 기록은 당시 이력이다.
+
+## Phase 4 — LootClaim + CurrencyLoot (2026-10-06)
+
+시작 main/origin/main은 `4d6a3057dbae08003cae8b5a082882135b31837b`, clean이고 열린 PR은 없었다. Phase 1~3를 포함하며 main CI37378988784 attempt2 success를 확인했다. 이는 시작 기준의 과거 결과이고 이번 PR HEAD 성공을 대신하지 않는다. 새 branch는 `codex/loot-claim-currency`다. 최종 준비 fetch에서도 main은 같은 SHA다. 이번 요청 범위는 구현·검증·문서·commit/push·새 PR·최신 HEAD CI 확인까지이며 merge하지 않는다.
+
+- 별도 loot_entities Django app에 LootClaim OneToOne, CurrencyLoot, CurrencyLootShare와 schema migration을 추가했다. 기존 world/profile의 data migration은 없다. 실물은 root ItemEntity+optional claim, 화폐는 non-item 별도 row+share다. 상세 모델·API·legacy 필드 의미는 [전리품 권리](loot-claims.md)에 기록했다.
+- loot_service의 loot_snapshot/source_entries가 legacy/native 공통 조회 경계다. 생성은 빈 source의 populate_source와 Corpse.from_enemy(..., backend="item_entities")로 명시적으로 선택한다. 기존 사냥의 기본 생성·legacy db.entries SSOT는 유지하며 lazy conversion/dual-write는 없다. native 실물은 native recipient, legacy 실물은 legacy recipient에게만 회수하며 backend를 자동 전환하지 않는다. profile version10·기존 콘텐츠/가격/보상은 유지한다.
+- full pickup은 claim 제거 후 같은 ItemEntity 이동, partial은 source claim 유지→claim 없는 새 split→inventory 이동/merge다. root firearm+inside magazine tree와 sequence를 그대로 유지한다. generic merge도 ClaimContext의 root 배정 단위와 권리를 비교한다. 독립 entry는 동일 권리 필드라도 합치지 않으며 claim DB PK 변경 자체는 context 차이가 아니다.
+- share=0도 행을 유지해 원래 eligible player의 trigger 의미를 보존한다. protected 생성 시 share 합=quantity, 항상 잔여 합≤quantity다. 기존 currency_payouts/weighted_split을 사용하며 offline recipient credits·share·quantity를 한 transaction에서 변경한다. expiry는 caller 지급이고 free 부분 회수 시 과거 share는 0으로 정리한다. XP는 전리품 모델에 넣지 않는다.
+- owner ID→전체 UUID→claim/currency/share 순으로 잠그고 선택 후 출처·권리·수량·지분을 다시 검사한다. 지급 대상 변경 시 lock 순서를 뒤집지 않고 재선택한다. claim expiry는 source 단위, decay는 실물/tree·화폐 owner만 옮겨 권리·지분·기한을 보존한다. 빈 corpse는 기존 TTL, 빈 ground는 회수 후 정리한다.
+- reserved_party의 SET_NULL은 마지막 멤버 탈퇴로 Party가 삭제되는 기존 동작을 유지하기 위한 선택이다. 배정 player·share·기한은 유지한다. 실물/owner/player/share parent는 PROTECT다. 0 share와 root 배정 단위 해석은 Decision Log·통합안·현재 실행 지침을 함께 반영했으며 기획 변경은 없다.
+
+로컬 관련 회귀168개/60.964초(runner69.961초), 순수5개/0.001초를 성공했다. 이후 native 생성 guard/owner lock과 rollback 테스트를 보완하고 native40개/13.991초(runner22.960초)를 최종 성공했다. 개수를 중복 합산하지 않는다. 실패/재실행·명령·Web 확인은 [playtest](playtest.md#phase-4-lootclaim--currencyloot-검증)를 따른다. [PR #32](https://github.com/wonmin82/primal-zone/pull/32)의 구현 HEAD `8e199b6df30a649fc567ef3baee75f3353286982`에서 [Game checks37384065998](https://github.com/wonmin82/primal-zone/actions/runs/37384065998)가 test/smoke success다. 자동 check·순수190개/1.038초·통합482개/197.032초·Quick27.517초를 확인했다. 문서 마감 commit은 실행 코드가 동일하여 로컬 테스트를 반복하지 않으며, 최종 문서 HEAD의 CI run/SHA는 PR Validation에 별도로 기록한다. 로컬 개수와 합산하지 않는다.
+
+문서 마감 HEAD `bcaf0887bce0a3d9a3a7be2581448683d18d1700`의 [CI37384558940](https://github.com/wonmin82/primal-zone/actions/runs/37384558940)는 smoke success, test failure(통합482개 중 distant-view 1개)였다. `test_gate_preview_does_not_unlock_or_traverse`의 recovery boundary가 실제 시각 1791240390→1791240400으로 넘어 profile 비교가 실패했다. Phase 4 gameplay 회귀가 아닌 기존 wall-clock flaky로 확인했고, 실행 지침74에 따라 해당 테스트의 Explorer 시각만 기존 observation fixture100에 맞췄다. gameplay/recovery 공식은 변경하지 않았다. `scripts/dev.py test tests.test_distant_view --parallel 2 --reverse`는14개/10.895초(runner23.041초) 성공했고 check/diff도 통과했다. 최종 수정 HEAD CI는 PR Validation에서 별도로 확인하며 실패 이력을 성공으로 바꾸지 않는다.
+
+최소 Web은 격리 SQLite/fixture/owned Portal·Server에서 보호 실물 버튼·free 실물 회수·칩 부분/모두·0 share trigger와 offline 지급을 확인했다. console warning/error는 없고 성공 임시 DB/로그·프로세스·탭을 정리했다. play DB fingerprint는 같았다. JS/CSS/template 변경은 없으며 Quick/full smoke 실행 결과로 간주하지 않는다.
+
+local full suite·smoke-full·전체 browser/multiplayer matrix·OS IME·실제 PostgreSQL contention·multi-server race·full-world migration·balance simulation은 미검증이다. Phase 5 Credential/access/shop/incinerator와 Phase 6 콘텐츠·migration은 구현하지 않았다. Phase 5는 root/tree/claim을 바꾸지 않고 연결할 수 있고 Phase 6의 legacy entry→명시적 모델 생성/검증/cutover 경계가 마련되었다. 자동 migration/idempotency 전체 검증은 후속 범위다. 아래 Phase 1~3 기록은 당시 이력으로 보존한다.
+
 ## PR #31 문서 마감·병합 및 소스 브랜치 정리 (2026-10-06)
 
 사용자가 필요한 문서 업데이트 후 [PR #31](https://github.com/wonmin82/primal-zone/pull/31) 병합과 소스 브랜치 삭제를 요청했다. 아래 구현·리뷰 단계의 OPEN 유지·merge 금지 기록은 당시 요청 범위이며 이번 명시적 요청보다 우선하지 않는다. 다음 Phase는 별도 요청 전 시작하지 않는다.

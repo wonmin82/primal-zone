@@ -216,9 +216,11 @@ def move_item_tree(
     )
 
 
-def split_stack(item, quantity):
+def split_stack(item, quantity, *, allow_claimed=False):
+    """claimed 분할 허용은 loot pickup의 즉시 이동/rollback transaction 전용이다."""
     with world_change():
         from world.equipment_service import before_item_change
+        from world.loot_entities.models import LootClaim
 
         current = _current(item)
         change = before_item_change(current)
@@ -229,6 +231,8 @@ def split_stack(item, quantity):
         if (source.location_kind, source.owner_object_id, source.parent_item_id) != (
                 current.location_kind, current.owner_object_id, current.parent_item_id):
             raise ValidationError("아이템의 위치나 소유자가 바뀌었습니다. 다시 선택하세요.")
+        if not allow_claimed and LootClaim.objects.filter(item_entity_id=source.pk).exists():
+            raise ValidationError("권리가 있는 전리품 스택은 부분 회수 경로에서만 나눌 수 있습니다.")
         if not ITEMS[source.definition_id]["stackable"] or source.children.exists():
             raise ValidationError("이 아이템은 나눌 수 없습니다.")
         if type(quantity) is not int or not 0 < quantity < source.quantity:
@@ -253,7 +257,7 @@ def merge_state(item):
 
 
 def same_merge_context(source, destination):
-    """정의·위치·merge 상태를 비교한다. LootClaim 도입 시 claim identity도 비교한다."""
+    """정의·위치·merge 상태와 권리/배정 단위를 비교한다."""
     fields = (
         "definition_id",
         "location_kind",
@@ -262,7 +266,10 @@ def same_merge_context(source, destination):
         "slot",
         "socket",
     )
-    return all(
+    from world.loot_claims import same_claim_context
+    from world.loot_service import claim_context
+
+    return same_claim_context(claim_context(source), claim_context(destination)) and all(
         getattr(source, field) == getattr(destination, field) for field in fields
     ) and merge_state(source) == merge_state(destination)
 

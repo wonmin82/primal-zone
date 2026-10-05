@@ -26,8 +26,10 @@ class DistantViewTests(WorldCommandTest):
         super().setUp()
         for module in ("typeclasses.enemies", "typeclasses.explorers", "typeclasses.loot"):
             self.enterContext(patch(module + ".delay"))
+        # 관찰과 명령의 회복 경계를 같은 시각으로 고정해 실제 시계 경합을 배제한다.
         for module in (
             "commands.character", "typeclasses.zone_rooms", "world.lifecycle",
+            "typeclasses.explorers",
             "typeclasses.enemies",
             "typeclasses.loot",
             "world.distant_presentation",

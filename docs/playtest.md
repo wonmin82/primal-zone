@@ -1,5 +1,62 @@
 # 원시구역 테스트 안내
 
+## PR #32 Phase 4 리뷰 수정 검증
+
+기준 HEAD `13cb330eb5a28784bab48688a8afa11291582d14` 위 리뷰2건만 수정한 diff를 격리 settings_test DB로 검사했다. 기존 Phase 4 검증과 아래 결과를 합산하지 않는다.
+
+```powershell
+.\.venv\Scripts\python.exe scripts/dev.py check
+.\.venv\Scripts\python.exe scripts/dev.py test tests.test_loot_entities tests.test_currency_loot tests.test_item_entities tests.test_loot tests.test_item_interactions --parallel 2 --reverse
+git diff --check
+```
+
+- 최종 targeted97개/34.030초, runner43.880초 성공. check/diff 성공.
+- 수정 전 generation 실물/화폐·claimed split 재현3개는 실패 subcase5개로 두 이슈를 확인했다. corpse/world split, hidden asset generation이 기존 구현에서 거절되지 않았다.
+- 첫97개는 삭제 보호 fixture2개에서 실패했다(35.058초, runner45.424초). Evennia 직접 delete가 PROTECT 전에 marker Attribute를 제거해 새 integrity 검사에서 불일치를 감지했다. 실제 domain의 world_change 경계로 fixture를 보정한 뒤 해당2개는5.445초(runner14.993초) 성공했고 전체 관련97개도 위와 같이 성공했다. production 삭제나 화폐 semantics를 변경하지 않았다.
+- 새 회귀는 marker 없는 실제 실물/화폐·잘못된 source owner 위치 row·양방향 integrity·빈 generation·reject 후 rows/quantity/state/claim/sequence/marker 불변, stale 입력의 corpse/world claimed split 거절, claim 없는 inventory split, partial pickup/merge와 full pickup의 split 미사용을 확인한다. 기존 legacy partial/권리·CurrencyLoot·ItemEntity rollback 회귀도 포함했다.
+- 최신 리뷰 HEAD CI run/SHA·test/Quick smoke 결과는 [PR #32 Review fixes/Validation](https://github.com/wonmin82/primal-zone/pull/32)에 별도로 기록한다. 시작 HEAD의 CI37385084401 성공은 과거 기준이며 이번 HEAD 성공으로 대신하지 않는다.
+
+리뷰 HEAD `f33ad30464088cb6b9bbb74e699590de94c29a40`의 [Game checks37389067401](https://github.com/wonmin82/primal-zone/actions/runs/37389067401)는 자동 check·순수190개/0.679초·통합487개/155.726초·Quick29.217초 성공이다. 로컬97개와 합산하지 않는다. 2026-10-06 후속 문서 마감/병합 요청에서는 실행 코드가 같아 로컬 검사를 반복하지 않는다. 문서 HEAD와 merge commit의 CI는 각각 새 run/SHA를 PR Validation/마감 기록에서 확인한다. 이전 실패 이력과 PostgreSQL/multi-server·IME·migration·balance 공백은 유지한다.
+
+ClaimContext/payout pure helper·UI asset은 그대로여서 pure test와 browser/node를 반복하지 않았다. 요청 범위에 따라 local full suite·smoke-full·전체 browser/multiplayer matrix·OS IME·실제 PostgreSQL/multi-server 경쟁·full-world migration·balance simulation은 미실행이다. 자동 복구·legacy conversion·Phase 5+ 구현도 없다.
+
+## Phase 4 LootClaim + CurrencyLoot 검증
+
+새 구조와 legacy 대응은 [전리품 권리](loot-claims.md)를 따른다. 현재 작업은 시작 main `4d6a3057dbae08003cae8b5a082882135b31837b` 위 미커밋 Phase 4 diff로 격리 테스트 DB를 사용했다. 플레이 DB/schema에는 migration을 실행하지 않는다.
+
+| 실행 | 실제 결과 |
+| --- | --- |
+| `.venv/Scripts/python.exe scripts/dev.py check` | 최종 성공 |
+| game에서 `../.venv/Scripts/python.exe -m unittest world.test_loot_claims world.test_currency_loot` | 순수5개/0.001초 성공 |
+| `.venv/Scripts/python.exe scripts/dev.py test tests.test_loot_entities tests.test_currency_loot tests.test_loot tests.test_combat tests.test_parties tests.test_item_entities tests.test_item_interactions tests.test_economy tests.test_lifecycle tests.test_targets tests.test_web_state tests.test_integration --parallel 2 --reverse` | 관련168개/60.964초, runner69.961초 성공 |
+| 이후 native 생성 guard/owner lock·추가 rollback 테스트 보완 후 `scripts/dev.py test tests.test_loot_entities tests.test_currency_loot --parallel 2 --reverse` | 최종40개/13.991초, runner22.960초 성공. 168개와 중복 합산하지 않는다. |
+| 격리 settings_test의 `makemigrations loot_entities item_entities --check --dry-run` | 해당 두 app에 model/schema 차이 없음 |
+| `git diff --check` | 성공 |
+
+개발 중 실물18개는 성공했다. 이어34개는 기존 금액+번호 혼용 금지 문법을 잘못 쓴 새 fixture1개에서 실패했다. 예시 이름 tests.test_multiplayer/test_party를 넣은106개 실행은 로더 오류2개, 실제 shared combat module을 잘못 tests.test_shared_combat으로 지정한112개 실행도 로더 오류1개였다. 실제 module은 test_combat/test_parties/test_economy로 확인해 위168개를 성공했다. 마지막 native38개는13.252초(runner22.306초) 성공했고 추가 rollback case의 메서드 배치 오류로 첫40개는 NameError1개에서 실패했다. 이력과 성공 개수를 섞거나 누적하지 않는다. 개발 check의 import 정렬4개와 테스트 블록의 unused/undefined 변수2개도 수정했다.
+
+최종40개는 해당 메서드 배치를 복구한 뒤 성공했다. 그 뒤에는 문서만 마감했으며 같은 실행 코드를 반복 검사하지 않는다. 도메인 두 app의 schema 검사 전 전체 앱 dry-run에서 Evennia 기존 Tag index rename 제안이 출력됐지만 파일을 생성하거나 외부 패키지를 변경하지 않았다. 이번 schema와 ItemEntity app을 지정한 위 검사는 차이 없음을 확인했다.
+
+회귀는 claim cardinality/location·PROTECT·party 해산·보호/자유·partial/full pickup·inventory merge·root 배정 단위·firearm tree·sequence rollback·source/claim/quantity stale·double pickup·corpse delete 후 rollback·부분/전량 화폐·0 share eligibility·offline/missing recipient·다중 payout rollback·currency decay·legacy no-lazy-conversion·selector/Web payload를 포함한다. UUID·sequence·canonical location·unique scope·tree policy·unknown operation·merge_state와 기존 공유 전투/파티/경제/명령 회귀도168개에 포함했다.
+
+### 최소 Web 확인
+
+기존 Quick harness로 별도 SQLite·fixture 계정·owned Portal/Server와 정적 파일을 준비해 기존 UI를 확인했다. full/Quick smoke scenario는 실행하지 않았으며 smoke 성공으로 기록하지 않는다. JS/CSS/template은 바꾸지 않았다.
+
+- 보호된 강철마체테의 배정 대상 검증나 표시와 회수 버튼 비활성화를 확인했다.
+- 자유 ammo×10의 회수 버튼은 native inventory×1/ground×9로 반영됐다.
+- share0인 검증가의 `시체에서 3칩 가져`는 offline 검증나에게3칩을 지급하고17칩을 남겼다. 자기 wallet은 그대로였다.
+- `2칩 가져`와 `칩 모두 가져`는 free6칩을2/4로 회수해 wallet150→152→156으로 표시됐다. `시체에서 칩 모두 가져`는 남은17칩을 검증나에게 지급하고 화폐 버튼을 제거했으며 보호된 실물은 남았다.
+- console warning/error 없음. 임시 탭·owned process·성공 DB/로그 정리 완료, play DB fingerprint 불변. 전체 viewport/IME/multiplayer matrix는 실행하지 않았다.
+
+### CI와 미실행
+
+[PR #32](https://github.com/wonmin82/primal-zone/pull/32)의 구현 HEAD `8e199b6df30a649fc567ef3baee75f3353286982`에서 [Game checks37384065998](https://github.com/wonmin82/primal-zone/actions/runs/37384065998)가 test/smoke success다. 자동 check·순수190개/1.038초·통합482개/197.032초·Quick27.517초를 확인했다. 문서 마감 commit은 실행 코드가 동일하여 로컬 테스트를 반복하지 않으며, 최종 문서 HEAD의 CI run/SHA는 PR Validation에 별도로 기록한다. 시작 main CI37378988784 attempt2 success는 과거 baseline이고 이번 결과가 아니다. 자동 전체 suite의 개수와 로컬168개·native 재검증·순수5개는 합산하지 않는다.
+
+문서 마감 HEAD `bcaf0887bce0a3d9a3a7be2581448683d18d1700`의 [CI37384558940](https://github.com/wonmin82/primal-zone/actions/runs/37384558940)는 smoke success, test failure(통합482개 중 distant-view 1개)였다. `test_gate_preview_does_not_unlock_or_traverse`의 recovery boundary가 실제 시각 1791240390→1791240400으로 넘어 profile 비교가 실패했다. Phase 4 gameplay 회귀가 아닌 기존 wall-clock flaky로 확인했고, 실행 지침74에 따라 해당 테스트의 Explorer 시각만 기존 observation fixture100에 맞췄다. gameplay/recovery 공식은 변경하지 않았다. `scripts/dev.py test tests.test_distant_view --parallel 2 --reverse`는14개/10.895초(runner23.041초) 성공했고 check/diff도 통과했다. 최종 수정 HEAD CI는 PR Validation에서 별도로 확인하며 실패 이력을 성공으로 바꾸지 않는다.
+
+요청한 단계별 전략에 따라 local full suite·smoke-full·전체 browser/multiplayer matrix·OS IME·실제 PostgreSQL contention·multi-server concurrency·full-world migration·balance simulation은 미실행이다. Credential/access/shop V2/incinerator·drop/content/balance tuning은 구현하지 않았다.
+
 ## Phase 3 Lighting + Firearm 검증
 
 [Phase 3 실제 검증 기록](phase3-validation.md)에 명령·개수·실패/재검증·최소 Web 확인과 미실행 범위를 구분했다. 순수/domain103개와 격리 DB targeted167개 성공을 서로 합산하지 않는다. 새 Lighting/Firearm 계약은 [광원·총기](lighting-firearms.md)를 따른다. 사용자 요청대로 이번 단계의 local full suite·smoke-full은 생략하고 최신 PR HEAD의 자동 전체 suite/Quick smoke를 별도 확인한다.

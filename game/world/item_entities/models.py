@@ -163,6 +163,11 @@ class ItemEntity(models.Model):
             if self.parent_item.children.filter(socket="magazine").exclude(pk=self.pk).exists():
                 raise ValidationError({"socket": "총기에 이미 탄창이 삽입되어 있습니다."})
         self.root()
+        if self.pk and (self.parent_item_id is not None or self.location_kind not in ("corpse_loot", "world_loot")):
+            from world.loot_entities.models import LootClaim
+
+            if LootClaim.objects.filter(item_entity_id=self.pk).exists():
+                raise ValidationError("전리품 권리를 정리한 뒤 소지품/보관 위치로 이동해야 합니다.")
         if self.owner_object_id is not None:
             expected = {
                 self.Location.INVENTORY: Explorer,
