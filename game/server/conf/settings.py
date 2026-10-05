@@ -70,6 +70,7 @@ AUTH_USERNAME_VALIDATORS = [
 ]
 INPUT_FUNC_MODULES = ["evennia.server.inputfuncs", "server.conf.primal_inputfuncs"]
 COMMAND_PARSER = "server.conf.cmdparser.cmdparser"
+INSTALLED_APPS = [*INSTALLED_APPS, "world.item_entities.apps.ItemEntitiesConfig"]  # noqa: F405
 
 # Optional PostgreSQL configuration for the private playtest.
 if os.environ.get("PRIMAL_DB_NAME"):

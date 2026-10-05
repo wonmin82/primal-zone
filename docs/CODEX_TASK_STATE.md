@@ -1,6 +1,19 @@
 # Current Task State
 
-확인일: 2026-10-04. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
+확인일: 2026-10-05. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
+
+## ItemEntity 1단계 구현·검증 (2026-10-05)
+
+사용자가 제공한 통합 기획안과 1단계 실행 문서를 기준으로 ItemEntity 영속 기반을 구현하고 커밋·푸시·PR 생성까지 진행한다. 2단계 이후의 선행 구현이나 병합은 요청 범위가 아니다. 시작 fetch 후 main/origin/main은 `25dd10061b7e63826011f04d69b2646883f2d80c`로 일치했고 작업 트리는 깨끗했다. 이 최신 기준에서 `codex/itementity-foundation`을 생성했다.
+
+- `world.item_entities` 앱의 ItemEntity·ItemSequence 모델과 두 migration, registry metadata·중앙 operation policy, create/move/tree/split/merge/delete/query API를 추가했다. UUID identity·global sequence, canonical 위치 DB 제약, owner/parent PROTECT, Explorer 소유 개인 보관, 스택/트리 application validation과 고유 범위 DB uniqueness를 제공한다. 상세 계약은 [ItemEntity 기반](item-entities.md)을 따른다.
+- API는 기존 world_change에 통합하며 UUID lock 순서와 sequence 표시 순서를 분리한다. 내부 스택 분할도 source와 부모 조상을 처음부터 함께 잠근다. 트리 이동은 내부 상대 위치를 유지하고 실제 root owner의 고유 범위 키를 함께 갱신하며 충돌 시 전체 이동을 rollback한다.
+- 기존 명령·전투·광원·화폐·아이템 값과 profile v10은 유지한다. profile/Container/Corpse/DroppedLoot의 기존 실물 저장을 복제하거나 이중 쓰기하지 않는다. 플레이 DB에 migration·초기화·fixture를 실행하지 않았다. 현재 schema migration은 테스트 전용 DB에만 적용했다.
+- 최종 미커밋 코드 기준 `.venv\Scripts\python.exe scripts/dev.py test tests.test_item_entities --parallel 2 --reverse`: 신규 핵심20개 / 5.137초, runner14.445초 성공. 생성·위치 SQL 제약·비스택/max_stack·split/merge·sequence·parent cycle·PROTECT·nested 고유 범위·DB uniqueness·rollback/cache/callback·deterministic lock·개인 보관 owner·발급기 반복 초기화를 확인했다.
+- 직전 코드 기준 `test tests.test_item_entities tests.test_item_interactions tests.test_loot --parallel 2 --reverse`: 45개 / 21.106초, runner30.502초 성공. 이후 변경은 신규 내부 스택 분할의 lock 보완·해당 테스트와 문서뿐이며 이 영향은 위 신규20개로 재검증했다. 이전 기존26개를 새로 실행한 결과로 합산하지 않는다.
+- game에서 `python -m unittest world.test_item_definitions world.test_rules world.test_headquarters world.test_shops`: 관련 순수55개 / 0.219초 성공. `scripts/dev.py check`, `git diff --check`, 테스트 설정의 Django `makemigrations item_entities --check --dry-run`·system check도 성공했다. 코드 성공 이후의 후속 문서 변경은 문서/diff 검사만 수행한다.
+- 초기 신규17개에서 bool 수량이 Django 정규화로1이 되는 실패를 발견해 save 이전 실제 정수 검증으로 수정했다. 후속19개와 최종20개는 성공했다. 첫 Evennia CLI makemigrations는 메모리 DB의 Account 테이블 선행 검사 때문에 생성되지 않았고, 같은 settings_test의 Django management API로 생성·drift 검사를 완료했다. 플레이 DB 설정으로 우회하지 않았다.
+- 단계별 사용자 계획에 따라 로컬 전체 suite·Quick/Full smoke·브라우저·OS IME·다인 전체 시나리오·전체 migration·balance simulation은 미실행이다. 기존 GitHub workflow는 변경하지 않았으며 PR 생성 후 자동 CI 결과는 최신 HEAD와 대조해 PR Validation에 별도로 기록한다. PostgreSQL row lock/다중 서버 운영은 미검증이다. 장비 slot 용량·주무기/광원 참조·LootClaim-aware merge와 실제 runtime cutover는 해당 후속 단계에 남긴다.
 
 ## Objective
 

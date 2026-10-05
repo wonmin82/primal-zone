@@ -1,5 +1,11 @@
 # 원시구역 테스트 안내
 
+## ItemEntity 1단계 검증
+
+1단계는 gameplay cutover 없이 독립 Django domain만 추가한다. `tests.test_item_entities`로 위치·스택·순번·트리·고유 범위·rollback을, 기존 `tests.test_item_interactions tests.test_loot`로 이전/전리품 호환을 검사한다. 정의·이동 순수 검사는 game에서 `python -m unittest world.test_item_definitions world.test_rules world.test_headquarters world.test_shops`로 실행한다. 일반 플레이 DB에 테스트 fixture나 migration을 적용하지 않는다.
+
+이번 단계의 사용자 계획은 로컬 targeted tests만 요구하고 전체 suite·smoke-full·Web/browser 전체 회귀·다인 전체 시나리오·전체 migration·balance simulation은 7단계로 미룬다. 실제 실행 결과와 기준 차이는 [작업 상태](CODEX_TASK_STATE.md), 모델/API 계약은 [ItemEntity 기반](item-entities.md)을 따른다. 아래 기존 gameplay 검증 기록은 당시 결과다.
+
 ## 현재 절차: PR #28 견제와 교관
 
 1. 격리 캐릭터 두 명으로 같은 적에게 견제를 적용한다. 문자열 source ID별 효과가 공존하고 각자 자신의 Rank만 교체/갱신/보존하는지 확인한다. R10 두 명34.39%, 네 명56.95%, 보스 네 명32.92%는 순수 helper로 검사한다. public 적에 두 파티8명이 참여해도 source를 모두 유지하며 최종 감소율만 네 명 기준으로 제한한다. cap 상태에서도 모든 효과를 소비한다. boss=True/quest 없음과 boss=False/quest 존재 fixture는 각각 보스/일반 수치를 사용해야 한다.
