@@ -49,7 +49,7 @@ def setup(credentials):
         weapon = api.items_in_location("equipment", owner_object=character).get(slot="hands")
         unequip_item(character, str(weapon.pk))
         profile = character.profile()
-        # 매입 후 재구매까지 포함한 Full 본부 서비스 동선의 준비금.
+        # Quick의 매입/재구매 준비금. 실제 신규 계정 시작 자금과 구분한다.
         profile["credits"] = 150
         profile["attributes"]["constitution"]["allocated"] = 4
         # 맨손 공격으로 양쪽 참여와 outsider 거절을 확인할 시간을 확보한다.
@@ -59,6 +59,9 @@ def setup(credentials):
         if settings.PRIMAL_SMOKE_MODE == "full":
             # 진행 전제만 준비한다. 수리·정산·구매·패배 결과는 실제 명령으로 만든다.
             if name == credentials[0][0]:
+                # Full은 모든 본부 거래와 두 보스의 붕대 재충전을 검증한다.
+                # RNG 전리품 수입에 의존하지 않는 서비스 검증용 준비금이다.
+                profile["credits"] += 200
                 profile["inventory"]["scrap"] = 10
             if name == credentials[2][0]:
                 # 자연회복으로 저체력 fixture가 오래 대기하며 과도하게 회복하지 않도록

@@ -5,12 +5,18 @@ from pathlib import Path
 from world.timing import PRODUCTION_TIMING
 
 QUICK_TIMING = {
-    "COMBAT_INTERVAL": 0.25,
-    "CORPSE_TTL_SECONDS": 1,
-    "RESPAWN_DELAY_SECONDS": 1,
-    "LOOT_PROTECTION_SECONDS": 2,
-    "CLAIM_TIMEOUT_SECONDS": 2,
-    "PARTICIPATION_TIMEOUT_SECONDS": 2,
+    # 실제 join/state 왕복보다 빠른 공격으로 두 번째 참가자의 첫 피해가
+    # 처치 뒤로 밀리지 않도록 공동 전투는 production 공격 기회를 사용한다.
+    "COMBAT_INTERVAL": PRODUCTION_TIMING["COMBAT_INTERVAL"],
+    # Quick도 실제 SQLite/WebSocket 왕복을 거친다. 첫 state 전송 전에
+    # 시체가 사라지지 않도록 명령 관찰 timeout(10초)만큼 창을 확보한다.
+    "CORPSE_TTL_SECONDS": 10,
+    "RESPAWN_DELAY_SECONDS": 2,
+    "LOOT_PROTECTION_SECONDS": 20,
+    # 점유/보상 자격 만료는 Quick의 관찰 대상이 아니다. DB·state 전송이
+    # 단축 전투 간격보다 오래 걸려도 유효 참가자를 지우지 않도록 production을 쓴다.
+    "CLAIM_TIMEOUT_SECONDS": PRODUCTION_TIMING["CLAIM_TIMEOUT_SECONDS"],
+    "PARTICIPATION_TIMEOUT_SECONDS": PRODUCTION_TIMING["PARTICIPATION_TIMEOUT_SECONDS"],
     "ENEMY_RECOVERY_DELAY_SECONDS": 2,
 }
 

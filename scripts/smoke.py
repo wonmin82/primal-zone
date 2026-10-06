@@ -110,9 +110,16 @@ class Client:
         while not self.messages.empty():
             self.messages.get_nowait()
         await self.send("text", [command])
-        async with asyncio.timeout(STATE_TIMEOUT):
-            while expected not in await self.messages.get():
-                pass
+        observed = []
+        try:
+            async with asyncio.timeout(STATE_TIMEOUT):
+                while True:
+                    message = await self.messages.get()
+                    observed = (observed + [message])[-5:]
+                    if expected in message:
+                        return
+        except TimeoutError as error:
+            raise AssertionError((self.name, command, expected, observed)) from error
 
     async def expect_prompt(self, command):
         while not self.prompts.empty():
@@ -191,6 +198,7 @@ class Scenario:
             for player in self.players:
                 await route(player, (("북", "grass"),))
             self.phase = "combat"
+            initial_credits = {player.name: player.state["credits"] for player in self.players}
             enemy_id = first.state["enemies"][0]["id"]
             started = monotonic()
             await first.act("어린청소룡 사냥", lambda state: state["combat_target"] is not None)
@@ -208,7 +216,7 @@ class Scenario:
             for player in (first, second):
                 await player.until(lambda state: state["xp"] == 11 and state["combat_target"] is None,
                                    self.timeouts.combat)
-                assert player.state["credits"] == 150
+                assert player.state["credits"] == initial_credits[player.name]
             self.report("combat", "shared enemy defeated / 양쪽 참여 보상")
             self.phase = "corpse"
             await first.until(lambda state: bool(state["corpses"]))
@@ -218,10 +226,17 @@ class Scenario:
             physical = [entry for entry in second.state["corpses"][0]["loot"] if entry["kind"] == "item"]
             assert all(entry["assigned_name"] == first.name and entry["can_take"] and entry["protected"] for entry in physical)
             await outsider.until(lambda state: bool(state["corpses"]))
-            await outsider.expect_text("시체에서 모두 가져", "보호된 전리품")
-            # 권한을 확인하고 남겨 두어 같은 시체의 ground 전환을 검증한다.
-            await first.act("시체에서 2칩 가져", lambda state: state["credits"] == 151)
-            await second.until(lambda state: state["credits"] == 151)
+            # Quick corpse 구간에서 두 command 왕복을 직렬 대기하지 않는다.
+            # 부분 지급 후에도 남은 loot의 권한은 동일하므로 서버 처리 순서와 무관하다.
+            if self.harness.mode == "quick":
+                await asyncio.gather(
+                    outsider.expect_text("시체에서 모두 가져", "보호된 전리품"),
+                    first.act("시체에서 2칩 가져", lambda state: state["credits"] == initial_credits[first.name] + 1),
+                )
+            else:
+                await outsider.expect_text("시체에서 모두 가져", "보호된 전리품")
+                await first.act("시체에서 2칩 가져", lambda state: state["credits"] == initial_credits[first.name] + 1)
+            await second.until(lambda state: state["credits"] == initial_credits[second.name] + 1)
             self.report("corpse", "currency 즉시 지급 없음 / 부분 회수 1칩씩 분배 / outsider blocked")
             self.phase = "lifecycle"
             await outsider.until(lambda state: not state["corpses"] and bool(state["ground_loot"]),

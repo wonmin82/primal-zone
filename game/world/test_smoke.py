@@ -18,10 +18,39 @@ from world.timing import PRODUCTION_TIMING, configured_timings
 
 PROJECT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT))
+sys.path.insert(0, str(PROJECT / "scripts"))
 from scripts import dev, smoke_harness  # noqa: E402
+from scripts.smoke_closeout import assert_restart_items  # noqa: E402
 
 
 class SmokeContractsTests(TestCase):
+    def test_native_restart_preserves_rows_and_only_settles_enabled_light_power(self):
+        from copy import deepcopy
+
+        saved = {"light": {"definition": "flashlight", "quantity": 1, "sequence": 8,
+                           "location": "inventory", "parent": None, "slot": None, "socket": None,
+                           "state": {"power_type": "battery", "remaining_power": 100,
+                                     "enabled": True, "started_at": 10}},
+                 "stack": {"definition": "bandage", "quantity": 3, "state": {}}}
+        restored = deepcopy(saved)
+        restored["light"]["state"].update(enabled=False, started_at=None, remaining_power=85)
+        assert_restart_items(saved, restored, 20, 30)
+        for field, value in (("quantity", 2), ("sequence", 9), ("location", "personal_storage")):
+            broken = deepcopy(restored)
+            broken["light"][field] = value
+            with self.subTest(field=field), self.assertRaises(AssertionError):
+                assert_restart_items(saved, broken, 20, 30)
+        for field, value in (("remaining_power", 95), ("remaining_power", 75),
+                             ("enabled", True), ("started_at", 20), ("power_type", "unknown")):
+            broken = deepcopy(restored)
+            broken["light"]["state"][field] = value
+            with self.subTest(field=field, value=value), self.assertRaises(AssertionError):
+                assert_restart_items(saved, broken, 20, 30)
+        broken = deepcopy(restored)
+        broken["stack"]["quantity"] = 2
+        with self.assertRaises(AssertionError):
+            assert_restart_items(saved, broken, 20, 30)
+
     def test_enemy_delay_canonical_setting_precedes_legacy_fallback(self):
         key = "ENEMY_RECOVERY_DELAY_SECONDS"
         self.assertEqual(configured_timings(SimpleNamespace(PRIMAL_ENEMY_RESET_SECONDS=3))[key], 3)
@@ -40,7 +69,15 @@ class SmokeContractsTests(TestCase):
         self.assertEqual(configured_timings(SimpleNamespace()), expected)
         self.assertEqual(smoke_timings("full"), expected)
         self.assertEqual(set(QUICK_TIMING), set(expected))
-        self.assertTrue(all(0 < value < expected[key] for key, value in QUICK_TIMING.items()))
+        idle_deadlines = {"COMBAT_INTERVAL", "CLAIM_TIMEOUT_SECONDS", "PARTICIPATION_TIMEOUT_SECONDS"}
+        self.assertTrue(all(0 < value < expected[key] for key, value in QUICK_TIMING.items()
+                            if key not in idle_deadlines))
+        # 처리/화면 전송 지연이 공격 기회보다 길어도 Quick 참가 자격이 사라지지 않는다.
+        self.assertEqual({key: QUICK_TIMING[key] for key in idle_deadlines},
+                         {key: expected[key] for key in idle_deadlines})
+        self.assertGreaterEqual(QUICK_TIMING['CORPSE_TTL_SECONDS'], 10)
+        self.assertGreater(QUICK_TIMING['LOOT_PROTECTION_SECONDS'],
+                           QUICK_TIMING['CORPSE_TTL_SECONDS'] + QUICK_TIMING['RESPAWN_DELAY_SECONDS'])
         config = SimpleNamespace(**{"PRIMAL_" + key: value for key, value in QUICK_TIMING.items()})
         self.assertEqual(configured_timings(config), smoke_timings("quick"))
         with self.assertRaises(ValueError):
