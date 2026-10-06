@@ -1,5 +1,22 @@
 # 원시구역 테스트 안내
 
+## PR #33 출입증 소각 확정 문법 리뷰 검증
+
+시작 HEAD `f60c6c5c08d0486aa49961bc4458651254f6e6ab`의 incinerator_service·tests.test_incinerator만 수정하고 아래 명령을 격리 settings_test DB에서 실행한다. 기존 Phase 5 결과와 재실행 개수를 합산하지 않는다.
+
+```powershell
+.\.venv\Scripts\python.exe scripts/dev.py test tests.test_incinerator tests.test_credentials --parallel 2 --reverse
+.\.venv\Scripts\python.exe scripts/dev.py check
+git diff --check
+```
+
+- 수정 전 새 confirmation regression2개(legacy/native)는10.026초, runner24.577초에 실패했다. 두 출입증의 1개 confirmation이 삭제되어 후속 불변 비교까지 실패 subcase16개가 발생했다. 이는 각각 별도 test16개를 실행한 숫자가 아니다.
+- 첫 수정 후 관련20개/24.264초, runner34.269초 성공했다. 이후 숫자 이름의 ammo9mm/556/762를 실제 command로 1/N개/모두 소각하는 회귀를 추가했다. 공통 parser와 ammo 정의는 변경하지 않았다.
+- 추가 회귀를 포함한 첫21개/23.908초, runner33.831초는9mm fixture의 잘못된 stable ID ammo_9mm로 생성 단계1건이 실패했다. 실제 정의 ID ammo_9로 fixture만 바로잡았고 production 정의는 변경하지 않았다.
+- 최종 같은 targeted 명령은21개/23.191초, runner34.609초 성공했다. check와 git diff --check도 성공했다. 이전20개나 실패 실행과 합산하지 않는다. 최종 코드 검사 이후 문서만 마감하므로 게임 검사를 반복하지 않는다.
+- malformed confirmed command와 service 직접 호출에서 profile·ItemEntity rows·ItemSequence·active refs·access 불변을 확인한다. 두 출입증 정상 확인/삭제·stable ID/local index·기존 재발급, 일반 붕대 수량/모두 및 일반 물품의 소각 확정 거절도 포함한다.
+- local full suite·smoke-full·전체 browser regression은 요청 범위에 따라 미실행이다. JS/CSS/template 변경이 없어 browser/node/정적 수집을 수행하지 않는다. 이전 CI37406457142 성공으로 대신하지 않고 최신 PR HEAD의 test/Quick smoke를 새 run/SHA로 PR Validation에 기록한다. 기존 PostgreSQL/multi-server·OS IME·full migration·balance 공백은 유지한다.
+
 ## Phase 5 출입증·접근·상점·소각 검증
 
 시작 main은 `248c849470bb709259902bd7f35780894a4c7b78`, branch는 `codex/credential-access-shops-incinerator`다. 아래는 Phase 5 미커밋 diff의 격리 settings_test DB 검사이며 Phase 1~4 결과나 재실행 개수를 합산하지 않는다. 실제 구조/명령은 [출입증·접근·상점](credentials-access-shops.md)을 따른다.

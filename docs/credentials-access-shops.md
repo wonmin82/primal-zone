@@ -63,6 +63,8 @@ stable 기본 room ID는 supply_shop/armor_shop/weapon_shop을 유지한다. 표
 
 잔탄 탄창 소각은 row와 rounds를 함께 없애며 loose ammo/credits를 반환하지 않는다. loaded firearm은 소각할 수 없다. 출입증은 첫 `<selector> 소각`에서 폐기 mutation 없이 `<selector> 소각 확정`을 안내하며 두 단어 명령 alias를 공통 후치 parser로 인식한다. Burn은 정확한 alias일 때만 `incinerate(..., confirmed=True)`를 전달하고 서비스는 item 문자열 끝의 확정을 승인으로 해석하지 않는다. `<selector> 확정 소각` 등 잘못된 순서는 삭제하지 않는다. 정확한 명령 자체가 확인이며 pending Attribute/timer/token/session state를 만들지 않는다. 첫 명령의 일반 command recovery reconciliation은 기존대로다. 소각 후 quest/XP/credits는 유지하고 다음 DB 기반 접근 검사가 즉시 거절한다. 원래 issuer에게 다시 대화하면 출입증만 재발급한다.
 
+출입증은 stack 수량 문법을 사용하지 않는다. 서비스가 raw selector를 기존 parse_selector/matching/select로 먼저 해석하며 stable ID·표시명·alias·정상 local index만 허용한다. `<출입증> 소각`은 안내, `<출입증> 소각 확정`은 삭제이며 `<출입증> 1개 소각 확정`, `<출입증> 2개 소각 확정`, `<출입증> 모두 소각 확정`은 전부 거절한다. confirmed 경로는 수량 parser로 fallback하지 않으며 서비스 직접 호출에도 같은 계약을 적용한다. 일반 물품만 parse_stack_quantity를 사용해 1/N개/모두와 숫자를 포함한 탄약 이름을 그대로 처리한다. 일반 물품의 소각 확정은 거절한다.
+
 ## Phase 6 경계와 검증
 
 profile version10과 기존 inventory/equipment/storage/light_sources, Container items, legacy loot blob은 유지한다. ordinary runtime backend를 자동 전환하지 않고 출입증만 backend-independent Entity SSOT로 추가한다. dual-write/lazy conversion/full-world migration/schema migration은 없다. Phase 6은 최종 콘텐츠/가격 확장, 기존 claimed entitlement의 명시적 출입증 migration, 전체 legacy→Entity migration/integrity/cutover를 수행한다.

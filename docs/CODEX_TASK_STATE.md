@@ -2,6 +2,15 @@
 
 확인일: 2026-10-06. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
 
+## PR #33 Phase 5 출입증 소각 확정 리뷰 수정 (2026-10-06)
+
+시작 fetch에서 local/remote/PR HEAD는 `f60c6c5c08d0486aa49961bc4458651254f6e6ab`, branch는 기존 `codex/credential-access-shops-incinerator`, origin/main은 `248c849470bb709259902bd7f35780894a4c7b78`다. 작업 트리는 clean이고 main 대비 ahead2/behind0였다. 시작 HEAD CI37406457142 test/smoke success는 이전 검증이며 이번 리뷰 수정 HEAD의 성공을 대신하지 않는다. 기존 PR/branch에 수정 commit만 추가하고 병합하지 않는다.
+
+- 일반 수량 parser가 출입증의 1개도 quantity1로 해석해 삭제를 허용한 문제만 수정한다. incinerator_service는 raw 출입증 selector를 먼저 해석하고 exact selector + 소각 확정에서만 삭제한다. confirmed에서 1개/N개/모두를 일반 parser로 우회하지 않는다.
+- 두 출입증·legacy/native 모두 첫 안내, 정상 삭제, 수량/순서 오류 거절, service 직접 호출, profile/전체 rows/ItemSequence/active refs/접근권 불변과 재발급을 검증한다. 일반 붕대와 숫자가 들어간 탄약의 1/N개/모두 소각은 유지한다.
+- 최종 tests.test_incinerator/tests.test_credentials targeted21개/23.191초(runner34.609초), check, git diff --check 성공이다. 수정 전 재현 실패와 추가 fixture 오류 이력은 playtest에 보존하고 이전 실행과 합산하지 않는다. full suite·smoke-full·전체 browser는 이번 요청의 좁은 범위에 따라 로컬 미실행이다.
+- production 변경은 incinerator_service 하나다. 공통 stack parser·command alias·Credential definition/policy·ItemEntity·Access/Shop/Quest/Reissue·Phase 6은 변경하지 않는다. 실제 검사와 수정 전 실패 기록은 [playtest](playtest.md)의 PR #33 소각 문법 리뷰 항목을 따른다. 최신 HEAD CI는 PR Review fixes/Validation에 별도 run/SHA로 기록한다.
+
 ## Phase 5 — Credential + Access + Shops + Incinerator (2026-10-06)
 
 사용자의 Phase 5 요청에 따라 시작 main `248c849470bb709259902bd7f35780894a4c7b78`에서 새 `codex/credential-access-shops-incinerator` branch를 만들었다. fetch 시 local/main과 origin/main이 같고 작업 트리는 clean, 열린 PR은 없었다. Phase 1~4가 포함되어 있으며 baseline의 Game checks37390803018 test/smoke success를 확인했다. 이는 Phase 5 수정 HEAD의 검증과 별개다. 이번 요청은 구현·문서·commit·push·PR·최신 CI까지이며 PR은 병합하지 않는다.

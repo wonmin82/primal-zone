@@ -12,7 +12,52 @@ from world.item_entities.models import ItemEntity
 from tests.phase5_fixture import Phase5Test
 
 
-class IncineratorTests(Phase5Test):
+class CredentialConfirmationCases:
+    def test_credentials_reject_quantity_confirmation_and_accept_exact_selector(self):
+        for identity, quest in credentials.CREDENTIAL_QUESTS.items():
+            with self.subTest(credential=identity):
+                self.char1.change(lambda p: p["quests"][quest].update(started=True, claimed=True))
+                credentials.grant_credential(self.char1, identity)
+                name = ITEMS[identity]["name"]
+                before = self.state()
+                access = [can_enter(self.char1, zone) for zone in ("outpost_equipment", "outpost_weapon", "reserved_equipment", "reserved_weapon")]
+                self.assertIn(name + " 소각 확정", self.command(name + " 소각"))
+                self.assertEqual(self.state(), before)
+                for suffix in ("1개", "2개", "모두"):
+                    with self.subTest(suffix=suffix):
+                        self.command(f"{name} {suffix} 소각 확정")
+                        self.assertEqual(self.state(), before)
+                        with self.assertRaises(rules.RuleError):
+                            incinerator_service.incinerate(self.char1, f"{name} {suffix}", confirmed=True)
+                        self.assertEqual(self.state(), before)
+                        self.assertEqual([can_enter(self.char1, zone) for zone in ("outpost_equipment", "outpost_weapon", "reserved_equipment", "reserved_weapon")], access)
+                for raw in (name + " 확정", name + " 확정 소각", name + " 소각 확정 확정"):
+                    self.command(raw)
+                    self.assertEqual(self.state(), before)
+                self.assertIn("소각했다", self.command(name + " 소각 확정"))
+                self.assertFalse(credentials.has_credential(self.char1, identity))
+                after = self.state()
+                self.assertEqual((after[0], after[2], after[3]), (before[0], before[2], before[3]))
+                if identity == "outpost_supply_pass":
+                    self.assertFalse(can_enter(self.char1, "outpost_weapon"))
+                credentials.reissue_credential(self.char1, identity)
+                self.assertEqual(self.state()[0], before[0])
+                # stable ID와 정상 local index도 수량이 아닌 selector로 처리한다.
+                incinerator_service.incinerate(self.char1, identity + " 1", confirmed=True)
+                self.assertFalse(credentials.has_credential(self.char1, identity))
+
+    def test_confirmed_regular_stack_is_rejected_without_mutation(self):
+        if self.native:
+            self.create("bandage", quantity=3)
+        before = self.state()
+        self.command("붕대 소각 확정")
+        self.assertEqual(self.state(), before)
+        with self.assertRaisesRegex(rules.RuleError, "출입증"):
+            incinerator_service.incinerate(self.char1, "붕대", confirmed=True)
+        self.assertEqual(self.state(), before)
+
+
+class IncineratorTests(CredentialConfirmationCases, Phase5Test):
     def test_credential_exact_confirm_access_loss_and_issuer_reissue(self):
         self.char1.change(lambda p: p["quests"]["radio_tower"].update(started=True, claimed=True))
         credentials.grant_credential(self.char1, "outpost_supply_pass")
@@ -57,7 +102,7 @@ class IncineratorTests(Phase5Test):
         self.assertEqual(self.state(), before)
 
 
-class NativeIncineratorTests(Phase5Test):
+class NativeIncineratorTests(CredentialConfirmationCases, Phase5Test):
     native = True
 
     def test_native_quantities_keep_source_uuid_sequence_and_state(self):
@@ -70,6 +115,18 @@ class NativeIncineratorTests(Phase5Test):
             self.assertEqual(row.quantity, remaining)
         self.command("붕대 모두 소각")
         self.assertFalse(ItemEntity.objects.filter(pk=row.pk).exists())
+
+    def test_numeric_ammo_names_keep_one_quantity_and_all_burn(self):
+        for identity in ("ammo_9", "ammo_556", "ammo_762"):
+            with self.subTest(ammo=identity):
+                row = self.create(identity, quantity=8)
+                name = ITEMS[identity]["name"]
+                for suffix, remaining in (("", 7), (" 3개", 4)):
+                    self.assertIn("소각했다", self.command(name + suffix + " 소각"))
+                    row.refresh_from_db()
+                    self.assertEqual(row.quantity, remaining)
+                self.assertIn("소각했다", self.command(name + " 모두 소각"))
+                self.assertFalse(ItemEntity.objects.filter(pk=row.pk).exists())
 
     def test_magazine_rounds_destroyed_and_loaded_firearm_rejected(self):
         firearm = create_firearm("carbine", owner_object=self.char1, mode="full_standard")

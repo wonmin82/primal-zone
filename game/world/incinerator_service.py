@@ -23,31 +23,32 @@ from world.targets import (
 def incinerate(character, value, *, confirmed=False):
     from typeclasses.interactables import Incinerator
 
-    name, quantity = parse_stack_quantity(value)
     with world_change():
         locked = lock_character_items(character)
         if not any(isinstance(obj, Incinerator) for obj in room_objects(character)):
             raise rules.RuleError("이곳에서 소각기를 식별할 수 없습니다.")
         rules.require_peace(character.profile_snapshot())
         credentials = credential_items(character)
-        try:
-            def names(row):
-                definition = ITEMS[row.definition_id]
-                return (row.definition_id, definition["name"], *definition.get("aliases", ()))
+        def names(row):
+            definition = ITEMS[row.definition_id]
+            return (row.definition_id, definition["name"], *definition.get("aliases", ()))
 
-            selector = parse_selector(name, [name for row in credentials for name in names(row)])
+        selector = parse_selector(value, [name for row in credentials for name in names(row)])
+        candidates = matching(credentials, selector, names)
+        if candidates:
             require_single(selector, "소각")
-            item = select(matching(credentials, selector, names), selector)[0]
-        except rules.RuleError:
-            item = resolve_item(character, name, "소각") if entity_runtime(character) else item_selector(name, ITEMS, "소각")
-        identity = item.definition_id if hasattr(item, "definition_id") else item
-        if ITEMS[identity]["item_type"] == "credential":
-            if quantity != 1:
-                raise rules.RuleError("출입증 하나를 지정해 소각 확정하세요.")
+            item = select(candidates, selector)[0]
+            identity, quantity = item.definition_id, 1
             if not confirmed:
                 return f"출입 권한을 잃습니다. 삭제하려면 {ITEMS[identity]['name']} 소각 확정"
-        elif confirmed:
-            raise rules.RuleError("소각 확정은 출입증에만 사용합니다.")
+        else:
+            if confirmed:
+                raise rules.RuleError("소각 확정은 출입증에만 사용합니다. 수량 없이 이름을 지정하세요.")
+            name, quantity = parse_stack_quantity(value)
+            item = resolve_item(character, name, "소각") if entity_runtime(character) else item_selector(name, ITEMS, "소각")
+            identity = item.definition_id if hasattr(item, "definition_id") else item
+            if ITEMS[identity]["item_type"] == "credential":
+                raise rules.RuleError("출입증은 수량 없이 하나를 지정하세요.")
         if hasattr(item, "definition_id"):
             row = selected(locked, item)
             if row.location_kind != "inventory" or row.owner_object_id != character.pk:
