@@ -330,8 +330,8 @@ class FirearmTests(NativeItemTest):
     def test_legacy_firearm_combat_remains_ammo_free_and_reload_rejected(self):
         self.char1.db.equipment_backend = None
         profile = rules.new_profile()
-        profile["inventory"]["carbine"] = 1
-        profile["equipment"]["weapon"] = "carbine"
+        profile["inventory"]["guard_carbine"] = 1
+        profile["equipment"]["weapon"] = "guard_carbine"
         self.char1.db.profile = profile
         profile = self.char1.profile()
         before = ItemEntity.objects.count()
@@ -339,7 +339,7 @@ class FirearmTests(NativeItemTest):
         self.assertGreater(damage, 0)
         self.assertTrue(outcome["shot_fired"])
         with self.assertRaises(rules.RuleError):
-            service.reload(self.char1, "carbine")
+            service.reload(self.char1, "guard_carbine")
         self.assertEqual(before, ItemEntity.objects.count())
         self.assertNotIn("rounds", self.char1.profile())
 

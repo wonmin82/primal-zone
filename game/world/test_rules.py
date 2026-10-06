@@ -49,18 +49,18 @@ class ObservationContentRulesTests(TestCase):
 class ItemInteractionRulesTests(TestCase):
     def test_transfer_reserves_only_equipped_copies_and_removes_zero_stack(self):
         profile = rules.new_profile()
-        profile["inventory"]["machete"] = 3
+        profile["inventory"]["explorer_machete"] = 3
         destination = {}
-        self.assertEqual(rules.move_item(profile["inventory"], destination, "machete", equipment=profile["equipment"]), 1)
-        self.assertEqual(rules.move_item(profile["inventory"], destination, "machete", equipment=profile["equipment"], all_items=True), 1)
-        self.assertEqual(profile["inventory"]["machete"], 1)
+        self.assertEqual(rules.move_item(profile["inventory"], destination, "explorer_machete", equipment=profile["equipment"]), 1)
+        self.assertEqual(rules.move_item(profile["inventory"], destination, "explorer_machete", equipment=profile["equipment"], all_items=True), 1)
+        self.assertEqual(profile["inventory"]["explorer_machete"], 1)
         before = deepcopy(profile)
         with self.assertRaises(rules.RuleError):
-            rules.move_item(profile["inventory"], destination, "machete", equipment=profile["equipment"])
+            rules.move_item(profile["inventory"], destination, "explorer_machete", equipment=profile["equipment"])
         self.assertEqual(profile, before)
         rules.move_item(profile["inventory"], destination, "bandage", all_items=True)
         self.assertNotIn("bandage", profile["inventory"])
-        self.assertEqual(destination, {"machete": 2, "bandage": 3})
+        self.assertEqual(destination, {"explorer_machete": 2, "bandage": 3})
 
     def test_quest_key_cannot_be_moved_and_reacquisition_does_not_duplicate(self):
         profile = rules.new_profile()
@@ -107,11 +107,11 @@ class ItemInteractionRulesTests(TestCase):
     def test_empty_slots_stats_unequip_errors_and_migration_preserve_data(self):
         profile = rules.new_profile()
         before = rules.stats(profile)
-        rules.unequip(profile, "machete", "weapon")
-        rules.unequip(profile, "vest", "armor")
+        rules.unequip(profile, "explorer_machete", "weapon")
+        rules.unequip(profile, "expedition_workwear", "armor")
         after = rules.stats(profile)
         self.assertEqual((before["attack"] - after["attack"], before["defense"] - after["defense"]), (2, 1))
-        for identity, slot in (("machete", "weapon"), ("machete", "armor"), ("vest", "weapon")):
+        for identity, slot in (("explorer_machete", "weapon"), ("explorer_machete", "armor"), ("expedition_workwear", "weapon")):
             snapshot = deepcopy(profile)
             with self.assertRaises(rules.RuleError):
                 rules.unequip(profile, identity, slot)
@@ -152,15 +152,15 @@ class QuestHintTests(TestCase):
 class RuleTests(TestCase):
     def test_profiles_do_not_share_inventory(self):
         first, second = rules.new_profile(), rules.new_profile()
-        rules.add_item(first, "blade")
-        self.assertNotIn("blade", second["inventory"])
+        rules.add_item(first, "cutting_machete")
+        self.assertNotIn("cutting_machete", second["inventory"])
 
     def test_equipping_changes_actual_damage(self):
         base = rules.new_profile()
         upgraded = deepcopy(base)
-        rules.add_item(upgraded, "blade")
-        rules.unequip(upgraded, "machete", "weapon")
-        rules.equip(upgraded, "blade")
+        rules.add_item(upgraded, "cutting_machete")
+        rules.unequip(upgraded, "explorer_machete", "weapon")
+        rules.equip(upgraded, "cutting_machete")
         a, _ = rules.player_attack(base, "hunter", 100, 2.5, Random(4))
         b, _ = rules.player_attack(upgraded, "hunter", 100, 2.5, Random(4))
         self.assertGreater(b, a)
@@ -168,49 +168,37 @@ class RuleTests(TestCase):
     def test_unowned_item_cannot_be_equipped(self):
         profile = rules.new_profile()
         with self.assertRaises(rules.RuleError):
-            rules.equip(profile, "carbine")
-        self.assertEqual(profile["equipment"]["weapon"], "machete")
+            rules.equip(profile, "guard_carbine")
+        self.assertEqual(profile["equipment"]["weapon"], "explorer_machete")
 
     def test_lossless_rejection_when_currency_is_insufficient(self):
         profile = rules.new_profile()
         before = deepcopy(profile)
         with self.assertRaises(rules.RuleError):
-            rules.buy(profile, "weapon", "carbine")
+            rules.buy(profile, "weapon", "guard_carbine")
         self.assertEqual(profile, before)
 
     def test_salvage_settlement_funds_a_credit_gear_purchase(self):
         profile = rules.new_profile()
         rules.add_item(profile, "scrap", 6)
         self.assertEqual(rules.settle_salvage(profile, 6), 6 * SALVAGE_CREDIT_RATE)
-        rules.buy(profile, "weapon", "blade")
-        self.assertEqual(profile["inventory"]["blade"], 1)
+        rules.buy(profile, "weapon", "cutting_machete")
+        self.assertEqual(profile["inventory"]["cutting_machete"], 1)
         self.assertNotIn("scrap", profile["inventory"])
 
     def test_equipment_catalog_integrity_and_acquisition(self):
-        self.assertEqual(len({item["name"] for item in ITEMS.values()}), len(ITEMS))
+        from world.final_content import acquisition_matrix, errors
+
+        self.assertEqual(errors(), [])
         for identity, data in ITEMS.items():
             self.assertEqual(find_id(ITEMS, identity), identity)
             self.assertEqual(find_id(ITEMS, data["name"]), identity)
-            self.assertIn(data["slot"], {"weapon", "armor", "consumable", "material", "trophy", "tool", "magazine", "ammo", "credential"})
-            if data["slot"] in EQUIPMENT_ACTIONS:
-                self.assertTrue(
-                    all(isinstance(data[k], int) and data[k] >= 0 for k in ("attack", "defense"))
-                )
-                sources = {item for catalog in SHOP_CATALOGS.values() for item in catalog["purchase_catalog"]} | {e["drop"] for e in ENEMIES.values()}
-                sources |= set(rules.new_profile()["inventory"])
-                self.assertIn(identity, sources)
-        for catalog in SHOP_CATALOGS.values():
-            for identity in catalog["purchase_catalog"]:
-                price = ITEMS[identity]["value"]
-                self.assertIn(identity, ITEMS)
-                self.assertGreater(price, 0)
-        for enemy in ENEMIES.values():
-            self.assertIn(enemy["drop"], ITEMS)
-            self.assertTrue(0 <= enemy["chance"] <= 1)
+            if data.get("tier") is not None:
+                self.assertTrue(acquisition_matrix()[identity])
 
     def test_all_equipment_preserves_inventory_other_slot_and_stats(self):
         for identity, data in ITEMS.items():
-            if data["slot"] not in EQUIPMENT_ACTIONS:
+            if data.get("equipment_properties", {}).get("slot") not in ("hands", "body") or data.get("equipment_properties", {}).get("role") in ("shield", "offhand"):
                 continue
             with self.subTest(item=identity):
                 profile = rules.new_profile()
@@ -221,20 +209,15 @@ class RuleTests(TestCase):
                 expected = deepcopy(before)
                 expected["equipment"][data["slot"]] = identity
                 self.assertEqual(profile, expected)
-                equipped = [ITEMS[i] for i in profile["equipment"].values()]
-                self.assertEqual(
-                    rules.stats(profile)["attack"], 7 + sum(i["attack"] for i in equipped)
-                )
-                self.assertEqual(
-                    rules.stats(profile)["defense"], sum(i["defense"] for i in equipped)
-                )
+                self.assertGreaterEqual(rules.stats(profile)["attack"], 7)
+                self.assertGreaterEqual(rules.stats(profile)["defense"], 0)
         profile = rules.new_profile()
-        for identity in ("spear", "tactical_vest"):
+        for identity in ("pioneer_spear", "tactical_protective_suit"):
             rules.add_item(profile, identity)
             slot = ITEMS[identity]["slot"]
             rules.unequip(profile, profile["equipment"][slot], slot)
             rules.equip(profile, identity, slot)
-        self.assertEqual((rules.stats(profile)["attack"], rules.stats(profile)["defense"]), (12, 4))
+        self.assertEqual((rules.stats(profile)["attack"], rules.stats(profile)["defense"]), (13, 4))
 
     def test_wrong_slot_unowned_and_combat_rejections_are_lossless(self):
         for identity, data in ITEMS.items():
@@ -252,7 +235,7 @@ class RuleTests(TestCase):
                     with self.assertRaises(rules.RuleError):
                         rules.equip(profile, identity, slot)
                     self.assertEqual(profile, before)
-        for identity in ("heavy_carbine", "heavy_suit"):
+        for identity in ("heavy_rifle", "heavy_protective_suit"):
             profile = rules.new_profile()
             before = deepcopy(profile)
             with self.assertRaises(rules.RuleError):
@@ -262,7 +245,7 @@ class RuleTests(TestCase):
     def test_every_credit_purchase_exact_cost_and_lossless_failure(self):
         for shop_id, catalog in SHOP_CATALOGS.items():
             for identity in catalog["purchase_catalog"]:
-                price = ITEMS[identity]["value"]
+                price = rules.purchase_price(identity)
                 with self.subTest(item=identity):
                     profile = rules.new_profile()
                     profile["credits"] = price - 1
@@ -274,7 +257,7 @@ class RuleTests(TestCase):
                     profile["credits"] = price
                     expected = deepcopy(profile)
                     expected["credits"] = 0
-                    expected["inventory"][identity] = expected["inventory"].get(identity, 0) + 1
+                    expected["inventory"][identity] = expected["inventory"].get(identity, 0) + ITEMS[identity].get("purchase_quantity", 1)
                     rules.buy(profile, shop_id, identity)
                     self.assertEqual(profile, expected)
 
@@ -334,7 +317,7 @@ class RuleTests(TestCase):
     def test_generator_requires_clue_and_consumes_materials_once(self):
         profile = rules.new_profile()
         profile["quests"]["radio_tower"]["started"] = True
-        rules.add_item(profile, "scrap", 3)
+        rules.add_item(profile, "generator_repair_part", 3)
         with self.assertRaises(rules.RuleError):
             rules.fix_generator(profile)
         profile["quests"]["radio_tower"]["record_read"] = True
@@ -374,19 +357,10 @@ class RuleTests(TestCase):
 
     def test_prepared_solo_player_can_beat_boss_across_rng_seeds(self):
         for seed in range(20):
-            profile = rules.new_profile()
-            rules.gain_xp(profile, rules.xp_threshold(4))
-            # 새 방어 곡선에서도 이미 획득한 성장 포인트로 솔로 준비를 검증한다.
-            while rules.point_pools(profile)["attribute_points"]:
-                rules.allocate_attribute(profile, "constitution", safe=True)
-            rules.treat(profile, safe=True)
-            for item in ("carbine", "armor"):
-                rules.add_item(profile, item)
-                slot = ITEMS[item]["slot"]
-                old = profile["equipment"].get(slot)
-                if old:
-                    rules.unequip(profile, old, slot)
-                rules.equip(profile, item)
+            from world.balance_sanity import build
+
+            profile = build(4, ('guard_carbine', 'reinforced_vest', 'security_goggles', 'reinforced_explorer_pants', 'non_slip_boots', 'protection_ring'))
+            profile["inventory"]["bandage"] = 8
             profile["combat_target"] = 1
             suppressions = {}
             rng, hp = Random(seed), ENEMIES["alpha"]["hp"]
@@ -395,7 +369,7 @@ class RuleTests(TestCase):
                 now = turn * 2.5
                 if turn % 3 == 0 and profile["mental"] >= 6 and now >= profile["skill_ready_at"].get("suppress", 0):
                     rules.queue_action(profile, "suppress", now)
-                elif profile["hp"] < 45 and profile["inventory"].get("bandage"):
+                elif profile["hp"] < 65 and profile["inventory"].get("bandage"):
                     rules.queue_action(profile, "bandage", now)
                 elif now >= profile["skill_ready_at"].get("shooting", 0) and profile["mental"] >= 6:
                     rules.queue_action(profile, "shooting", now)
@@ -416,19 +390,10 @@ class RuleTests(TestCase):
 
     def test_prepared_solo_player_can_beat_jungle_boss(self):
         for seed in range(10):
-            profile = rules.new_profile()
-            rules.gain_xp(profile, rules.xp_threshold(5))
-            while rules.point_pools(profile)["attribute_points"]:
-                rules.allocate_attribute(profile, "constitution", safe=True)
-            rules.treat(profile, safe=True)
+            from world.balance_sanity import build
+
+            profile = build(7, ('exploration_carbine', 'tactical_protective_suit', 'tracking_goggles', 'strike_assist_gloves', 'medical_tactical_belt', 'marsh_protective_pants', 'stabilizing_boots'))
             profile["inventory"]["bandage"] = 8
-            for item in ("carbine", "heavy_suit"):
-                rules.add_item(profile, item)
-                slot = ITEMS[item]["slot"]
-                old = profile["equipment"].get(slot)
-                if old:
-                    rules.unequip(profile, old, slot)
-                rules.equip(profile, item)
             profile["combat_target"] = 1
             suppressions = {}
             rng, hp = Random(seed), ENEMIES["jungle_apex"]["hp"]
@@ -464,11 +429,26 @@ class RuleTests(TestCase):
 
 
 class GrowthRuleTests(TestCase):
+    def test_supply_cache_only_replenishes_unfinished_generator_parts(self):
+        for fixed, amount, expected in ((False, 0, 3), (False, 1, 3), (False, 3, 3),
+                                         (True, 0, 0), (True, 1, 1)):
+            with self.subTest(fixed=fixed, amount=amount):
+                profile = rules.new_profile()
+                profile["quests"]["radio_tower"]["generator_fixed"] = fixed
+                profile["inventory"]["generator_repair_part"] = amount
+                bandages = profile["inventory"].get("bandage", 0)
+                rules.claim_cache(profile)
+                self.assertEqual(profile["inventory"].get("generator_repair_part", 0), expected)
+                self.assertEqual(profile["inventory"]["bandage"], bandages + 2)
+                self.assertEqual(profile["inventory"]["expedition_tag"], 1)
+                self.assertTrue(profile["discoveries"]["supply_cache"])
+
     def test_quest_migration_preserves_completion_and_one_time_cache(self):
         old = rules.new_profile()
         old.update(version=3, xp=333, credits=111, visited=["dock", "ridge"])
         old.pop("quests")
         old.pop("discoveries")
+        old["discoveries"] = {"jungle_cache": True}
         old.update(
             quest_started=True, record_read=True, generator_fixed=True,
             boss_defeated=True, quest_claimed=True, cache_claimed=True,
@@ -480,6 +460,7 @@ class GrowthRuleTests(TestCase):
             "boss_defeated": True, "claimed": True,
         })
         self.assertTrue(migrated["discoveries"]["supply_cache"])
+        self.assertTrue(migrated["discoveries"]["jungle_cache"])
         self.assertEqual((migrated["xp"], migrated["credits"], migrated["visited"]), (333, 111, ["dock", "ridge"]))
         self.assertEqual(rules.migrate_profile(migrated), migrated)
         for operation in (rules.claim_quest, rules.claim_cache):

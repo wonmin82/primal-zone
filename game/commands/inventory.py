@@ -108,7 +108,7 @@ class Value(Buy):
     stack = True
     key = "가치"
     aliases = ["value"]
-    usage = "강철마체테 가치 · 무기상에게 강철마체테 가치"
+    usage = "절단마체테 가치 · 무기상에게 절단마체테 가치"
     summary = "주변 상인에게 취급 품목의 가치와 매입가를 확인합니다."
 
 
@@ -116,7 +116,7 @@ class Sell(Buy):
     key = "판매"
     aliases = ["sell"]
     stack = True
-    usage = "강철마체테 판매 · 무기상에게 강철마체테 판매 · 붕대 모두 판매"
+    usage = "절단마체테 판매 · 무기상에게 절단마체테 판매 · 붕대 모두 판매"
     summary = "물품을 1개·N개·모두 판매합니다. 장비는 먼저 해제하세요."
 
 
@@ -150,7 +150,7 @@ class ActiveWeapon(GameCommand):
     input_style = "target"
     category = "아이템·보급"
     equipment_change = True
-    usage = "강철마체테 2 주무기"
+    usage = "절단마체테 2 주무기"
     summary = "장착한 무기 하나를 실제 공격에 사용할 주무기로 지정합니다."
 
     def run(self):

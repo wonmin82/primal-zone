@@ -19,6 +19,33 @@ class ItemSequence(models.Model):
         constraints = [models.CheckConstraint(condition=Q(id=1), name="item_sequence_singleton")]
 
 
+class ItemMigrationLedger(models.Model):
+    """명시적 maintenance 변환의 source별 완료·검증 증거."""
+
+    migration_version = models.PositiveIntegerField()
+    source_kind = models.CharField(max_length=40)
+    source_identity = models.PositiveBigIntegerField()
+    completed = models.BooleanField(default=False)
+    completed_at = models.DateTimeField(null=True)
+    source_digest = models.CharField(max_length=64)
+    expected_state = models.JSONField(default=dict)
+    created_counts = models.JSONField(default=dict)
+    warnings = models.JSONField(default=list)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=("migration_version", "source_kind", "source_identity"), name="item_migration_source_unique")]
+
+
+class ItemRuntime(models.Model):
+    """source ledger와 별개인 전역 runtime 전환 version."""
+
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    version = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        constraints = [models.CheckConstraint(condition=Q(id=1), name="item_runtime_singleton")]
+
+
 class ItemEntity(models.Model):
     class Location(models.TextChoices):
         INVENTORY = "inventory", "소지품"
@@ -195,8 +222,12 @@ class ItemEntity(models.Model):
 
             validate_equipment_row(self)
         saved = type(self).objects.filter(pk=self.pk).values("sequence", "definition_id").first()
+        from world.content.item_mapping import LEGACY_ITEM_MAPPING
+        from world.item_runtime import maintenance
+
+        definition_conversion = bool(saved and maintenance.get() and LEGACY_ITEM_MAPPING.get(saved["definition_id"]) == self.definition_id)
         if saved and (
-            saved["sequence"] != self.sequence or saved["definition_id"] != self.definition_id
+            saved["sequence"] != self.sequence or saved["definition_id"] != self.definition_id and not definition_conversion
         ):
             raise ValidationError("생성된 아이템의 정의와 순번은 변경할 수 없습니다.")
 

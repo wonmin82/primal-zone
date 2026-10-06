@@ -226,7 +226,7 @@ class HeadquartersTests(GameCommandTest):
             self.assertNotEqual(search_tag(key, category="primal_interactable")[0].location, self.rooms["dock"])
         self.assertIsNone(instructor_for(self.char1))
         before = self.char1.profile()
-        for raw in ("상품", "붕대 구매", "강철마체테 구매", "강화조끼 구매"):
+        for raw in ("상품", "붕대 구매", "절단마체테 구매", "강화방호조끼 구매"):
             self.char1.execute_cmd(raw)
             self.assertEqual(self.char1.profile(), before)
         self.char1.execute_cmd("개인 보관함에 붕대 넣어")

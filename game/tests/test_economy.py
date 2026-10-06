@@ -212,25 +212,25 @@ class EconomyTests(WorldCommandTest):
         # 실패 원자성 비교 도중 실제 회복 경계가 넘어가는 영향을 제거한다.
         self.enterContext(patch("typeclasses.explorers.time", return_value=100))
         self.char1.location = self.rooms["weapon_shop"]
-        self.char1.change(lambda p: p["inventory"].update(blade=3))
-        self.command("낡은마체테 해제")
-        self.command("강철마체테 무장")
-        self.assertIn("60칩", self.command("무기상에게 강철마체테 가치"))
-        self.assertIn("30칩", self.command("강철마체테 value"))
+        self.char1.change(lambda p: p["inventory"].update(cutting_machete=3))
+        self.command("탐사용 벌목도 해제")
+        self.command("절단마체테 무장")
+        self.assertIn("55칩", self.command("무기상에게 절단마체테 가치"))
+        self.assertIn("27칩", self.command("절단마체테 value"))
         actions = multiplayer_state(self.char1)["interactables"][0]["actions"]
-        single = next(a for a in actions if a["label"] == "강철마체테 · 30칩 판매")
-        self.assertTrue(single["command"].endswith("강철마체테 판매"))
-        bulk = next(a for a in actions if a["label"] == "강철마체테 모두 판매 · 총 60칩")
+        single = next(a for a in actions if a["label"] == "절단마체테 · 27칩 판매")
+        self.assertTrue(single["command"].endswith("절단마체테 판매"))
+        bulk = next(a for a in actions if a["label"] == "절단마체테 모두 판매 · 총 54칩")
         command = bulk["command"]
-        self.assertIn("60칩", self.command(command))
-        self.assertEqual((self.char1.profile()["credits"], self.char1.profile()["inventory"]["blade"]), (80, 1))
+        self.assertIn("54칩", self.command(command))
+        self.assertEqual((self.char1.profile()["credits"], self.char1.profile()["inventory"]["cutting_machete"]), (74, 1))
         before = self.char1.profile()
-        for raw in ("강철마체테 판매", "회수부품 판매", "붕대 판매", "강철마체테 3개 판매"):
+        for raw in ("절단마체테 판매", "회수부품 판매", "붕대 판매", "절단마체테 3개 판매"):
             self.command(raw)
             self.assertEqual(self.char1.profile(), before)
         seller = search_tag("weapon_shopkeeper", category="primal_interactable")[0]
         seller.locks.add("view:false()")
-        self.command("강철마체테 가치")
+        self.command("절단마체테 가치")
         self.assertEqual(self.char1.profile(), before)
 
     def test_sale_storage_failure_rolls_back_proceeds_and_inventory(self):
@@ -245,17 +245,17 @@ class EconomyTests(WorldCommandTest):
         self.char1.location = self.rooms["supply_shop"]
         seller = search_tag("supply_shopkeeper", category="primal_interactable")[0]
         actions = seller.web_actions(self.char1, seller.key)
-        single = next(a for a in actions if a["label"] == "붕대 · 4칩 판매")
-        bulk = next(a for a in actions if a["label"] == "붕대 모두 판매 · 총 12칩")
+        single = next(a for a in actions if a["label"] == "붕대 · 5칩 판매")
+        bulk = next(a for a in actions if a["label"] == "붕대 모두 판매 · 총 15칩")
         self.assertTrue(single["command"].endswith("붕대 판매"))
         self.assertTrue(bulk["command"].endswith("붕대 모두 판매"))
         self.command(single["command"])
-        self.assertEqual((self.char1.profile()["inventory"]["bandage"], self.char1.profile()["credits"]), (2, 24))
+        self.assertEqual((self.char1.profile()["inventory"]["bandage"], self.char1.profile()["credits"]), (2, 25))
         actions = seller.web_actions(self.char1, seller.key)
-        bulk = next(a for a in actions if a["label"] == "붕대 모두 판매 · 총 8칩")
+        bulk = next(a for a in actions if a["label"] == "붕대 모두 판매 · 총 10칩")
         self.command(bulk["command"])
         self.assertNotIn("bandage", self.char1.profile()["inventory"])
-        self.assertEqual(self.char1.profile()["credits"], 32)
+        self.assertEqual(self.char1.profile()["credits"], 35)
 
     def test_last_device_sale_via_dispatcher_cannot_restore_old_charge(self):
         self.char1.location = self.rooms["supply_shop"]
@@ -344,5 +344,5 @@ class EconomyTests(WorldCommandTest):
         self.char1.location = self.rooms["supply_shop"]
         self.char1.change(lambda p: p["inventory"].update(bandage=1))
         actions = multiplayer_state(self.char1)["interactables"][0]["actions"]
-        self.assertIn({"label": "붕대 · 4칩 판매", "command": "보급관에게 붕대 판매"}, actions)
+        self.assertIn({"label": "붕대 · 5칩 판매", "command": "보급관에게 붕대 판매"}, actions)
         self.assertFalse(any(a["command"].endswith("붕대 모두 판매") for a in actions))

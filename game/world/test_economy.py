@@ -46,13 +46,13 @@ class EconomyRulesTests(TestCase):
         self.assertEqual(spend_currency(profile), 20)
         self.assertEqual(profile["credits"], 0)
 
-    def test_item_value_is_the_only_price_source(self):
+    def test_purchase_quantity_package_and_resale_metadata(self):
         for catalog in SHOP_CATALOGS.values():
             self.assertIsInstance(catalog["purchase_catalog"], tuple)
             for item in catalog["purchase_catalog"]:
-                self.assertEqual(rules.purchase_price(item), ITEMS[item]["value"])
-                self.assertEqual(rules.resale_price(item), max(1, ITEMS[item]["value"] // 2))
-        for item in ("scrap", "jungle_cell", "machete"):
+                self.assertEqual(rules.purchase_price(item), ITEMS[item].get("purchase_unit_value", ITEMS[item]["value"]) * ITEMS[item].get("purchase_quantity", 1))
+                self.assertEqual(rules.resale_price(item), ITEMS[item].get("resale_unit_value", ITEMS[item]["value"] // 2))
+        for item in ("scrap", "jungle_cell", "ridge_predator_mark"):
             with self.assertRaises(rules.RuleError):
                 rules.purchase_price(item)
 
@@ -79,12 +79,12 @@ class EconomyRulesTests(TestCase):
 
     def test_sale_excludes_equipped_copy_and_failure_keeps_profile(self):
         profile = rules.new_profile()
-        profile["inventory"]["blade"] = 2
-        profile["equipment"]["weapon"] = "blade"
-        self.assertEqual(rules.sell(profile, "weapon", "blade", all_items=True), (1, 30))
-        self.assertEqual((profile["credits"], profile["inventory"]["blade"]), (50, 1))
+        profile["inventory"]["cutting_machete"] = 2
+        profile["equipment"]["weapon"] = "cutting_machete"
+        self.assertEqual(rules.sell(profile, "weapon", "cutting_machete", all_items=True), (1, 27))
+        self.assertEqual((profile["credits"], profile["inventory"]["cutting_machete"]), (47, 1))
         before = deepcopy(profile)
-        for shop, item in (("weapon", "blade"), ("supply", "blade"), ("weapon", "scrap")):
+        for shop, item in (("weapon", "cutting_machete"), ("supply", "cutting_machete"), ("weapon", "scrap")):
             with self.assertRaises(rules.RuleError):
                 rules.sell(profile, shop, item)
             self.assertEqual(profile, before)

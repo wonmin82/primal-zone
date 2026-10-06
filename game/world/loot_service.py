@@ -96,6 +96,11 @@ def _currency_snapshot(row):
 
 def loot_snapshot(source):
     """조회는 expired 권리를 free로 해석할 수 있고 저장소를 변경하지 않는다."""
+    from world.item_runtime import maintenance, native_runtime, require_runtime
+
+    require_runtime()
+    if native_runtime() and not maintenance.get() and not native_source(source):
+        raise rules.RuleError("Item runtime migration required: 전리품 source가 변환되지 않았습니다.")
     if not native_source(source):
         entries = []
         for raw in source.db.entries or []:
@@ -208,7 +213,7 @@ def populate_source(source, entries):
 
     with world_change():
         _require_container(source)
-        entries = [normalize_entry(entry) for entry in entries]
+        entries = [{**normalize_entry(entry), "acquisition": entry.get("acquisition", {})} for entry in entries]
         refs = {identity for entry in entries
                 for identity in (entry["reserved_party"], entry["reserved_player"], entry["assigned_player"],
                                  *entry.get("eligible_players", [])) if identity}
@@ -229,12 +234,20 @@ def populate_source(source, entries):
                                 protection_until=entry["protection_until"])
             else:
                 # 실제 drop 내용은 기존 registry 그대로이며 총기 drop에 full 탄창을 덧붙이지 않는다.
-                item = api.create_item(entry["id"], quantity=entry["quantity"],
-                                       location_kind=location, owner_object=source)
-                if entry["protection_until"] or any(entry.get(field) for field in
-                                                     ("reserved_party", "reserved_player", "assigned_player")):
-                    LootClaim(item_entity=item, assigned_player_id=entry["assigned_player"],
-                              **_reservation(entry)).save()
+                from world.content import ITEMS
+                from world.firearm_service import create_firearm
+
+                if entry["id"] not in ITEMS:
+                    raise ValidationError("등록되지 않은 아이템 정의입니다.")
+                amounts = [entry["quantity"]] if ITEMS[entry["id"]]["stackable"] else [1] * entry["quantity"]
+                for amount in amounts:
+                    item = (create_firearm(entry["id"], owner_object=source, location_kind=location, **entry["acquisition"])
+                            if ITEMS[entry["id"]].get("firearm_family") else
+                            api.create_item(entry["id"], quantity=amount, location_kind=location, owner_object=source))
+                    if entry["protection_until"] or any(entry.get(field) for field in
+                                                         ("reserved_party", "reserved_player", "assigned_player")):
+                        LootClaim(item_entity=item, assigned_player_id=entry["assigned_player"],
+                                  **_reservation(entry)).save()
 
 
 def _current_entry(source, selected):
@@ -350,7 +363,12 @@ def decay_source(source, *, now):
 def integrity_errors(source):
     """출처의 marker/실제 저장과 모델을 검사한다. 자동 복구나 전체 scan은 하지 않는다."""
     issues = []
-    if native_source(source) and source.db.entries:
+    from world.item_migration.scan import digest, ledger, raw_source
+
+    kind = "corpse" if source.db_typeclass_path == "typeclasses.loot.Corpse" else "dropped"
+    record = ledger(kind, source)
+    archived = bool(record and record.completed and record.source_digest == digest(raw_source(kind, source)))
+    if native_source(source) and source.db.entries and not archived:
         issues.append("native 전리품 공간에 legacy entry가 남았습니다.")
     if not native_source(source) and has_native_assets(source):
         issues.append("legacy 전리품 공간에 native 전리품 row가 존재합니다.")

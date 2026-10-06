@@ -60,11 +60,18 @@ class Drop(GameCommand):
             else:
                 self.caller.msg(ft.text(item, "을 바닥에 내려놓았다. 다른 탐사자도 가져갈 수 있다."))
             return
-        identity, all_items = stack_selector(value, ITEMS, self.key)
-        if counterpart and not isinstance(self, Give):
-            quantity = counterpart.perform_action(self.caller, self.key, (identity, all_items))
+        from world.equipment_service import entity_runtime
+
+        if entity_runtime(self.caller):
+            from world.item_transfer_native import transfer as native_transfer
+
+            identity, quantity = native_transfer(self.caller, value, withdraw=self.withdraw, **kwargs)
         else:
-            quantity = transfer(self.caller, identity, all_items=all_items, **kwargs)
+            identity, all_items = stack_selector(value, ITEMS, self.key)
+            if counterpart and not isinstance(self, Give):
+                quantity = counterpart.perform_action(self.caller, self.key, (identity, all_items))
+            else:
+                quantity = transfer(self.caller, identity, all_items=all_items, **kwargs)
         item = ft.text(ft.item(identity), f" {quantity}개")
         if isinstance(self, Give):
             self.caller.msg(

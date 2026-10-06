@@ -40,23 +40,21 @@ def issuer_talk(character, credential_id, operation):
     with world_change():
         lock_character_items(character)
         granted = False
+        boss_granted = False
 
         def talk(profile):
-            nonlocal granted
-            previous_bandages = profile["inventory"].get("bandage", 0)
+            nonlocal granted, boss_granted
             result = operation(profile)
-            from world.equipment_service import entity_runtime
+            if result == "complete":
+                from world.content.item_mapping import BOSS_REWARDS
 
-            if result == "complete" and entity_runtime(character):
-                reward = profile["inventory"].get("bandage", 0) - previous_bandages
-                if previous_bandages:
-                    profile["inventory"]["bandage"] = previous_bandages
-                else:
-                    profile["inventory"].pop("bandage", None)
-                api.create_item("bandage", quantity=reward, location_kind="inventory", owner_object=character)
+                identity = BOSS_REWARDS[CREDENTIAL_QUESTS[credential_id]]
+                if not any(row.definition_id == identity for row in api.items_owned_by(character)):
+                    api.create_item(identity, location_kind="inventory", owner_object=character)
+                    boss_granted = True
             if profile["quests"][CREDENTIAL_QUESTS[credential_id]]["claimed"] and not has_credential(character, credential_id):
                 grant_credential(character, credential_id)
                 granted = True
             return result
 
-        return character.change(talk), granted
+        return character.change(talk), granted, boss_granted

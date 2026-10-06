@@ -58,18 +58,27 @@ def main():
     parser = argparse.ArgumentParser(description="Primal Zone local development")
     parser.add_argument(
         "command", choices=["setup", "start", "stop", "reload", "test", "check", "admin-password",
-                            "smoke", "smoke-full"]
+                            "smoke", "smoke-full", "migrate-items"]
     )
     parser.add_argument("test_labels", nargs="*", help="선택한 Evennia 테스트 경로")
     parser.add_argument("--parallel", type=int, help="통합 테스트 프로세스 수 (기본 최대 4)")
     parser.add_argument("--reverse", action="store_true", help="테스트 순서를 뒤집어 격리 확인")
+    mode_group = parser.add_mutually_exclusive_group()
+    for mode in ("dry-run", "apply", "verify", "cutover"):
+        mode_group.add_argument("--" + mode, action="store_true")
+    parser.add_argument("--accept-warnings", action="store_true")
     args = parser.parse_args()
     command = args.command
+    modes = [mode for mode in ("dry-run", "apply", "verify", "cutover") if getattr(args, mode.replace("-", "_"))]
+    if (command == "migrate-items") != bool(modes) or args.accept_warnings and command != "migrate-items":
+        parser.error("migrate-items에는 정확히 하나의 migration mode가 필요합니다.")
     if command != "test" and (args.test_labels or args.parallel is not None or args.reverse):
         parser.error("테스트 경로와 --parallel/--reverse는 test에만 사용할 수 있습니다.")
     if args.parallel is not None and args.parallel < 1:
         parser.error("--parallel은 1 이상의 정수여야 합니다.")
-    if command == "setup":
+    if command == "migrate-items":
+        run("-m", "evennia", "migrate_items", "--" + modes[0], *(["--accept-warnings"] if args.accept_warnings else []))
+    elif command == "setup":
         setup()
     elif command == "test":
         ensure_secret()

@@ -33,6 +33,27 @@ class RegionTests(WorldCommandTest):
         for module in ("enemies", "explorers", "loot"):
             self.enterContext(patch(f"typeclasses.{module}.delay"))
 
+    def test_bootstrap_definition_hp_keeps_full_idle_and_scaled_encounters(self):
+        enemy = next(obj for obj in room_enemies(self.rooms["ridge"]) if obj.db.enemy_id == "alpha")
+        current_id = enemy.db.enemy_id
+        for hp, old_max, new_max, combat, expected in ((190, 190, 270, False, 270), (150, 190, 270, False, 150),
+                                                       (270, 270, 190, False, 190), (150, 270, 190, False, 150),
+                                                       (190, 190, 270, True, 190)):
+            with self.subTest(hp=hp, old_max=old_max, new_max=new_max, combat=combat):
+                enemy.db.hp, enemy.db.max_hp = hp, old_max
+                enemy.db.state = "alive"
+                enemy.db.combatants = [self.char1.pk] if combat else []
+                enemy.db.scaling_participants = 1
+                with patch.dict(ENEMIES[current_id], hp=new_max):
+                    build_world()
+                self.assertEqual((enemy.db.hp, enemy.db.max_hp), (expected, new_max))
+        enemy.db.hp, enemy.db.max_hp = 200, 297
+        enemy.db.combatants = [self.char1.pk, self.char2.pk]
+        enemy.db.scaling_participants = 2
+        with patch.dict(ENEMIES[current_id], hp=170):
+            build_world()
+        self.assertEqual((enemy.db.hp, enemy.db.max_hp, enemy.db.scaling_participants), (200, 297, 2))
+
     def test_content_integrity_and_stable_first_region(self):
         self.assertEqual(errors(INTERACTABLES), [])
         self.assertEqual(len(REGIONS), 3)
@@ -125,7 +146,7 @@ class RegionTests(WorldCommandTest):
 
     def test_bootstrap_syncs_enemy_max_hp_without_healing(self):
         enemy = room_enemies(self.rooms["jungle_road"])[0]
-        self.assertEqual(enemy.db.max_hp, 92)
+        self.assertEqual(enemy.db.max_hp, 105)
         enemy.db.hp = 37
         with patch.dict(ENEMIES["shellback"], {"hp": 100}):
             build_world()
@@ -300,7 +321,7 @@ class RegionTests(WorldCommandTest):
         )
         self.assertEqual(len(room_loot(self.rooms["jungle_nest"])), 1)
         entries = room_loot(self.rooms["jungle_nest"])[0].db.entries
-        self.assertEqual(len(entries), 4)
+        self.assertEqual(len(entries), 3)
         self.assertEqual(
             {entry["reserved_player"] for entry in entries if entry["reserved_player"]},
             {self.char1.id},
@@ -333,7 +354,8 @@ class RegionTests(WorldCommandTest):
         self.assertEqual(self.char1.profile()["xp"], ENEMIES["dartclaw"]["xp"])
         self.assertEqual(len(room_loot(self.rooms["jungle_edge"])), 1)
         take_loot(self.char1, corpse=True, now=103)
-        self.assertEqual(self.char1.profile()["inventory"]["scrap"], 1)
+        self.assertNotIn("scrap", self.char1.profile()["inventory"])
+        self.assertEqual(self.char1.profile()["credits"], 38)
 
     def test_jungle_boss_telegraphs_on_its_own_round(self):
         self.char1.location = self.rooms["jungle_nest"]

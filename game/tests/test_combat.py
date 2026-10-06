@@ -32,7 +32,8 @@ class SharedCombatTests(WorldCommandTest):
         before = self.enemy.db.hp
         for player in (self.char1, self.char2):
             self.enemy.receive_attack(player, now=102.5, rng=Random(1))
-        self.assertLess(self.enemy.db.hp, before - 10)
+        self.assertLess(self.enemy.db.hp, before + int(before * .75) - 10)
+        self.assertEqual(self.enemy.db.max_hp, int(before * 1.75))
         self.assertEqual(self.char1.combat_snapshot()["hp"], self.char2.combat_snapshot()["hp"])
         self.assertEqual(self.char1.profile()["hp"], 60)
         self.assertEqual(self.char2.profile()["hp"], 60)
@@ -97,15 +98,22 @@ class SharedCombatTests(WorldCommandTest):
         profile = self.char1.profile()
         profile["quests"]["radio_tower"].update(started=True, record_read=True)
         rules.gain_xp(profile, rules.xp_threshold(4))
-        while rules.point_pools(profile)["attribute_points"]:
-            rules.allocate_attribute(profile, "constitution", safe=True)
+        for attribute in ("strength", "constitution"):
+            for _ in range(4):
+                rules.allocate_attribute(profile, attribute, safe=True)
+        profile["skills"].update(attack=4, shooting=4, defense=4, suppress=4)
+        profile["inventory"]["bandage"] = 8
         rules.treat(profile, safe=True)
-        rules.add_item(profile, "scrap", 3)
-        for item in ("carbine", "armor"):
+        rules.add_item(profile, "generator_repair_part", 3)
+        for item in ("guard_carbine", "reinforced_vest"):
             rules.add_item(profile, item)
             slot = rules.ITEMS[item]["slot"]
             rules.unequip(profile, profile["equipment"][slot], slot)
             rules.equip(profile, item)
+        for slot, item in (("head", "security_goggles"), ("legs", "reinforced_explorer_pants"), ("feet", "non_slip_boots"), ("ring", "protection_ring")):
+            rules.add_item(profile, item)
+            profile["equipment"][slot] = item
+        rules.treat(profile, safe=True)
         rules.fix_generator(profile)
         self.char1.save_profile(profile)
         self.enemy.engage(self.char1, now=100)
@@ -117,7 +125,7 @@ class SharedCombatTests(WorldCommandTest):
             profile = self.char1.profile()
             if self.enemy.db.enemy_round % 3 == 2 and profile["mental"] >= 6 and now >= profile["skill_ready_at"].get("suppress", 0):
                 rules.queue_action(profile, "suppress", now)
-            elif profile["hp"] < 45 and profile["inventory"].get("bandage"):
+            elif profile["hp"] < 65 and profile["inventory"].get("bandage"):
                 rules.queue_action(profile, "bandage", now)
             elif now >= profile["skill_ready_at"].get("shooting", 0) and profile["mental"] >= 6:
                 rules.queue_action(profile, "shooting", now)

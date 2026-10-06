@@ -70,7 +70,7 @@ class Commander(ActionObject):
         before = caller.profile()
         from world.credential_service import issuer_talk
 
-        result, granted = issuer_talk(caller, "outpost_supply_pass", rules.commander_talk)
+        result, granted, boss_granted = issuer_talk(caller, "outpost_supply_pass", rules.commander_talk)
         after = caller.profile()
         if result == "start":
             body = ft.text(
@@ -97,6 +97,8 @@ class Commander(ActionObject):
             body = view.quest(after)
         if granted:
             body = ft.text(body, "\n", ft.item("outpost_supply_pass"), "을 받았다." if result == "complete" else "을 무료로 재발급받았다.")
+        if boss_granted:
+            body = ft.text(body, "\n", ft.item("ridge_predator_mark"), "을 받았다.")
         caller.msg(ft.text(ft.token("npc", self.key), "\n\n", body))
 
 
@@ -124,9 +126,17 @@ class Container(ActionObject):
 
     def return_appearance(self, looker, **kwargs):
         from evennia.utils.dbserialize import deserialize
+        from world.equipment_service import entity_runtime
         from world.targets import labels, room_objects
 
-        contents = looker.profile_snapshot()["storage"] if self.personal else deserialize(self.db.items)
+        if entity_runtime(looker):
+            from world.item_transfer_native import stored_items
+
+            contents = {}
+            for row in stored_items(looker, self):
+                contents[row.definition_id] = contents.get(row.definition_id, 0) + row.quantity
+        else:
+            contents = looker.profile_snapshot()["storage"] if self.personal else deserialize(self.db.items)
         label = labels(room_objects(looker)).get(self.id, self.key)
         lines = [self.description]
         lines.extend(
@@ -169,7 +179,7 @@ class MaintenanceLog(ActionObject):
             ft.text(
                 content_name("maintenance_log"),
                 "을 펼쳐 복구 절차를 읽었다.\n  ",
-                ft.item("scrap"),
+                ft.item("generator_repair_part"),
                 " 3개로 ",
                 content_name("generator"),
                 "를 수리하면 능선의 문을 열 수 있다.\n  ",
@@ -187,10 +197,17 @@ class SupplyCache(ActionObject):
     actions = ("조사",)
 
     def act(self, caller, action, args):
+        profile = caller.profile_snapshot()
+        generator_fixed = profile["quests"]["radio_tower"]["generator_fixed"]
+        existing_parts = profile["inventory"].get("generator_repair_part", 0)
         caller.change(rules.claim_cache)
+        missing_parts = 0 if generator_fixed else max(0, 3 - existing_parts)
         caller.msg(
             ft.text(
-                ft.token("object", self.key), "에서 ", ft.item("bandage"), " 2개를 찾아 챙겼다."
+                ft.token("object", self.key), "에서 ", ft.item("bandage"), " 2개",
+                ft.text(", ", ft.item("generator_repair_part"), f" {missing_parts}개") if missing_parts else "",
+                "와 ", ft.item("expedition_tag"), "를 찾아 챙겼다.",
+                " 정비용 회수부품은 기존 보유량을 포함해 3개를 확보했다." if existing_parts and not generator_fixed else "",
             )
         )
 
@@ -422,7 +439,8 @@ class Shopkeeper(ActionObject):
         actions = [{"label": "상품", "command": target + " 상품"}]
         for item in catalog:
             name = ITEMS[item]["name"]
-            actions.extend(({"label": f"{name} · {format_currency(rules.purchase_price(item))} 구매",
+            unit = f" ×{ITEMS[item]['purchase_quantity']}발" if ITEMS[item].get("purchase_quantity", 1) != 1 else ""
+            actions.extend(({"label": f"{name}{unit} · {format_currency(rules.purchase_price(item))} 구매",
                              "command": f"{target}에게 {name} 구매"},
                             {"label": name + " 가치", "command": f"{target}에게 {name} 가치"}))
         for name, quantity, price, stackable in sales:
@@ -456,7 +474,8 @@ class Shopkeeper(ActionObject):
             from world.shop_service import buy
 
             buy(caller, self, args)
-            caller.msg(ft.text(ft.item(args), " 1개를 받아 소지품에 넣었다."))
+            quantity = ITEMS[args].get("purchase_quantity", 1)
+            caller.msg(ft.text(ft.item(args), f" {quantity}개를 받아 소지품에 넣었다."))
         elif action == "가치":
             from world.shop_service import valuation
 
@@ -481,7 +500,7 @@ class Shopkeeper(ActionObject):
                                f" {result.quantity}개를 ", ft.token("reward", format_currency(result.proceeds)), "에 매입했다.",
                                f"\n잔탄 {result.rounds}발의 가치가 포함되었다." if result.rounds else ""))
         else:
-            caller.msg(ft.text(ft.token("npc", self.key), "\n\n필요한 물품은 판매 목록을 살펴보세요. 보급칩으로 하나씩 구매할 수 있습니다."))
+            caller.msg(ft.text(ft.token("npc", self.key), "\n\n필요한 물품과 구매 단위는 판매 목록을 살펴보세요."))
 
 
 class Incinerator(ActionObject):
@@ -506,7 +525,7 @@ class Pathfinder(ActionObject):
         before = caller.profile()
         from world.credential_service import issuer_talk
 
-        result, granted = issuer_talk(caller, "special_supply_pass", rules.jungle_talk)
+        result, granted, boss_granted = issuer_talk(caller, "special_supply_pass", rules.jungle_talk)
         after = caller.profile()
         if result == "start":
             body = "관측소와 수몰 도로의 표식을 확인해 주세요. 두 기록을 맞추면 거목의 신호 장치가 연구구역 길을 열 겁니다."
@@ -522,6 +541,8 @@ class Pathfinder(ActionObject):
             body = view.quest(after)
         if granted:
             body = ft.text(body, "\n", ft.item("special_supply_pass"), "을 받았다." if result == "complete" else "을 무료로 재발급받았다.")
+        if boss_granted:
+            body = ft.text(body, "\n", ft.item("predator_scale_charm"), "을 받았다.")
         caller.msg(ft.text(ft.token("npc", self.key), "\n\n", body))
 
 
@@ -569,7 +590,8 @@ class JungleCache(ActionObject):
 
     def act(self, caller, action, args):
         caller.change(rules.claim_jungle_cache)
-        caller.msg(ft.text(ft.token("object", self.key), "에서 ", ft.item("bandage"), " 2개와 ", ft.item("battery"), " 2개를 찾아 챙겼다."))
+        caller.msg(ft.text(ft.token("object", self.key), "에서 ", ft.item("bandage"), " 2개, ", ft.item("battery"), " 2개와 ",
+                           ft.item("mental_stability_module"), "을 찾아 챙겼다."))
 
 
 class EmergencyLightCache(ActionObject):

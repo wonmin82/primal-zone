@@ -98,16 +98,16 @@ class SemanticTextTests(WorldCommandTest):
         output = message.call_args.args[0]
         self.assertEqual(tokens(output, "hostile"), [enemy.key])
         self.assertEqual(tokens(output, "command"), ["공격"])
-        command.args = "낡은 마체테"
+        command.args = "탐사용 벌 목 도"
         with patch.object(self.char1, "msg") as message:
             command.func()
-        self.assertEqual(tokens(message.call_args.args[0], "item"), [ITEMS["machete"]["name"]])
+        self.assertEqual(tokens(message.call_args.args[0], "item"), [ITEMS["explorer_machete"]["name"]])
         self.assertEqual(tokens(message.call_args.args[0], "command"), ["무장"])
 
     def test_query_values_and_item_roles_are_consistent(self):
         profile = rules.new_profile()
         profile.update(xp=200, credits=123, kills=7, hp=43)
-        profile["inventory"].update(blade=1, scrap=8)
+        profile["inventory"].update(cutting_machete=1, scrap=8)
         stats = rules.stats(profile)
         status = view.status("탐사자", profile)
         self.assertEqual(tokens(status, "player"), ["탐사자"])
@@ -193,13 +193,13 @@ class SemanticTextTests(WorldCommandTest):
 
     def test_compact_inventory_equipment_and_quest(self):
         profile = rules.new_profile()
-        profile["inventory"].update(blade=2, scrap=8)
+        profile["inventory"].update(cutting_machete=2, scrap=8)
         bag = view.inventory(profile)
         self.assertEqual(
             tokens(bag, "item"),
-            [ITEMS[i]["name"] for i in ("machete", "vest", "blade", "bandage", "scrap")],
+            [ITEMS[i]["name"] for i in ("explorer_machete", "expedition_workwear", "cutting_machete", "bandage", "scrap")],
         )
-        self.assertIn("강철마체테×2", bag)
+        self.assertIn("절단마체테×2", bag)
         self.assertIn("[재료] 회수부품×8", bag)
         self.assertEqual(len(tokens(bag, "success")), len(profile["equipment"]))
         self.assertNotIn("[기타]", bag)
@@ -208,9 +208,7 @@ class SemanticTextTests(WorldCommandTest):
             self.assertIn("손" if slot == "weapon" else "몸", equip)
             self.assertIn(ITEMS[identity]["name"], tokens(equip, "item"))
         self.assertIn("[주무기]", equip)
-        attack = sum(ITEMS[i].get("attack", 0) for i in profile["equipment"].values())
-        defense = sum(ITEMS[i].get("defense", 0) for i in profile["equipment"].values())
-        self.assertIn(f"공격 +{attack} · 방어 +{defense}", equip.splitlines()[-1])
+        self.assertIn("공격 +2 · 방어 +1", equip.splitlines()[-1])
         profile["inventory"] = {}
         self.assertEqual(str(view.inventory(profile)), "[소지품] 20칩\n\n비어 있다.")
         self.assertEqual(tokens(view.shop("supply", "보급관"), "command"), ["구매"])
@@ -270,9 +268,9 @@ class SemanticTextTests(WorldCommandTest):
         self.assertFalse(cmdparser("도움말 공격", cmdset, self.char1))
 
     def test_usage_styles_only_declared_action_metadata(self):
-        output = ft.usage("강화 조끼 착용 · 대상 기타", {"착용"})
+        output = ft.usage("강화방호조끼 착용 · 대상 기타", {"착용"})
         self.assertEqual(tokens(output, "command"), ["착용"])
-        self.assertIn("강화 조끼", tokens(output, "text"))
+        self.assertIn("강화방호조끼", tokens(output, "text"))
         self.assertIn("대상 기타", tokens(output, "text"))
         self.assertEqual(tokens(ft.usage("응급처치", {"응급처치"}), "command"), ["응급처치"])
 
@@ -296,7 +294,7 @@ class SemanticTextTests(WorldCommandTest):
             attack = next(m for m in outputs if tokens(m, "item"))
             self.assertIn("1 피해를 입혔다.", attack)
             self.assertEqual(tokens(attack, "hostile"), [enemy.key])
-            self.assertEqual(tokens(attack, "item"), [ITEMS["machete"]["name"]])
+            self.assertEqual(tokens(attack, "item"), [ITEMS["explorer_machete"]["name"]])
             rewards = [m for m in outputs if tokens(m, "reward")]
             self.assertEqual(len(rewards), 1)
             self.assertEqual(tokens(rewards[0], "reward"), ["경험치 11"])
@@ -310,11 +308,11 @@ class SemanticTextTests(WorldCommandTest):
             outputs = [call.args[0] for call in second.call_args_list if call.args]
             assigned = next(m for m in outputs if tokens(m, "player") and tokens(m, "item"))
             self.assertEqual(tokens(assigned, "player"), [self.char1.key])
-            self.assertEqual(tokens(assigned, "item"), [ITEMS["scrap"]["name"]])
-            self.assertEqual(self.char1.profile()["inventory"]["scrap"], 1)
-            self.assertEqual(self.char2.profile()["inventory"]["blade"], 1)
+            self.assertEqual(tokens(assigned, "item"), [ITEMS["water"]["name"]])
+            self.assertEqual(self.char1.profile()["inventory"]["water"], 1)
+            self.assertEqual(self.char2.profile()["inventory"]["security_goggles"], 1)
             self.assertEqual(tokens(corpse.return_appearance(self.char1), "command"), [])
-        rng.random.assert_called_once()
+        self.assertEqual(rng.random.call_count, 3)
 
     def test_npc_quest_rewards_and_player_movement_keep_roles(self):
         from typeclasses.interactables import Commander, Generator
@@ -327,7 +325,7 @@ class SemanticTextTests(WorldCommandTest):
         self.assertEqual(tokens(message.call_args.args[0], "npc"), [commander.key])
         self.assertIn("발전기", tokens(message.call_args.args[0], "object"))
         self.char1.change(lambda p: p["quests"]["radio_tower"].update(record_read=True))
-        self.char1.change(lambda p: p["inventory"].update(scrap=3))
+        self.char1.change(lambda p: p["inventory"].update(generator_repair_part=3))
         self.char1.location = self.rooms["generator"]
         generator = next(
             obj for obj in action_objects(self.char1.location) if isinstance(obj, Generator)

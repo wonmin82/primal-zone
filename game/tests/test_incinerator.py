@@ -37,11 +37,16 @@ class CredentialConfirmationCases:
                 self.assertIn("소각했다", self.command(name + " 소각 확정"))
                 self.assertFalse(credentials.has_credential(self.char1, identity))
                 after = self.state()
-                self.assertEqual((after[0], after[2], after[3]), (before[0], before[2], before[3]))
+                expected = before[0]
+                if self.native:
+                    expected[0]["inventory"].pop(identity)
+                self.assertEqual((after[0], after[2], after[3]), (expected, before[2], before[3]))
                 if identity == "outpost_supply_pass":
                     self.assertFalse(can_enter(self.char1, "outpost_weapon"))
                 credentials.reissue_credential(self.char1, identity)
-                self.assertEqual(self.state()[0], before[0])
+                if self.native:
+                    expected[0]["inventory"][identity] = 1
+                self.assertEqual(self.state()[0], expected)
                 # stable ID와 정상 local index도 수량이 아닌 selector로 처리한다.
                 incinerator_service.incinerate(self.char1, identity + " 1", confirmed=True)
                 self.assertFalse(credentials.has_credential(self.char1, identity))
@@ -129,17 +134,17 @@ class NativeIncineratorTests(CredentialConfirmationCases, Phase5Test):
                 self.assertFalse(ItemEntity.objects.filter(pk=row.pk).exists())
 
     def test_magazine_rounds_destroyed_and_loaded_firearm_rejected(self):
-        firearm = create_firearm("carbine", owner_object=self.char1, mode="full_standard")
+        firearm = create_firearm("guard_carbine", owner_object=self.char1, mode="full_standard")
         before = self.state()
         with self.assertRaisesRegex(rules.RuleError, "탄창을 먼저"):
-            incinerator_service.incinerate(self.char1, "탐사카빈")
+            incinerator_service.incinerate(self.char1, "경비카빈")
         self.assertEqual(self.state(), before)
         unload_magazine(self.char1, firearm)
         credits = self.char1.profile()["credits"]
         self.assertIn("소각했다", self.command("카빈표준 소각"))
         self.assertFalse(ItemEntity.objects.filter(definition_id="ammo_556").exists())
         self.assertEqual(self.char1.profile()["credits"], credits)
-        self.assertIn("소각했다", self.command("탐사카빈 소각"))
+        self.assertIn("소각했다", self.command("경비카빈 소각"))
 
     def test_invalid_quantity_and_after_change_failure_roll_back_everything(self):
         self.create("bandage", quantity=5)

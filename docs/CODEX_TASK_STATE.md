@@ -1,6 +1,62 @@
+## Phase 6 — PR #34 문서 마감·병합 인계 (2026-10-06)
+
+사용자가 문서 마감 후 PR #34 병합과 소스 브랜치 삭제를 승인했다. 구현·리뷰 보정 기준 HEAD는 `07eeec845128f450e4606c28f1c1239650d86c5b`이며 당시 최신 main `94bc1e788fec5547841fb5f87e105854a69cc92b`를 포함한다. 이후 문서 마감은 실행 코드·schema·의존성을 변경하지 않는다.
+
+- 최종 구현 CI [Game checks37446497165](https://github.com/wonmin82/primal-zone/actions/runs/37446497165): check 성공, pure200개/0.864초, integration568개/250.502초 성공. Quick smoke는 첫 두 attempt의 시체2칩 회수 timeout 뒤 실패 job만 재실행한 attempt3에서28.145초 성공했다. 성공한 동일 HEAD test 결과를 유지했으며 실패 이력을 삭제하지 않는다.
+- 진행·귀속·fixed discovery·HP·Boss 메시지와 최종 cache/pre-v4 호환 이슈는 해결됐다. 구현 구조 및 migration 운영 절차는 [final-content](final-content.md), [item-migration](item-migration.md)을 따른다. 실제 플레이 DB migration은 미실행이며 기존 DB fingerprint는 불변이다.
+- 문서만 마감하므로 기존 로컬 pure46개·통합53개·shortcut22개 성공 근거를 유지하고 Python/browser/smoke를 로컬에서 반복하지 않는다. 링크·명령·최종 정책과 diff를 확인한다. 문서 마감 HEAD의 자동 CI와 병합된 main의 CI는 별도로 확인하여 PR Validation/최종 보고에 기록한다.
+- 남은 Phase 7 범위: 전체 local/운영 regression, smoke-full, browser/OS IME, 전체 multiplayer, PostgreSQL contention·multi-server race, historical corpus audit, full balance simulation, 단축 Quick smoke timing 안정성. 경비카빈 ammo/gross44.6% 재검토도 Phase 7로 남긴다. 이번 마감에서 수치를 조정하거나 Phase 7을 시작하지 않는다.
+- PR 최종 병합은 latest main 반영·latest HEAD CI·충돌/리뷰 상태 확인 후 merge commit 방식으로 수행한다. 소스 브랜치는 main에 반영됐음을 검증한 뒤 삭제한다. 실제 DB apply/cutover는 이 병합 요청의 범위가 아니다.
+
+아래 Phase 6/이전 Phase 기록은 각 실행 시점의 이력으로 보존한다.
+
+## Phase 6 — PR #34 최종 cache 리뷰 수정 (2026-10-06)
+
+시작 HEAD `980d506064b1b58b98ccf6ccd11a3cd8b356a5fc`, branch `codex/content-balance-full-migration`, main `94bc1e788fec5547841fb5f87e105854a69cc92b`에서 기존 PR만 수정한다.
+
+Resolved:
+
+- Boss unique shared-storage transfer: 개인 보관만 허용하는 기존 ownership invariant 유지.
+- Generator progression resource split 및 migration entitlement: submit-only 정비용 회수부품과 owner scope 총3개 보장 유지.
+- Fixed discovery entitlement: 기존 supply/jungle 완료의 신규 보상 소급 유지.
+- Enemy HP bootstrap 및 Boss unique reward message: 기존 full/idle 보정과 실제 지급 메시지 유지.
+- Post-migration generator cache regrant: 발전기 수리 완료 후 최초 cache에서도 정비부품을 지급하지 않는다. 미수리 상태에서는 부족분만 보충한다.
+- Pre-v4 cache_claimed entitlement compatibility: raw discoveries.supply_cache로 정규화하며 기존 discovery key와 archived profile을 보존한다. Pure profile normalization과 동일한 의미다.
+
+Deferred: 경비카빈 ammo/gross 약44.6% → Phase 7 full balance simulation. 이번 수정에서 가격·drop·전투 수치·schema·ledger/cutover 구조를 변경하지 않는다. 실제 플레이 DB migration은 미실행이다. 이번 pure46개/0.515초·integration53개/66.853초와 check/diff가 성공했다. 실행 근거는 playtest에, 최종 정확한 HEAD CI는 PR Validation에 기록한다. CI37445691423은 check/pure/Quick 성공 후 기존 shortcut fixture의 recovery 시각 경계1건으로 통합 실패했다. 실패 fixture의 관찰 시각만 고정한 후 shortcut22개와 check/diff가 성공했다. Production 코드와 기존 targeted 근거는 동일하며 최신 보정 HEAD CI는 PR에 따로 기록한다. 이전 기록은 아래에 보존한다.
+
 # Current Task State
 
 확인일: 2026-10-06. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
+
+## Phase 6 PR #34 review fixes (2026-10-06)
+
+시작 fetch에서 PR source는 `codex/content-balance-full-migration`, HEAD는 `fbb44170828c56ec9fb2af595643d9eed5f31680`, origin/main은 `94bc1e788fec5547841fb5f87e105854a69cc92b`이며 작업 트리는 clean이었다. 기존 HEAD CI37434685617 test/smoke 성공은 이번 수정 HEAD를 대신하지 않는다. 새 PR/branch를 만들거나 병합하지 않는다.
+
+- owner-changing native transfer에 transferable 검사를 추가한다. Boss unique는 personal storage만 허용하고 shared Container 입출고/give로 owner를 변경할 수 없다. 일반 transferable item의 shared transfer는 유지한다.
+- 일반 scrap은 경제 자원으로 보존하며 발전기는 `generator_repair_part`(정비용 회수부품)3개를 submit한다. Max stack3/submit-only 정책으로 판매·정산·소각·drop/give/store/consume을 차단한다. 수송차 cache는 기존 붕대2개·탐사인식표와 정비부품 총3개를 확보하며 migration 선지급분을 중복하지 않는다.
+- Explorer migration에서 generator 미수리 owner의 부족분을 채우고 기존 supply/jungle discovery 완료 캐릭터의 탐사인식표/정신안정모듈을 소급한다. Owner tree 전체를 검사하고 discoveries를 digest에 추가한다. Source atomicity·ledger·workflow·runtime cutover 구조는 유지한다.
+- bootstrap은 alive/full/idle 적만 새 max HP 기준 full로 유지하고 damaged/combat HP는 clamp한다. 기존 Boss scaling participant 수는 보존한다.
+- final report는 실제 지급한 Boss unique 이름을 안내하고 반복 대화/Credential 재발급에서 unique를 다시 지급한 것처럼 표시하지 않는다.
+- 경비카빈 ammo/gross 약44.6%는 Phase 7 full balance simulation에서 melee/firearm progression·shots-to-kill·refill cadence와 함께 검토한다. 이번 수정에 확정 가격·적 수치·drop·공식 변경은 없다.
+
+검증 명령·실패 보정 이력은 [playtest](playtest.md)의 PR #34 review fixes를 따른다. 최초 리뷰 수정 CI37441493018은 pure/Quick 성공, 기존 발전기 fixture4건과 shortcut 시각 경계1건으로 통합 실패했다. Test fixture만 보정한 combat/lighting/shortcut56개와 check/diff가 성공했으며 production 코드는 동일하다. 최종 push의 정확한 run/HEAD/CI 결과는 PR Review fixes/Validation에 별도로 기록한다. 실제 플레이 DB에는 apply/cutover를 실행하지 않는다. 아래 초기 Phase 6/이전 Phase 기록은 당시 이력으로 보존한다.
+
+## Phase 6 — Final Content + Balance + Full Migration + Runtime Cutover (2026-10-06)
+
+시작 main은 `94bc1e788fec5547841fb5f87e105854a69cc92b`, branch는 `codex/content-balance-full-migration`이다. fetch 시 clean, 열린 PR 없음, Phase 1~5 포함, baseline Game checks37413051057 test/smoke 성공을 확인했다. 이 baseline CI는 Phase 6 HEAD 결과를 대신하지 않는다. 이번 요청은 구현·검증·문서·commit·push·PR·최신 CI까지이며 병합하지 않는다.
+
+- Decision interpretation: T1 drop에서 회수부품 획득이 사라져 초기 progression이 막히는 문제를 사용자에게 확인했고, 수송차 보급상자에서 회수부품3개를 한 번 추가 지급하도록 승인받았다. drop 확률과 발전기 비용은 유지한다.
+- 최종 T0/T1/T2/Boss 정의·가격·ammo bundle·firearm package·구매 catalog와 획득 matrix를 반영했다. 구매 목록과 category 매입은 독립적이며 field-only accessory와 T2 장비도 기본점에서 매입한다. 최종 숫자와 stable ID는 [final-content.md](final-content.md)에 모았다.
+- resource/consumable 한 종류와 special 최대 하나의 독립 roll, Boss trophy 100%, firearm enemy partial magazine을 구현했다. Enemy V1 수치와 기존 reward eligibility에 기반한 Boss HP 상승을 적용하며 encounter 중 downscale하지 않는다. 최종 보고는 기존 보상·Credential·Boss unique를 같은 transaction에서 지급한다.
+- version1 ledger와 global marker, Explorer의 `item_runtime_version`을 추가했다. source는 Explorer·공용 Container·Corpse·DroppedLoot이며 inventory 총량 안에서 equipment 한 개를 선택한다. personal storage owner는 Explorer, shared storage owner는 Container다. 기존 native UUID/sequence/state/tree를 보존하며 중앙 mapping으로 이전 definition ID만 maintenance에서 치환한다.
+- `scripts/dev.py migrate-items --dry-run/--apply/--verify/--cutover`는 서로 분리되어 있다. dry-run/verify는 read-only, apply는 source 단위 atomic/retry, completed ledger도 digest/native snapshot과 독립 수량·권리 audit를 검사한다. cutover는 verify 오류 또는 미승인 warning이 있으면 거절한다. 운영 offline guard와 격리 in-memory test override를 구분한다.
+- cutover 후 일반 gameplay는 Entity를 authoritative하게 사용한다. 계산용 profile inventory는 Entity 수량으로 만들고 저장할 때 기존 legacy item blob은 원형으로 보존한다. legacy fallback·lazy migration·dual-write는 없다. 신규 Explorer는 Entity 시작 장비와 붕대를 직접 생성하며 item profile 필드를 저장하지 않는다. marker/version 또는 profile 누락은 오류다.
+- migration 운영 절차와 retry/rollback 경계는 [item-migration.md](item-migration.md), 실제 로컬 validation 및 실패 보정 이력은 [playtest.md](playtest.md#phase-6-targeted-validation-2026-10-06)를 따른다. 최신 PR HEAD CI run/SHA/test/smoke는 PR Validation에 별도 기록한다.
+- sanity: Lv4 능선 Boss basic12/heavy9, Lv7 밀림 Boss13/10 opportunities. 예상 loot EV는 9.785/16.57/26.905/22.94/34.59/36.715칩이다. 경비카빈 vs 경비기4발 비용12칩은 EV의44.6%로15~30% 목표보다 높아 Phase 7 검토로 남긴다. 확정 수치와 확률은 tuning하지 않았다.
+- 실제 플레이 DB migration은 실행하지 않았다. local full suite·smoke-full·browser/OS IME·전체 multiplayer·PostgreSQL contention·multi-server·full balance simulation도 미실행이다. Phase 7은 운영 데이터 역사 corpus audit와 전체 regression/simulation에 집중할 수 있으나 실제 production migration은 backup/offline 검토 후 별도 실행해야 한다.
+
+아래 Phase 1~5 기록은 당시 요청과 검증 이력으로 보존한다.
 
 ## PR #33 문서 마감·병합 및 소스 브랜치 정리 (2026-10-06)
 

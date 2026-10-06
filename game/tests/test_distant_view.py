@@ -93,7 +93,7 @@ class DistantViewTests(WorldCommandTest):
                 self.assertEqual(str(alias), str(normal))
                 self.assertEqual(alias.segments, normal.segments)
         self.char1.location = self.rooms["dock"]
-        for target in ("보관상자", "개인 보관함", "윤대장", "낡은마체테"):
+        for target in ("보관상자", "개인 보관함", "윤대장", "탐사용 벌목도"):
             self.assertEqual(self.command(target + " 봐"), self.command(target + " 보기"))
         self.assertEqual(self.command("봐"), self.command("보기"))
         self.assertIn("봐", self.command("보기 도움말"))

@@ -1,5 +1,7 @@
 # 전리품 권리와 보급칩 영속 구조
 
+Phase 6 현재 상태: cutover 후 일반 gameplay는 native ItemEntity만 사용한다. 아래 legacy adapter/Phase 6 예정 설명은 Phase 1~5의 설계·검증 기록이며 maintenance migration과 historical audit fixture의 호환 경계로 남는다. 최신 저장·운영 정책은 [item-migration](item-migration.md), 최종 콘텐츠·가격은 [final-content](final-content.md)를 따른다.
+
 Phase 4는 기존 ItemEntity·장비·광원·총기를 유지하며 권리와 화폐를 분리한다. 실제 검증은 [playtest](playtest.md#phase-4-lootclaim--currencyloot-검증), 인계는 [CODEX_TASK_STATE](CODEX_TASK_STATE.md)를 따른다. Phase 5 콘텐츠와 Phase 6 월드 변환은 수행하지 않는다.
 
 ## legacy entry 의미와 모델 대응

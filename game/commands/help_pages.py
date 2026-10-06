@@ -50,7 +50,7 @@ def category_page(category, commands):
         lines.append(ft.text("대상은 ", ft.token("command", "보기"), "로 확인할 수 있습니다."))
         lines.extend(["보급칩은 칩 단위로 옮기며, 판매는 장착하지 않은 물건만 취급합니다.",
                       commands_text(["철수에게 20칩 줘", "20칩 버려", "시체에서 20칩 가져",
-                                     "강철마체테 가치", "강철마체테 판매"])])
+                                     "절단마체테 가치", "절단마체테 판매"])])
     lines.extend(["", ft.text("상세: ", ft.token("command", "명령이름 도움말"))])
     return ft.compact(category, *lines)
 

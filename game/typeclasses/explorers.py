@@ -78,25 +78,64 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
 
     def at_object_creation(self):
         super().at_object_creation()
-        self.db.profile = rules.new_profile()
+        from world.item_runtime import initialize_fresh, maintenance, native_runtime
+
+        if not maintenance.get():
+            initialize_fresh(exclude=self)
+            from world.item_runtime import require_runtime
+
+            require_runtime()
+        profile = rules.new_profile()
+        if native_runtime() and not maintenance.get():
+            from world.content.item_mapping import STARTER_EQUIPMENT
+            from world.item_entities import api
+            from world.multiplayer import world_change
+
+            for field in ("inventory", "equipment", "storage", "light_sources"):
+                profile.pop(field, None)
+            self.db.profile = profile
+            self.db.equipment_backend = "item_entities"
+            from world.item_runtime import VERSION
+
+            self.db.item_runtime_version = VERSION
+            with world_change():
+                for identity, slot in zip(STARTER_EQUIPMENT, ("hands", "body")):
+                    api.create_item(identity, location_kind="equipment", owner_object=self, slot=slot)
+                api.create_item("bandage", quantity=3, location_kind="inventory", owner_object=self)
+        else:
+            self.db.profile = profile
 
     def profile(self):
+        from world.equipment_service import bind_profile, entity_runtime
+
         if self.db.profile is None:
+            if entity_runtime(self):
+                raise rules.RuleError("native 캐릭터의 profile이 없습니다. 무결성 검사가 필요합니다.")
             self.db.profile = rules.new_profile()
         profile = deserialize(self.db.profile)
+
+        if entity_runtime(self):
+            bound = bind_profile(self, profile)
+            if profile.get("version", 1) < rules.PROFILE_VERSION:
+                bound = rules.migrate_profile(bound)
+                self.save_profile(bound)
+            else:
+                rules.normalize_growth(bound)
+            return bound
         if profile.get("version", 1) < rules.PROFILE_VERSION:
             profile = rules.migrate_profile(profile)
             self.db.profile = dict(profile)
         else:
             rules.normalize_growth(profile)
-        from world.equipment_service import bind_profile
-
         return bind_profile(self, profile)
 
     def profile_snapshot(self):
         """관찰용 사본만 변환한다. 구버전 profile도 저장하거나 진행하지 않는다."""
         saved = deserialize(self.db.profile)
-        from world.equipment_service import bind_profile
+        from world.equipment_service import bind_profile, entity_runtime
+
+        if saved is None and entity_runtime(self):
+            raise rules.RuleError("native 캐릭터의 profile이 없습니다. 무결성 검사가 필요합니다.")
 
         profile = bind_profile(self, saved if saved is not None else rules.new_profile())
         return rules.migrate_profile(profile)
@@ -110,9 +149,18 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         rules.normalize_growth(profile)
         recovery.clamp(profile, rules.stats(profile))
         with transaction.atomic():
-            self.db.profile = dict(profile)
+            self.db.profile = self._stored_profile(profile)
         after_change(self.push_state)
         after_change(self.schedule_recovery)
+
+    def _stored_profile(self, profile):
+        from world.equipment_service import entity_runtime
+
+        if entity_runtime(self):
+            from world.item_inventory import persist_calculation
+
+            return persist_calculation(self, profile)
+        return dict(profile)
 
     def change(self, operation):
         from world.multiplayer import world_change
@@ -138,7 +186,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         with world_change():
             profile = self.profile()
             self.accrue_recovery(profile)
-            self.db.profile = dict(profile)
+            self.db.profile = self._stored_profile(profile)
 
     def reconcile_recovery(self, now=None, *, emit_prompt=True):
         from world.multiplayer import world_change
@@ -148,7 +196,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             profile = self.profile()
             self.accrue_recovery(profile, now)
             changed = recovery.commit(profile, rules.stats(profile))
-            self.db.profile = dict(profile)
+            self.db.profile = self._stored_profile(profile)
             if changed:
                 after_change(self.push_state)
                 if emit_prompt:

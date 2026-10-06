@@ -57,7 +57,7 @@ class ItemEntityTests(GameCommandTest):
         )
 
     def unique_definition(self):
-        definition = {**deepcopy(ITEMS["machete"]), "unique_per_owner": True}
+        definition = {**deepcopy(ITEMS["explorer_machete"]), "unique_per_owner": True}
         self.enterContext(patch.dict(ITEMS, {"unique_test": definition}))
 
     def test_creation_persists_opaque_identity_and_definition_state(self):
@@ -80,7 +80,7 @@ class ItemEntityTests(GameCommandTest):
             ("bandage", True),
             ("bandage", 1.5),
             ("bandage", "2"),
-            ("machete", 2),
+            ("explorer_machete", 2),
         ):
             before = ItemSequence.objects.get(pk=1).last_value
             with (
@@ -92,7 +92,7 @@ class ItemEntityTests(GameCommandTest):
             self.assertEqual(ItemSequence.objects.get(pk=1).last_value, before)
 
     def test_database_rejects_invalid_canonical_locations_and_quantities(self):
-        parent = self.create("machete")
+        parent = self.create("explorer_machete")
         invalid = [
             {"quantity": 0},
             {"sequence": 0},
@@ -130,7 +130,7 @@ class ItemEntityTests(GameCommandTest):
         box = create_object(Container, key="검증상자")
         corpse = create_object(Corpse, key="검증시체")
         ground = create_object(DroppedLoot, key="검증전리품")
-        parent = self.create("machete")
+        parent = self.create("explorer_machete")
         for location, owner, fields in (
             ("inventory", self.char1, {}),
             ("equipment", self.char1, {"slot": "hands"}),
@@ -141,7 +141,7 @@ class ItemEntityTests(GameCommandTest):
             ("inside", None, {"parent_item": parent, "socket": "part"}),
         ):
             with self.subTest(location=location):
-                item = self.create("machete" if location == "equipment" else "bandage", location_kind=location, owner_object=owner, **fields)
+                item = self.create("explorer_machete" if location == "equipment" else "bandage", location_kind=location, owner_object=owner, **fields)
                 item.refresh_from_db()
                 self.assertEqual(item.location_kind, location)
 
@@ -160,7 +160,7 @@ class ItemEntityTests(GameCommandTest):
         self.assertEqual(self.create(location_kind="personal_storage").owner_object, self.char1)
 
     def test_nonstack_model_save_and_stack_limit_reject_invalid_quantity(self):
-        item = self.create("machete")
+        item = self.create("explorer_machete")
         item.quantity = 2
         with self.assertRaises(ValidationError):
             item.save()
@@ -194,7 +194,7 @@ class ItemEntityTests(GameCommandTest):
         self.assertFalse(ItemEntity.objects.filter(pk=source.pk).exists())
 
     def test_inside_split_preserves_parent_and_locks_source_with_ancestors(self):
-        parent = self.create("machete")
+        parent = self.create("explorer_machete")
         source = self.create(
             quantity=7,
             location_kind="inside",
@@ -249,7 +249,7 @@ class ItemEntityTests(GameCommandTest):
             moved.save()
 
     def test_parent_cycles_are_rejected_and_tree_move_preserves_inside(self):
-        root = self.create("machete")
+        root = self.create("explorer_machete")
         child = self.create(
             "flashlight", location_kind="inside", owner_object=None, parent_item=root, socket="tool"
         )
@@ -271,7 +271,7 @@ class ItemEntityTests(GameCommandTest):
         self.assertEqual(list(api.children_of(root)), [child])
 
     def test_model_parent_cycle_and_parent_owner_deletion_are_protected(self):
-        root = self.create("machete")
+        root = self.create("explorer_machete")
         child = self.create(
             location_kind="inside", owner_object=None, parent_item=root, socket="part"
         )
@@ -357,7 +357,7 @@ class ItemEntityTests(GameCommandTest):
         with self.assertRaises(ValidationError):
             self.create("unique_test", location_kind="personal_storage")
         other = self.create("unique_test", owner_object=self.char2)
-        parent = self.create("machete")
+        parent = self.create("explorer_machete")
         api.move_item(first, location_kind="inside", parent_item=parent, socket="part")
         with self.assertRaises(ValidationError):
             api.move_item_tree(parent, location_kind="inventory", owner_object=self.char2)
@@ -374,7 +374,7 @@ class ItemEntityTests(GameCommandTest):
         self.assertTrue(can_item_operation("bandage", "give"))
         self.assertFalse(can_item_operation("bandage", "unknown"))
         self.assertFalse(can_item_operation("jungle_cell", "give"))
-        root = self.create("machete")
+        root = self.create("explorer_machete")
         self.create(
             "jungle_cell",
             location_kind="inside",
@@ -390,8 +390,9 @@ class ItemEntityTests(GameCommandTest):
         self.assertEqual(root.owner_object_id, self.char1.id)
 
     def test_tree_equip_checks_root_only_and_preserves_passive_child(self):
-        root_definition = deepcopy(ITEMS["machete"])
+        root_definition = deepcopy(ITEMS["explorer_machete"])
         root_definition.update(weapon_type="firearm", firearm_family="pistol_9mm")
+        root_definition["equipment_properties"]["weapon_type"] = "firearm"
         child_definition = deepcopy(ITEMS["mag_9_standard"])
         child_definition["operation_policy"]["equip"] = False
         with patch.dict(
@@ -433,7 +434,7 @@ class ItemEntityTests(GameCommandTest):
 
     def test_tree_transfer_restriction_preserves_all_rows_and_unique_scopes(self):
         operations = ("give", "drop", "store", "sell", "burn", "loot", "consume")
-        root_definition = {**deepcopy(ITEMS["machete"]), "unique_per_owner": True}
+        root_definition = {**deepcopy(ITEMS["explorer_machete"]), "unique_per_owner": True}
         root_definition["operation_policy"].update(dict.fromkeys(operations, True))
         child_definition = {
             **deepcopy(ITEMS["jungle_cell"]),
@@ -472,7 +473,7 @@ class ItemEntityTests(GameCommandTest):
                     self.assertEqual(ItemSequence.objects.get(pk=1).last_value, counter)
 
     def test_tree_unknown_operation_fails_closed_and_none_is_trusted_internal(self):
-        root = self.create("machete")
+        root = self.create("explorer_machete")
         child = self.create(
             "jungle_cell",
             location_kind="inside",
@@ -484,7 +485,7 @@ class ItemEntityTests(GameCommandTest):
             api.move_item_tree(
                 root, location_kind="inventory", owner_object=self.char2, operation="unknown"
             )
-        with patch.dict(ITEMS["machete"]["operation_policy"], {"unknown": True}):
+        with patch.dict(ITEMS["explorer_machete"]["operation_policy"], {"unknown": True}):
             self.assertFalse(can_item_operation(root, "unknown"))
             with self.assertRaises(ValidationError):
                 api.delete_item(root, operation="unknown")
@@ -538,7 +539,7 @@ class ItemEntityTests(GameCommandTest):
         self.assertGreater(self.create().sequence, item.sequence)
 
     def test_stale_or_nonstack_operations_fail_without_changing_rows(self):
-        first, second = self.create("machete"), self.create("machete")
+        first, second = self.create("explorer_machete"), self.create("explorer_machete")
         with self.assertRaises(ValidationError):
             api.split_stack(first, 1)
         with self.assertRaises(ValidationError):

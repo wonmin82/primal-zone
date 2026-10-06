@@ -141,7 +141,7 @@ class GrowthReviewTests(WorldCommandTest):
         self.assertGreater(len(players), PARTY_MAX_SIZE)
         for boss, quest, individual, cap in ((True, None, .095, .329198049375), (False, "radio_tower", .19, .56953279)):
             with self.subTest(boss=boss):
-                definition = {**rules.ENEMIES["alpha"], "boss": boss}
+                definition = {**rules.ENEMIES["alpha"], "boss": boss, "hp": 10000}
                 definition.pop("boss_quest", None)
                 if quest:
                     definition["boss_quest"] = quest

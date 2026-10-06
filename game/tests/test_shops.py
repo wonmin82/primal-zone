@@ -1,5 +1,6 @@
 """실제 판매자·parser·관찰·bootstrap·Web·지원동 구매 동선."""
 
+import re
 from copy import deepcopy
 from unittest.mock import Mock, patch
 
@@ -46,13 +47,14 @@ class ShopTests(WorldCommandTest):
                 output = self.command(raw)
                 self.assertIn("[" + seller.key + "]", output)
                 for item in {item for catalog in SHOP_CATALOGS.values() for item in catalog["purchase_catalog"]}:
-                    self.assertEqual(ITEMS[item]["name"] in output, item in SHOP_CATALOGS[shop_id]["purchase_catalog"])
+                    # 집중링/정신집중링처럼 이름의 부분 문자열이 겹쳐도 독립 상품으로 검사한다.
+                    self.assertEqual(bool(re.search(r"(?<![가-힣])" + re.escape(ITEMS[item]["name"]) + r" ·", output)), item in SHOP_CATALOGS[shop_id]["purchase_catalog"], item)
                 self.assertNotIn("회수부품", output)
             self.assertIn(seller.key + "에게 물건이름 구매", self.command(seller.key + " 보기"))
             self.assertIn("판매 목록", self.command(seller.key + " 대화"))
 
     def test_bare_targeted_alias_purchases_and_infinite_catalog(self):
-        for shop_id, item in (("supply", "bandage"), ("weapon", "blade"), ("armor", "armor")):
+        for shop_id, item in (("supply", "bandage"), ("weapon", "cutting_machete"), ("armor", "reinforced_vest")):
             seller = self.sellers[shop_id]
             self.char1.location = seller.location
             for raw in (ITEMS[item]["name"] + " 구매", seller.key + "에게 " + ITEMS[item]["name"] + " 구매",
@@ -65,7 +67,7 @@ class ShopTests(WorldCommandTest):
             self.assertIn(ITEMS[item]["name"], self.command("상품"))
 
     def test_wrong_vendor_quantities_insufficient_credits_and_dock_are_atomic(self):
-        for shop_id, item in (("supply", "blade"), ("weapon", "bandage"), ("armor", "spear")):
+        for shop_id, item in (("supply", "cutting_machete"), ("weapon", "bandage"), ("armor", "pioneer_spear")):
             seller = self.sellers[shop_id]
             self.char1.location = seller.location
             before = deepcopy(self.char1.profile())
@@ -78,7 +80,7 @@ class ShopTests(WorldCommandTest):
             self.assertNotIn("1개를 받아", self.command(raw))
             self.assertEqual(self.char1.profile(), before)
         self.char1.location = self.rooms["dock"]
-        for raw in ("상품", "붕대 구매", "강철마체테 구매", "강화조끼 구매"):
+        for raw in ("상품", "붕대 구매", "절단마체테 구매", "강화방호조끼 구매"):
             self.assertIn("상인", self.command(raw))
             self.assertEqual(self.char1.profile(), before)
         self.assertEqual([obj["name"] for obj in multiplayer_state(self.char1)["interactables"]], ["윤대장"])
@@ -122,20 +124,20 @@ class ShopTests(WorldCommandTest):
         seller.location = self.rooms["support_roof"]
         self.char1.location = self.rooms["weapon_shop"]
         before = deepcopy(self.char1.profile())
-        self.command("강철마체테 구매")
+        self.command("절단마체테 구매")
         self.assertEqual(self.char1.profile(), before)
         self.char1.location = seller.location
-        self.assertIn("1개를 받아", self.command("강철마체테 구매"))
+        self.assertIn("1개를 받아", self.command("절단마체테 구매"))
         self.char1.change(lambda p: p.update(combat_target=999))
         before = deepcopy(self.char1.profile())
-        for raw in ("상품", "강철마체테 구매", "무기상에게 강철마체테 구매"):
+        for raw in ("상품", "절단마체테 구매", "무기상에게 절단마체테 구매"):
             self.assertIn("전투 중", self.command(raw))
             self.assertEqual(self.char1.profile(), before)
         self.assertEqual(multiplayer_state(self.char1)["interactables"][0]["actions"], [])
         self.char1.change(lambda p: p.update(combat_target=None))
         self.char1.location = seller.location = self.rooms["grass"]
         before = deepcopy(self.char1.profile())
-        for raw in ("상품", "강철마체테 구매"):
+        for raw in ("상품", "절단마체테 구매"):
             self.assertIn("안전한 곳", self.command(raw))
             self.assertEqual(self.char1.profile(), before)
         self.assertEqual(next(obj for obj in multiplayer_state(self.char1)["interactables"] if obj["name"] == seller.key)["actions"], [])
@@ -163,8 +165,8 @@ class ShopTests(WorldCommandTest):
         for raw in ("승강기", "3층", "동", "북"):
             self.command(raw)
         self.assertEqual(self.char1.zone, "weapon_shop")
-        self.command("강철마체테 구매")
-        self.assertEqual(self.char1.profile()["inventory"]["blade"], 1)
+        self.command("절단마체테 구매")
+        self.assertEqual(self.char1.profile()["inventory"]["cutting_machete"], 1)
         for raw in ("남", "서", "승강기", "1층", "북", "서", "북", "북", "동"):
             self.command(raw)
         self.assertEqual(self.char1.zone, "office")

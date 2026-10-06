@@ -11,21 +11,18 @@ from world.test_headquarters import content_targets
 
 
 class ShopRulesTests(TestCase):
-    def test_catalogs_preserve_all_fourteen_prices_without_legacy_table(self):
-        self.assertEqual({shop: {item: ITEMS[item]["value"] for item in catalog["purchase_catalog"]} for shop, catalog in SHOP_CATALOGS.items()}, {
-            "supply": {"flashlight": 30, "battery": 6, "bandage": 8, "field_ration": 4, "water": 3},
-            "weapon": {"spear": 35, "blade": 60, "carbine": 130},
-            "outpost_weapon": {"jungle_blade": 95, "heavy_carbine": 240},
-            "armor": {"leather_suit": 35, "armor": 65},
-            "outpost_equipment": {"tactical_vest": 85, "heavy_suit": 190},
-        })
+    def test_catalogs_use_final_prices_without_legacy_table(self):
         self.assertFalse(hasattr(content, "SHOP"))
         self.assertFalse(hasattr(content.items, "SHOP"))
         self.assertEqual(errors(content_targets()), [])
+        self.assertNotIn("tactical_pistol", SHOP_CATALOGS["weapon"]["purchase_catalog"])
+        self.assertIn("tactical_pistol", SHOP_CATALOGS["outpost_weapon"]["purchase_catalog"])
+        self.assertIn("ammo_556", SHOP_CATALOGS["weapon"]["purchase_catalog"])
+        self.assertIn("ammo_556", SHOP_CATALOGS["outpost_weapon"]["purchase_catalog"])
 
     def test_wrong_catalog_item_and_combat_purchase_preserve_profile(self):
-        for shop_id, item, combat in (("missing", "bandage", None), ("supply", "blade", None),
-                                      ("weapon", "bandage", None), ("armor", "spear", None),
+        for shop_id, item, combat in (("missing", "bandage", None), ("supply", "cutting_machete", None),
+                                      ("weapon", "bandage", None), ("armor", "pioneer_spear", None),
                                       ("weapon", "missing", None), ("supply", "bandage", 999)):
             with self.subTest(shop_id=shop_id, item=item, combat=combat):
                 profile = rules.new_profile()
@@ -41,7 +38,7 @@ class ShopRulesTests(TestCase):
                 self.assertTrue(any("가격" in issue for issue in shop_errors()))
         with patch.dict(SHOP_CATALOGS, supply={**SHOP_CATALOGS["supply"], "purchase_catalog": (*SHOP_CATALOGS["supply"]["purchase_catalog"], "missing")}):
             self.assertTrue(any("아이템 정의" in issue for issue in shop_errors()))
-        with patch.dict(SHOP_CATALOGS, weapon={**SHOP_CATALOGS["weapon"], "purchase_catalog": (*SHOP_CATALOGS["weapon"]["purchase_catalog"], "bandage")}):
+        with patch.dict(SHOP_CATALOGS, weapon={**SHOP_CATALOGS["weapon"], "purchase_catalog": (*SHOP_CATALOGS["weapon"]["purchase_catalog"], "cutting_machete")}):
             self.assertTrue(any("중복" in issue for issue in shop_errors()))
         with patch.dict(SHOP_CATALOGS, supply={**SHOP_CATALOGS["supply"], "purchase_catalog": ()}):
             self.assertTrue(any("비었습니다" in issue for issue in shop_errors()))

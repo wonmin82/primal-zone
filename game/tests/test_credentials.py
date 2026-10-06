@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from evennia.utils.dbserialize import deserialize
 from world import credential_service as credentials
 from world import presentation, rules
 from world.content import ITEMS
@@ -45,18 +46,18 @@ class CredentialTests(Phase5Test):
             with self.subTest(quest=quest):
                 self.prepare(quest)
                 operation = rules.commander_talk if quest == "radio_tower" else rules.jungle_talk
-                result, granted = credentials.issuer_talk(self.char1, identity, operation)
-                self.assertEqual((result, granted), ("complete", True))
+                result, granted, boss_granted = credentials.issuer_talk(self.char1, identity, operation)
+                self.assertEqual((result, granted, boss_granted), ("complete", True, True))
                 self.assertTrue(credentials.has_credential(self.char1, identity))
                 self.assertNotIn(identity, self.char1.profile()["inventory"])
                 self.assertIn(ITEMS[identity]["name"], presentation.inventory(self.char1.profile()))
                 before = self.state()
-                self.assertEqual(credentials.issuer_talk(self.char1, identity, operation), ("progress", False))
+                self.assertEqual(credentials.issuer_talk(self.char1, identity, operation), ("progress", False, False))
                 self.assertEqual(self.state(), before)
                 row = next(row for row in credentials.credential_items(self.char1) if row.definition_id == identity)
                 api.delete_item(row, operation="burn")
                 rewards = dict(self.char1.profile())
-                self.assertEqual(credentials.issuer_talk(self.char1, identity, operation), ("progress", True))
+                self.assertEqual(credentials.issuer_talk(self.char1, identity, operation), ("progress", True, False))
                 self.assertEqual(dict(self.char1.profile()), rewards)
 
     def test_reward_and_credential_failures_restore_all_state(self):
@@ -93,7 +94,7 @@ class NativeCredentialTests(Phase5Test):
     def test_native_quest_reward_does_not_write_legacy_inventory(self):
         self.char1.change(lambda p: p["quests"]["radio_tower"].update(started=True, generator_fixed=True, boss_defeated=True))
         credentials.issuer_talk(self.char1, "outpost_supply_pass", rules.commander_talk)
-        self.assertEqual(self.char1.profile()["inventory"], {})
+        self.assertEqual(deserialize(self.char1.db.profile)["inventory"], {})
         self.assertEqual(ItemEntity.objects.get(owner_object=self.char1, definition_id="bandage").quantity, 3)
 
     def test_native_quest_save_failure_restores_reward_tree_and_sequence(self):

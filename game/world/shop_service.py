@@ -95,7 +95,9 @@ def buy(character, shop, identity):
 
             create_firearm(identity, owner_object=character, mode="full_standard")
         else:
-            api.create_item(identity, location_kind="inventory", owner_object=character)
+            from world.item_inventory import grant
+
+            grant(character, identity, ITEMS[identity].get("purchase_quantity", 1))
         character.save_profile(profile)
 
 

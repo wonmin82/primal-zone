@@ -116,12 +116,14 @@ def shop(shop_id, seller):
     lines = []
     for key in SHOP_CATALOGS[shop_id]["purchase_catalog"]:
         parts = [ft.item(key), ft.token("reward", format_currency(rules.purchase_price(key)))]
+        if ITEMS[key].get("purchase_quantity", 1) != 1:
+            parts.append(f"{ITEMS[key]['purchase_quantity']}발 묶음")
         lines.append(ft.join(parts, " · "))
     lines.append(
         ft.text(
             "물건이름 ",
             ft.token("command", "구매"),
-            " (1개씩)",
+            " (표시된 구매 단위)",
         )
     )
     return ft.compact(ft.token("npc", seller), *lines)

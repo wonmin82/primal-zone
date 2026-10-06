@@ -26,12 +26,12 @@ class FirearmDomainTests(TestCase):
                 self.assertEqual(firearms.needs_shot(action, weapon),
                                  weapon == "firearm" and action in ("attack", "shooting", "suppress"))
         profile = rules.new_profile()
-        profile["equipment"]["weapon"] = "machete"
+        profile["equipment"]["weapon"] = "explorer_machete"
         for action in ("attack", "suppress"):
             profile["queued_action"] = action
             outcome = rules.player_attack(profile, "scavenger", 100, 2.5, Random(1))[1]
             self.assertFalse(outcome["shot_fired"])
-        profile["equipment"]["weapon"] = "carbine"
+        profile["equipment"]["weapon"] = "guard_carbine"
         profile["inventory"]["bandage"] = 1
         profile["hp"] = 30
         profile["queued_action"] = "bandage"

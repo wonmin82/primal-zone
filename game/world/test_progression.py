@@ -198,7 +198,7 @@ class ProgressionTests(TestCase):
                 with self.subTest(level=level, action=action):
                     p = at_level(level)
                     p.update(mental=cost - 1, combat_target=1)
-                    p["equipment"]["weapon"] = "carbine" if action == "shooting" else "machete"
+                    p["equipment"]["weapon"] = "guard_carbine" if action == "shooting" else "explorer_machete"
                     target = at_level(level)
                     target["hp"] -= 10
                     before, target_before = deepcopy(p), deepcopy(target)
@@ -244,7 +244,7 @@ class ProgressionTests(TestCase):
             with self.assertRaises(rules.RuleError):
                 rules.queue_action(p, action, 100)
             self.assertEqual(p, before)
-        p["equipment"]["weapon"] = "carbine"
+        p["equipment"]["weapon"] = "guard_carbine"
         before = deepcopy(p)
         with self.assertRaises(rules.RuleError):
             rules.queue_action(p, "heavy", 100)
@@ -315,18 +315,19 @@ class ProgressionTests(TestCase):
         p.update(combat_target=1, queued_action="insight")
         p["skills"].update(attack=30, insight=10, shooting=20, heavy=20)
         rules.player_attack(p, "alpha", 100, 2.5)
-        p["equipment"]["weapon"] = "carbine"
+        p["equipment"]["weapon"] = "guard_carbine"
         p["queued_action"] = "shooting"
         damage, outcome = rules.player_attack(p, "alpha", 102.5, 2.5, Mock(randint=Mock(return_value=0)))
-        self.assertEqual(damage, 113)
+        # 최종 guard_carbine 공격8/shooting+2%, 능선 Boss DEF6를 적용한다.
+        self.assertEqual(damage, 105)
         self.assertTrue(outcome["insight"])
         self.assertIsNone(p["insight"])
         self.assertEqual(p["mental"], 331 - 17 - 12)
-        p["equipment"]["weapon"] = "machete"
+        p["equipment"]["weapon"] = "explorer_machete"
         p["queued_action"] = "insight"
         rules.player_attack(p, "alpha", 110, 2.5)
         p["queued_action"] = "heavy"
-        self.assertEqual(rules.player_attack(p, "alpha", 112.5, 2.5, Mock(randint=Mock(return_value=0)))[0], 162)
+        self.assertEqual(rules.player_attack(p, "alpha", 112.5, 2.5, Mock(randint=Mock(return_value=0)))[0], 150)
 
     def test_passive_defense_after_fixed_defense_and_charge_and_breathing_tiers(self):
         p = at_level(20)

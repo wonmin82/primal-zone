@@ -31,7 +31,10 @@ def at_server_start():
     how it was shut down.
     """
     from world.bootstrap import build_world
+    from world.item_runtime import initialize_fresh, require_runtime
 
+    initialize_fresh()
+    require_runtime()
     build_world()
     from evennia import create_script
     from typeclasses.scripts import WorldLifecycle

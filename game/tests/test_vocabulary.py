@@ -47,7 +47,7 @@ class VocabularyTests(WorldCommandTest):
             self.assertIn("명령을 확인", self.raw(old), old)
             self.assertEqual(self.char1.profile_snapshot(), before)
         for command in ("상품", "무기상 상품"):
-            self.assertIn("강철마체테", self.raw(command))
+            self.assertIn("절단마체테", self.raw(command))
 
     def test_healing_aliases_bandage_and_medical_services(self):
         for command in ('치료', '힐', 'heal'):

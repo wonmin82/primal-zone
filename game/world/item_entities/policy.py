@@ -14,6 +14,7 @@ TREE_OPERATION_SCOPES = {
     "burn": "tree",
     "loot": "tree",
     "consume": "tree",
+    "submit": "tree",
     "load": "root",
     "unload": "root",
 }

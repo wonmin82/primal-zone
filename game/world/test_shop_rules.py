@@ -11,7 +11,7 @@ from world.stack_quantity import parse_stack_quantity
 
 class ShopV2RulesTests(TestCase):
     def test_category_resale_is_independent_of_purchase_and_progression(self):
-        for shop, identity in (("weapon", "jungle_blade"), ("armor", "tactical_vest")):
+        for shop, identity in (("weapon", "jungle_longblade"), ("armor", "tactical_protective_suit")):
             self.assertNotIn(identity, SHOP_CATALOGS[shop]["purchase_catalog"])
             self.assertTrue(accepts(shop, ITEMS[identity]))
             profile = rules.new_profile()
@@ -24,7 +24,7 @@ class ShopV2RulesTests(TestCase):
 
     def test_quantity_suffix_preserves_numeric_names_and_instance_selectors(self):
         for value, result in (("붕대", ("붕대", 1)), ("붕대 3개", ("붕대", 3)),
-                              ("붕대 모두", ("붕대", None)), ("강철마체테 2", ("강철마체테 2", 1)),
+                              ("붕대 모두", ("붕대", None)), ("절단마체테 2", ("절단마체테 2", 1)),
                               ("9mm 권총탄 12개", ("9mm 권총탄", 12)),
                               ("5.56mm 표준탄창", ("5.56mm 표준탄창", 1))):
             self.assertEqual(parse_stack_quantity(value), result)

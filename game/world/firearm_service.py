@@ -6,6 +6,7 @@ from time import time
 from world import firearms, rules
 from world.content import ITEMS
 from world.equipment_service import active_weapon_item
+from world.firearms import STANDARD_MAGAZINES
 from world.item_entities import api
 from world.item_entities.models import ItemEntity
 from world.item_entities.services import (
@@ -17,8 +18,6 @@ from world.item_entities.services import (
 )
 from world.multiplayer import COMBAT_INTERVAL, world_change
 
-STANDARD_MAGAZINES = {"pistol_9mm": "mag_9_standard", "carbine_556": "mag_556_standard",
-                      "rifle_762": "mag_762_standard"}
 AMMO_DEFINITIONS = {"9mm": "ammo_9", "556mm": "ammo_556", "762mm": "ammo_762"}
 
 
@@ -55,7 +54,7 @@ def compatible_magazines(character, firearm):
 
 
 @domain_errors
-def create_firearm(definition_id, *, owner_object, mode="no_mag", rounds=None, location_kind="inventory"):
+def create_firearm(definition_id, *, owner_object, mode="no_mag", rounds=None, location_kind="inventory", magazine_definition=None):
     """획득 형태만 제공한다. 실제 상점·보상·drop·migration에는 아직 연결하지 않는다."""
     if mode not in ("no_mag", "empty", "partial", "full_standard"):
         raise rules.RuleError("총기 획득 형태를 확인하세요.")
@@ -69,7 +68,11 @@ def create_firearm(definition_id, *, owner_object, mode="no_mag", rounds=None, l
             if rounds is not None:
                 raise rules.RuleError("탄창 없는 획득에는 잔탄을 지정할 수 없습니다.")
             return firearm
-        identity = STANDARD_MAGAZINES[family]
+        identity = magazine_definition or STANDARD_MAGAZINES[family]
+        if ITEMS.get(identity, {}).get("magazine", {}).get("family") != family:
+            raise rules.RuleError("획득 탄창의 family가 총기와 일치하지 않습니다.")
+        if mode == "full_standard" and identity != STANDARD_MAGAZINES[family]:
+            raise rules.RuleError("full_standard 획득은 표준 탄창을 사용합니다.")
         capacity = ITEMS[identity]["magazine"]["capacity"]
         if mode == "partial" and (type(rounds) is not int or not 0 < rounds < capacity):
             raise rules.RuleError("부분 탄창의 잔탄은 0과 용량 사이여야 합니다.")

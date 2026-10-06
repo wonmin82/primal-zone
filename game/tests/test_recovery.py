@@ -96,10 +96,10 @@ class RecoveryTests(WorldCommandTest):
     def test_equipment_transition_applies_only_future_time(self):
         self.char1.location = self.rooms["staging_room"]
         self.char1.change(lambda p: p["equipment"].update(weapon=None))
-        definition = {**ITEMS["machete"], "recovery_bonus": {"mental_per_minute": 6}}
-        with patch.dict(ITEMS, machete=definition):
+        definition = {**ITEMS["explorer_machete"], "modifiers": [{"target": "recovery.mental_per_minute", "op": "add", "value": 6, "scope": "equipped"}]}
+        with patch.dict(ITEMS, explorer_machete=definition):
             self.clock.return_value = 109
-            self.char1.execute_cmd("낡은마체테 무장")
+            self.char1.execute_cmd("탐사용 벌목도 무장")
             self.assertEqual(self.char1.profile()["mental"], 10)
             self.clock.return_value = 120
             self.char1.reconcile_recovery(120)

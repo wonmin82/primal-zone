@@ -45,11 +45,11 @@ class CommandShortcutsTests(WorldCommandTest):
     def test_purchase_then_wield_and_location_specific_commands_run_sequentially(self):
         self.char1.location = self.rooms["weapon_shop"]
         self.char1.change(lambda p: p.update(credits=100))
-        self.run_raw("강철마체테 구매, 낡은마체테 해제, 강철마체테 무장 해")
+        self.run_raw("절단마체테 구매, 탐사용 벌목도 해제, 절단마체테 무장 해")
         profile = self.char1.profile_snapshot()
-        self.assertEqual(profile["inventory"]["blade"], 1)
-        self.assertEqual(profile["equipment"]["weapon"], "blade")
-        self.assertEqual(profile["credits"], 40)
+        self.assertEqual(profile["inventory"]["cutting_machete"], 1)
+        self.assertEqual(profile["equipment"]["weapon"], "cutting_machete")
+        self.assertEqual(profile["credits"], 45)
         self.run_raw("귀환, 승강기, 3층, 동, 북 해")
         self.assertEqual(self.char1.zone, "weapon_shop")
 
@@ -234,6 +234,7 @@ class CommandShortcutsTests(WorldCommandTest):
         self.assertIsNone(self.char1.ndb.shortcut_delete_all_request)
 
     def test_indirect_request_cannot_create_or_replace_pending(self):
+        self.enterContext(patch("typeclasses.explorers.time", return_value=100))
         self.register("삭제요청", "줄임말 모두 삭제")
         before = self.char1.profile_snapshot()
         for raw in ("삭제요청", "상태, 줄임말 모두 삭제 해"):
@@ -248,6 +249,8 @@ class CommandShortcutsTests(WorldCommandTest):
             self.assertEqual(self.char1.ndb.shortcut_delete_all_request, request)
 
     def test_shortcut_confirmation_preserves_pending_for_direct_confirmation(self):
+        # 확인 입력의 무변경 계약을 실제 시각의 recovery 경계와 분리한다.
+        self.enterContext(patch("typeclasses.explorers.time", return_value=100))
         self.register("a", "상태")
         self.register("확정", "줄임말 모두 삭제 확인")
         before = self.char1.profile_snapshot()

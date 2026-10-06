@@ -194,8 +194,12 @@ class Scenario:
             enemy_id = first.state["enemies"][0]["id"]
             started = monotonic()
             await first.act("어린청소룡 사냥", lambda state: state["combat_target"] is not None)
-            await second.act("어린청소룡 사냥", lambda state: state["combat_target"] is not None)
-            await outsider.expect_text("어린청소룡 사냥", "다른 파티")
+            # 단축 전투에서 두 번째 플레이어의 화면 전송을 기다리는 사이 적이 죽지 않도록
+            # 참여와 outsider 거절 요청을 같은 시점에 보낸다. 권한은 서버가 판정한다.
+            await asyncio.gather(
+                second.act("어린청소룡 사냥", lambda state: state["combat_target"] is not None),
+                outsider.expect_text("어린청소룡 사냥", "다른 파티"),
+            )
             await first.until(lambda state: state["player_round"] >= 1, self.timeouts.combat)
             first_round = monotonic() - started
             if self.harness.mode == "full":
@@ -211,9 +215,8 @@ class Scenario:
             death_seen = monotonic()
             corpse_id = first.state["corpses"][0]["id"]
             await second.until(lambda state: any(c["id"] == corpse_id for c in state["corpses"]))
-            scrap = next(entry for entry in second.state["corpses"][0]["loot"]
-                         if entry["kind"] == "item" and entry["id"] == "scrap")
-            assert scrap["assigned_name"] == first.name and scrap["can_take"] and scrap["protected"]
+            physical = [entry for entry in second.state["corpses"][0]["loot"] if entry["kind"] == "item"]
+            assert all(entry["assigned_name"] == first.name and entry["can_take"] and entry["protected"] for entry in physical)
             await outsider.until(lambda state: bool(state["corpses"]))
             await outsider.expect_text("시체에서 모두 가져", "보호된 전리품")
             # 권한을 확인하고 남겨 두어 같은 시체의 ground 전환을 검증한다.
@@ -240,8 +243,7 @@ class Scenario:
                 not entry["protected"] for ground in state["ground_loot"] for entry in ground["loot"]),
                 self.timeouts.lifecycle)
             self.elapsed("loot protection expiry", death_seen, self.timings["LOOT_PROTECTION_SECONDS"])
-            await outsider.act("모두 가져", lambda state: count_item(state, "scrap") == 1
-                               and not state["ground_loot"])
+            await outsider.act("모두 가져", lambda state: not state["ground_loot"])
             assert outsider.state["credits"] == 156
             self.report("protection", "outsider blocked → allowed / 미회수 6칩 자유 획득")
             self.phase = "shop"
@@ -250,19 +252,19 @@ class Scenario:
             await route(first, (("동", "support_3f_e1"),
                                 ("북", "weapon_shop")))
             assert any(obj["name"] == "무기상" for obj in first.state["interactables"])
-            await first.expect_text("무기상 상품", "60칩")
+            await first.expect_text("무기상 상품", "55칩")
             before_credits = first.state["credits"]
             # RNG drop은 남겨 둔 ground에서 outsider만 회수한다. 구매 결과는 미리 지급하지 않는다.
-            assert count_item(first.state, "blade") == 0
-            await first.act("무기상에게 강철마체테 구매", lambda state: count_item(state, "blade") == 1)
-            assert first.state["credits"] == before_credits - 60
-            await first.expect_text("강철마체테 가치", "매입가는 30칩")
+            assert count_item(first.state, "cutting_machete") == 0
+            await first.act("무기상에게 절단마체테 구매", lambda state: count_item(state, "cutting_machete") == 1)
+            assert first.state["credits"] == before_credits - 55
+            await first.expect_text("절단마체테 가치", "매입가는 27칩")
             single_sale = next(action for obj in first.state["interactables"] for action in obj["actions"]
-                               if action["label"] == "강철마체테 · 30칩 판매")
-            assert single_sale["command"].endswith("강철마체테 판매")
-            await first.act(single_sale["command"], lambda state: count_item(state, "blade") == 0)
-            assert first.state["credits"] == before_credits - 30
-            await first.act("무기상에게 강철마체테 구매", lambda state: count_item(state, "blade") == 1)
+                               if action["label"] == "절단마체테 · 27칩 판매")
+            assert single_sale["command"].endswith("절단마체테 판매")
+            await first.act(single_sale["command"], lambda state: count_item(state, "cutting_machete") == 0)
+            assert first.state["credits"] == before_credits - 28
+            await first.act("무기상에게 절단마체테 구매", lambda state: count_item(state, "cutting_machete") == 1)
             self.report("shop", "옥상 귀환 / 승강기 / 가치·구매·판매 / 재구매")
             self.phase = "persistence"
             saved = {key: first.state[key] for key in

@@ -17,6 +17,10 @@ def get_room(zone_id):
 
 
 def build_world():
+    from world.item_runtime import initialize_fresh, maintenance
+
+    if not maintenance.get():
+        initialize_fresh()
     with world_change():
         return _build_world()
 
@@ -53,8 +57,12 @@ def _build_world():
                 # 정의가 소유하는 값만 갱신하고 현재 피해·교전·재생성 상태는 보존한다.
                 enemy.key = definition["name"]
                 enemy.db.enemy_id = enemy_id
-                enemy.db.max_hp = definition["hp"]
-                enemy.db.hp = min(enemy.db.hp, definition["hp"])
+                from world.loot_rules import boss_hp, updated_enemy_hp
+
+                maximum = boss_hp(definition["hp"], enemy.db.scaling_participants or 1) if definition.get("boss") else definition["hp"]
+                enemy.db.hp = updated_enemy_hp(enemy.db.hp, enemy.db.max_hp, maximum,
+                                               enemy.db.state, bool(enemy.db.combatants))
+                enemy.db.max_hp = maximum
                 if not enemy.db.combatants and enemy.location != room:
                     enemy.location = room
             enemy.attributes.remove("suppression")
