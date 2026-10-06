@@ -211,7 +211,7 @@ class LightingTests(WorldCommandTest):
     def test_shared_generator_light_is_independent_of_other_player_quest(self):
         self.char1.location = self.char2.location = self.rooms["generator"]
         self.assertEqual(snapshot_for(self.char1.location, 100).ambient_light, "dim")
-        self.char1.change(lambda p: (p["quests"]["radio_tower"].update(started=True, record_read=True), p["inventory"].update(scrap=3)))
+        self.char1.change(lambda p: (p["quests"]["radio_tower"].update(started=True, record_read=True), p["inventory"].update(generator_repair_part=3)))
         restore_outpost_power(self.char1)
         self.assertTrue(self.char1.profile()["quests"]["radio_tower"]["generator_fixed"])
         self.assertFalse(self.char2.profile()["quests"]["radio_tower"]["generator_fixed"])
@@ -222,7 +222,7 @@ class LightingTests(WorldCommandTest):
         self.assertEqual(deserialize(self.script.db.facilities), saved)
 
     def test_generator_failure_rolls_back_shared_power_and_personal_progress(self):
-        self.char1.change(lambda p: (p["quests"]["radio_tower"].update(started=True, record_read=True), p["inventory"].update(scrap=3)))
+        self.char1.change(lambda p: (p["quests"]["radio_tower"].update(started=True, record_read=True), p["inventory"].update(generator_repair_part=3)))
         before = deepcopy(self.char1.profile())
         with self.assertRaises(RuntimeError), world_change():
             restore_outpost_power(self.char1)
@@ -286,7 +286,7 @@ class LightingTests(WorldCommandTest):
             write.assert_not_called()
 
     def test_future_facility_schema_stops_personal_progress_and_preserves_storage(self):
-        self.char1.change(lambda p: (p["quests"]["radio_tower"].update(started=True, record_read=True), p["inventory"].update(scrap=3)))
+        self.char1.change(lambda p: (p["quests"]["radio_tower"].update(started=True, record_read=True), p["inventory"].update(generator_repair_part=3)))
         future = {"version": 2, "states": {"outpost_power": True}}
         self.script.db.facilities = future
         before = deepcopy(self.char1.profile())
@@ -425,7 +425,7 @@ class LightingTests(WorldCommandTest):
     def test_shared_power_event_only_on_first_activation_and_scoped_rooms(self):
         for player in (self.char1, self.char2):
             player.location = self.rooms["generator"]
-            player.change(lambda p: (p["quests"]["radio_tower"].update(started=True, record_read=True), p["inventory"].update(scrap=3)))
+            player.change(lambda p: (p["quests"]["radio_tower"].update(started=True, record_read=True), p["inventory"].update(generator_repair_part=3)))
         with patch.object(self.char2.sessions, "count", return_value=1), patch.object(self.char2, "msg") as msg:
             restore_outpost_power(self.char1)
             self.assertTrue(any("시설 조명이 하나둘" in str(call.args[0]) for call in msg.call_args_list))
@@ -434,5 +434,5 @@ class LightingTests(WorldCommandTest):
             restore_outpost_power(self.char2)
             self.assertFalse(any("시설 조명이 하나둘" in str(call.args[0]) for call in msg.call_args_list))
         for player in (self.char1, self.char2):
-            self.assertEqual(player.profile()["inventory"].get("scrap", 0), 0)
+            self.assertEqual(player.profile()["inventory"].get("generator_repair_part", 0), 0)
             self.assertEqual(player.profile()["xp"], 50)

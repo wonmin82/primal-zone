@@ -248,6 +248,8 @@ class CommandShortcutsTests(WorldCommandTest):
             self.assertEqual(self.char1.ndb.shortcut_delete_all_request, request)
 
     def test_shortcut_confirmation_preserves_pending_for_direct_confirmation(self):
+        # 확인 입력의 무변경 계약을 실제 시각의 recovery 경계와 분리한다.
+        self.enterContext(patch("typeclasses.explorers.time", return_value=100))
         self.register("a", "상태")
         self.register("확정", "줄임말 모두 삭제 확인")
         before = self.char1.profile_snapshot()

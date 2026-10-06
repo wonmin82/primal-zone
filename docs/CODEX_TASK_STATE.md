@@ -13,7 +13,7 @@
 - final report는 실제 지급한 Boss unique 이름을 안내하고 반복 대화/Credential 재발급에서 unique를 다시 지급한 것처럼 표시하지 않는다.
 - 경비카빈 ammo/gross 약44.6%는 Phase 7 full balance simulation에서 melee/firearm progression·shots-to-kill·refill cadence와 함께 검토한다. 이번 수정에 확정 가격·적 수치·drop·공식 변경은 없다.
 
-검증 명령·실패 보정 이력은 [playtest](playtest.md)의 PR #34 review fixes를 따른다. 최종 push의 정확한 run/HEAD/CI 결과는 PR Review fixes/Validation에 별도로 기록한다. 실제 플레이 DB에는 apply/cutover를 실행하지 않는다. 아래 초기 Phase 6/이전 Phase 기록은 당시 이력으로 보존한다.
+검증 명령·실패 보정 이력은 [playtest](playtest.md)의 PR #34 review fixes를 따른다. 최초 리뷰 수정 CI37441493018은 pure/Quick 성공, 기존 발전기 fixture4건과 shortcut 시각 경계1건으로 통합 실패했다. Test fixture만 보정한 combat/lighting/shortcut56개와 check/diff가 성공했으며 production 코드는 동일하다. 최종 push의 정확한 run/HEAD/CI 결과는 PR Review fixes/Validation에 별도로 기록한다. 실제 플레이 DB에는 apply/cutover를 실행하지 않는다. 아래 초기 Phase 6/이전 Phase 기록은 당시 이력으로 보존한다.
 
 ## Phase 6 — Final Content + Balance + Full Migration + Runtime Cutover (2026-10-06)
 

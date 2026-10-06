@@ -1221,3 +1221,8 @@ Full의 actual first combat round는 2.804초, 시체→ground 29.924초, 같은
 - 최종 `scripts/dev.py test tests.test_phase6_runtime.Phase6RuntimeTests.test_existing_entitlements_do_not_repeat_cache_parts_or_report_credential tests.test_integration.GameplayIntegrationTests.test_cache_reward_is_personal_and_once_only tests.test_item_entities --parallel 2 --reverse`:28개/13.662초 성공. 이미 지급한 정비부품은 cache에서 추가하지 않고 기존 출입증도 final report에서 신규 지급으로 안내하지 않는다.
 - 최종 `scripts/dev.py check` / `git diff --check`:성공. Full smoke helper는 보급상자에서 정비부품을 확보하도록 실제 진행 경로만 갱신했으며 smoke-full은 실행하지 않았다.
 - 실제 플레이 DB SHA256 `B1318296F505B9B7522FCBDEDFF7642A06CF055E9DE72802198C70E6B8A7F700`,733184bytes, UTCmtime2026-09-22 12:29:13은 불변이다.
+
+
+- Review-fix HEAD `1eddc1abf73de8e6109fb5784d8c97ae8701e760`의 Game checks37441493018:check/pure199개/0.783초/Quick27.102초 성공. 통합563개/196.702초에서 이전 발전기 scrap fixture4건 오류와 shortcut의 실제 recovery 경계 이동1건 실패가 있었다. 실패 이력을 보존한다.
+- CI 보정은 `tests.test_combat`/`tests.test_lighting`의 generator 준비 자원·소모 기대를 정비부품으로 바꾸고, 실패한 shortcut confirmation fixture의 Explorer 시각만100으로 고정했다. Production HP/가격/drop/recovery/타이머 변경은 없다.
+- `scripts/dev.py test tests.test_combat tests.test_lighting tests.test_command_shortcuts --parallel 2 --reverse`:56개/27.327초 성공(runner36.628초). 후속 check/diff 성공. 기존125/6/28/53개 결과와 합산하거나 반복 실행하지 않는다. 최신 보정 HEAD의 CI는 PR Validation에 별도 기록한다.

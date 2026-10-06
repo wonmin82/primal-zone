@@ -104,7 +104,7 @@ class SharedCombatTests(WorldCommandTest):
         profile["skills"].update(attack=4, shooting=4, defense=4, suppress=4)
         profile["inventory"]["bandage"] = 8
         rules.treat(profile, safe=True)
-        rules.add_item(profile, "scrap", 3)
+        rules.add_item(profile, "generator_repair_part", 3)
         for item in ("guard_carbine", "reinforced_vest"):
             rules.add_item(profile, item)
             slot = rules.ITEMS[item]["slot"]
