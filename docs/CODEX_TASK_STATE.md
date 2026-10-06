@@ -1,3 +1,23 @@
+## Phase 7A — Baseline & Documentation Closeout (2026-10-06)
+
+- Base main: `75f41316a5e174df2a02ade46a7ac03dc8924318` (PR #34 merge). Branch: `codex/phase7a-baseline-docs-closeout`. 시작 tree clean, 열린 PR 없음, Phase 6 소스 branch는 원격/로컬에서 제거되어 있었다. 이후 예상 밖 main 변경은 없었다.
+- 목적: 현재 runtime 문서와 historical Phase 1~6 기록 분리, fresh/legacy 설치 경로·지원 topology·Phase 7A/B/C 완료 기준 정리, 전체 자동 기준선과 Quick/Full smoke 안정성 검증. 새 gameplay 기능·수치 tuning은 하지 않는다.
+- 현재 migration할 실제 플레이 DB는 없다. 최종 운영 시작은 fresh empty SQLite → Django schema → 첫 서버 시작의 native ItemRuntime.version=1/world bootstrap → 새 Explorer다. Legacy tooling은 구버전 DB/backup 호환·regression용이다.
+- 지원 V1 topology는 SQLite + single Evennia server다. PostgreSQL row locking/concurrency/backup 목적·전환 조건·필요 작업은 [roadmap](postgresql-transition.md)에 문서화했으며 설치·접속·이관·contention 검증은 하지 않았다. PostgreSQL/multi-server는 Phase 7 exit criterion이 아니다.
+- README의 오래된 가격·회복 장비·완료된 미래 표현과 실제 본부 방 수를 정리했다. Architecture 및 item/equipment/lighting/loot/credential/shop 문서는 현재 Entity SSOT를 우선하고 historical backend/catalog 경계를 별도 섹션으로 보존한다. Installation과 item-migration은 fresh 초기화와 legacy explicit upgrade를 분리한다.
+- [Phase 7 audit](phase7-final-integration-audit.md)의 7B/7C/Infrastructure checklist는 미완료로 유지한다. Browser·실제 OS IME·1~4인 수동 E2E·Canonical Legacy Migration Corpus는 7B, full balance/경비카빈 ammo-gross 약 44.6%/최종 fresh operational DB는 7C다.
+- Local baseline: `scripts/dev.py check` 성공. `scripts/dev.py test --parallel 2`는 pure 200개/6.304초, integration 568개/396.771초 (runner 412.498초) 성공. 이후 gameplay/schema/의존성 변경 없이 smoke 인프라·그 회귀만 보완했다. 최종 `world.test_smoke` 12개/2.740초와 `tests.test_smoke_infrastructure --parallel 2 --reverse` 3개/12.251초(runner 24.900초)가 성공했다.
+- Full 준비 보완 전 Quick 경로 연속 #1/#2/#3: 113.180초 / 93.723초 / 92.409초 성공. 초기 단축 점유/참여·0.25초 join·1초 corpse 경계 실패는 Quick 전용 설정/요청 순서를 보완했다. 2.5/10/2/20초 중간 실행의 outsider 응답 timeout 1건은 실제 응답 기록이 없어 정확한 원인을 확정하지 않았으며 마지막 응답 진단을 추가했다. 실패·중간 성공은 최종 3회와 구분해 [playtest](playtest.md)에 보존한다.
+- Full 최종 성공: 621.653초(launcher622.694초). corpse29.191초/respawn43.950초/protection119.614초, 두 임무/보스/최종 보고·HQ·패배/회복·실제 Portal+Server restart/relogin·native UUID/sequence/tree/state/storage/loot 보존을 확인했다. 광원은 정상 OFF/잔량 정산·참조 제거를 별도 검사한다. 준비금/교관 위치/전투 선택과 restart predicate의 실패4회 및 보완 이력은 playtest에 보존한다. Production gameplay 타이머·가격·보상·balance는 변경하지 않았다.
+
+아래 Phase 1~6 기록은 각 작업 시점의 historical record다. 당시 실패·미실행 사실을 현재 결과로 소급 수정하지 않는다.
+
+- Full 성공 뒤 동일 최종 code Quick #1/#2/#3:91.901초/90.169초/88.972초 모두 성공. 각 실행을 별도 기록하며 앞선 성공·재실행과 합산하지 않는다.
+- 개발 DB 전후 SHA256 `B1318296F505B9B7522FCBDEDFF7642A06CF055E9DE72802198C70E6B8A7F700`,733184bytes,mtime_ns1790080153765082800 불변. 모든 smoke는 별도 DB/계정/owned process와 cleanup을 사용했다.
+- Findings:production P0/P1/P2 없음. P3/harness 준비·관찰·native restart 검사를 보완했다. 이전 outsider 응답 timeout1건은 당시 응답 미수집으로 원인을 확정하지 않았고 진단을 추가했다. 최종 연속3회·Full 성공으로 기준선은 통과했으며 이 reliability 이력은 notes로 유지한다. Documentation의 stale 현재형은 정리하고 historical 결과는 보존했다.
+- 검증한 최종 smoke code는 `f1128d09691fc2774f7439efb4de690ee7567bdf`에 커밋됐다. 이후 문서 마감만으로 동일 로컬 검사를 반복하지 않는다.
+- Local 기준으로 Phase 7B 진입 가능이며 PR 생성·exact latest HEAD CI를 확인한 뒤 원격 마감 결과를 기록한다. Phase 7B/7C와 PostgreSQL 작업은 실행하지 않는다.
+
 ## Phase 6 — PR #34 문서 마감·병합 인계 (2026-10-06)
 
 사용자가 문서 마감 후 PR #34 병합과 소스 브랜치 삭제를 승인했다. 구현·리뷰 보정 기준 HEAD는 `07eeec845128f450e4606c28f1c1239650d86c5b`이며 당시 최신 main `94bc1e788fec5547841fb5f87e105854a69cc92b`를 포함한다. 이후 문서 마감은 실행 코드·schema·의존성을 변경하지 않는다.
