@@ -113,7 +113,9 @@ class ZoneRoom(DefaultRoom):
             )
         )
         for dropped in (obj for obj in room_loot(self, corpse=False) if obj in pool):
-            for entry in dropped.db.entries:
+            from world.loot_service import source_entries
+
+            for entry in source_entries(dropped):
                 from world.loot_assets import asset_text, normalize_entry
 
                 entry = normalize_entry(entry)

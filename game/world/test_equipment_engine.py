@@ -14,7 +14,7 @@ from world.item_entities.policy import definition_errors
 
 class EquipmentEngineTests(TestCase):
     def profile(self, modifiers, weapon_type="melee"):
-        data = {**deepcopy(ITEMS["machete"]), "equipment_properties": {
+        data = {**deepcopy(ITEMS["explorer_machete"]), "equipment_properties": {
             "slot": "hands", "role": "weapon", "hands_required": 1,
             "weapon_type": weapon_type, "weapon_attack": 2}, "modifiers": modifiers}
         item = eq.item_snapshot("fixture", data, item_id="opaque")
@@ -33,7 +33,7 @@ class EquipmentEngineTests(TestCase):
         self.assertEqual(len(mod.TARGETS), 15)
 
     def test_invalid_definition_metadata_is_rejected_early(self):
-        valid = {**deepcopy(ITEMS["machete"]), "equipment_properties": {
+        valid = {**deepcopy(ITEMS["explorer_machete"]), "equipment_properties": {
             "slot": "hands", "role": "weapon", "hands_required": 1, "weapon_type": "melee"}}
         for key, value in (("slot", "unknown"), ("slot", []), ("role", None),
                            ("hands_required", 3), ("hands_required", True), ("weapon_type", None),
@@ -106,29 +106,28 @@ class EquipmentEngineTests(TestCase):
         result = rules.support_action(profile, "breathing", 100)
         self.assertEqual(result["amount"], pg.breathing_amount(40, 1) + 3)
 
-    def test_legacy_all_known_hand_metadata_and_numeric_translation(self):
-        from world.equipment_legacy import LEGACY_HAND_UNITS
-
-        for identity in ("machete", "blade", "spear", "jungle_blade", "carbine", "heavy_carbine"):
+    def test_structured_final_metadata_and_legacy_numeric_adapter(self):
+        for identity in ("explorer_machete", "cutting_machete", "pioneer_spear", "jungle_longblade", "guard_carbine", "heavy_rifle"):
             item = eq.item_snapshot(identity, ITEMS[identity])
+            props = ITEMS[identity]["equipment_properties"]
             self.assertEqual((item.slot, item.role, item.hands_required, item.weapon_attack),
-                             ("hands", "weapon", LEGACY_HAND_UNITS.get(identity, 1), ITEMS[identity]["attack"]))
-        for identity in ("vest", "leather_suit", "armor", "tactical_vest", "heavy_suit"):
-            item = eq.item_snapshot(identity, ITEMS[identity])
-            self.assertEqual(item.slot, "body")
-            self.assertEqual(mod.apply("stat.defense", 0, item.modifiers), ITEMS[identity]["defense"])
+                             ("hands", "weapon", props["hands_required"], props["weapon_attack"]))
+        item = eq.item_snapshot("spear", {"name": "기존 창", "slot": "weapon", "attack": 5, "defense": 0})
+        self.assertEqual((item.hands_required, item.weapon_attack), (2, 5))
+        item = eq.item_snapshot("vest", {"name": "기존 조끼", "slot": "armor", "attack": 0, "defense": 3})
+        self.assertEqual((item.slot, mod.apply("stat.defense", 0, item.modifiers)), ("body", 3))
 
     def test_legacy_automatic_replacement_is_atomic(self):
         profile = rules.new_profile()
-        rules.add_item(profile, "blade")
+        rules.add_item(profile, "cutting_machete")
         before = deepcopy(profile)
         with self.assertRaises(rules.RuleError):
-            rules.equip(profile, "blade")
+            rules.equip(profile, "cutting_machete")
         self.assertEqual(profile, before)
         for operation in ("equip", "unequip"):
-            with patch.dict(ITEMS["machete"]["operation_policy"], {operation: False}):
+            with patch.dict(ITEMS["explorer_machete"]["operation_policy"], {operation: False}):
                 with self.assertRaises(rules.RuleError):
-                    getattr(rules, operation)(profile, "machete", "weapon")
+                    getattr(rules, operation)(profile, "explorer_machete", "weapon")
             self.assertEqual(profile, before)
 
     def test_equipment_and_level_up_resource_semantics_are_distinct(self):

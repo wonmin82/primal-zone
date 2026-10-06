@@ -40,3 +40,4 @@ def magazine_resale(rounds, empty_resale, ammo_resale):
 
 def needs_shot(action, weapon_type):
     return weapon_type == "firearm" and action in ("attack", "shooting", "suppress")
+STANDARD_MAGAZINES = {"pistol_9mm": "mag_9_standard", "carbine_556": "mag_556_standard", "rifle_762": "mag_762_standard"}

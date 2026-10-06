@@ -38,7 +38,7 @@ class EquipmentEntityTests(GameCommandTest):
             if role == "weapon":
                 properties.update(weapon_type="melee", weapon_attack=4)
         properties.update(extra)
-        definition = {**deepcopy(ITEMS["machete"]), "name": identity, "aliases": [],
+        definition = {**deepcopy(ITEMS["explorer_machete"]), "name": identity, "aliases": [],
                       "equipment_properties": properties, "modifiers": list(modifiers)}
         self.enterContext(patch.dict(ITEMS, {identity: definition}))
         return definition
@@ -235,7 +235,7 @@ class EquipmentEntityTests(GameCommandTest):
         before_profile = dict(self.char2.profile())
         active = service.active_weapon(self.char2)
         self.assertIsInstance(active, eq.EquipmentItem)
-        self.assertEqual(active.definition_id, "machete")
+        self.assertEqual(active.definition_id, "explorer_machete")
         self.assertEqual(active.weapon_type, "melee")
         self.assertIsNone(active.identity)
         self.assertIsNone(service.active_weapon_item(self.char2))
@@ -244,11 +244,11 @@ class EquipmentEntityTests(GameCommandTest):
         self.assertEqual(service.hand_usage(self.char2, before_profile), 1)
         self.assertEqual(before_profile, dict(self.char2.profile()))
         self.assertIsNone(self.char2.db.active_weapon_item_id)
-        self.assertIn("낡은마체테 [주무기]", presentation.status(self.char2.key, self.char2.profile()))
-        service.unequip_item(self.char2, "machete", "weapon")
+        self.assertIn("탐사용 벌목도 [주무기]", presentation.status(self.char2.key, self.char2.profile()))
+        service.unequip_item(self.char2, "explorer_machete", "weapon")
         self.assertIsNone(service.active_weapon(self.char2))
         self.assertEqual(service.hand_usage(self.char2), 0)
-        service.equip_item(self.char2, "machete", "weapon")
+        service.equip_item(self.char2, "explorer_machete", "weapon")
         snapshot = eq.context(self.char2.profile())
         self.assertEqual([(item.slot, item.role) for item in snapshot.items], [("hands", "weapon"), ("body", None)])
         self.assertEqual(before_rows, list(ItemEntity.objects.values()))

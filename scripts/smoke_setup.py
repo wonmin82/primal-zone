@@ -25,6 +25,7 @@ def setup(credentials):
     from evennia.utils.create import create_account
     from world import rules
     from world.bootstrap import build_world
+    from world.item_runtime import initialize_fresh
 
     if AccountDB.objects.exists():
         raise RuntimeError("fixture는 비어 있는 새 smoke DB에서만 생성할 수 있습니다.")
@@ -32,6 +33,7 @@ def setup(credentials):
     admin.set_unusable_password()
     admin.save()
     create_objects()
+    initialize_fresh()
     rooms = build_world()
     for name, password in credentials:
         # 공개 가입을 호출하지 않는다. 정상 Account/Character API와 일반 Player 권한을 쓴다.
@@ -41,12 +43,17 @@ def setup(credentials):
                                                       home=rooms["dock"])
         if errors or character is None:
             raise RuntimeError("smoke fixture character 생성에 실패했습니다.")
-        profile = rules.new_profile()
+        from world.equipment_service import unequip_item
+        from world.item_entities import api
+
+        weapon = api.items_in_location("equipment", owner_object=character).get(slot="hands")
+        unequip_item(character, str(weapon.pk))
+        profile = character.profile()
         # 매입 후 재구매까지 포함한 Full 본부 서비스 동선의 준비금.
         profile["credits"] = 150
         profile["attributes"]["constitution"]["allocated"] = 4
         # 맨손 공격으로 양쪽 참여와 outsider 거절을 확인할 시간을 확보한다.
-        profile["equipment"]["weapon"] = None
+
         profile["hp"] = rules.stats(profile)["max_hp"]
         profile["mental"] = 10
         if settings.PRIMAL_SMOKE_MODE == "full":

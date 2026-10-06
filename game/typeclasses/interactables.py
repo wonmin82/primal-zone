@@ -124,9 +124,17 @@ class Container(ActionObject):
 
     def return_appearance(self, looker, **kwargs):
         from evennia.utils.dbserialize import deserialize
+        from world.equipment_service import entity_runtime
         from world.targets import labels, room_objects
 
-        contents = looker.profile_snapshot()["storage"] if self.personal else deserialize(self.db.items)
+        if entity_runtime(looker):
+            from world.item_transfer_native import stored_items
+
+            contents = {}
+            for row in stored_items(looker, self):
+                contents[row.definition_id] = contents.get(row.definition_id, 0) + row.quantity
+        else:
+            contents = looker.profile_snapshot()["storage"] if self.personal else deserialize(self.db.items)
         label = labels(room_objects(looker)).get(self.id, self.key)
         lines = [self.description]
         lines.extend(
@@ -190,7 +198,8 @@ class SupplyCache(ActionObject):
         caller.change(rules.claim_cache)
         caller.msg(
             ft.text(
-                ft.token("object", self.key), "에서 ", ft.item("bandage"), " 2개를 찾아 챙겼다."
+                ft.token("object", self.key), "에서 ", ft.item("bandage"), " 2개, ",
+                ft.item("scrap"), " 3개와 ", ft.item("expedition_tag"), "를 찾아 챙겼다."
             )
         )
 
@@ -422,7 +431,8 @@ class Shopkeeper(ActionObject):
         actions = [{"label": "상품", "command": target + " 상품"}]
         for item in catalog:
             name = ITEMS[item]["name"]
-            actions.extend(({"label": f"{name} · {format_currency(rules.purchase_price(item))} 구매",
+            unit = f" ×{ITEMS[item]['purchase_quantity']}발" if ITEMS[item].get("purchase_quantity", 1) != 1 else ""
+            actions.extend(({"label": f"{name}{unit} · {format_currency(rules.purchase_price(item))} 구매",
                              "command": f"{target}에게 {name} 구매"},
                             {"label": name + " 가치", "command": f"{target}에게 {name} 가치"}))
         for name, quantity, price, stackable in sales:
@@ -456,7 +466,8 @@ class Shopkeeper(ActionObject):
             from world.shop_service import buy
 
             buy(caller, self, args)
-            caller.msg(ft.text(ft.item(args), " 1개를 받아 소지품에 넣었다."))
+            quantity = ITEMS[args].get("purchase_quantity", 1)
+            caller.msg(ft.text(ft.item(args), f" {quantity}개를 받아 소지품에 넣었다."))
         elif action == "가치":
             from world.shop_service import valuation
 
@@ -481,7 +492,7 @@ class Shopkeeper(ActionObject):
                                f" {result.quantity}개를 ", ft.token("reward", format_currency(result.proceeds)), "에 매입했다.",
                                f"\n잔탄 {result.rounds}발의 가치가 포함되었다." if result.rounds else ""))
         else:
-            caller.msg(ft.text(ft.token("npc", self.key), "\n\n필요한 물품은 판매 목록을 살펴보세요. 보급칩으로 하나씩 구매할 수 있습니다."))
+            caller.msg(ft.text(ft.token("npc", self.key), "\n\n필요한 물품과 구매 단위는 판매 목록을 살펴보세요."))
 
 
 class Incinerator(ActionObject):
@@ -569,7 +580,8 @@ class JungleCache(ActionObject):
 
     def act(self, caller, action, args):
         caller.change(rules.claim_jungle_cache)
-        caller.msg(ft.text(ft.token("object", self.key), "에서 ", ft.item("bandage"), " 2개와 ", ft.item("battery"), " 2개를 찾아 챙겼다."))
+        caller.msg(ft.text(ft.token("object", self.key), "에서 ", ft.item("bandage"), " 2개, ", ft.item("battery"), " 2개와 ",
+                           ft.item("mental_stability_module"), "을 찾아 챙겼다."))
 
 
 class EmergencyLightCache(ActionObject):

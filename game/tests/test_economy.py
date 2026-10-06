@@ -212,25 +212,25 @@ class EconomyTests(WorldCommandTest):
         # 실패 원자성 비교 도중 실제 회복 경계가 넘어가는 영향을 제거한다.
         self.enterContext(patch("typeclasses.explorers.time", return_value=100))
         self.char1.location = self.rooms["weapon_shop"]
-        self.char1.change(lambda p: p["inventory"].update(blade=3))
-        self.command("낡은마체테 해제")
-        self.command("강철마체테 무장")
-        self.assertIn("60칩", self.command("무기상에게 강철마체테 가치"))
-        self.assertIn("30칩", self.command("강철마체테 value"))
+        self.char1.change(lambda p: p["inventory"].update(cutting_machete=3))
+        self.command("탐사용 벌목도 해제")
+        self.command("절단마체테 무장")
+        self.assertIn("60칩", self.command("무기상에게 절단마체테 가치"))
+        self.assertIn("30칩", self.command("절단마체테 value"))
         actions = multiplayer_state(self.char1)["interactables"][0]["actions"]
-        single = next(a for a in actions if a["label"] == "강철마체테 · 30칩 판매")
-        self.assertTrue(single["command"].endswith("강철마체테 판매"))
-        bulk = next(a for a in actions if a["label"] == "강철마체테 모두 판매 · 총 60칩")
+        single = next(a for a in actions if a["label"] == "절단마체테 · 30칩 판매")
+        self.assertTrue(single["command"].endswith("절단마체테 판매"))
+        bulk = next(a for a in actions if a["label"] == "절단마체테 모두 판매 · 총 60칩")
         command = bulk["command"]
         self.assertIn("60칩", self.command(command))
-        self.assertEqual((self.char1.profile()["credits"], self.char1.profile()["inventory"]["blade"]), (80, 1))
+        self.assertEqual((self.char1.profile()["credits"], self.char1.profile()["inventory"]["cutting_machete"]), (80, 1))
         before = self.char1.profile()
-        for raw in ("강철마체테 판매", "회수부품 판매", "붕대 판매", "강철마체테 3개 판매"):
+        for raw in ("절단마체테 판매", "회수부품 판매", "붕대 판매", "절단마체테 3개 판매"):
             self.command(raw)
             self.assertEqual(self.char1.profile(), before)
         seller = search_tag("weapon_shopkeeper", category="primal_interactable")[0]
         seller.locks.add("view:false()")
-        self.command("강철마체테 가치")
+        self.command("절단마체테 가치")
         self.assertEqual(self.char1.profile(), before)
 
     def test_sale_storage_failure_rolls_back_proceeds_and_inventory(self):

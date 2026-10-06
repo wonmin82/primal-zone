@@ -6,7 +6,7 @@ from unittest import TestCase
 from unittest.mock import patch
 
 from world import content, rules
-from world.content import ITEMS, SALVAGE_CREDIT_RATE, SHOP_CATALOGS
+from world.content import ITEMS, SALVAGE_CREDIT_RATE
 from world.content.integrity import errors
 from world.settlement import parse_salvage
 from world.test_headquarters import content_targets
@@ -21,11 +21,8 @@ class SettlementRulesTests(TestCase):
         self.assertEqual(ITEMS["scrap"]["slot"], "material")
         self.assertTrue(ITEMS["scrap"]["transferable"])
         self.assertFalse(hasattr(content, "SHOP"))
-        self.assertEqual({item: ITEMS[item]["value"] for catalog in SHOP_CATALOGS.values() for item in catalog["purchase_catalog"]}, {
-            "flashlight": 30, "battery": 6, "bandage": 8, "field_ration": 4, "water": 3,
-            "spear": 35, "blade": 60, "jungle_blade": 95, "carbine": 130, "heavy_carbine": 240,
-            "leather_suit": 35, "tactical_vest": 85, "armor": 65, "heavy_suit": 190,
-        })
+        self.assertEqual(rules.purchase_price("bandage"), 10)
+        self.assertEqual(rules.purchase_price("ammo_556"), 60)
 
     def test_one_and_all_quantities_preserve_every_other_field(self):
         for quantity in (1, 5):
@@ -58,7 +55,7 @@ class SettlementRulesTests(TestCase):
                                 ("회수부품 모두", None), ("회수 부품 모두", None)):
             self.assertEqual(parse_salvage(value), expected)
         for value in ("회수부품 0개", "회수부품 -1개", "회수부품 abc개", "회수부품 3",
-                      "회수부품 모두 1개", "회수부품 3개 모두", "강화 조끼", "강철마체테", ""):
+                      "회수부품 모두 1개", "회수부품 3개 모두", "강화방호조끼", "절단마체테", ""):
             with self.subTest(value=value), self.assertRaises(rules.RuleError):
                 parse_salvage(value)
         from world.targets import stack_selector

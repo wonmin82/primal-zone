@@ -39,6 +39,13 @@ def transfer_currency(caller, amount=None, recipient=None):
 
 
 def transfer(caller, item_id, *, all_items=False, recipient=None, container=None, withdraw=False):
+    from world.equipment_service import entity_runtime
+
+    if entity_runtime(caller):
+        from world.item_transfer_native import transfer as native_transfer
+
+        return native_transfer(caller, item_id + (" 모두" if all_items else ""), recipient=recipient,
+                               container=container, withdraw=withdraw)[1]
     from typeclasses.explorers import Explorer
     from typeclasses.interactables import Container
     from typeclasses.loot import create_dropped_loot

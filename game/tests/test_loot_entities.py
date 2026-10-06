@@ -7,6 +7,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
 from evennia import create_object
+from evennia.utils.dbserialize import deserialize
 from typeclasses.loot import Corpse, DroppedLoot, take_loot
 from typeclasses.parties import invite, respond
 from world import loot_service, rules
@@ -56,7 +57,7 @@ class LootEntityTests(NativeLootTest):
         self.assertEqual((root.pk, root.sequence, root.location_kind, root.owner_object_id),
                          (identity, sequence, "inventory", self.char1.pk))
         self.assertFalse(LootClaim.objects.exists())
-        self.assertEqual(dict(self.char1.profile())["inventory"], {})
+        self.assertEqual(deserialize(self.char1.db.profile)["inventory"], {})
         self.assertEqual(self.source.db.entries, [])
 
     def test_partial_pickup_source_rights_and_inventory_merge(self):
@@ -297,12 +298,12 @@ class LootEntityTests(NativeLootTest):
         self.assertEqual(self.all_state(), before)
 
     def test_native_selector_payload_and_command_uses_same_root_instances(self):
-        first, second = self.loot_item("blade", 1), self.loot_item("blade", 1)
+        first, second = self.loot_item("cutting_machete", 1), self.loot_item("cutting_machete", 1)
         controls = loot_controls(self.char1, 100)[self.source.pk]["loot"]
-        self.assertEqual([entry["label"] for entry in controls], ["강철마체테 1", "강철마체테 2"])
+        self.assertEqual([entry["label"] for entry in controls], ["절단마체테 1", "절단마체테 2"])
         self.assertNotIn(str(first.pk), str(controls))
         self.assertNotIn(str(second.pk), str(controls))
-        take_loot(self.char1, request=parse_loot("시체에서 강철마체테 2", []), now=100)
+        take_loot(self.char1, request=parse_loot("시체에서 절단마체테 2", []), now=100)
         first.refresh_from_db()
         second.refresh_from_db()
         self.assertEqual((first.location_kind, second.location_kind), ("corpse_loot", "inventory"))
@@ -316,6 +317,7 @@ class LootEntityTests(NativeLootTest):
         groups = {f"party:{party.pk}": {self.char1.pk: 1, self.char2.pk: 1}}
         rng = Mock()
         rng.random.return_value = 0
+        rng.randint.return_value = 1
         corpse = Corpse.from_enemy(enemy, groups, 100, rng=rng, backend="item_entities")
         snapshot = loot_service.loot_snapshot(corpse)
         self.assertEqual([entry.assigned_player for entry in snapshot.entries if entry.kind == "item"],

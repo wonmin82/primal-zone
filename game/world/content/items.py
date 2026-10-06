@@ -1,32 +1,23 @@
 """아이템과 보급 가격. Stable ID는 저장 데이터와 연결된다."""
 
+from world.content.final_items import FINAL_ITEMS
+
 ITEMS = {
     "flashlight": {
-        "value": 30,
+        "value": 35,
         "name": "탐사용손전등", "aliases": ["손전등"], "slot": "tool",
         "description": "교체형 전원을 넣어 켜는 탐사용 광원이다. 현재 장소와 인접한 곳을 비춘다.",
         "light_source": {"strength": 2, "range": 1, "power_type": "flashlight_battery", "max_power_seconds": 1800},
     },
     "battery": {
-        "value": 6,
+        "value": 8,
         "name": "건전지", "slot": "consumable",
         "description": "탐사용 광원에 넣는 전원이다. 실제 사용 시간 약 30분을 제공한다.",
         "power_source": {"type": "flashlight_battery", "capacity_seconds": 1800},
     },
-    "machete": {"name": "낡은마체테", "slot": "weapon", "attack": 2, "defense": 0},
-    "vest": {"name": "탐사조끼", "slot": "armor", "attack": 0, "defense": 1},
-    "blade": {"value": 60, "name": "강철마체테", "slot": "weapon", "attack": 6, "defense": 0},
-    "armor": {"value": 65, "name": "강화조끼", "slot": "armor", "attack": 0, "defense": 4},
-    "carbine": {"value": 130, "weapon_type": "firearm", "name": "탐사카빈", "slot": "weapon", "attack": 10, "defense": 0},
-    "spear": {"value": 35, "name": "사냥창", "slot": "weapon", "attack": 4, "defense": 1},
-    "jungle_blade": {"value": 95, "name": "정글도", "slot": "weapon", "attack": 8, "defense": 0},
-    "heavy_carbine": {"value": 240, "weapon_type": "firearm", "name": "중량카빈", "slot": "weapon", "attack": 12, "defense": 0},
-    "leather_suit": {"value": 35, "name": "가죽보호복", "slot": "armor", "attack": 0, "defense": 2},
-    "tactical_vest": {"value": 85, "name": "경량전술조끼", "slot": "armor", "attack": 1, "defense": 3},
-    "heavy_suit": {"value": 190, "name": "중장방호복", "slot": "armor", "attack": 0, "defense": 6},
     "fang": {"name": "우두머리송곳니", "slot": "trophy", "attack": 0, "defense": 0},
-    "bandage": {"value": 8, "name": "붕대", "slot": "consumable", "heal": 20},
-    "field_ration": {"value": 4, "name": "야전식량", "slot": "consumable", "heal": 12, "consume_action": "먹어", "description": "탐사 중 간단히 먹을 수 있는 보존식이다. 비전투 중 먹으면 체력을 회복한다."},
+    "bandage": {"value": 10, "name": "붕대", "slot": "consumable", "heal": 20},
+    "field_ration": {"value": 5, "name": "야전식량", "slot": "consumable", "heal": 12, "consume_action": "먹어", "description": "탐사 중 간단히 먹을 수 있는 보존식이다. 비전투 중 먹으면 체력을 회복한다."},
     "water": {"value": 3, "name": "정제수", "slot": "consumable", "heal": 6, "consume_action": "마셔", "description": "안전하게 정제한 식수다. 비전투 중 마시면 체력을 조금 회복한다."},
     "scrap": {"name": "회수부품", "slot": "material"},
     "jungle_cell": {
@@ -42,7 +33,7 @@ ITEMS = {
     },
 }
 
-# Phase 3 구조용 탄창·탄약. 실제 shop/drop 연결과 기존 가격·공격력은 변경하지 않는다.
+# Phase 3의 탄창·탄약 구조에 Phase 6 최종 가격과 획득 경로를 연결한다.
 for identity, name, alias, family, ammo_type, capacity in (
     ("mag_9_small", "9mm 소형탄창", "권총소형", "pistol_9mm", "9mm", 8),
     ("mag_9_standard", "9mm 표준탄창", "권총표준", "pistol_9mm", "9mm", 12),
@@ -61,8 +52,6 @@ for identity, name, alias, ammo_type in (
     ("ammo_762", "7.62mm 소총탄", "중량탄", "762mm"),
 ):
     ITEMS[identity] = {"name": name, "aliases": [alias], "slot": "ammo", "ammo_type": ammo_type}
-ITEMS["carbine"]["firearm_family"] = "carbine_556"
-ITEMS["heavy_carbine"]["firearm_family"] = "rifle_762"
 
 # 출입증은 기존 profile 저장과 무관한 고유 Entity다.
 for identity, name, quest in (
@@ -74,12 +63,24 @@ for identity, name, quest in (
                        "transferable": False, "credential_properties": {"quest": quest},
                        "operation_policy": {operation: operation == "burn" for operation in (
                            "drop", "give", "store", "sell", "consume", "equip", "unequip",
-                           "loot", "burn", "load", "unload")}}
+                           "loot", "burn", "load", "unload", "submit")}}
+
+# 최종 장비는 별도 stable ID를 사용한다. 이전 ID 해석은 migration mapping에만 있다.
+
+ITEMS.update(FINAL_ITEMS)
+for identity, price in {
+    "mag_9_small": 16, "mag_9_standard": 24, "mag_9_extended": 40,
+    "mag_556_short": 30, "mag_556_standard": 45, "mag_556_extended": 65,
+    "mag_762_standard": 50, "mag_762_extended": 70,
+}.items():
+    ITEMS[identity].update(value=price, resale_unit_value=price // 2)
+for identity, purchase, resale, quantity in (("ammo_9", 2, 1, 12), ("ammo_556", 3, 1, 20), ("ammo_762", 4, 2, 8)):
+    ITEMS[identity].update(value=purchase, purchase_unit_value=purchase, resale_unit_value=resale, purchase_quantity=quantity)
 
 # 일반 물품은 이동 가능하고 임무 핵심 물품은 정의에서 명시적으로 차단한다.
 for definition in ITEMS.values():
     definition.setdefault("transferable", True)
-    # 새 Entity domain의 정의. 기존 수량 저장이나 장비 규칙은 여기서 전환하지 않는다.
+    # 공통 정의 기본값. 저장 구조의 변환은 명시적인 maintenance tooling이 담당한다.
     definition.setdefault("item_type", definition["slot"])
     definition.setdefault("stackable", definition["slot"] not in ("weapon", "armor", "tool"))
     definition.setdefault("max_stack", None)
@@ -87,6 +88,7 @@ for definition in ITEMS.values():
     definition.setdefault("operation_policy", {
         **{operation: definition["transferable"] for operation in ("drop", "give", "store", "sell")},
         "consume": bool(definition.get("heal") or definition.get("power_source")),
+        "submit": definition is ITEMS["jungle_cell"] or definition is ITEMS["scrap"],
         "equip": definition["slot"] in ("weapon", "armor"),
         "unequip": definition["slot"] in ("weapon", "armor"),
         "loot": definition["transferable"],

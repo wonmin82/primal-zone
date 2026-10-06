@@ -86,11 +86,12 @@ class Closeout:
         await route(player, (("남", "support_1f_e1"), ("서", "support_1f_c")))
         await self.floor(player, "3층", "support_3f_c")
         await route(player, (("서", "support_3f_w1"), ("북", "armor_shop")))
-        await player.act("강화조끼 구매", lambda s: count_item(s, "armor") == 1)
-        await player.act("낡은마체테 해제", lambda s: s["equipment"]["hands"] is None)
-        await player.act("강철마체테 무장", lambda s: s["equipment"]["hands"] == "강철마체테 [주무기]")
-        await player.act("탐사조끼 벗어", lambda s: s["equipment"]["body"] is None)
-        await player.act("강화조끼 착용", lambda s: s["equipment"]["body"] == "강화조끼")
+        await player.act("강화방호조끼 구매", lambda s: count_item(s, "reinforced_vest") == 1)
+        # 격리 smoke fixture는 준비 단계에서 기본 손 무기를 명시 해제한다.
+        assert player.state["equipment"]["hands"] is None
+        await player.act("절단마체테 무장", lambda s: s["equipment"]["hands"] == "절단마체테 [주무기]")
+        await player.act("탐사대 작업복 벗어", lambda s: s["equipment"]["body"] is None)
+        await player.act("강화방호조끼 착용", lambda s: s["equipment"]["body"] == "강화방호조끼")
         self.scenario.report("hq", "보관/정산/훈련/Doctor/Bed/귀환/승강기/3종 상점 실제 연결")
         await self.progression()
         await self.restart()

@@ -33,8 +33,8 @@ def new_profile():
         "mental": 40,
         "recovery_effects": [],
         "credits": 20,
-        "inventory": {"machete": 1, "vest": 1, "bandage": 3},
-        "equipment": {"weapon": "machete", "armor": "vest"},
+        "inventory": {"explorer_machete": 1, "expedition_workwear": 1, "bandage": 3},
+        "equipment": {"weapon": "explorer_machete", "armor": "expedition_workwear"},
         "storage": {},
         "command_shortcuts": {},
         "light_sources": {},
@@ -96,12 +96,15 @@ def add_item(profile, item_id, quantity=1):
     inventory[item_id] = inventory.get(item_id, 0) + quantity
 
 
-def consume(profile, item_id, quantity=1):
+def consume(profile, item_id, quantity=1, *, operation="consume"):
     if profile["inventory"].get(item_id, 0) < quantity:
         raise RuleError(f"{ITEMS[item_id]['name']}이(가) 부족합니다.")
     profile["inventory"][item_id] -= quantity
     if not profile["inventory"][item_id]:
         del profile["inventory"][item_id]
+    operations = getattr(profile, "item_operations", None)
+    if operations is not None:
+        operations[item_id] = operation
 
 
 def gain_xp(profile, amount):
@@ -138,7 +141,7 @@ def buy(profile, shop_id, item_id):
     if profile["credits"] < price:
         raise RuleError("보급칩이 부족합니다.")
     profile["credits"] -= price
-    add_item(profile, item_id)
+    add_item(profile, item_id, ITEMS[item_id].get("purchase_quantity", 1))
 
 
 def purchase_price(item_id):
@@ -146,11 +149,14 @@ def purchase_price(item_id):
     value = definition.get("purchase_unit_value", definition.get("value"))
     if type(value) is not int or value <= 0:
         raise RuleError("일반 상인이 매매할 수 없는 물건입니다.")
-    return value
+    return value * definition.get("purchase_quantity", 1)
 
 
 def resale_price(item_id):
-    return max(1, purchase_price(item_id) // 2)
+    definition = ITEMS.get(item_id, {})
+    if "value" not in definition and "resale_unit_value" not in definition:
+        raise RuleError("일반 상인이 매매할 수 없는 물건입니다.")
+    return definition.get("resale_unit_value", definition.get("value", 0) // 2)
 
 
 def sell(profile, shop_id, item_id, *, all_items=False, quantity=1):
@@ -184,7 +190,7 @@ def settle_salvage(profile, quantity):
     if profile["inventory"].get("scrap", 0) < quantity:
         raise RuleError("회수부품이 부족합니다.")
     earned = quantity * SALVAGE_CREDIT_RATE
-    consume(profile, "scrap", quantity)
+    consume(profile, "scrap", quantity, operation="sell")
     profile["credits"] += earned
     return earned
 
@@ -445,7 +451,7 @@ def fix_generator(profile):
         raise RuleError("이미 발전기를 복구했습니다.")
     if not progress["record_read"]:
         raise RuleError("관리동의 정비기록을 먼저 조사하세요.")
-    consume(profile, "scrap", 3)
+    consume(profile, "scrap", 3, operation="submit")
     progress["generator_fixed"] = True
     gain_xp(profile, 50)
 
@@ -682,7 +688,9 @@ def claim_cache(profile):
     if profile["discoveries"].get("supply_cache"):
         raise RuleError("이미 보급품을 챙겼습니다.")
     add_item(profile, "bandage", 2)
+    add_item(profile, "scrap", 3)
     profile["discoveries"]["supply_cache"] = True
+    add_item(profile, "expedition_tag")
 
 
 def jungle_talk(profile):
@@ -730,7 +738,7 @@ def open_jungle_gate(profile):
         raise RuleError("관측소와 수몰 도로의 표식을 모두 확인하세요.")
     if profile["inventory"].get("jungle_cell", 0) < 1:
         raise RuleError("수몰 도로에서 밀림 신호전지를 확보하세요.")
-    consume(profile, "jungle_cell")
+    consume(profile, "jungle_cell", operation="submit")
     progress["gate_open"] = True
 
 
@@ -741,6 +749,7 @@ def claim_jungle_cache(profile):
     add_item(profile, "bandage", 2)
     add_item(profile, "battery", 2)
     profile["discoveries"]["jungle_cache"] = True
+    add_item(profile, "mental_stability_module")
 
 
 def claim_emergency_light_cache(profile):

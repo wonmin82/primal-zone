@@ -74,7 +74,7 @@ class SettlementCommandsTests(SettlementFixture, WorldCommandTest):
         self.prepare(scrap=2)
         for raw in ("회수부품 0개 교환", "회수부품 -1개 교환", "회수부품 abc개 교환",
                     "회수부품 999개 교환", "회수부품 모두 1개 교환", "붕대 교환",
-                    "강철마체테 교환", "강화 조끼 교환"):
+                    "절단마체테 교환", "강화방호조끼 교환"):
             before = deepcopy(self.char1.profile())
             self.assertNotIn("칩을 받았다", self.command(raw))
             self.assertEqual(self.char1.profile(), before)
@@ -83,7 +83,7 @@ class SettlementCommandsTests(SettlementFixture, WorldCommandTest):
         self.assertIn("정산할 회수부품이 없습니다", self.command("회수부품 모두 교환"))
         self.assertEqual(self.char1.profile(), before)
         self.char1.location = self.rooms["dock"]
-        for raw in ("강철마체테 교환", "강화 조끼 교환", "회수부품 교환", "환율"):
+        for raw in ("절단마체테 교환", "강화방호조끼 교환", "회수부품 교환", "환율"):
             self.assertIn("정산관을 찾지", self.command(raw))
             self.assertEqual(self.char1.profile(), before)
 
@@ -193,16 +193,16 @@ class SettlementWorldTests(SettlementFixture, WorldCommandTest):
         self.assertIn(f"{SALVAGE_CREDIT_RATE}칩", self.command("정산관 환율"))
         self.command("회수부품 6개 교환")
         self.assertNotIn("scrap", self.char1.profile()["inventory"])
-        self.assertEqual(self.char1.profile()["credits"], ITEMS["blade"]["value"])
+        self.assertEqual(self.char1.profile()["credits"], ITEMS["cutting_machete"]["value"])
         for raw in ("남", "동", "동", "승강기", "3층", "동", "북"):
             self.command(raw)
         self.assertEqual(self.char1.zone, "weapon_shop")
         shop = self.command("상품")
         self.assertNotIn("교환", shop)
         self.assertNotIn("회수부품", shop)
-        self.command("강철마체테 구매")
+        self.command("절단마체테 구매")
         self.assertEqual(self.char1.profile()["credits"], 0)
-        self.assertEqual(self.char1.profile()["inventory"]["blade"], 1)
+        self.assertEqual(self.char1.profile()["inventory"]["cutting_machete"], 1)
         for raw in ("남", "서", "승강기", "1층", "북", "서"):
             self.command(raw)
         self.command("윤대장 대화")

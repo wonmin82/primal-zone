@@ -125,7 +125,7 @@ class RegionTests(WorldCommandTest):
 
     def test_bootstrap_syncs_enemy_max_hp_without_healing(self):
         enemy = room_enemies(self.rooms["jungle_road"])[0]
-        self.assertEqual(enemy.db.max_hp, 92)
+        self.assertEqual(enemy.db.max_hp, 105)
         enemy.db.hp = 37
         with patch.dict(ENEMIES["shellback"], {"hp": 100}):
             build_world()
@@ -300,7 +300,7 @@ class RegionTests(WorldCommandTest):
         )
         self.assertEqual(len(room_loot(self.rooms["jungle_nest"])), 1)
         entries = room_loot(self.rooms["jungle_nest"])[0].db.entries
-        self.assertEqual(len(entries), 4)
+        self.assertEqual(len(entries), 3)
         self.assertEqual(
             {entry["reserved_player"] for entry in entries if entry["reserved_player"]},
             {self.char1.id},
@@ -333,7 +333,8 @@ class RegionTests(WorldCommandTest):
         self.assertEqual(self.char1.profile()["xp"], ENEMIES["dartclaw"]["xp"])
         self.assertEqual(len(room_loot(self.rooms["jungle_edge"])), 1)
         take_loot(self.char1, corpse=True, now=103)
-        self.assertEqual(self.char1.profile()["inventory"]["scrap"], 1)
+        self.assertNotIn("scrap", self.char1.profile()["inventory"])
+        self.assertEqual(self.char1.profile()["credits"], 38)
 
     def test_jungle_boss_telegraphs_on_its_own_round(self):
         self.char1.location = self.rooms["jungle_nest"]

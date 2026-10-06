@@ -27,7 +27,7 @@ class NativeItemTest(GameCommandTest):
                            hp=30, mental=20, recovery=recovery.initialize(100))
             character.db.profile = profile
             equipment_service.use_item_entities(character)
-        definition = deepcopy(ITEMS["carbine"])
+        definition = deepcopy(ITEMS["guard_carbine"])
         definition.update(name="시험권총", aliases=["시험총"], firearm_family="pistol_9mm",
                           equipment_properties={"slot": "hands", "role": "weapon", "hands_required": 1,
                                                 "weapon_type": "firearm", "weapon_attack": 10})

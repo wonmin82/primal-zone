@@ -63,7 +63,7 @@ class LootTests(WorldCommandTest):
         self.assertEqual(self.char1.profile()["inventory"]["scrap"], 1)
         self.assertEqual(len(corpse.db.entries), 2)
         take_loot(self.char1, corpse=True, now=104)
-        self.assertEqual(self.char1.profile()["inventory"]["blade"], 1)
+        self.assertEqual(self.char1.profile()["inventory"]["cutting_machete"], 1)
         with self.assertRaises(RuleError):
             take_loot(self.char1, corpse=True, now=104)
 
@@ -75,7 +75,7 @@ class LootTests(WorldCommandTest):
         )
         take_loot(self.char2, corpse=True, now=103)
         self.assertEqual(self.char1.profile()["inventory"]["scrap"], 1)
-        self.assertEqual(self.char2.profile()["inventory"]["blade"], 1)
+        self.assertEqual(self.char2.profile()["inventory"]["cutting_machete"], 1)
         self.assertNotIn("scrap", self.char2.profile()["inventory"])
         self.assertEqual(party.state()["round_robin_cursor"], 2)
 
@@ -98,7 +98,7 @@ class LootTests(WorldCommandTest):
         take_loot(self.char2, "scrap", corpse=False, now=222.5)
         self.assertEqual(self.char2.profile()["inventory"]["scrap"], 1)
         take_loot(self.char2, corpse=False, now=223)
-        self.assertEqual(self.char2.profile()["inventory"]["blade"], 1)
+        self.assertEqual(self.char2.profile()["inventory"]["cutting_machete"], 1)
         self.assertEqual(DroppedLoot.objects.count(), 0)
 
     def test_ground_owner_can_collect_before_expiry(self):
@@ -164,7 +164,7 @@ class LootTests(WorldCommandTest):
         )
         take_loot(self.char1, corpse=True, now=104)
         self.assertEqual(self.char1.profile()["inventory"]["scrap"], 1)
-        self.assertEqual(self.char2.profile()["inventory"]["blade"], 1)
+        self.assertEqual(self.char2.profile()["inventory"]["cutting_machete"], 1)
 
     def test_decay_failure_restores_corpse_and_retry_does_not_duplicate_ground(self):
         corpse, _, _ = self.kill()

@@ -13,6 +13,13 @@ from world.multiplayer import world_change
 
 
 def entity_runtime(character):
+    from world.item_runtime import VERSION, maintenance, native_runtime, require_runtime
+
+    require_runtime()
+    if native_runtime() and not maintenance.get():
+        if character.db.equipment_backend != "item_entities" or character.db.item_runtime_version != VERSION:
+            raise rules.RuleError("Item runtime migration required: 캐릭터 변환 상태가 일치하지 않습니다.")
+        return True
     return character.db.equipment_backend == "item_entities"
 
 
@@ -31,10 +38,15 @@ def equipped_items(character):
 
 
 def entity_snapshot(character):
+    from world.content.item_mapping import LEGACY_ITEM_MAPPING
     from world.item_entities.api import items_owned_by
+    from world.item_runtime import maintenance
+
+    def definition_id(row):
+        return LEGACY_ITEM_MAPPING.get(row.definition_id, row.definition_id) if maintenance.get() else row.definition_id
 
     carried = tuple(
-        eq.item_snapshot(row.definition_id, ITEMS[row.definition_id], item_id=row.pk,
+        eq.item_snapshot(definition_id(row), ITEMS[definition_id(row)], item_id=row.pk,
                          sequence=row.sequence, quantity=row.quantity, location=row.location_kind,
                          slot=row.slot, state_summary=state_summary(row))
         for row in items_owned_by(character)
@@ -45,7 +57,11 @@ def entity_snapshot(character):
 
 
 def state_summary(row):
-    definition = ITEMS[row.definition_id]
+    from world.content.item_mapping import LEGACY_ITEM_MAPPING
+    from world.item_runtime import maintenance
+
+    identity = LEGACY_ITEM_MAPPING.get(row.definition_id, row.definition_id) if maintenance.get() else row.definition_id
+    definition = ITEMS[identity]
     if definition.get("magazine"):
         return f"{row.state['rounds']}/{definition['magazine']['capacity']}"
     if definition.get("firearm_family"):
@@ -76,7 +92,11 @@ def equipment_snapshot(character, profile=None):
 
 def bind_profile(character, profile):
     bound = eq.EquipmentProfile(profile, equipment_snapshot(character, profile))
-    if not entity_runtime(character):
+    if entity_runtime(character):
+        from world.item_inventory import bind
+
+        return bind(character, bound)
+    else:
         from world.credential_service import credential_items
 
         bound.credential_items = tuple(eq.item_snapshot(row.definition_id, ITEMS[row.definition_id],
@@ -180,11 +200,17 @@ def after_item_change(change):
 
 
 def validate_equipment_row(row):
+    from world.content.item_mapping import LEGACY_ITEM_MAPPING
+    from world.item_runtime import maintenance
+
+    def identity(item):
+        return LEGACY_ITEM_MAPPING.get(item.definition_id, item.definition_id) if maintenance.get() else item.definition_id
+
     candidate = eq.item_snapshot(row.definition_id, ITEMS[row.definition_id], item_id=row.pk,
                                  sequence=row.sequence, quantity=row.quantity)
     if row.slot != candidate.slot:
         raise ValidationError({"slot": "아이템 정의의 장비 slot과 다릅니다."})
-    others = [eq.item_snapshot(item.definition_id, ITEMS[item.definition_id], item_id=item.pk,
+    others = [eq.item_snapshot(identity(item), ITEMS[identity(item)], item_id=item.pk,
                               sequence=item.sequence, quantity=item.quantity, slot=item.slot)
               for item in equipped_items(row.owner_object).exclude(pk=row.pk)]
     try:

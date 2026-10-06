@@ -163,7 +163,7 @@ def shop_errors():
             issues.append(f"{shop_id}: purchase_catalog와 accepts가 필요합니다.")
             continue
         catalog = definition["purchase_catalog"]
-        if not definition["accepts"] or any(category not in {"weapon", "armor", "equipment", "tool", "consumable", "magazine", "ammo"}
+        if not definition["accepts"] or any(category not in {"weapon", "hand_equipment", "armor", "equipment", "tool", "consumable", "magazine", "ammo"}
                                             for category in definition["accepts"]):
             issues.append(f"{shop_id}: 매입 category가 올바르지 않습니다.")
         if not catalog:
@@ -177,17 +177,16 @@ def shop_errors():
             price = ITEMS.get(item, {}).get("value")
             if type(price) is not int or price <= 0:
                 issues.append(f"{shop_id}/{item}: 가격은 양의 정수여야 합니다.")
-    if len(items) != len(set(items)):
-        issues.append("상점 catalog 아이템이 중복되었습니다.")
-    if set(items) != {"flashlight", "battery", "bandage", "field_ration", "water",
-                      "spear", "blade", "jungle_blade", "carbine", "heavy_carbine",
-                      "leather_suit", "tactical_vest", "armor", "heavy_suit"}:
-        issues.append("상점 catalog 합집합이 기존 판매 14개와 다릅니다.")
+        if len(catalog) != len(set(catalog)):
+            issues.append(f"{shop_id}: 같은 catalog에서 아이템이 중복되었습니다.")
     return issues
 
 
 def errors(interactables):
     issues = headquarters_errors() + elevator_errors() + shop_errors()
+    from world.final_content import errors as final_errors
+
+    issues.extend(final_errors())
     from world.progression import ATTRIBUTES, SKILLS
 
     for identity, definition in interactables.items():
@@ -297,8 +296,15 @@ def errors(interactables):
             issues.append(f"{enemy}: 시체 보급칩은 양의 정수여야 합니다.")
         if not data.get("presence") or not data.get("distant_presence"):
             issues.append(f"{enemy}: 현재/원거리 존재 묘사가 없습니다.")
-        if data["drop"] not in ITEMS:
-            issues.append(f"{enemy}: 전리품 정의가 없습니다.")
+        from world.content.loot_v1 import LOOT
+
+        loot = LOOT.get(enemy, {})
+        for group in ("resource", "special"):
+            options = loot.get(group, ()) if group == "special" else loot.get(group, (0, ()))[1]
+            if any(identity not in ITEMS or not 0 < weight <= 1 for identity, weight in options) or sum(weight for _, weight in options) > 1.000001:
+                issues.append(f"{enemy}: 드롭 definition/확률이 올바르지 않습니다.")
+        if loot.get("trophy") and loot["trophy"] not in ITEMS:
+            issues.append(f"{enemy}: trophy 정의가 없습니다.")
         if data.get("boss_quest") and data["boss_quest"] not in QUESTS:
             issues.append(f"{enemy}: 임무 정의가 없습니다.")
     for key, data in ITEMS.items():

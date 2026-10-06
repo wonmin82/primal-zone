@@ -389,7 +389,7 @@ class TargetIntegrationTests(WorldCommandTest):
         original = deepcopy(list(b.db.entries))
         self.take("모든 시체에서 모두")
         self.assertEqual(self.char1.profile()["inventory"]["scrap"], 3)
-        self.assertEqual(self.char2.profile()["inventory"]["armor"], 1)
+        self.assertEqual(self.char2.profile()["inventory"]["reinforced_vest"], 1)
         self.assertEqual(self.char2.profile()["inventory"]["bandage"], 5)
         self.assertEqual(list(b.db.entries), original)
         self.assertEqual(a.db.entries, [])
@@ -423,7 +423,7 @@ class TargetIntegrationTests(WorldCommandTest):
 
     def test_equipment_all_rejected_and_buttons_resolve_to_same_sources(self):
         before = self.char1.profile()
-        for raw in ("낡은마체테 모두 무장", "탐사조끼 모두 착용"):
+        for raw in ("탐사용 벌목도 모두 무장", "탐사대 작업복 모두 착용"):
             self.char1.execute_cmd(raw)
             self.assertEqual(self.char1.profile(), before)
         sources = [self.source(), self.source()]

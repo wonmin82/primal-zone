@@ -96,22 +96,22 @@ class ItemInteractionTests(WorldCommandTest):
 
     def test_equipped_only_copy_is_blocked_for_every_transfer_and_extra_copies_move(self):
         for raw in (
-            "낡은마체테 버려",
-            f"{self.char2.key}에게 낡은마체테 줘",
-            "보관상자에 낡은마체테 넣어",
-            "개인 보관함에 낡은마체테 넣어",
+            "탐사용 벌목도 버려",
+            f"{self.char2.key}에게 탐사용 벌목도 줘",
+            "보관상자에 탐사용 벌목도 넣어",
+            "개인 보관함에 탐사용 벌목도 넣어",
         ):
             before = (self.char1.profile(), self.char2.profile(), deserialize(self.box.db.items))
             self.assertIn("해제", self.command(raw))
             self.assertEqual(
                 (self.char1.profile(), self.char2.profile(), deserialize(self.box.db.items)), before
             )
-        self.char1.change(lambda p: rules.add_item(p, "machete", 2))
-        self.command("낡은마체테 버려")
-        self.command("보관상자에 낡은마체테 모두 넣어")
-        self.assertEqual(self.char1.profile()["inventory"]["machete"], 1)
-        self.assertEqual(self.box.db.items, {"machete": 1})
-        self.assertEqual(self.char1.profile()["equipment"]["weapon"], "machete")
+        self.char1.change(lambda p: rules.add_item(p, "explorer_machete", 2))
+        self.command("탐사용 벌목도 버려")
+        self.command("보관상자에 탐사용 벌목도 모두 넣어")
+        self.assertEqual(self.char1.profile()["inventory"]["explorer_machete"], 1)
+        self.assertEqual(self.box.db.items, {"explorer_machete": 1})
+        self.assertEqual(self.char1.profile()["equipment"]["weapon"], "explorer_machete")
 
     def test_quest_key_transfer_block_and_original_gate_lifecycle(self):
         def prepare(p):
@@ -170,12 +170,12 @@ class ItemInteractionTests(WorldCommandTest):
 
     def test_empty_equipment_persists_and_unarmed_combat_works(self):
         inventory = self.char1.profile()["inventory"]
-        for raw in ("낡은마체테 벗어", "탐사조끼 해제"):
+        for raw in ("탐사용 벌목도 벗어", "탐사대 작업복 해제"):
             before = self.char1.profile()
             self.command(raw)
             self.assertEqual(self.char1.profile(), before)
-        self.command("낡은마체테 해제")
-        self.command("탐사조끼 벗어")
+        self.command("탐사용 벌목도 해제")
+        self.command("탐사대 작업복 벗어")
         self.char1.attributes.reset_cache()
         profile = self.char1.profile()
         self.assertEqual(profile["equipment"], {"weapon": None, "armor": None})
@@ -238,7 +238,7 @@ class ItemInteractionTests(WorldCommandTest):
         self.command("개인 보관함에 붕대 모두 넣어")
         self.assertEqual(self.char1.profile()["storage"], {"bandage": 3})
         self.assertNotIn("붕대", self.locker.return_appearance(self.char2))
-        self.command("개인 보관함에 탐사조끼 넣어", self.char2)
+        self.command("개인 보관함에 탐사대 작업복 넣어", self.char2)
         self.assertEqual(self.char2.profile()["storage"], {})
         self.command("개인 보관함에 붕대 넣어", self.char2)
         self.assertEqual(self.char2.profile()["storage"], {"bandage": 1})
@@ -310,8 +310,8 @@ class ItemInteractionTests(WorldCommandTest):
             Explorer.push_state(self.char1)
         state = message.call_args.kwargs["pz_state"][0][0]
         inventory = {i["id"]: i for i in state["inventory"]}
-        self.assertEqual(inventory["machete"]["remove_action"], "해제")
-        self.assertEqual(inventory["vest"]["remove_action"], "벗어")
+        self.assertEqual(inventory["explorer_machete"]["remove_action"], "해제")
+        self.assertEqual(inventory["expedition_workwear"]["remove_action"], "벗어")
         self.assertEqual(inventory["field_ration"]["consume_action"], "먹어")
         boxes = [i for i in state["interactables"] if i["name"] in ("보관상자", "개인 보관함")]
         self.assertEqual(len(boxes), 2)
@@ -325,8 +325,8 @@ class ItemInteractionTests(WorldCommandTest):
             f"{self.char2.key}에게 붕대 줘",
             "보관상자에 붕대 넣어",
             "보관상자에서 붕대 꺼내",
-            "낡은마체테 해제",
-            "탐사조끼 벗어",
+            "탐사용 벌목도 해제",
+            "탐사대 작업복 벗어",
             "야전식량 먹어",
             "정제수 마셔",
         ):

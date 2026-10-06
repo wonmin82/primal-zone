@@ -418,7 +418,7 @@ class LightingTests(WorldCommandTest):
         from world.presentation import item_appearance
 
         self.char1.change(lambda p: p["inventory"].update(battery=1))
-        for identity in ("battery", "machete", "vest", "bandage"):
+        for identity in ("battery", "explorer_machete", "expedition_workwear", "bandage"):
             with self.subTest(identity=identity):
                 self.assertIn(str(item_appearance(identity)), self.command(ITEMS[identity]["name"] + " 보기"))
 

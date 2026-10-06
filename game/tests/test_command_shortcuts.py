@@ -45,10 +45,10 @@ class CommandShortcutsTests(WorldCommandTest):
     def test_purchase_then_wield_and_location_specific_commands_run_sequentially(self):
         self.char1.location = self.rooms["weapon_shop"]
         self.char1.change(lambda p: p.update(credits=100))
-        self.run_raw("강철마체테 구매, 낡은마체테 해제, 강철마체테 무장 해")
+        self.run_raw("절단마체테 구매, 탐사용 벌목도 해제, 절단마체테 무장 해")
         profile = self.char1.profile_snapshot()
-        self.assertEqual(profile["inventory"]["blade"], 1)
-        self.assertEqual(profile["equipment"]["weapon"], "blade")
+        self.assertEqual(profile["inventory"]["cutting_machete"], 1)
+        self.assertEqual(profile["equipment"]["weapon"], "cutting_machete")
         self.assertEqual(profile["credits"], 40)
         self.run_raw("귀환, 승강기, 3층, 동, 북 해")
         self.assertEqual(self.char1.zone, "weapon_shop")

@@ -26,9 +26,9 @@ from world.targets import LootRequest, Mode, TargetSelector, ordered, select
 
 def build_entries(enemy, groups, now, rng=None):
     definition = ENEMIES[enemy.db.enemy_id]
-    items = ["scrap"]
-    if (rng or Random()).random() < definition["chance"]:
-        items.append(definition["drop"])
+    from world.loot_rules import roll_loot
+
+    items = roll_loot(enemy.db.enemy_id, rng or Random())
     weights = {key: sum(members.values()) for key, members in groups.items()}
     total = sum(weights.values())
     entries = []
@@ -59,8 +59,7 @@ def build_entries(enemy, groups, now, rng=None):
         entries.append(
             {
                 "kind": "item",
-                "id": item,
-                "quantity": 1,
+                **item,
                 "reserved_party": party.id if party else None,
                 "reserved_player": identity if kind == "player" else None,
                 "assigned_player": assigned,
@@ -118,9 +117,16 @@ def room_loot(room, corpse=True):
 
 def create_dropped_loot(room, entries, source_spawn=None):
     """직접 버리기와 시체 decay가 같은 바닥 물건 표현을 사용한다."""
-    entries = [normalize_entry(entry) for entry in entries]
-    dropped = create_object(DroppedLoot, key=asset_name(entries[0]), location=room)
-    dropped.db.entries = entries
+    dropped = create_object(DroppedLoot, key=asset_name(normalize_entry(entries[0])), location=room)
+    from world.item_runtime import native_runtime, require_runtime
+
+    require_runtime()
+    if native_runtime():
+        from world.loot_service import populate_source
+
+        populate_source(dropped, entries)
+    else:
+        dropped.db.entries = [normalize_entry(entry) for entry in entries]
     dropped.db.source_spawn = source_spawn
     return dropped
 
@@ -306,6 +312,11 @@ class Corpse(DistantPresenceMixin, DefaultObject):
     def from_enemy(cls, enemy, groups, now, rng=None, *, backend="legacy"):
         """native generation은 명시적으로 선택한다. 기존 사냥의 backend는 바꾸지 않는다."""
         with world_change():
+            from world.item_runtime import native_runtime, require_runtime
+
+            require_runtime()
+            if native_runtime():
+                backend = "item_entities"
             return cls._from_enemy(enemy, groups, now, rng, backend=backend)
 
     @classmethod
@@ -338,8 +349,11 @@ class Corpse(DistantPresenceMixin, DefaultObject):
         with world_change():
             if not self.pk or not object_by_id(self.pk):
                 return
+            from world.item_runtime import native_runtime
             from world.loot_service import decay_source, native_source, reconcile_claims
 
+            if native_runtime() and not native_source(self):
+                raise rules.RuleError("Item runtime migration required: corpse backend")
             reconcile_claims(self, now=now)
             if now < self.db.decay_at:
                 return

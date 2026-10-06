@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from evennia.utils.dbserialize import deserialize
 from world import credential_service as credentials
 from world import presentation, rules
 from world.content import ITEMS
@@ -93,7 +94,7 @@ class NativeCredentialTests(Phase5Test):
     def test_native_quest_reward_does_not_write_legacy_inventory(self):
         self.char1.change(lambda p: p["quests"]["radio_tower"].update(started=True, generator_fixed=True, boss_defeated=True))
         credentials.issuer_talk(self.char1, "outpost_supply_pass", rules.commander_talk)
-        self.assertEqual(self.char1.profile()["inventory"], {})
+        self.assertEqual(deserialize(self.char1.db.profile)["inventory"], {})
         self.assertEqual(ItemEntity.objects.get(owner_object=self.char1, definition_id="bandage").quantity, 3)
 
     def test_native_quest_save_failure_restores_reward_tree_and_sequence(self):

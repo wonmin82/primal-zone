@@ -87,8 +87,8 @@ class RecoveryRulesTests(TestCase):
         recovery.commit(p, rules.stats(p))
         self.assertEqual(p["hp"], 11)
         items = deepcopy(ITEMS)
-        items["machete"]["recovery_bonus"] = {"mental_per_minute": 6}
-        p["equipment"]["future_slot"] = "machete"
+        items["explorer_machete"]["modifiers"].append({"target": "recovery.mental_per_minute", "op": "add", "value": 6, "scope": "equipped"})
+        p["equipment"]["future_slot"] = "explorer_machete"
         self.accrue(p, 20, items=items)
         recovery.commit(p, rules.stats(p))
         self.assertEqual(p["mental"], 14)

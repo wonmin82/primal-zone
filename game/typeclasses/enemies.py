@@ -129,6 +129,19 @@ class Enemy(DistantPresenceMixin, DefaultObject):
             groups.setdefault(group, {})[player.id] = entry["damage"]
         return groups
 
+    def scale_boss(self, now):
+        definition = ENEMIES[self.db.enemy_id]
+        if not definition.get("boss"):
+            return
+        from world.loot_rules import boss_hp
+
+        participants = sum(len(group) for group in self.reward_groups(now).values())
+        count = max(self.db.scaling_participants or 1, participants)
+        maximum = boss_hp(definition["hp"], count)
+        self.db.hp += max(0, maximum - self.db.max_hp)
+        self.db.max_hp = maximum
+        self.db.scaling_participants = count
+
     def engage(self, player, now=None):
         now = time() if now is None else now
         with world_change():
@@ -243,9 +256,15 @@ class Enemy(DistantPresenceMixin, DefaultObject):
                 recovery.commit(resources, {"max_hp": self.db.max_hp, "max_mental": 0})
                 self.db.hp = resources["hp"]
                 self.db.recovery = state
+            if self.db.state == "alive" and not self.db.combatants and not self.db.contribution and self.db.hp == self.db.max_hp:
+                self.db.scaling_participants = 1
+                self.db.max_hp = ENEMIES[self.db.enemy_id]["hp"]
+                self.db.hp = self.db.max_hp
             if self.db.state == "respawning" and self.db.respawn_at <= now:
                 self.db.suppressions = {}
                 self.db.state = "alive"
+                self.db.scaling_participants = 1
+                self.db.max_hp = ENEMIES[self.db.enemy_id]["hp"]
                 self.db.hp = self.db.max_hp
                 self.db.respawn_at = None
                 self.db.enemy_round = 0
@@ -296,7 +315,17 @@ class Enemy(DistantPresenceMixin, DefaultObject):
                 recipient.save_profile(recipient_profile)
                 outcome["recipient"] = recipient.key
                 after_change(lambda: recipient.msg(f"{player.key}의 치료로 HP {outcome['amount']}을 회복했다."))
-            damage = min(self.db.hp, damage)
+            # 현재 공격의 기여를 먼저 등록해 late join의 증가분도 사망 판정 전에 적용한다.
+            contribution = deserialize(self.db.contribution)
+            previous = contribution.get(player.id, {"damage": 0})
+            contribution[player.id] = {"damage": previous["damage"] + damage,
+                                       "last_action_at": now, "group": self.group_for(player)}
+            self.db.contribution = contribution
+            self.scale_boss(now)
+            actual = min(self.db.hp, damage)
+            contribution[player.id]["damage"] = previous["damage"] + actual
+            self.db.contribution = contribution
+            damage = actual
             self.db.hp -= damage
             if "suppression" in outcome:
                 from world.progression import apply_suppression
@@ -313,14 +342,6 @@ class Enemy(DistantPresenceMixin, DefaultObject):
             threat = deserialize(self.db.threat)
             threat[player.id] = threat.get(player.id, 0) + damage
             self.db.threat = threat
-            contribution = deserialize(self.db.contribution)
-            previous = contribution.get(player.id, {"damage": 0})
-            contribution[player.id] = {
-                "damage": previous["damage"] + damage,
-                "last_action_at": now,
-                "group": self.group_for(player),
-            }
-            self.db.contribution = contribution
             player.save_profile(profile)
             message = view.outgoing_attack(profile, self.key, outcome, damage)
             after_change(lambda: player.msg(message))

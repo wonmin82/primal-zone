@@ -11,7 +11,12 @@ class ItemDefinitionTests(unittest.TestCase):
         for identity, definition in ITEMS.items():
             with self.subTest(identity=identity):
                 self.assertEqual(definition_errors(identity, definition), [])
-                if definition["item_type"] == "credential":
+                if identity in ("ridge_predator_mark", "predator_scale_charm"):
+                    self.assertEqual(definition["max_stack"], 1)
+                    self.assertTrue(definition["unique_per_owner"])
+                    self.assertTrue(can_item_operation(identity, "store"))
+                    self.assertFalse(can_item_operation(identity, "burn"))
+                elif definition["item_type"] == "credential":
                     self.assertEqual(definition["max_stack"], 1)
                     self.assertFalse(definition["stackable"])
                     self.assertTrue(definition["unique_per_owner"])
@@ -20,10 +25,10 @@ class ItemDefinitionTests(unittest.TestCase):
                     self.assertIsNone(definition["max_stack"])
                 for operation in ("drop", "give", "store", "sell"):
                     self.assertEqual(
-                        can_item_operation(identity, operation), definition["transferable"]
+                        can_item_operation(identity, operation), definition["operation_policy"][operation]
                     )
         self.assertFalse(ITEMS["flashlight"]["stackable"])
-        self.assertFalse(ITEMS["machete"]["stackable"])
+        self.assertFalse(ITEMS["explorer_machete"]["stackable"])
         self.assertTrue(ITEMS["bandage"]["stackable"])
 
     def test_malformed_metadata_and_unknown_operations_fail_closed(self):
