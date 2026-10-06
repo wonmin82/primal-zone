@@ -205,6 +205,7 @@ def inventory_rows(profile):
         candidates = tuple(item_snapshot(identity, ITEMS[identity],
                                          quantity=count, location="inventory")
                            for identity, count in profile["inventory"].items() if count > 0)
+    candidates += getattr(profile, "credential_items", ())
     rows = []
     for item in candidates:
         data = ITEMS[item.definition_id]

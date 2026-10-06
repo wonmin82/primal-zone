@@ -21,7 +21,7 @@ class SettlementRulesTests(TestCase):
         self.assertEqual(ITEMS["scrap"]["slot"], "material")
         self.assertTrue(ITEMS["scrap"]["transferable"])
         self.assertFalse(hasattr(content, "SHOP"))
-        self.assertEqual({item: ITEMS[item]["value"] for catalog in SHOP_CATALOGS.values() for item in catalog}, {
+        self.assertEqual({item: ITEMS[item]["value"] for catalog in SHOP_CATALOGS.values() for item in catalog["purchase_catalog"]}, {
             "flashlight": 30, "battery": 6, "bandage": 8, "field_ration": 4, "water": 3,
             "spear": 35, "blade": 60, "jungle_blade": 95, "carbine": 130, "heavy_carbine": 240,
             "leather_suit": 35, "tactical_vest": 85, "armor": 65, "heavy_suit": 190,

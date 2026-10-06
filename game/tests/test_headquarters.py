@@ -76,7 +76,10 @@ class HeadquartersTests(GameCommandTest):
                     with self.subTest(zone=zone, command=command):
                         self.char1.location = self.rooms[zone]
                         self.char1.execute_cmd(command)
-                        self.assertEqual(self.char1.location, self.rooms[destination])
+                        if ROOMS[destination].get("access"):
+                            self.assertEqual(self.char1.location, self.rooms[zone])
+                        else:
+                            self.assertEqual(self.char1.location, self.rooms[destination])
         self.char1.location = self.rooms["dock"]
         self.char1.execute_cmd("동")
         self.assertEqual(self.char1.zone, "hq_concourse")

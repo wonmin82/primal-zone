@@ -2,6 +2,21 @@
 
 확인일: 2026-10-06. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
 
+## Phase 5 — Credential + Access + Shops + Incinerator (2026-10-06)
+
+사용자의 Phase 5 요청에 따라 시작 main `248c849470bb709259902bd7f35780894a4c7b78`에서 새 `codex/credential-access-shops-incinerator` branch를 만들었다. fetch 시 local/main과 origin/main이 같고 작업 트리는 clean, 열린 PR은 없었다. Phase 1~4가 포함되어 있으며 baseline의 Game checks37390803018 test/smoke success를 확인했다. 이는 Phase 5 수정 HEAD의 검증과 별개다. 이번 요청은 구현·문서·commit·push·PR·최신 CI까지이며 PR은 병합하지 않는다.
+
+- Credential은 모든 backend에서 실제 ItemEntity만 SSOT다. non-stack/unique_per_owner/max_stack1/기존 unique_scope_key DB constraint를 사용한다. owner 전체 tree scope를 검사하고 burn만 허용한다. 임무 최종 보고의 XP/credits/붕대/claimed·출입증·profile 저장을 기존 world_change에 묶고 원래 issuer에서 출입증만 재발급한다. native의 새 붕대 reward도 Entity에만 저장한다. 기존 claimed 캐릭터에 startup 지급이나 자동 migration은 없다.
+- common can_enter/entry_message는 availability → 개인 출입증 → 기존 quest gate를 읽기 전용으로 검사한다. Exit와 Explorer.at_pre_move를 통해 Web 방향·직접 이동·승강기·귀환 등 현재 gameplay 경로가 같은 API를 사용한다. restricted→public 출구는 허용하며 party 권한을 공유하지 않는다. collective party movement 기능은 없다.
+- 본부 북쪽 전초 장비고/병기고와 남쪽 unavailable 예약 시설, 실제 상인2명과 정산소 소각기를 기존 managed bootstrap에 연결했다. 기존 stable room/NPC ID와 가격·수치를 유지한다. bootstrap idempotency는 격리 DB에서 확인하며 플레이 월드에서 build_world를 실행하지 않는다.
+- Shop V2는 purchase_catalog와 category accepts를 분리한다. T1/T2 기존 판매 ID만 기본점/전초 시설로 재배치한다. shop_service는 legacy profile adapter 또는 native ItemEntity source/sink를 사용하고 firearm은 full_standard로 구매한다. shopkeeper Entity 재고나 상품별 quest 검사, dual-write는 없다. 잔탄 매입은 기존 magazine_resale helper와 fixture 가격으로 검증하며 실제 최종 가격은 Phase 6이다.
+- 공통 parse_stack_quantity는 1/N개/모두와 stable instance 번호를 구별하며 기존 정산에도 적용한다. destroy_quantity는 부분 판매/소각 후 잔여 UUID/sequence/state를 유지한다. before/after hook의 active reference 정리와 실패 rollback을 보존한다. 출입증 확인은 정확한 후치 alias 소각 확정일 때만 명시적으로 전달하며 pending state나 문자열 확정 추론은 없다.
+- inventory/Web의 추가 Entity 표시는 legacy에서는 출입증만, native에서는 기존 Entity snapshot을 사용한다. 일반 legacy inventory/equipment/storage/light_sources, Container/loot blob과 profile version10은 그대로다. pure rules에 ORM query를 추가하지 않았으며 equipment/combat/recovery/loot math는 변경하지 않는다.
+
+최종 로컬 검증은 [playtest의 Phase 5 기록](playtest.md#phase-5-출입증접근상점소각-검증)에 기록한다. 순수71개/0.661초와 통합 targeted223개/156.765초(runner166.067초), check/diff가 성공했다. 개수는 재실행이나 이전 Phase와 합산하지 않는다. 개발 중 fixture의 기존 방/상점 수·정산관 첫 객체 전제, legacy 여분 장비 Web 판매 후보와 실제 시각 경계 실패를 구분해 보정했다. 경제 실패 원자성 test의 Explorer 시각만 고정하고 recovery formula/interval은 바꾸지 않았다. 마지막 코드 검증 이후 문서 변경은 게임 검사 재실행 조건이 아니다. 최신 PR HEAD CI run/SHA와 결과는 PR Validation에서 별도로 확인해 기록한다.
+
+PostgreSQL 실제 contention·multi-server race·전체 browser/multiplayer matrix·OS IME·local full suite·smoke-full·full-world migration·balance simulation은 미실행이다. JS/CSS/template 변경이 없어 browser/node/정적 파일 수집을 수행하지 않고 서버 action payload를 검사한다. 새로운 Django schema migration은 없다. Phase 6은 최종 content/가격, claimed entitlement의 명시적 출입증 migration과 일반 legacy full migration/integrity/runtime cutover를 수행할 수 있다. 자동 변환·최종 가격·boss reward·enemy/drop balance는 이번 diff에 없다. 상세 API와 이동 조사표는 [Phase 5 설계](credentials-access-shops.md)를 따른다. 아래 Phase 1~4 기록은 당시 이력으로 보존한다.
+
 ## PR #32 문서 마감·병합 및 소스 브랜치 정리 (2026-10-06)
 
 사용자가 문서 마감 후 [PR #32](https://github.com/wonmin82/primal-zone/pull/32) 병합과 소스 브랜치 삭제를 요청했다. 아래 구현·리뷰 단계의 merge 금지/OPEN 유지 설명은 당시 요청 범위이며 이번 명시적 병합 요청을 제한하지 않는다. Phase 5는 별도 요청 전 시작하지 않는다.

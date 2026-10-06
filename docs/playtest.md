@@ -1,5 +1,29 @@
 # 원시구역 테스트 안내
 
+## Phase 5 출입증·접근·상점·소각 검증
+
+시작 main은 `248c849470bb709259902bd7f35780894a4c7b78`, branch는 `codex/credential-access-shops-incinerator`다. 아래는 Phase 5 미커밋 diff의 격리 settings_test DB 검사이며 Phase 1~4 결과나 재실행 개수를 합산하지 않는다. 실제 구조/명령은 [출입증·접근·상점](credentials-access-shops.md)을 따른다.
+
+```powershell
+.\.venv\Scripts\python.exe scripts/dev.py check
+.\.venv\Scripts\python.exe scripts/dev.py test tests.test_credentials tests.test_access tests.test_shop_entities tests.test_incinerator tests.test_item_entities tests.test_item_interactions tests.test_headquarters tests.test_parties tests.test_integration tests.test_shops tests.test_equipment tests.test_firearms tests.test_settlement tests.test_text tests.test_rewards tests.test_regions tests.test_lifecycle tests.test_economy tests.test_command_shortcuts --parallel 2 --reverse
+git diff --check
+```
+
+관련 pure 검사는 game 디렉터리에서 `../.venv/Scripts/python.exe -X utf8 -m unittest world.test_shop_rules world.test_shops world.test_settlement world.test_headquarters world.test_rules world.test_economy`를 실행한다. 최종 순수71개/0.661초 성공이다. 위 통합 명령은223개/156.765초, runner166.067초 성공이며 실패/skip은 없다. check/diff도 성공했다. 로그는 Git 제외 work/phase5-closeout-targeted.log다. 마지막 코드 검증 이후 문서만 갱신하므로 게임 검사를 반복하지 않는다.
+
+회귀는 실제 임무 보고/출입증 재발급/고유 DB constraint·모든 operation 거절·숨겨진 owner scope·보상/profile/sequence 전체 rollback, 개인 access/예약 시설/제한실 퇴장/기존 ridge/방향·직접 이동, 실제 bootstrap 재실행, legacy/native 거래와 source/sink, 1/N개/모두·duplicate selector·장착 복사본 보호·loaded firearm 거절, fixture 탄창 잔탄 매입, 소각 same-room/perception/정확한 확정·burn→access loss→reissue, active-light 삭제 및 실패 원복을 포함한다. Web 서버 payload와 공통 후치 parser/개인 줄임말 회귀도 검사한다.
+
+### 개발 중 실패와 재검증
+
+- 최초 pure 명령을 저장소 root에서 실행해 world import 오류5개가 났으며 실제 test body는 실행되지 않았다. game에서 다시 실행했다. 초기 순수69개는 기존 catalog/방 개수/NPC 전제에서15개 실패, 보정 후69개는 전초 방 hint 기대값1개 실패했다. 최종 관련 순수71개는 위 명령으로 성공했다.
+- 초기 통합61개/75.686초는 기존 본부 traversal이 모든 새 방에 무조건 입장할 수 있다고 가정한 subcase8개가 실패했다. 권한 없는 새 목적지의 거절을 기대하도록 해당 fixture를 맞췄다. 새 Phase 5 module의 첫30개/29.875초(runner38.796초)는 성공했다. 이는 이후 보완된 최종 전체 관련 검사와 별도다.
+- 확대161개/114.461초(runner123.776초)는 정산소의 첫 객체가 정산관이라는 기존 fixture2개가 실패했다. 소각기가 함께 배치되므로 정산관을 이름으로 선택하고 hidden NPC 검사는 해당 정산관만 검사하도록 보정했다.
+- 확대201개/143.536초(runner152.658초)는 legacy 여분 무기의 모두 판매 Web action 누락1개와 기존 총 방 수52 기대값1개가 실패했다. snapshot의 legacy 장착 복사본만 제외하고 기존 모두 판매 동작을 유지하며 새 방4개를 포함해 기대값56으로 맞췄다.
+- 수정 영향4개 module의51개/39.894초(runner49.008초)는 경제 실패 비교 중 actual wall-clock 회복 경계가 넘어1개 실패했다. 해당 원자성 method의 Explorer 시각만100으로 고정했다. 나머지 검사와 출입증의 잘못된 확정 순서 거절은 통과했다. 이후 `tests.test_economy tests.test_command_shortcuts --parallel 2 --reverse`는40개/17.459초(runner26.800초) 성공했다. gameplay recovery 주기/공식은 변경하지 않았다.
+
+최신 PR HEAD의 자동 Game checks/test/Quick smoke는 push 후 별도 run/SHA로 기록하며 baseline main CI37390803018 성공으로 대신하지 않는다. PR을 병합하지 않는다. 로컬 full suite·smoke-full·전체 browser/multiplayer matrix·OS IME·PostgreSQL contention·multi-server race·full-world migration·balance simulation은 요청의 단계별 전략에 따라 미실행이다. JS/CSS/template를 수정하지 않아 browser/node/정적 수집은 미실행이고 Web action은 서버 payload test로 검사한다. production 가격/수치/profile schema와 플레이 DB·비밀 설정을 변경하지 않았다.
+
 ## PR #32 Phase 4 리뷰 수정 검증
 
 기준 HEAD `13cb330eb5a28784bab48688a8afa11291582d14` 위 리뷰2건만 수정한 diff를 격리 settings_test DB로 검사했다. 기존 Phase 4 검증과 아래 결과를 합산하지 않는다.

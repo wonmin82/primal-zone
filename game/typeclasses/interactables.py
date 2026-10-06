@@ -68,7 +68,9 @@ class Commander(ActionObject):
         from world import presentation as view
 
         before = caller.profile()
-        result = caller.change(rules.commander_talk)
+        from world.credential_service import issuer_talk
+
+        result, granted = issuer_talk(caller, "outpost_supply_pass", rules.commander_talk)
         after = caller.profile()
         if result == "start":
             body = ft.text(
@@ -89,10 +91,12 @@ class Commander(ActionObject):
                 ft.token("reward", format_currency(after["credits"] - before["credits"])),
                 ", ",
                 ft.item("bandage"),
-                f" {after['inventory'].get('bandage', 0) - before['inventory'].get('bandage', 0)}개를 받았다.",
+                " 3개를 받았다.",
             )
         else:
             body = view.quest(after)
+        if granted:
+            body = ft.text(body, "\n", ft.item("outpost_supply_pass"), "을 받았다." if result == "complete" else "을 무료로 재발급받았다.")
         caller.msg(ft.text(ft.token("npc", self.key), "\n\n", body))
 
 
@@ -412,22 +416,18 @@ class Shopkeeper(ActionObject):
     def web_actions(self, caller, target, observed_at=None):
         if not self.available(caller, observed_at):
             return []
-        profile = caller.profile_snapshot()
-        actions = [
-            {"label": "상품", "command": target + " 상품"},
-            *[{"label": f"{ITEMS[item]['name']} · {format_currency(rules.purchase_price(item))} 구매",
-               "command": f"{target}에게 {ITEMS[item]['name']} 구매"}
-              for item in SHOP_CATALOGS[self.db.shop_id]],
-            *[{"label": ITEMS[item]["name"] + " 가치", "command": f"{target}에게 {ITEMS[item]['name']} 가치"}
-              for item in SHOP_CATALOGS[self.db.shop_id]],
-        ]
-        for item in SHOP_CATALOGS[self.db.shop_id]:
-            quantity = profile["inventory"].get(item, 0) - sum(item == identity for identity in profile["equipment"].values())
-            if not ITEMS[item]["transferable"] or quantity <= 0:
-                continue
-            name, price = ITEMS[item]["name"], rules.resale_price(item)
+        from world.shop_service import shop_snapshot
+
+        catalog, sales = shop_snapshot(caller, self, observed_at)
+        actions = [{"label": "상품", "command": target + " 상품"}]
+        for item in catalog:
+            name = ITEMS[item]["name"]
+            actions.extend(({"label": f"{name} · {format_currency(rules.purchase_price(item))} 구매",
+                             "command": f"{target}에게 {name} 구매"},
+                            {"label": name + " 가치", "command": f"{target}에게 {name} 가치"}))
+        for name, quantity, price, stackable in sales:
             actions.append({"label": f"{name} · {format_currency(price)} 판매", "command": f"{target}에게 {name} 판매"})
-            if quantity >= 2:
+            if stackable and quantity >= 2:
                 actions.append({"label": f"{name} 모두 판매 · 총 {format_currency(quantity * price)}",
                                 "command": f"{target}에게 {name} 모두 판매"})
         return actions
@@ -453,21 +453,45 @@ class Shopkeeper(ActionObject):
         if action == "상품":
             caller.msg(view.shop(self.db.shop_id, self.key))
         elif action == "구매":
-            caller.change(lambda profile: rules.buy(profile, self.db.shop_id, args))
+            from world.shop_service import buy
+
+            buy(caller, self, args)
             caller.msg(ft.text(ft.item(args), " 1개를 받아 소지품에 넣었다."))
         elif action == "가치":
-            if args not in SHOP_CATALOGS[self.db.shop_id]:
-                raise rules.RuleError("취급하지 않는 물건입니다.")
-            caller.msg(ft.text(ft.token("npc", self.key), "은 ", ft.item(args), "의 가치를 ",
-                               ft.token("reward", format_currency(rules.purchase_price(args))), "으로 평가한다.\n매입가는 ",
-                               ft.token("reward", format_currency(rules.resale_price(args))), "이다."))
+            from world.shop_service import valuation
+
+            name, _quantity = args
+            price = valuation(caller, self, name)
+            from world.content.items import find_id
+            from world.targets import parse_selector
+
+            identity = find_id(ITEMS, parse_selector(name).name)
+            try:
+                purchase = rules.purchase_price(identity)
+            except rules.RuleError:
+                purchase = None
+            caller.msg(ft.text(ft.token("npc", self.key), "은 ", ft.token("item", name), "의 가치를 평가한다.\n",
+                               f"구매 기준가는 {format_currency(purchase)}이다.\n" if purchase else "",
+                               "매입가는 ", ft.token("reward", format_currency(price)), "이다."))
         elif action == "판매":
-            item, all_items = args
-            quantity, proceeds = caller.change(lambda profile: rules.sell(profile, self.db.shop_id, item, all_items=all_items))
-            caller.msg(ft.text(ft.token("npc", self.key), "이 ", ft.item(item), f" {quantity}개를 ",
-                               ft.token("reward", format_currency(proceeds)), "에 매입했다."))
+            from world.shop_service import sell
+
+            result = sell(caller, self, *args)
+            caller.msg(ft.text(ft.token("npc", self.key), "이 ", ft.token("item", result.label),
+                               f" {result.quantity}개를 ", ft.token("reward", format_currency(result.proceeds)), "에 매입했다.",
+                               f"\n잔탄 {result.rounds}발의 가치가 포함되었다." if result.rounds else ""))
         else:
             caller.msg(ft.text(ft.token("npc", self.key), "\n\n필요한 물품은 판매 목록을 살펴보세요. 보급칩으로 하나씩 구매할 수 있습니다."))
+
+
+class Incinerator(ActionObject):
+    detectability = "conspicuous"
+    description = "불필요한 물품을 폐기한다. 출입증은 소각 확정이 필요하며 원래 발급자에게 재발급받을 수 있다."
+    presence = "밀폐된 소각로에서 낮은 열기가 느껴진다."
+    actions = ("보기",)
+
+    def act(self, caller, action, args):
+        caller.msg(self.return_appearance(caller))
 
 
 class Pathfinder(ActionObject):
@@ -480,7 +504,9 @@ class Pathfinder(ActionObject):
 
     def act(self, caller, action, args):
         before = caller.profile()
-        result = caller.change(rules.jungle_talk)
+        from world.credential_service import issuer_talk
+
+        result, granted = issuer_talk(caller, "special_supply_pass", rules.jungle_talk)
         after = caller.profile()
         if result == "start":
             body = "관측소와 수몰 도로의 표식을 확인해 주세요. 두 기록을 맞추면 거목의 신호 장치가 연구구역 길을 열 겁니다."
@@ -494,6 +520,8 @@ class Pathfinder(ActionObject):
         else:
             from world import presentation as view
             body = view.quest(after)
+        if granted:
+            body = ft.text(body, "\n", ft.item("special_supply_pass"), "을 받았다." if result == "complete" else "을 무료로 재발급받았다.")
         caller.msg(ft.text(ft.token("npc", self.key), "\n\n", body))
 
 
@@ -586,6 +614,9 @@ def growth_controls(caller, observed_at=None):
 
 
 INTERACTABLES = {
+    "outpost_equipment_shopkeeper": {"room": "outpost_equipment", "typeclass": "Shopkeeper", "name": "전초 장비관", "aliases": ["장비관"], "shop_id": "outpost_equipment"},
+    "outpost_weapon_shopkeeper": {"room": "outpost_weapon", "typeclass": "Shopkeeper", "name": "전초 병기관", "aliases": ["병기관"], "shop_id": "outpost_weapon"},
+    "incinerator": {"room": "salvage_office", "typeclass": "Incinerator", "name": "폐기물 소각기", "aliases": ["소각기"]},
     "supply_shopkeeper": {"room": "supply_shop", "typeclass": "Shopkeeper", "name": "보급관", "aliases": ["보급상인"], "shop_id": "supply"},
     "weapon_shopkeeper": {"room": "weapon_shop", "typeclass": "Shopkeeper", "name": "무기상", "aliases": ["무기 상인"], "shop_id": "weapon"},
     "armor_shopkeeper": {"room": "armor_shop", "typeclass": "Shopkeeper", "name": "방어구상", "aliases": ["방어구 상인"], "shop_id": "armor"},

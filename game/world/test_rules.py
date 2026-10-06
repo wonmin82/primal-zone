@@ -191,16 +191,16 @@ class RuleTests(TestCase):
         for identity, data in ITEMS.items():
             self.assertEqual(find_id(ITEMS, identity), identity)
             self.assertEqual(find_id(ITEMS, data["name"]), identity)
-            self.assertIn(data["slot"], {"weapon", "armor", "consumable", "material", "trophy", "tool", "magazine", "ammo"})
+            self.assertIn(data["slot"], {"weapon", "armor", "consumable", "material", "trophy", "tool", "magazine", "ammo", "credential"})
             if data["slot"] in EQUIPMENT_ACTIONS:
                 self.assertTrue(
                     all(isinstance(data[k], int) and data[k] >= 0 for k in ("attack", "defense"))
                 )
-                sources = {item for catalog in SHOP_CATALOGS.values() for item in catalog} | {e["drop"] for e in ENEMIES.values()}
+                sources = {item for catalog in SHOP_CATALOGS.values() for item in catalog["purchase_catalog"]} | {e["drop"] for e in ENEMIES.values()}
                 sources |= set(rules.new_profile()["inventory"])
                 self.assertIn(identity, sources)
         for catalog in SHOP_CATALOGS.values():
-            for identity in catalog:
+            for identity in catalog["purchase_catalog"]:
                 price = ITEMS[identity]["value"]
                 self.assertIn(identity, ITEMS)
                 self.assertGreater(price, 0)
@@ -261,7 +261,7 @@ class RuleTests(TestCase):
 
     def test_every_credit_purchase_exact_cost_and_lossless_failure(self):
         for shop_id, catalog in SHOP_CATALOGS.items():
-            for identity in catalog:
+            for identity in catalog["purchase_catalog"]:
                 price = ITEMS[identity]["value"]
                 with self.subTest(item=identity):
                     profile = rules.new_profile()
@@ -368,7 +368,8 @@ class RuleTests(TestCase):
         prepared = {zone for zone in ROOMS if zone.startswith(("support_2f_", "support_3f_"))}
         prepared.update({"infirmary", "training_room", "armor_shop", "weapon_shop", "support_elevator", "tactics_room", "training_office", "shooting_range"})
         prepared.update(ROOF_ROOMS)
-        self.assertEqual(len(prepared), 27)
+        prepared.update({"outpost_equipment", "outpost_weapon", "reserved_equipment", "reserved_weapon"})
+        self.assertEqual(len(prepared), 31)
         self.assertEqual(visited, set(ROOMS) - prepared)
 
     def test_prepared_solo_player_can_beat_boss_across_rng_seeds(self):

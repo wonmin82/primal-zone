@@ -1,10 +1,10 @@
 # ItemEntity 기반·장비·상태형 아이템
 
-새 아이템 row의 SSOT는 `world.item_entities.models.ItemEntity`다. Phase 2 장비와 Phase 3 광원·총기 서비스는 명시적으로 선택한 ItemEntity 또는 legacy 저장소를 공통 snapshot으로 계산한다. 기존 캐릭터의 runtime SSOT는 legacy profile이며 상점·전리품·전체 저장 전환은 후속 단계다. 새 row와 자동 동기화하거나 dual-write하지 않는다. 상세 계약은 [장비·Modifier·Defense V1](equipment.md)과 [광원·총기](lighting-firearms.md)를 따른다. profile version은 10이다.
+새 아이템 row의 SSOT는 `world.item_entities.models.ItemEntity`다. Phase 2 장비와 Phase 3 광원·총기 서비스는 명시적으로 선택한 ItemEntity 또는 legacy 저장소를 공통 snapshot으로 계산한다. 기존 캐릭터의 runtime SSOT는 legacy profile이며 전리품은 Phase 4의 명시적 native backend, 상점은 Phase 5의 legacy/native facade를 사용하며 전체 저장 전환은 Phase 6이다. 새 row와 자동 동기화하거나 dual-write하지 않는다. 상세 계약은 [장비·Modifier·Defense V1](equipment.md)과 [광원·총기](lighting-firearms.md)를 따른다. profile version은 10이다.
 
 ## 정의와 모델
 
-정적 정의는 기존 `world.content.ITEMS`에 유지한다. `stackable`, `max_stack`, `unique_per_owner`, `operation_policy`, `item_type`을 추가하며 가격·기존 ID·표시명·전투 수치를 바꾸지 않는다. 무기·방어구·상태형 도구는 비스택, 일반 소비품·재료는 스택이다. 현재 모든 정의의 `max_stack`은 None이다. 기존 `transferable`에서 이동 policy를 파생해 현재 명령과의 호환성을 유지한다. 후속 단계에서 실제 명령을 새 domain으로 전환할 때 해당 필드도 정리한다.
+정적 정의는 기존 `world.content.ITEMS`에 유지한다. `stackable`, `max_stack`, `unique_per_owner`, `operation_policy`, `item_type`을 추가하며 가격·기존 ID·표시명·전투 수치를 바꾸지 않는다. 무기·방어구·상태형 도구는 비스택, 일반 소비품·재료는 스택이다. 일반 스택의 `max_stack`은 None이며 출입증은 1이다. 기존 `transferable`에서 이동 policy를 파생해 현재 명령과의 호환성을 유지한다. 후속 단계에서 실제 명령을 새 domain으로 전환할 때 해당 필드도 정리한다.
 
 `ItemEntity`는 UUID PK, definition_id, quantity, location_kind, owner_object, parent_item, slot, socket, JSON state, sequence, nullable unique_scope_key를 저장한다. `definition_id`는 DB FK가 아니라 registry key다. 소유 위치·정의별 순번과 부모/socket에 index를 둔다.
 
@@ -56,7 +56,7 @@ operation은 호출자가 직접 조작하는 root의 행동이다. contained ch
 | equip, unequip | root만 | root를 장착/해제하고 내부 물품은 따라 이동한다. child에 equip/unequip 허용을 요구하지 않는다. |
 | load, unload | root만 | 탄창 삽입/분리 또는 탄약 처리의 직접 조작 물품을 검사한다. 상위 서비스가 호환성·소유권·전투 제한을 검증한다. |
 | give, drop, store | root와 모든 descendants | 소유권·바닥/보관 위치 이전에서 내부 물품의 이동 제한도 유지한다. |
-| sell, burn, consume | root와 모든 descendants | 처분·소비를 통한 내부 물품 보호 우회를 막는다. 실제 판매·소각·소비 기능이나 재귀 삭제는 이번 단계에서 구현하지 않는다. |
+| sell, burn, consume | root와 모든 descendants | 처분·소비를 통한 내부 물품 보호 우회를 막는다. Phase 1에서는 policy만 정의했고 실제 판매·소각은 아래 Phase 5 source/sink에 연결한다. 재귀 삭제는 추가하지 않는다. |
 | loot | root와 모든 descendants | 획득으로 소유권을 이전할 때 내부 물품의 policy도 검사한다. 실제 LootClaim 권한은 loot_service에서 lock 후 검증한다. |
 
 `operation=None`은 migration/bootstrap 등 신뢰된 내부 작업의 policy 생략용이다. canonical 위치·순환·고유 범위·트랜잭션 검증은 그대로 적용된다. 사용자 action에서 거절을 피하는 일반 해법으로 사용하지 않는다. 실제 명령 서비스가 같은 방·지각·전투·전리품 권리·소유자 등 권한과 목적지를 검증한 뒤 정확한 operation을 전달해야 한다. 이 표는 policy 적용 범위다. Phase 2의 실제 장비/해제 명령도 동일한 root contract를 사용한다.
@@ -98,3 +98,9 @@ before/after_item_change는 equipment뿐 아니라 inventory source/destination/
 ## Phase 2 연결
 
 최종 장비 slot·capacity·손 조합은 모델 clean과 서비스에서 검증한다. equipment root의 create/move/delete는 owner lock과 기존 UUID 정렬 lock을 사용하고 같은 world_change 안에서 주무기 참조와 max/rate/회복을 reconcile한다. 실패 시 전체 변경을 rollback한다. raw QuerySet 쓰기는 사용자 domain 경로가 아니며 참조 정리를 우회해 사용하지 않는다. UUID·sequence·canonical 위치 DB constraint·parent/owner PROTECT·nested unique scope·split/merge·merge_state 계약과 ItemSequence migration은 변경하지 않았다. equipment에 임의 main_hand/비장비 정의를 넣는 Phase 1 fixture는 최종 hands/장비 정의로 갱신했다.
+
+## Phase 5 출입증과 부분 폐기
+
+출입증은 legacy/native와 무관하게 실제 ItemEntity만 SSOT다. 전초/특수 출입증은 non-stack, max_stack1, unique_per_owner로 owner tree의 unique_scope_key DB uniqueness를 사용한다. burn만 허용하고 drop/give/store/sell/consume/equip/unequip/loot/load/unload와 unknown operation은 거절한다. issuer 보상·재발급은 owner lock과 기존 ItemEntity API/sequence/world_change를 재사용한다. profile inventory에 복제하지 않고 legacy presentation에는 출입증 snapshot만 추가한다.
+
+`destroy_quantity(item, quantity, operation="sell"|"burn")`은 수량 검증 후 전체면 삭제, 부분이면 기존 source quantity만 줄인다. 잔여 UUID/sequence/state/unique_scope를 유지하며 children이 있는 stack의 부분 폐기는 거절한다. 기존 before/after item change에서 active reference를 같은 transaction에 정리하고 실패하면 전부 rollback한다. loaded firearm structural protection, split/merge/claim 계약은 유지한다. 출입증 확정 소각·접근 상실·issuer 무료 재발급과 Shop source/sink는 [Phase 5 설계](credentials-access-shops.md)를 따른다.

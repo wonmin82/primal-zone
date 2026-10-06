@@ -131,7 +131,7 @@ class SemanticTextTests(WorldCommandTest):
         self.assertIn("진행 60 / 100", view.experience(profile))
         self.assertIn(str(next_xp - 200), view.experience(profile))
         shop = view.shop("supply", "보급관")
-        for key in SHOP_CATALOGS["supply"]:
+        for key in SHOP_CATALOGS["supply"]["purchase_catalog"]:
             price = ITEMS[key]["value"]
             self.assertIn(ITEMS[key]["name"], tokens(shop, "item"))
             self.assertIn(f"{price}칩", tokens(shop, "reward"))

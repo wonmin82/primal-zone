@@ -5,7 +5,7 @@ from world import rules
 from world import text as ft
 from world.content import EQUIPMENT_ACTIONS, ITEMS
 from world.currency import currency_names
-from world.targets import item_selector, names, parse_loot, parse_relation, resolve, stack_selector
+from world.targets import item_selector, names, parse_loot, parse_relation, resolve
 
 from commands.base import GameCommand
 from commands.shops import resolve_shopkeeper, shopkeepers
@@ -81,16 +81,31 @@ class Buy(GameCommand):
             selector, value = parse_relation(value, "에게", [n for obj in objects for n in names(obj)])
             seller = resolve(objects, selector, self.caller, self.key)[0]
         if self.stack:
-            item, all_items = stack_selector(value, ITEMS, self.key)
+            from world.stack_quantity import parse_stack_quantity
+
+            value, quantity = parse_stack_quantity(value)
+            from world.shop_service import resolve_sale
+
+            if self.key == "가치":
+                from world.content.items import find_id
+                from world.targets import parse_selector
+
+                item = find_id(ITEMS, parse_selector(value).name)
+                selected = item
+            else:
+                selected = resolve_sale(self.caller, value)
+            item = selected.definition_id if hasattr(selected, "definition_id") else selected
         else:
             item = item_selector(value, ITEMS, self.key)
         if not item:
             raise rules.RuleError("물건 이름을 확인하세요. 예: 붕대 구매")
-        seller = seller or resolve_shopkeeper(self.caller, item=item, objects=objects)
-        seller.perform_action(self.caller, self.key, (item, all_items) if self.stack else item)
+        seller = seller or resolve_shopkeeper(self.caller, item=item, objects=objects, action=self.key)
+        seller.perform_action(self.caller, self.key, (value, quantity) if self.stack else item)
+
 
 
 class Value(Buy):
+    stack = True
     key = "가치"
     aliases = ["value"]
     usage = "강철마체테 가치 · 무기상에게 강철마체테 가치"
@@ -102,7 +117,7 @@ class Sell(Buy):
     aliases = ["sell"]
     stack = True
     usage = "강철마체테 판매 · 무기상에게 강철마체테 판매 · 붕대 모두 판매"
-    summary = "장착한 복사본을 남기고 취급 품목을 상인에게 판매합니다."
+    summary = "물품을 1개·N개·모두 판매합니다. 장비는 먼저 해제하세요."
 
 
 class Take(GameCommand):

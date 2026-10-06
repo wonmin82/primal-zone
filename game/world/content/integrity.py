@@ -87,6 +87,12 @@ def headquarters_errors():
     for facility, corridor in (("tactics_room", "support_2f_w2"), ("training_office", "support_2f_c"), ("shooting_range", "support_2f_e2")):
         expected[facility] = {"북": corridor}
         expected[corridor]["남"] = facility
+    for facility, corridor, direction in (
+        ("outpost_equipment", "support_3f_w2", "북"), ("outpost_weapon", "support_3f_e2", "북"),
+        ("reserved_equipment", "support_3f_w2", "남"), ("reserved_weapon", "support_3f_e2", "남"),
+    ):
+        expected[facility] = {OPPOSITE_DIRECTIONS[direction]: corridor}
+        expected[corridor][direction] = facility
     issues = []
     for zone in ROOF_ROOMS:
         room = ROOMS.get(zone, {})
@@ -149,10 +155,17 @@ def elevator_errors():
 
 def shop_errors():
     issues = []
-    if set(SHOP_CATALOGS) != {"supply", "weapon", "armor"}:
+    if set(SHOP_CATALOGS) != {"supply", "weapon", "armor", "outpost_weapon", "outpost_equipment"}:
         issues.append("상점 catalog ID가 올바르지 않습니다.")
     items = []
-    for shop_id, catalog in SHOP_CATALOGS.items():
+    for shop_id, definition in SHOP_CATALOGS.items():
+        if not isinstance(definition, dict) or set(definition) != {"purchase_catalog", "accepts"}:
+            issues.append(f"{shop_id}: purchase_catalog와 accepts가 필요합니다.")
+            continue
+        catalog = definition["purchase_catalog"]
+        if not definition["accepts"] or any(category not in {"weapon", "armor", "equipment", "tool", "consumable", "magazine", "ammo"}
+                                            for category in definition["accepts"]):
+            issues.append(f"{shop_id}: 매입 category가 올바르지 않습니다.")
         if not catalog:
             issues.append(f"{shop_id}: 상점 판매 목록이 비었습니다.")
         if not isinstance(catalog, (tuple, list)):
@@ -298,6 +311,11 @@ def errors(interactables):
         if light and (not positive_number(light.get("strength")) or type(light.get("range")) is not int or light["range"] < 0 or not isinstance(light.get("power_type"), str) or not light["power_type"].strip()):
             issues.append(f"{key}: 광원 정의가 유효하지 않습니다.")
     issues.extend(alias_errors(ITEMS))
+    for zone, room in ROOMS.items():
+        access = room.get("access")
+        if access is not None and (not isinstance(access, dict) or type(access.get("available")) is not bool
+                or ITEMS.get(access.get("credential"), {}).get("item_type") != "credential"):
+            issues.append(f"{zone}: 접근 가용성/출입증 정의가 올바르지 않습니다.")
     for identity, data in interactables.items():
         if data.get("room") in ROOF_ROOMS:
             issues.append(f"{identity}: 옥상 검증 Room {data['room']}에는 interactable/NPC를 배치할 수 없습니다.")
@@ -305,7 +323,7 @@ def errors(interactables):
             issues.append(f"{identity}: 대상 Room이 없습니다.")
         if data.get("typeclass") == "Shopkeeper" and data.get("shop_id") not in SHOP_CATALOGS:
             issues.append(f"{identity}: 상점 catalog가 없습니다.")
-    for identity, shop_id in (("supply_shopkeeper", "supply"), ("weapon_shopkeeper", "weapon"), ("armor_shopkeeper", "armor")):
+    for identity, shop_id in (("supply_shopkeeper", "supply"), ("weapon_shopkeeper", "weapon"), ("armor_shopkeeper", "armor"), ("outpost_weapon_shopkeeper", "outpost_weapon"), ("outpost_equipment_shopkeeper", "outpost_equipment")):
         data = interactables.get(identity, {})
         if data.get("shop_id") != shop_id or tuple(data.get("actions", ())) != ("대화", "상품", "구매", "가치", "판매"):
             issues.append(f"{identity}: 상점 catalog/행동 정의가 올바르지 않습니다.")

@@ -133,7 +133,7 @@ class EquipmentTests(WorldCommandTest):
         self.assertIn(ITEMS["jungle_blade"]["name"] + " [주무기]", view.equipment(self.char1.profile()))
         self.assertEqual((rules.stats(self.char1.profile())["attack"], rules.stats(self.char1.profile())["defense"]), (16, 3))
         for shop_id, catalog in SHOP_CATALOGS.items():
-            self.assertEqual({ITEMS[i]["name"] for i in catalog}, set(tokens(view.shop(shop_id, "상인"), "item")))
+            self.assertEqual({ITEMS[i]["name"] for i in catalog["purchase_catalog"]}, set(tokens(view.shop(shop_id, "상인"), "item")))
         for action, alias in (("무장", "wield"), ("착용", "wear")):
             registered = [c for c in COMMANDS if c.key == action]
             self.assertEqual(len(registered), 1)

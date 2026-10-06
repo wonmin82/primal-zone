@@ -10,6 +10,7 @@ from evennia.utils import delay
 from evennia.utils.dbserialize import deserialize
 from world import recovery, rules
 from world import text as ft
+from world.access import can_enter, entry_message
 from world.content import (
     ITEMS,
     REGIONS,
@@ -21,7 +22,6 @@ from world.content.economy import CURRENCY
 from world.currency import format_currency
 from world.distant_presentation import DistantPresence, DistantPresenceMixin
 from world.multiplayer import after_change
-from world.navigation import entry_block
 from world.quests import current_hint
 
 
@@ -398,9 +398,8 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         if profile.get("combat_target"):
             self.msg("전투 중에는 이동할 수 없습니다. '도망'으로 교전을 끝내세요.")
             return False
-        requirement = entry_block(profile, destination.db.zone_id)
-        if requirement:
-            self.msg(requirement["message"])
+        if not can_enter(self, destination):
+            self.msg(entry_message(self, destination))
             return False
         allowed = super().at_pre_move(destination, move_type=move_type, **kwargs)
         if allowed:

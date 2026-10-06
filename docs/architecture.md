@@ -1,5 +1,11 @@
 # 원시구역 구조와 설계 결정
 
+## Phase 5 출입증·접근·거래 경계
+
+Quest state는 entitlement/진행 이력이고 실제 access authority는 Credential ItemEntity다. Room access는 availability와 개인 credential을 읽기 전용 can_enter로 검사한다. legacy/native backend와 관계없이 credential_service가 지급·재발급을 소유하고 pure rules의 보상과 profile 저장을 outer world_change로 묶는다. 임무 완료만으로 입장시키거나 profile inventory에 출입증을 복제하지 않는다.
+
+Shopkeeper는 공간상의 서비스 제공자이며 Entity 재고 owner가 아니다. shop_service가 purchase_catalog/accepts를 분리하고 source/sink 거래를 처리한다. 일반 legacy 거래·소각은 profile adapter, native 거래·소각은 ItemEntity API를 사용한다. Legacy의 추가 Entity 소지품 표시는 Credential에만 한정한다. 공통 수량 parser와 destroy_quantity는 부분 stack identity를 유지한다. 기존 lock·reference·회복·LootClaim/화폐 경계를 대체하지 않으며 가격·콘텐츠 전체/migration/cutover는 Phase 6에 남긴다. 자세한 API·모든 이동 경로 조사표는 [출입증·접근·상점](credentials-access-shops.md)을 따른다.
+
 ## Phase 4 전리품 권리·화폐 (2026-10-06)
 
 Corpse/DroppedLoot는 공간 owner이며 실물은 ItemEntity, root 권리는 LootClaim, 보급칩은 CurrencyLoot와 player별 CurrencyLootShare다. 0인 share도 원래 요청 자격을 보존한다. 만료 조회는 읽기 전용이고 lifecycle에서 해당 source의 expired claim을 삭제한다. 부분 회수는 source claim 유지→claim 없는 split→inventory 이동/merge이며 전체 회수는 identity/sequence를 유지한다. decay는 tree·권리·화폐 share·보호 기한을 보존한다.

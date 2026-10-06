@@ -34,6 +34,11 @@ class Exit(ObjectParent, DefaultExit):
         if message:
             traversing_object.msg(ft.text(message))
             return
+        from world.access import can_enter, entry_message
+
+        if not can_enter(traversing_object, target_location):
+            traversing_object.msg(entry_message(traversing_object, target_location))
+            return
         return super().at_traverse(traversing_object, target_location, **kwargs)
 
     def can_observe_through(self, context):

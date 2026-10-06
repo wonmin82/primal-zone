@@ -75,7 +75,15 @@ def equipment_snapshot(character, profile=None):
 
 
 def bind_profile(character, profile):
-    return eq.EquipmentProfile(profile, equipment_snapshot(character, profile))
+    bound = eq.EquipmentProfile(profile, equipment_snapshot(character, profile))
+    if not entity_runtime(character):
+        from world.credential_service import credential_items
+
+        bound.credential_items = tuple(eq.item_snapshot(row.definition_id, ITEMS[row.definition_id],
+                                      item_id=row.pk, sequence=row.sequence, quantity=1, location="inventory")
+                                      for row in credential_items(character)
+                                      if row.location_kind == "inventory")
+    return bound
 
 
 def active_weapon(character, profile=None):

@@ -48,8 +48,8 @@ class EconomyRulesTests(TestCase):
 
     def test_item_value_is_the_only_price_source(self):
         for catalog in SHOP_CATALOGS.values():
-            self.assertIsInstance(catalog, tuple)
-            for item in catalog:
+            self.assertIsInstance(catalog["purchase_catalog"], tuple)
+            for item in catalog["purchase_catalog"]:
                 self.assertEqual(rules.purchase_price(item), ITEMS[item]["value"])
                 self.assertEqual(rules.resale_price(item), max(1, ITEMS[item]["value"] // 2))
         for item in ("scrap", "jungle_cell", "machete"):

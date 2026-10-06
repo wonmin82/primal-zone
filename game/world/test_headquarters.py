@@ -23,7 +23,7 @@ def content_targets():
                        "presence": "훈련 기록을 정리하고 있다.", "description": "훈련 기록을 관리한다.", "dialogue": "투자 방향을 정리해 드립니다."},
         "salvage_officer": {"room": "salvage_office", "actions": ["환율", "교환"]},
     }
-    for shop_id, room in (("supply", "supply_shop"), ("weapon", "weapon_shop"), ("armor", "armor_shop")):
+    for shop_id, room in (("supply", "supply_shop"), ("weapon", "weapon_shop"), ("armor", "armor_shop"), ("outpost_weapon", "outpost_weapon"), ("outpost_equipment", "outpost_equipment")):
         targets[shop_id + "_shopkeeper"] = {"room": room, "typeclass": "Shopkeeper", "shop_id": shop_id, "actions": ["대화", "상품", "구매", "가치", "판매"]}
     for zone, room in ROOMS.items():
         for hint in room.get("hints", []):
@@ -50,7 +50,7 @@ class HeadquartersRulesTests(TestCase):
         self.assertTrue(any("instructor: 본부 서비스" in issue for issue in errors(targets)))
 
     def test_hub_layout_and_prepared_rooms_are_valid(self):
-        self.assertEqual(len(HQ_ROOMS), 37)
+        self.assertEqual(len(HQ_ROOMS), 41)
         self.assertEqual(errors(content_targets()), [])
         self.assertEqual(ROOMS["staging_room"]["exits"], {"남": "hq_concourse"})
         self.assertEqual(ROOMS["hq_concourse"]["exits"], {
@@ -61,7 +61,7 @@ class HeadquartersRulesTests(TestCase):
         })
         self.assertEqual(ROOMS["support_1f_c"]["blocked_exits"], {"남": "남쪽 출입문은 현재 폐쇄되어 있다."})
         self.assertEqual(ROOMS["dock"]["exits"], {"북": "grass", "동": "hq_concourse"})
-        self.assertEqual(ROOMS["supply_shop"]["name"], "보급품 상점")
+        self.assertEqual(ROOMS["supply_shop"]["name"], "1F 보급품 상점")
         self.assertEqual(ROOMS["support_roof"]["exits"], ROOF_SIDES)
         for zone, room in HQ_ROOMS.items():
             self.assertTrue(room["safe"])
@@ -71,6 +71,8 @@ class HeadquartersRulesTests(TestCase):
                                                   {"target": "infirmary_bed", "action": "휴식"}])
             elif zone == "salvage_office":
                 self.assertEqual(room["hints"], [{"target": "salvage_officer", "action": "환율"}])
+            elif zone in ("outpost_equipment", "outpost_weapon"):
+                self.assertEqual(room["hints"], [{"target": zone + "_shopkeeper", "action": "상품"}])
             elif zone in ("supply_shop", "weapon_shop", "armor_shop"):
                 self.assertEqual(room["hints"], [{"target": zone.replace("_shop", "_shopkeeper"), "action": "상품"}])
             else:
@@ -149,7 +151,7 @@ class HeadquartersRulesTests(TestCase):
                 count += 1
                 self.assertNotIn(direction, room["exits"])
                 self.assertEqual(blocked_exit_message(zone, direction), message)
-        self.assertEqual(count, 19)
+        self.assertEqual(count, 15)
         for direction in ("남", "s", " S "):
             self.assertEqual(blocked_exit_message("support_1f_c", direction), "남쪽 출입문은 현재 폐쇄되어 있다.")
         self.assertIsNone(blocked_exit_message("support_1f_c", "북"))

@@ -64,6 +64,18 @@ for identity, name, alias, ammo_type in (
 ITEMS["carbine"]["firearm_family"] = "carbine_556"
 ITEMS["heavy_carbine"]["firearm_family"] = "rifle_762"
 
+# 출입증은 기존 profile 저장과 무관한 고유 Entity다.
+for identity, name, quest in (
+    ("outpost_supply_pass", "전초 보급구역 출입증", "radio_tower"),
+    ("special_supply_pass", "특수 보급구역 출입증", "deep_jungle"),
+):
+    ITEMS[identity] = {"name": name, "slot": "credential", "item_type": "credential",
+                       "stackable": False, "max_stack": 1, "unique_per_owner": True,
+                       "transferable": False, "credential_properties": {"quest": quest},
+                       "operation_policy": {operation: operation == "burn" for operation in (
+                           "drop", "give", "store", "sell", "consume", "equip", "unequip",
+                           "loot", "burn", "load", "unload")}}
+
 # 일반 물품은 이동 가능하고 임무 핵심 물품은 정의에서 명시적으로 차단한다.
 for definition in ITEMS.values():
     definition.setdefault("transferable", True)

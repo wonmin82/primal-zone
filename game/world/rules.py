@@ -131,7 +131,7 @@ def buy(profile, shop_id, item_id):
     require_peace(profile)
     if shop_id not in SHOP_CATALOGS:
         raise RuleError("상점 판매 목록을 확인할 수 없습니다.")
-    catalog = SHOP_CATALOGS[shop_id]
+    catalog = SHOP_CATALOGS[shop_id]["purchase_catalog"]
     if item_id not in catalog:
         raise RuleError("취급하지 않는 물건입니다.")
     price = purchase_price(item_id)
@@ -142,7 +142,8 @@ def buy(profile, shop_id, item_id):
 
 
 def purchase_price(item_id):
-    value = ITEMS.get(item_id, {}).get("value")
+    definition = ITEMS.get(item_id, {})
+    value = definition.get("purchase_unit_value", definition.get("value"))
     if type(value) is not int or value <= 0:
         raise RuleError("일반 상인이 매매할 수 없는 물건입니다.")
     return value
@@ -152,20 +153,27 @@ def resale_price(item_id):
     return max(1, purchase_price(item_id) // 2)
 
 
-def sell(profile, shop_id, item_id, *, all_items=False):
+def sell(profile, shop_id, item_id, *, all_items=False, quantity=1):
+    from world.content.shops import accepts
+    from world.item_entities.policy import can_item_operation
     from world.lighting import discard_device_state_if_unowned
 
     require_peace(profile)
-    if item_id not in SHOP_CATALOGS.get(shop_id, ()):
+    if not accepts(shop_id, ITEMS.get(item_id, {})):
         raise RuleError("취급하지 않는 물건입니다.")
+    if not can_item_operation(item_id, "sell"):
+        raise RuleError("이 물건은 판매할 수 없습니다.")
     price = resale_price(item_id)
-    # 장착 복사본 제외·임무 물품 차단은 기존 이동 규칙과 같은 정책이다.
-    quantity = move_item(profile["inventory"], {}, item_id, all_items=all_items,
-                         equipment=profile["equipment"])
+    reserved = sum(item_id == identity for identity in profile["equipment"].values())
+    available = profile["inventory"].get(item_id, 0) - reserved
+    amount = available if all_items else quantity
+    if type(amount) is not int or amount <= 0 or amount > available:
+        raise RuleError("판매할 수량이 부족합니다. 사용 중인 장비는 먼저 해제하세요.")
+    consume(profile, item_id, amount)
     discard_device_state_if_unowned(profile, item_id)
-    proceeds = quantity * price
+    proceeds = amount * price
     profile["credits"] += proceeds
-    return quantity, proceeds
+    return amount, proceeds
 
 
 def settle_salvage(profile, quantity):
