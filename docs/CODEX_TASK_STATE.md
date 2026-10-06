@@ -15,6 +15,8 @@
 
 최종 로컬 검증은 [playtest의 Phase 5 기록](playtest.md#phase-5-출입증접근상점소각-검증)에 기록한다. 순수71개/0.661초와 통합 targeted223개/156.765초(runner166.067초), check/diff가 성공했다. 개수는 재실행이나 이전 Phase와 합산하지 않는다. 개발 중 fixture의 기존 방/상점 수·정산관 첫 객체 전제, legacy 여분 장비 Web 판매 후보와 실제 시각 경계 실패를 구분해 보정했다. 경제 실패 원자성 test의 Explorer 시각만 고정하고 recovery formula/interval은 바꾸지 않았다. 마지막 코드 검증 이후 문서 변경은 게임 검사 재실행 조건이 아니다. 최신 PR HEAD CI run/SHA와 결과는 PR Validation에서 별도로 확인해 기록한다.
 
+[PR #33](https://github.com/wonmin82/primal-zone/pull/33)을 OPEN/non-draft로 생성했다. 구현 HEAD `ed79f48dfce2df74d8774e7babaa1f2c7f336bed`의 Game checks37406287020은 check/Quick smoke30.118초 성공이며 순수192개 중 출입증 max_stack=None의 이전 기대값2개가 실패해 통합을 시작하지 않았다. 정의 fixture를 max_stack1/non-stack/unique/burn 계약으로 보정하고 관련 순수73개/0.808초 및 check/diff가 성공했다. production 코드는 동일해223개를 재실행하지 않는다. 최신 보정 HEAD CI는 새 run/SHA로 PR Validation에서 확인하며 최초 실패 이력을 보존한다. 병합하지 않는다.
+
 PostgreSQL 실제 contention·multi-server race·전체 browser/multiplayer matrix·OS IME·local full suite·smoke-full·full-world migration·balance simulation은 미실행이다. JS/CSS/template 변경이 없어 browser/node/정적 파일 수집을 수행하지 않고 서버 action payload를 검사한다. 새로운 Django schema migration은 없다. Phase 6은 최종 content/가격, claimed entitlement의 명시적 출입증 migration과 일반 legacy full migration/integrity/runtime cutover를 수행할 수 있다. 자동 변환·최종 가격·boss reward·enemy/drop balance는 이번 diff에 없다. 상세 API와 이동 조사표는 [Phase 5 설계](credentials-access-shops.md)를 따른다. 아래 Phase 1~4 기록은 당시 이력으로 보존한다.
 
 ## PR #32 문서 마감·병합 및 소스 브랜치 정리 (2026-10-06)

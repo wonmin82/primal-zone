@@ -24,6 +24,12 @@ git diff --check
 
 최신 PR HEAD의 자동 Game checks/test/Quick smoke는 push 후 별도 run/SHA로 기록하며 baseline main CI37390803018 성공으로 대신하지 않는다. PR을 병합하지 않는다. 로컬 full suite·smoke-full·전체 browser/multiplayer matrix·OS IME·PostgreSQL contention·multi-server race·full-world migration·balance simulation은 요청의 단계별 전략에 따라 미실행이다. JS/CSS/template를 수정하지 않아 browser/node/정적 수집은 미실행이고 Web action은 서버 payload test로 검사한다. production 가격/수치/profile schema와 플레이 DB·비밀 설정을 변경하지 않았다.
 
+### PR #33 최초 CI와 정의 fixture 보정
+
+구현 HEAD `ed79f48dfce2df74d8774e7babaa1f2c7f336bed`의 [Game checks37406287020](https://github.com/wonmin82/primal-zone/actions/runs/37406287020)는 check와 Quick smoke30.118초 성공, test 실패다. 순수192개 중 출입증2개에서 기존 모든 max_stack=None 기대값이 실패했고 통합 suite는 시작하지 않았다. 출입증의 max_stack1/non-stack/unique_per_owner/burn 허용을 명시적으로 검사하도록 해당 순수 fixture만 보정했다. 일반 아이템의 max_stack=None/legacy transfer 정책 검사는 유지하며 실행 코드와 가격·규칙은 바꾸지 않았다.
+
+game에서 `../.venv/Scripts/python.exe -X utf8 -m unittest world.test_item_definitions world.test_shop_rules world.test_shops world.test_settlement world.test_headquarters world.test_rules world.test_economy`는73개/0.808초 성공했고 check/diff도 성공했다. 마지막 production 코드가 같아 targeted223개를 다시 실행하지 않는다. 로컬71개와73개를 합산하지 않으며 최초 CI 실패를 성공으로 덮어쓰지 않는다. 이후 최신 HEAD의 전체 자동 test/Quick smoke 결과는 [PR #33 Validation](https://github.com/wonmin82/primal-zone/pull/33)에 새 run/SHA로 기록한다.
+
 ## PR #32 Phase 4 리뷰 수정 검증
 
 기준 HEAD `13cb330eb5a28784bab48688a8afa11291582d14` 위 리뷰2건만 수정한 diff를 격리 settings_test DB로 검사했다. 기존 Phase 4 검증과 아래 결과를 합산하지 않는다.
