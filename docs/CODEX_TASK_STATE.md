@@ -1,3 +1,15 @@
+## PR #35 — Restart Preservation Review Fix (2026-10-07)
+
+시작 fetch의 PR/local/remote HEAD는 `c8416685191a32ee892300e1abcdaff2d32bdb63`, source는 `codex/phase7a-baseline-docs-closeout`, base main은 `75f41316a5e174df2a02ade46a7ac03dc8924318`이다. Tree clean, OPEN/non-draft/CLEAN/MERGEABLE, review thread0건과 이전 HEAD CI37539287152 성공을 확인했다. 기존 branch/PR만 수정하며 병합하지 않는다.
+
+- Review finding: 기존 native item 비교는 shutdown 뒤 stopped snapshot을 baseline으로 삼아 shutdown에서 잘못 바뀐 item을 놓칠 수 있었다. 이전 Full 성공 기록은 당시 coverage이며 소급 수정하지 않는다.
+- `scripts/smoke_closeout.py`는 before(live)→stopped(shutdown 완료)에서 일반 item 전체 불변·켜진 광원만 OFF/started_at=None/`project_power` 관찰 시각 범위 정산을 허용한다. active weapon은 유지하며 active light는 None이어야 한다. stopped→after(startup/relogin)는 item dict 전체를 엄격 비교한다.
+- Windows terminate는 callback을 건너뛸 수 있으므로 Full에서만 격리 settings/AMP의 정상 Evennia stop을 요청하고 owned process의 정상 exit를 확인한다. 기존 Harness/Quick 경로·타이머·fixture 자금·production·balance·migration은 변경하지 않는다. Live Full은 실제 ON/active UUID 손전등과 주무기를 먼저 확인한다.
+- `game/world/test_smoke.py`에 shutdown 불법 mutation·광원 정상/과다·과소 정산·OFF 광원 불변·startup strict preservation·Full 종료 요청 회귀를 보완했다. Pure14개/3.232초, snapshot integration3개/10.207초(runner22.160초)가 성공했다. 초기 check의 import formatting1건을 수정한 뒤 check가 성공했다. 격리 정상 종료 probe도 성공하고 cleanup/개발 DB 불변을 확인했다.
+- 첫 Full은 새 restart 구간에 도달하기 전 기존 성장 전투에서 회복품을 소진하고 패배했다. 변경 없는 동일 코드의 재실행은558.589초 성공했다. Before 실제 ON/active UUID 광원의 raw power1800.000 → stopped OFF/started_at=None/active_light=None·power1517.858(`project_power` 시각 범위 내), after는 stopped item 전체 strict 보존·active_light None·active weapon 보존을 실제 E2E로 확인했다. Corpse29.361초/respawn44.179초/protection120.333초, restart/relogin과 기존 storage/loot/party/world 검사도 성공했다.
+- 개발 DB SHA256 `B1318296F505B9B7522FCBDEDFF7642A06CF055E9DE72802198C70E6B8A7F700`,size733184,mtime_ns1790080153765082800 불변이다. 실패 로그/DB는 보존하고 성공 run은 owned process 종료/cleanup을 완료했다. Production·Quick 경로·fixture 수치는 변경하지 않았다.
+- 수정 commit push 뒤 latest HEAD와 일치하는 CI는 PR #35 Validation에 실제 SHA/run/count/time을 기록한다. 기존 시작 HEAD의 성공으로 대신하지 않는다. READY FOR PHASE 7B WITH NOTES를 유지하며 이전 notes와 이번 기존 progression smoke 실패 이력을 인계한다. 이 수정은 7B/7C/PostgreSQL 작업을 시작하지 않는다.
+
 ## Phase 7A — Baseline & Documentation Closeout (2026-10-06)
 
 - Base main: `75f41316a5e174df2a02ade46a7ac03dc8924318` (PR #34 merge). Branch: `codex/phase7a-baseline-docs-closeout`. 시작 tree clean, 열린 PR 없음, Phase 6 소스 branch는 원격/로컬에서 제거되어 있었다. 이후 예상 밖 main 변경은 없었다.

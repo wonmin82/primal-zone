@@ -1,6 +1,8 @@
 """Full 전용 본부·현재 두 임무·실제 restart 연결 검증. Quick 경로는 확장하지 않는다."""
 
 import asyncio
+import subprocess
+import sys
 from time import monotonic
 
 from smoke import count_item, route
@@ -8,8 +10,8 @@ from world.content import ITEMS
 from world.lighting import project_power
 
 
-def assert_restart_items(saved, restored, stopped_at, restored_at):
-    """Identity는 그대로, 켜진 광원만 종료/startup의 잔량 정산을 허용한다."""
+def assert_shutdown_items(saved, restored, before_at, stopped_at):
+    """Live → shutdown: 켜진 광원의 OFF/시간 정산만 허용한다."""
     assert saved.keys() == restored.keys(), "재시작 item identity 변경"
     for identity, old in saved.items():
         new = restored[identity]
@@ -20,11 +22,30 @@ def assert_restart_items(saved, restored, stopped_at, restored_at):
             expected = dict(old["state"], enabled=False, started_at=None,
                             remaining_power=state["remaining_power"])
             assert state == expected, (identity, "광원 OFF 정산 외 state 변경", state)
-            lower = project_power(old["state"], restored_at)["remaining_power"]
-            upper = project_power(old["state"], stopped_at)["remaining_power"]
+            lower = project_power(old["state"], stopped_at)["remaining_power"]
+            upper = project_power(old["state"], before_at)["remaining_power"]
             assert lower <= state["remaining_power"] <= upper, (identity, "광원 잔량", lower, state, upper)
         else:
             assert old["state"] == new["state"], (identity, "state 변경")
+
+
+def assert_startup_items(stopped, restored):
+    """Shutdown 정산 이후 startup/relogin은 item 전체를 그대로 보존한다."""
+    assert stopped == restored, "startup/relogin item 변경"
+
+
+def stop_for_restart(harness):
+    """Full 전용: 격리 Portal의 정상 종료를 요청하고 owned process exit를 확인한다."""
+    from smoke_harness import SHUTDOWN_TIMEOUT
+
+    assert harness.mode == "full"
+    harness.check_alive()
+    with (harness.run_dir / "restart-stop.log").open("w", encoding="utf-8") as log:
+        subprocess.run([sys.executable, "-m", "evennia", "stop", "--settings", "settings_smoke"],
+                       cwd=harness.run_dir / "game", env=harness.env, stdout=log,
+                       stderr=subprocess.STDOUT, timeout=SHUTDOWN_TIMEOUT, check=True)
+    for name, process in harness.processes:
+        assert process.wait(timeout=SHUTDOWN_TIMEOUT) == 0, (name, "정상 shutdown 실패")
 
 
 class Closeout:
@@ -279,26 +300,55 @@ class Closeout:
         await player.act("3층", lambda s: s["zone"] == "support_3f_c")
         await player.act("승강기", lambda s: s["zone"] == "support_elevator")
         await self.second.act("어린청소룡 공격", lambda s: s["combat_target"] is not None)
+        # before: live server의 shutdown 직전 DB. 실제 ON 광원/주무기가 전제다.
         before = await asyncio.to_thread(self.scenario.harness.checkpoint)
         assert before["players"][self.second.name]["profile"]["combat_target"] is not None
         assert before["facilities"]["states"]["outpost_power"] and before["loot"]
-        stopped = await self.scenario.harness.restart()
+        live = before["players"][player.name]
+        light_id = live["active_light"]
+        assert light_id is not None and light_id in live["items"], "live active light 없음"
+        light = live["items"][light_id]
+        assert ITEMS[light["definition"]].get("light_source") and light["state"]["enabled"]
+        assert live["active_weapon"] is not None and live["active_weapon"] in live["items"]
+        harness = self.scenario.harness
+        harness.restarting = True
+        try:
+            # Windows terminate는 callback을 건너뛴다. 실제 at_server_shutdown을 거친다.
+            await asyncio.to_thread(stop_for_restart, harness)
+            # stopped: 정상 shutdown 완료 후 DB. after: startup + relogin 후 DB.
+            stopped = await harness.restart()
+        finally:
+            harness.restarting = False
+        assert before["players"].keys() == stopped["players"].keys()
+        for name, saved in before["players"].items():
+            settled = stopped["players"][name]
+            assert_shutdown_items(saved["items"], settled["items"],
+                                  before["observed_at"], stopped["observed_at"])
+            assert saved["active_weapon"] == settled["active_weapon"], name
+            assert settled["active_light"] is None, name
+        settled_light = stopped["players"][player.name]["items"][light_id]["state"]
+        self.scenario.report("shutdown-items", f"live light ON/active UUID → OFF/None / "
+                             f"power {light['state']['remaining_power']:.3f}→"
+                             f"{settled_light['remaining_power']:.3f} (project_power 범위 내) / "
+                             "일반 item·tree·주무기 불변")
         await asyncio.gather(*(client.close() for client in self.scenario.players))
         for client in self.scenario.players:
             await client.open()
         after = await asyncio.to_thread(self.scenario.harness.checkpoint)
+        assert stopped["players"].keys() == after["players"].keys()
         preserved = ("xp", "credits", "inventory", "equipment", "storage", "attributes", "skills",
                      "skill_ready_at", "quests", "discoveries", "visited")
         for name, saved in stopped["players"].items():
             restored = after["players"][name]
             assert saved["id"] == restored["id"] and restored["zone"] == "staging_room"
             assert restored["home"] == "dock" and restored["profile"]["combat_target"] is None
-            assert_restart_items(saved["items"], restored["items"],
-                                 stopped["observed_at"], after["observed_at"])
+            assert_startup_items(saved["items"], restored["items"])
             assert saved["active_weapon"] == restored["active_weapon"], name
             assert restored["active_light"] is None, name
             assert {key: saved["profile"][key] for key in preserved} == {
                 key: restored["profile"][key] for key in preserved}, name
+        self.scenario.report("startup-items", "stopped → after UUID/quantity/sequence/tree/state 엄격 보존 / "
+                             "active_light None / active_weapon 보존 / relogin 성공")
         for name, saved in stopped["players"].items():
             for key in ("hp", "mental"):
                 assert after["players"][name]["profile"][key] >= saved["profile"][key]

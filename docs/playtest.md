@@ -2,6 +2,25 @@
 
 이 문서는 각 작업 시점의 historical validation record를 포함한다. 과거 미실행·미구현 기록은 당시 사실이며 현재 구현은 [architecture](architecture.md), [final-content](final-content.md), [최신 작업 상태](CODEX_TASK_STATE.md)를 따른다.
 
+## PR #35 restart preservation review fix (2026-10-07)
+
+시작 HEAD `c8416685191a32ee892300e1abcdaff2d32bdb63`에서 기존 PR source만 수정한다. 이전 Full의 stopped→after 비교는 shutdown 중 mutation을 baseline으로 흡수할 수 있었다. 아래 새 검증은 이전 성공·실패 기록을 대체하지 않는다.
+
+Before는 live server 종료 직전, stopped는 정상 shutdown callback 완료 뒤 DB, after는 restart/relogin 뒤 DB다. Before→stopped는 UUID/definition/quantity/sequence/location/parent/slot/socket/비광원 state를 보존하고 켜진 광원만 OFF·started_at=None·`project_power(before_at..stopped_at)` 잔량 범위를 허용한다. 꺼진 광원은 완전 불변이다. Stopped→after는 모든 item state까지 strict equality이며 shutdown 예외를 다시 적용하지 않는다. active_weapon은 세 시점에서 동일하고 실제 ON active_light는 UUID→None→None이다.
+
+Windows의 기존 terminate는 shutdown callback을 건너뛸 수 있어 Full 전용으로 격리 Portal에 `evennia stop --settings settings_smoke`를 요청하고 owned Server/Portal exit를 확인한다. Quick의 Client/Harness/Scenario/타이머는 변경하지 않는다. 기존 storage/loot/party/facility/elevator 및 combat cleanup·corpse/respawn 재예약 검사도 유지한다.
+
+- Game cwd `..\.venv\Scripts\python.exe -X utf8 -m unittest world.test_smoke`:14개/3.232초 성공. 일반 item mutation·광원 과다/과소 소비·OFF state·startup 추가 정산을 거절하는 회귀와 Full 종료 요청 검사를 포함한다.
+- `.\.venv\Scripts\python.exe scripts/dev.py test tests.test_smoke_infrastructure --parallel 2 --reverse`:3개/10.207초(runner22.160초) 성공. Snapshot 구현은 변경하지 않았지만 native checkpoint 회귀를 다시 확인했다.
+- 최초 `scripts/dev.py check`는 긴 import formatting1건 실패, 해당 import만 정리한 뒤 성공했다. 게임 수치나 동작으로 검사를 맞추지 않았다.
+- 격리 Full Harness의 짧은 정상 종료 probe: Server/Portal 정상 exit, cleanup, 개발 DB fingerprint 불변 성공. 이 probe가 아래 실제 Full restart E2E를 대신하지 않는다.
+- 첫 `.\.venv\Scripts\python.exe scripts/dev.py smoke-full`은 기존 progression의 두 번째 고장난경비기 전투에서 패배했다. XP236/Lv3·HP1/의무실, inventory 붕대0이며 새 restart 경로/검사는 아직 실행되지 않았다. Read-only 실패 DB 확인으로 힘0/체질4·기술R1·기존 장비/자금을 확인했다. 준비·전투 동선과 수치에 이번 수정이 없으며 동일 코드로 재실행한다. `work/phase7a-restart-full.log`와 `work/smoke/full-8ujrs6mx`에 실패 DB/로그를 보존하고 owned process 종료·개발 DB 불변을 확인했다. 이 실행에서 corpse29.400초/respawn44.311초/protection120.156초는 성공했다. 실패를 최종 Full 성공으로 표현하지 않는다.
+- 동일 코드 Full 재실행은 **558.589초 성공**했다(`work/phase7a-restart-full-2.log`). Corpse29.361초/respawn44.179초/protection120.333초로 production30/45/120초를 관찰했다. 첫 실패 뒤 source/fixture/timing/balance를 바꾸지 않았다.
+- 실제 `shutdown-items` assertion: before active_light UUID 존재·대응 ItemEntity ON·active weapon 존재를 확인했다. Raw remaining_power1800.000에서 stopped1517.858로 감소하며 관찰 시각 사이 `project_power` 범위에 들었다. 같은 light UUID의 enabled=False/started_at=None, active_light=None과 일반 item UUID/definition/quantity/sequence/location/parent/slot/socket/state 불변, active_weapon 불변을 검사했다. UUID 전체는 기록에 노출하지 않는다.
+- 실제 `startup-items` assertion: stopped→after 모든 ItemEntity dict를 strict 비교해 광원 추가 정산·quantity/tree/state mutation을 허용하지 않았다. After active_light=None, stopped와 동일한 OFF state/잔량1517.858, 주무기 보존 및 relogin이 성공했다. Storage/loot/party/facility/elevator·combat/claim 정리·corpse/respawn callback 재예약 기존 검사도 유지하며 통과했다.
+- 성공 run의 owned process 종료/cleanup과 개발 DB 전후 SHA256 `B1318296F505B9B7522FCBDEDFF7642A06CF055E9DE72802198C70E6B8A7F700`,size733184,mtime_ns1790080153765082800(UTC2026-09-22T12:29:13.7650828Z) 불변을 확인했다. 실제 플레이 DB에는 mutation/migration을 실행하지 않았다. 최신 수정 commit의 exact-head CI는 PR #35 Validation에 별도로 기록한다.
+- Quick 경로는 변경하지 않아 기존 최종 연속3회 결과를 유지하고 새 실행으로 표현하지 않는다. Local full suite·browser/IME·corpus·PostgreSQL·balance simulation·fresh operational DB도 이번 좁은 리뷰 수정에서 실행하지 않는다.
+
 ## Phase 7A baseline validation (2026-10-06)
 
 Base main `75f41316a5e174df2a02ade46a7ac03dc8924318`, branch `codex/phase7a-baseline-docs-closeout`에서 실행했다. 실제 플레이 DB migration 대상은 없으며 개발 DB와 모든 smoke DB를 분리했다. 아래 실행 개수는 합산하지 않는다.

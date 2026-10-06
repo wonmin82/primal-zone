@@ -40,6 +40,8 @@ Baseline & Documentation Closeout. 현재 문서와 historical 기록을 분리�
 
 기존 main의 Dependabot open4건(Twisted high1, Autobahn/DRF medium3)은 별도 보안 triage 관찰 사항이다. Runtime 노출/공격 재현은 미검증이며 이번 PR은 의존성을 변경하지 않는다. 이 사항과 reliability 이력을 포함한 7B 진입 판단은 READY FOR PHASE 7B WITH NOTES다.
 
+PR #35 restart 리뷰의 coverage 공백은 before→stopped shutdown invariant와 stopped→after strict preservation으로 보강했다. 실제 ON/active UUID 광원을 전제로 정상 shutdown의 OFF/started_at=None/시간 정산·참조 제거와 일반 item/주무기 불변을 Full E2E에서 검사했다. 재실행 Full558.589초 성공이며 첫 기존 progression 전투 실패도 playtest에 보존한다. Production·Quick timing·fixture/balance는 변경하지 않았다. 수정 HEAD의 정확한 CI는 PR Validation을 따르며 notes 판정을 유지한다.
+
 ## Phase 7B
 
 Integration & Legacy Compatibility Validation. 실제 browser/입력/멀티플레이와 격리 Canonical Legacy Migration Corpus를 검증한다. 아래 항목은 7A에서 수행하지 않는다.
