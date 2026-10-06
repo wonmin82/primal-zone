@@ -1,5 +1,11 @@
 # 원시구역 테스트 안내
 
+## PR #33 문서 마감 및 병합 검증
+
+2026-10-06 문서 마감·병합 요청의 시작 HEAD는 `0e5be5e4fe162f993adc92db459cbeeeabb41bf8`, main은 `248c849470bb709259902bd7f35780894a4c7b78`다. 리뷰 HEAD의 [Game checks37411748278](https://github.com/wonmin82/primal-zone/actions/runs/37411748278)는 check·순수192개/1.055초·통합526개/242.912초·Quick smoke30.882초 성공이며 로컬21개와 합산하지 않는다.
+
+마감 변경은 Task State와 이 검증 기록뿐이다. 실행 코드·테스트·설정·UI asset이 리뷰 검증 당시와 같아 아래 targeted21개/check 성공을 재사용하고 로컬 게임 검사·smoke·browser·node를 반복하지 않는다. 문서 경로·링크·명령과 과거 결과를 대조하고 git diff --check를 실행한다. 문서 HEAD 및 병합 commit의 자동 test/Quick smoke는 각각 새 run/SHA로 [PR #33 Validation/병합 마감 기록](https://github.com/wonmin82/primal-zone/pull/33)에 남긴다. 아래 병합 금지 설명은 이전 요청 시점의 범위이며 이번 명시적 병합 요청이 우선한다. 기존 PostgreSQL/multi-server·OS IME·전체 browser·migration·balance 공백은 유지한다.
+
 ## PR #33 출입증 소각 확정 문법 리뷰 검증
 
 시작 HEAD `f60c6c5c08d0486aa49961bc4458651254f6e6ab`의 incinerator_service·tests.test_incinerator만 수정하고 아래 명령을 격리 settings_test DB에서 실행한다. 기존 Phase 5 결과와 재실행 개수를 합산하지 않는다.

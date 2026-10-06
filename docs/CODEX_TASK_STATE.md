@@ -2,6 +2,16 @@
 
 확인일: 2026-10-06. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
 
+## PR #33 문서 마감·병합 및 소스 브랜치 정리 (2026-10-06)
+
+사용자가 문서 마감 후 [PR #33](https://github.com/wonmin82/primal-zone/pull/33) 병합과 소스 브랜치 삭제를 요청했다. 아래 구현·리뷰 단계의 병합 금지/OPEN 설명은 당시 요청 범위이며 이번 명시적 병합 요청을 제한하지 않는다. Phase 6은 별도 요청 전 시작하지 않는다.
+
+- 마감 시작 fetch에서 local/remote/PR HEAD는 `0e5be5e4fe162f993adc92db459cbeeeabb41bf8`, origin/main은 `248c849470bb709259902bd7f35780894a4c7b78`다. 작업 트리는 clean, main 대비 ahead3/behind0이며 다른 worktree에서 소스 branch를 사용하지 않는다. 최신 main을 이미 포함해 불필요한 rebase/이력 재작성을 하지 않는다.
+- 리뷰 HEAD의 [Game checks37411748278](https://github.com/wonmin82/primal-zone/actions/runs/37411748278)는 check·순수192개/1.055초·통합526개/242.912초·Quick smoke30.882초 성공이다. 문서 마감 HEAD와 병합된 main은 각각 새 run/SHA의 CI 결과를 PR Validation/마감 기록에서 확인하며 리뷰 HEAD 결과로 대신하지 않는다.
+- 이번 마감은 Task State/playtest만 수정한다. 출입증 raw selector와 일반 stack parser 경계, 접근·재발급·legacy/Phase 6 문서를 현재 구현과 대조했다. 실행 코드/테스트/의존성/UI asset은 리뷰 검증 당시와 같아 targeted21개와 당시 check 성공을 재사용한다. 문서의 링크·명령·이력을 검토하고 git diff --check를 실행하며 로컬 게임 검사·browser·smoke는 반복하지 않는다.
+- 최신 main 포함·non-draft·충돌 없음·필수 CI·리뷰 조건을 확인하고 merge commit으로 병합한다. source HEAD가 main에 포함된 것을 확인한 뒤 원격/로컬 codex/credential-access-shops-incinerator를 삭제하고 로컬 main을 fast-forward로 갱신한다. 실제 병합 commit·main CI·삭제 결과는 PR 마감 기록과 원격 상태를 기준으로 확인한다.
+- PostgreSQL 실제 경쟁·multi-server·전체 browser/multiplayer matrix·OS IME·full migration·balance simulation 공백은 유지한다. 플레이 DB·비밀 설정·밸런스·profile version10을 변경하지 않는다. 아래 Phase 1~5 기록과 실패/재실행 이력은 당시 결과로 보존한다.
+
 ## PR #33 Phase 5 출입증 소각 확정 리뷰 수정 (2026-10-06)
 
 시작 fetch에서 local/remote/PR HEAD는 `f60c6c5c08d0486aa49961bc4458651254f6e6ab`, branch는 기존 `codex/credential-access-shops-incinerator`, origin/main은 `248c849470bb709259902bd7f35780894a4c7b78`다. 작업 트리는 clean이고 main 대비 ahead2/behind0였다. 시작 HEAD CI37406457142 test/smoke success는 이전 검증이며 이번 리뷰 수정 HEAD의 성공을 대신하지 않는다. 기존 PR/branch에 수정 commit만 추가하고 병합하지 않는다.
