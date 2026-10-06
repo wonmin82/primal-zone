@@ -30,6 +30,12 @@ Decision interpretation: 최종 T1 drop에 회수부품이 없어 발전기 수�
 
 최종 보완 검증: cache 보상 안내의 이전 기대값으로 관련73개 중1건 실패한 뒤 기대값을 새 보상으로 맞췄다. 이후46개 실행에서 tests.test_text의 이전 시작 장비/숫자 column/단일 scrap drop 기대값3건이 실패했다. 실제 최종 장비와 독립 resource/special roll 계약에 맞춘 후 `scripts/dev.py test tests.test_text tests.test_phase6_runtime tests.test_item_migration tests.test_integration.GameplayIntegrationTests.test_cache_reward_is_personal_and_once_only --parallel 2 --reverse`는38개/35.987초(runner50.940초) 성공했다. 승인된 cache를 실제 generator 재료로 제출하는 native 경로도 포함한다. 추가 maintenance 방어선 전용1개는0.651초(runner11.125초) 성공했고 apply/cutover 거절 시 profile/rows/ledger/sequence/marker 불변을 확인했다. game cwd의 `..\.venv\Scripts\python.exe -X utf8 -m unittest world.test_rules world.test_final_content`는43개/0.500초 성공했다. 최신 check/diff도 성공했다. 실행별 개수는 합산하지 않는다.
 
+### PR #34 최초 CI와 package import 보정
+
+문서 HEAD `0d80f64a23a1b7fb202fd044cb042b7dfa1e20b3`의 [Game checks37433325751](https://github.com/wonmin82/primal-zone/actions/runs/37433325751)는 check 성공, 순수198개 중 discovery import1건 오류로 test 실패이며 통합은 시작하지 않았다. 새 item_migration package가 workflow/ORM을 eager import하여 Django 설정 없는 pure discovery에 영향을 줬다. package entry point에서 실제 호출 시 workflow를 import하도록 제한하고 Django가 미설정인 독립 프로세스에서 package import 성공을 확인했다. 관련 world.test_final_content 5개/0.017초와 migration/runtime targeted26개/26.267초(runner36.351초)가 성공했다. check/diff도 성공했다.
+
+같은 HEAD의 Linux Quick smoke는21.718초 성공했다. 실제 first round0.643초, corpse→ground0.786초, respawn/protection1.782초와 공동 전투·부분 currency·권리·shop·relogin을 확인했다. 이는 Windows의 실패4회를 성공으로 바꾸는 근거가 아니며 서로 별도 기록이다. 보정 후 최신 HEAD CI는 별도 run/SHA로 PR Validation에 기록한다.
+
 ## PR #33 문서 마감 및 병합 검증
 
 2026-10-06 문서 마감·병합 요청의 시작 HEAD는 `0e5be5e4fe162f993adc92db459cbeeeabb41bf8`, main은 `248c849470bb709259902bd7f35780894a4c7b78`다. 리뷰 HEAD의 [Game checks37411748278](https://github.com/wonmin82/primal-zone/actions/runs/37411748278)는 check·순수192개/1.055초·통합526개/242.912초·Quick smoke30.882초 성공이며 로컬21개와 합산하지 않는다.
