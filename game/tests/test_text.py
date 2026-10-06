@@ -325,7 +325,7 @@ class SemanticTextTests(WorldCommandTest):
         self.assertEqual(tokens(message.call_args.args[0], "npc"), [commander.key])
         self.assertIn("발전기", tokens(message.call_args.args[0], "object"))
         self.char1.change(lambda p: p["quests"]["radio_tower"].update(record_read=True))
-        self.char1.change(lambda p: p["inventory"].update(scrap=3))
+        self.char1.change(lambda p: p["inventory"].update(generator_repair_part=3))
         self.char1.location = self.rooms["generator"]
         generator = next(
             obj for obj in action_objects(self.char1.location) if isinstance(obj, Generator)

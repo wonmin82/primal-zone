@@ -20,6 +20,14 @@ ITEMS = {
     "field_ration": {"value": 5, "name": "야전식량", "slot": "consumable", "heal": 12, "consume_action": "먹어", "description": "탐사 중 간단히 먹을 수 있는 보존식이다. 비전투 중 먹으면 체력을 회복한다."},
     "water": {"value": 3, "name": "정제수", "slot": "consumable", "heal": 6, "consume_action": "마셔", "description": "안전하게 정제한 식수다. 비전투 중 마시면 체력을 조금 회복한다."},
     "scrap": {"name": "회수부품", "slot": "material"},
+    "generator_repair_part": {
+        "name": "정비용 회수부품", "aliases": ["정비부품", "발전기부품"], "slot": "material",
+        "item_type": "quest_resource", "stackable": True, "max_stack": 3,
+        "unique_per_owner": False, "transferable": False,
+        "description": "수송차 보급상자에 보관된 발전기 수리 전용 부품이다.",
+        "operation_policy": {operation: operation == "submit" for operation in (
+            "drop", "give", "store", "sell", "burn", "consume", "equip", "unequip", "loot", "load", "unload", "submit")},
+    },
     "jungle_cell": {
         "name": "밀림 신호전지",
         "transferable": False,
@@ -88,7 +96,7 @@ for definition in ITEMS.values():
     definition.setdefault("operation_policy", {
         **{operation: definition["transferable"] for operation in ("drop", "give", "store", "sell")},
         "consume": bool(definition.get("heal") or definition.get("power_source")),
-        "submit": definition is ITEMS["jungle_cell"] or definition is ITEMS["scrap"],
+        "submit": definition is ITEMS["jungle_cell"],
         "equip": definition["slot"] in ("weapon", "armor"),
         "unequip": definition["slot"] in ("weapon", "armor"),
         "loot": definition["transferable"],

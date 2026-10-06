@@ -110,3 +110,10 @@ before/after_item_change는 equipment뿐 아니라 inventory source/destination/
 `equipment_properties`와 구조화된 modifier가 최종 장비의 수치다. 탄약은 `purchase_unit_value`, `resale_unit_value`, `purchase_quantity`를 분리하고 총기는 body `value`와 package `purchase_unit_value`를 분리한다. 일반 매입가는 floor(value/2), explicit resale이 있으면 그것을 쓴다. field-only는 purchase catalog에 없고 drop/fixed discovery가 있으며 category 기반 resale은 가능하다. Boss unique는 가격이 없고 equip/unequip/store만 허용한다.
 
 일반 gameplay에서 생성된 definition_id와 sequence는 불변이다. 명시적 maintenance context에서 중앙 legacy mapping과 정확히 일치하는 definition 변경만 허용하며 기존 UUID·sequence·state·tree를 유지한다. 기존 native 총기의 탄창을 새 full 탄창으로 교체하지 않는다. legacy firearm 신규 변환만 full_standard를 사용한다. ledger와 global marker는 schema migration 0004이고 실제 월드 변환은 Django RunPython이 아닌 분리된 운영 서비스다.
+
+
+## Phase 6 리뷰: 귀속 이전과 진행 자원
+
+Native 사용자 이전은 같은 owner 내부 위치 변경과 owner-changing transfer를 구분한다. Shared storage 입출고와 give는 root 및 내부 tree의 transferable=true가 필요하다. Boss unique는 개인 보관 가능하지만 공용 보관 및 양도는 불가하다. 비정상 공용 귀속 row도 정상 gameplay로 회수하여 새 owner에게 귀속하지 않는다.
+
+`generator_repair_part`는 max_stack3의 submit-only quest resource다. 일반 scrap과 별개이며 발전기 수리3개 제출 외 정상 소실·이전 경로를 차단한다. Migration의 정비부품/fixed discovery entitlement는 owner tree 기준이며 ItemEntity schema/operation framework를 변경하지 않는다.

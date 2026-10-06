@@ -3,7 +3,7 @@
 from collections import Counter
 
 from world.content import ITEMS
-from world.content.item_mapping import BOSS_REWARDS
+from world.content.item_mapping import BOSS_REWARDS, FIXED_DISCOVERY_REWARDS
 from world.firearms import STANDARD_MAGAZINES
 from world.item_entities import api
 from world.loot_assets import normalize_entry
@@ -39,6 +39,9 @@ def conversion_errors(kind, obj, record):
         for row in roots:
             if ITEMS[row.definition_id].get("item_type") == "credential" or row.definition_id in BOSS_REWARDS.values():
                 expected[(row.definition_id, row.location_kind, row.slot)] += 1
+            elif row.definition_id in (*FIXED_DISCOVERY_REWARDS.values(), "generator_repair_part"):
+                key = (row.definition_id, row.location_kind, row.slot)
+                expected[key] = max(expected[key], actual[key])
         for quest, identity in BOSS_REWARDS.items():
             if raw["quests"].get(quest, {}).get("claimed") and not any(row.definition_id == identity for row in roots):
                 expected[(identity, "inventory", None)] += 1

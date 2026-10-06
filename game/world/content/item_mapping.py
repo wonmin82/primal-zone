@@ -11,3 +11,4 @@ LEGACY_ITEM_MAPPING = {
 
 STARTER_EQUIPMENT = ("explorer_machete", "expedition_workwear")
 BOSS_REWARDS = {"radio_tower": "ridge_predator_mark", "deep_jungle": "predator_scale_charm"}
+FIXED_DISCOVERY_REWARDS = {"supply_cache": "expedition_tag", "jungle_cache": "mental_stability_module"}

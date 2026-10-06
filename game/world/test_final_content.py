@@ -88,3 +88,28 @@ class FinalContentTests(TestCase):
         self.assertLess(values["hunter"], values["sentinel"])
         self.assertLess(values["dartclaw"], values["shellback"])
         self.assertLess(values["shellback"], values["stalker"])
+
+
+    def test_definition_reload_hp_preserves_full_idle_and_damage(self):
+        from world.loot_rules import updated_enemy_hp
+
+        for old_hp, old_max, new_max, state, combat, expected in (
+            (190, 190, 270, "alive", False, 270), (150, 190, 270, "alive", False, 150),
+            (270, 270, 190, "alive", False, 190), (150, 270, 190, "alive", False, 150),
+            (190, 190, 270, "alive", True, 190), (150, 190, 270, "alive", True, 150),
+            (0, 190, 270, "respawning", False, 0)):
+            with self.subTest(old_hp=old_hp, old_max=old_max, new_max=new_max, state=state, combat=combat):
+                self.assertEqual(updated_enemy_hp(old_hp, old_max, new_max, state, combat), expected)
+
+    def test_generator_parts_are_submit_only_and_never_economic_goods(self):
+        from world.item_entities.policy import TREE_OPERATION_SCOPES, can_item_operation
+        from world.settlement import parse_salvage
+
+        self.assertEqual(ITEMS["generator_repair_part"]["max_stack"], 3)
+        for operation in (*TREE_OPERATION_SCOPES, "unknown"):
+            self.assertEqual(can_item_operation("generator_repair_part", operation), operation == "submit")
+        for name in ("정비용 회수부품", "정비부품"):
+            with self.assertRaises(rules.RuleError):
+                parse_salvage(name)
+        self.assertEqual(final_content.acquisition_matrix()["generator_repair_part"], ["supply_cache", "migration:generator_unfixed"])
+        self.assertFalse(can_item_operation("scrap", "submit"))

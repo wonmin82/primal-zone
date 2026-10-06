@@ -135,4 +135,17 @@ world.test_final_content와 관련 pure regressions, tests.test_phase6_runtime/t
 
 ## 승인된 progression 보완
 
-최종 T1 drop 표에 회수부품이 없어 발전기 수리 이전의 획득 경로가 사라진 문제를 사용자에게 확인했다. 승인에 따라 수송차 보급상자의 기존 one-time 조사에서 붕대2개·탐사인식표에 회수부품3개를 추가한다. drop 확률·수리 비용3개·cache 반복 지급 금지는 유지한다. 기존 claimed cache를 migration에서 다시 지급하지 않는다.
+초기 Phase 6에서는 T1 drop에서 사라진 발전기 자원을 보충하기 위해 수송차에 일반 회수부품3개를 추가했다. 이 초기안은 아래 PR #34 리뷰 결정으로 정비용 회수부품으로 대체되었다. 기존 cache의 신규 장비 보상도 아래 migration entitlement로 소급하며 cache 자체를 다시 열지는 않는다.
+
+
+## PR #34 리뷰 보완 — 진행 자원·귀속·발견 보상
+
+초기 Phase 6의 일반 회수부품3개 보급안을 리뷰에서 정비용 회수부품(`generator_repair_part`)으로 대체했다. 일반 scrap의 field drop·정산 환율·처분 정책은 그대로이며 발전기는 정비용 부품3개만 submit한다. 수송차 보급상자는 붕대2개·탐사인식표와 정비용 부품 총3개를 확보하게 한다. Migration에서 이미 지급한 부품은 중복 지급하지 않는다.
+
+정비용 회수부품은 stack/max_stack3, transferable=false, submit-only이며 shop 구매·매입·가치·drop·give·store·burn·consume 대상이 아니다. Alias는 정비부품/발전기부품이다. 획득처는 fixed discovery와 명시적인 미수리 migration entitlement다.
+
+Boss unique의 store=true는 개인 보관에만 유효하다. Shared Container는 다른 owner이므로 owner-changing transfer의 transferable 검사를 통과해야 한다. 내부 tree의 귀속 물품도 검사한다. First final report 메시지는 실제 신규 지급한 unique 이름을 표시하며 반복 대화나 Credential 재발급에서 unique 지급을 다시 안내하지 않는다.
+
+기존 supply/jungle cache 완료 캐릭터의 탐사인식표/정신안정모듈은 owner tree에 없을 때 Explorer migration source transaction에서 소급한다. 이미 보유한 UUID/sequence를 유지한다. Full/idle alive 적은 콘텐츠 max HP 변경 시 새 max 기준 full을 유지하고 damaged/combat 상태는 기존 HP를 clamp한다. Boss scaling 참가자 수와 확정 수치는 변경하지 않는다.
+
+경비카빈 대표 전투 탄약 지출12칩은 경비기 expected gross 약26.9칩의44.6%로 목표15~30%를 초과한다. 이번 리뷰에서 가격·전투·drop 수치를 변경하지 않는다. Phase 7 full balance simulation에서 melee/firearm progression·shots-to-kill·refill cadence와 함께 재검토한다.

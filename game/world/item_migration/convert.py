@@ -1,5 +1,6 @@
 """source 하나의 원자적 변환. 운영 CLI와 fixture만 호출한다."""
 
+from collections import Counter
 from copy import deepcopy
 
 from django.utils import timezone
@@ -14,7 +15,7 @@ from world.item_runtime import VERSION
 from world.loot_entities.models import CurrencyLoot, CurrencyLootShare, LootClaim
 from world.multiplayer import world_change
 
-from .scan import json_state, ledger, plan, raw_source, target
+from .scan import entitlement_grants, json_state, ledger, plan, raw_source, target
 
 
 def create(identity, amount, owner, location):
@@ -73,6 +74,11 @@ def convert_explorer(obj, raw, now, was_native):
             for reward in (identity, credential):
                 if not any(row.definition_id == reward for row in api.items_owned_by(obj)):
                     api.create_item(reward, location_kind="inventory", owner_object=obj)
+    owned = Counter()
+    for row in api.items_owned_by(obj):
+        owned[row.definition_id] += row.quantity
+    for identity, amount in entitlement_grants(raw, owned).items():
+        api.create_item(identity, quantity=amount, location_kind="inventory", owner_object=obj)
     # recovery hook의 계산용 profile을 legacy blob에 쓰지 않는다. entitlement도 quest 기록을 바꾸지 않는다.
     obj.db.profile = saved_profile
 

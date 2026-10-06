@@ -2,6 +2,19 @@
 
 확인일: 2026-10-06. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
 
+## Phase 6 PR #34 review fixes (2026-10-06)
+
+시작 fetch에서 PR source는 `codex/content-balance-full-migration`, HEAD는 `fbb44170828c56ec9fb2af595643d9eed5f31680`, origin/main은 `94bc1e788fec5547841fb5f87e105854a69cc92b`이며 작업 트리는 clean이었다. 기존 HEAD CI37434685617 test/smoke 성공은 이번 수정 HEAD를 대신하지 않는다. 새 PR/branch를 만들거나 병합하지 않는다.
+
+- owner-changing native transfer에 transferable 검사를 추가한다. Boss unique는 personal storage만 허용하고 shared Container 입출고/give로 owner를 변경할 수 없다. 일반 transferable item의 shared transfer는 유지한다.
+- 일반 scrap은 경제 자원으로 보존하며 발전기는 `generator_repair_part`(정비용 회수부품)3개를 submit한다. Max stack3/submit-only 정책으로 판매·정산·소각·drop/give/store/consume을 차단한다. 수송차 cache는 기존 붕대2개·탐사인식표와 정비부품 총3개를 확보하며 migration 선지급분을 중복하지 않는다.
+- Explorer migration에서 generator 미수리 owner의 부족분을 채우고 기존 supply/jungle discovery 완료 캐릭터의 탐사인식표/정신안정모듈을 소급한다. Owner tree 전체를 검사하고 discoveries를 digest에 추가한다. Source atomicity·ledger·workflow·runtime cutover 구조는 유지한다.
+- bootstrap은 alive/full/idle 적만 새 max HP 기준 full로 유지하고 damaged/combat HP는 clamp한다. 기존 Boss scaling participant 수는 보존한다.
+- final report는 실제 지급한 Boss unique 이름을 안내하고 반복 대화/Credential 재발급에서 unique를 다시 지급한 것처럼 표시하지 않는다.
+- 경비카빈 ammo/gross 약44.6%는 Phase 7 full balance simulation에서 melee/firearm progression·shots-to-kill·refill cadence와 함께 검토한다. 이번 수정에 확정 가격·적 수치·drop·공식 변경은 없다.
+
+검증 명령·실패 보정 이력은 [playtest](playtest.md)의 PR #34 review fixes를 따른다. 최종 push의 정확한 run/HEAD/CI 결과는 PR Review fixes/Validation에 별도로 기록한다. 실제 플레이 DB에는 apply/cutover를 실행하지 않는다. 아래 초기 Phase 6/이전 Phase 기록은 당시 이력으로 보존한다.
+
 ## Phase 6 — Final Content + Balance + Full Migration + Runtime Cutover (2026-10-06)
 
 시작 main은 `94bc1e788fec5547841fb5f87e105854a69cc92b`, branch는 `codex/content-balance-full-migration`이다. fetch 시 clean, 열린 PR 없음, Phase 1~5 포함, baseline Game checks37413051057 test/smoke 성공을 확인했다. 이 baseline CI는 Phase 6 HEAD 결과를 대신하지 않는다. 이번 요청은 구현·검증·문서·commit·push·PR·최신 CI까지이며 병합하지 않는다.

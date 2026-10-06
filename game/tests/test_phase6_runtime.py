@@ -5,6 +5,7 @@ from random import Random
 from time import time
 from unittest.mock import Mock, patch
 
+from django.core.exceptions import ValidationError
 from django.test import override_settings
 from evennia import search_tag
 from evennia.utils.dbserialize import deserialize
@@ -161,13 +162,12 @@ class Phase6RuntimeTests(WorldCommandTest):
             with patch.object(self.char1, "save_profile", side_effect=RuntimeError("save")), self.assertRaises(RuntimeError):
                 credential_service.issuer_talk(self.char1, credential, operation)
             self.assertEqual(self.state(), before)
-            self.assertEqual(credential_service.issuer_talk(self.char1, credential, operation), ("complete", True))
+            self.assertEqual(credential_service.issuer_talk(self.char1, credential, operation), ("complete", True, True))
             row = api.items_owned_by(self.char1).get(definition_id=identity)
             after = self.state()
             credential_service.issuer_talk(self.char1, credential, operation)
             self.assertEqual(self.state(), after)
             for action in ("drop", "give", "sell", "burn", "consume", "loot", "unknown"):
-                from django.core.exceptions import ValidationError
                 with self.subTest(action=action), self.assertRaises(ValidationError):
                     api.delete_item(row, operation=action)
             api.move_item_tree(row, location_kind="equipment", slot=ITEMS[identity]["equipment_properties"]["slot"], owner_object=self.char1, operation="equip")
@@ -178,7 +178,7 @@ class Phase6RuntimeTests(WorldCommandTest):
         self.char1.change(rules.claim_cache)
         self.char1.change(rules.claim_jungle_cache)
         self.assertEqual(self.char1.profile()["inventory"]["expedition_tag"], 1)
-        self.assertEqual(self.char1.profile()["inventory"]["scrap"], 3)
+        self.assertEqual(self.char1.profile()["inventory"]["generator_repair_part"], 3)
         self.assertEqual(self.char1.profile()["inventory"]["mental_stability_module"], 1)
         self.assertGreater(self.char1.profile()["inventory"]["bandage"], 3)
         before = self.state()
@@ -190,9 +190,9 @@ class Phase6RuntimeTests(WorldCommandTest):
     def test_native_quest_submission_consumes_resources_without_legacy_write(self):
         self.char1.change(lambda p: p["quests"]["radio_tower"].update(started=True, record_read=True))
         self.char1.change(rules.claim_cache)
-        self.assertEqual(self.char1.profile()["inventory"]["scrap"], 3)
+        self.assertEqual(self.char1.profile()["inventory"]["generator_repair_part"], 3)
         self.char1.change(rules.fix_generator)
-        self.assertFalse(api.items_owned_by(self.char1).filter(definition_id="scrap").exists())
+        self.assertFalse(api.items_owned_by(self.char1).filter(definition_id="generator_repair_part").exists())
         self.char1.change(lambda p: p["quests"]["deep_jungle"].update(started=True, watch_marked=True, road_marked=True))
         api.create_item("jungle_cell", owner_object=self.char1, location_kind="inventory")
         self.char1.change(rules.open_jungle_gate)
@@ -222,3 +222,128 @@ class Phase6RuntimeTests(WorldCommandTest):
         self.char2.leave_combat(now=103)
         boss.scale_boss(103)
         self.assertEqual(boss.db.max_hp, int(170 * 1.75))
+
+
+    def test_owner_changing_transfer_rejects_unique_but_preserves_personal_storage(self):
+        from world.item_transfer_native import transfer
+
+        self.char1.location = self.rooms["storage_room"]
+        self.char2.location = self.char1.location
+        personal, shared = self.obj("personal_locker"), self.obj("shared_container")
+        for identity in BOSS_REWARDS.values():
+            row = api.create_item(identity, owner_object=self.char1, location_kind="inventory")
+            original = (row.pk, row.sequence)
+            transfer(self.char1, ITEMS[identity]["name"], container=personal)
+            row.refresh_from_db()
+            self.assertEqual((row.location_kind, row.owner_object_id), ("personal_storage", self.char1.pk))
+            transfer(self.char1, ITEMS[identity]["name"], container=personal, withdraw=True)
+            row.refresh_from_db()
+            self.assertEqual((row.pk, row.sequence, row.location_kind), (*original, "inventory"))
+            for kwargs in ({"container": shared}, {"recipient": self.char2}):
+                before = self.state()
+                with self.assertRaises(rules.RuleError):
+                    transfer(self.char1, ITEMS[identity]["name"], **kwargs)
+                self.assertEqual(before, self.state())
+            # 기존 비정상 공용 row는 자동 귀속/복구 없이 양쪽 player 회수를 막는다.
+            api.move_item_tree(row, location_kind="shared_storage", owner_object=shared)
+            for player in (self.char1, self.char2):
+                before = self.state()
+                with self.assertRaises(rules.RuleError):
+                    transfer(player, ITEMS[identity]["name"], container=shared, withdraw=True)
+                self.assertEqual(before, self.state())
+        ordinary = api.create_item("scrap", quantity=2, owner_object=self.char1, location_kind="inventory")
+        transfer(self.char1, "회수부품 모두", container=shared)
+        transfer(self.char2, "회수부품 모두", container=shared, withdraw=True)
+        ordinary.refresh_from_db()
+        self.assertEqual((ordinary.owner_object_id, ordinary.quantity), (self.char2.pk, 2))
+
+    def test_fresh_cache_repair_parts_cannot_be_lost_and_submit_leaves_scrap(self):
+        from evennia import create_object
+        from world.item_inventory import consume
+        from world.item_transfer_native import transfer
+        from world.settlement import parse_salvage
+
+        player = create_object(Explorer, key="새 진행 탐사자", location=self.rooms["dock"])
+        player.push_state, player.schedule_recovery = Mock(), Mock()
+        cache = self.obj("supply_cache")
+        player.location = cache.location
+        with patch.object(player, "msg") as output:
+            cache.act(player, "조사", None)
+            self.assertIn("정비용 회수부품", str(output.call_args_list))
+            self.assertIn("탐사인식표", str(output.call_args_list))
+        self.assertEqual(player.profile()["inventory"]["generator_repair_part"], 3)
+        self.assertNotIn("scrap", player.profile()["inventory"])
+        def state():
+            return (deserialize(player.db.profile), list(ItemEntity.objects.order_by("sequence").values()),
+                    ItemSequence.objects.get(pk=1).last_value, player.db.active_weapon_item_id, player.db.active_light_item_id)
+        for shop_id in ("supply_shopkeeper", "weapon_shopkeeper", "armor_shopkeeper", "outpost_weapon_shopkeeper", "outpost_equipment_shopkeeper"):
+            shop = self.obj(shop_id)
+            player.location = shop.location
+            for action, arg in ((shop_service.buy, "generator_repair_part"), (shop_service.sell, "정비부품"), (shop_service.valuation, "정비부품")):
+                before = state()
+                with self.assertRaises(rules.RuleError):
+                    action(player, shop, arg)
+                self.assertEqual(before, state())
+        player.location = self.rooms["salvage_office"]
+        for action in (lambda: incinerate(player, "정비부품"), lambda: consume(player, "generator_repair_part", 1),
+                       lambda: parse_salvage("정비용 회수부품")):
+            before = state()
+            with self.assertRaises((rules.RuleError, ValidationError)):
+                action()
+            self.assertEqual(before, state())
+        player.location = self.rooms["storage_room"]
+        self.char2.location = player.location
+        for kwargs in ({}, {"recipient": self.char2}, {"container": self.obj("personal_locker")}, {"container": self.obj("shared_container")}):
+            before = state()
+            with self.assertRaises(rules.RuleError):
+                transfer(player, "정비부품", **kwargs)
+            self.assertEqual(before, state())
+        scrap = api.create_item("scrap", quantity=7, owner_object=player, location_kind="inventory")
+        player.change(lambda p: p["quests"]["radio_tower"].update(started=True, record_read=True))
+        player.change(rules.fix_generator)
+        self.assertTrue(player.profile()["quests"]["radio_tower"]["generator_fixed"])
+        self.assertFalse(api.items_owned_by(player).filter(definition_id="generator_repair_part").exists())
+        scrap.refresh_from_db()
+        self.assertEqual(scrap.quantity, 7)
+
+    def test_final_report_messages_only_announce_actual_unique_grants(self):
+        for quest, npc_id, credential in (("radio_tower", "commander", "outpost_supply_pass"),
+                                          ("deep_jungle", "pathfinder", "special_supply_pass")):
+            npc = self.obj(npc_id)
+            self.char1.location = npc.location
+            self.char1.change(lambda p: p["quests"][quest].update(started=True, boss_defeated=True, **({"generator_fixed": True} if quest == "radio_tower" else {})))
+            identity = BOSS_REWARDS[quest]
+            with patch.object(self.char1, "msg") as output:
+                npc.perform_action(self.char1, "대화")
+                message = str(output.call_args_list)
+                for token in (ITEMS[identity]["name"], ITEMS[credential]["name"], "경험치", "칩", "3개"):
+                    self.assertIn(token, message)
+                output.reset_mock()
+                npc.perform_action(self.char1, "대화")
+                self.assertNotIn(ITEMS[identity]["name"], str(output.call_args_list))
+                api.delete_item(api.items_owned_by(self.char1).get(definition_id=credential), operation="burn")
+                output.reset_mock()
+                npc.perform_action(self.char1, "대화")
+                message = str(output.call_args_list)
+                self.assertIn("재발급", message)
+                self.assertNotIn(ITEMS[identity]["name"], message)
+                self.assertEqual(api.items_owned_by(self.char1).filter(definition_id=identity).count(), 1)
+
+
+    def test_existing_entitlements_do_not_repeat_cache_parts_or_report_credential(self):
+        cache = self.obj("supply_cache")
+        self.char1.location = cache.location
+        with patch.object(self.char1, "msg") as output:
+            cache.perform_action(self.char1, "조사")
+            self.assertIn("기존 보유량을 포함해 3개", str(output.call_args_list))
+            self.assertNotIn("0개", str(output.call_args_list))
+        self.assertEqual(sum(row.quantity for row in api.items_owned_by(self.char1) if row.definition_id == "generator_repair_part"), 3)
+        credential_service.grant_credential(self.char1, "outpost_supply_pass")
+        self.char1.change(lambda p: p["quests"]["radio_tower"].update(started=True, generator_fixed=True, boss_defeated=True))
+        commander = self.obj("commander")
+        self.char1.location = commander.location
+        with patch.object(self.char1, "msg") as output:
+            commander.perform_action(self.char1, "대화")
+            message = str(output.call_args_list)
+            self.assertIn("능선포식자표식", message)
+            self.assertNotIn("전초 보급구역 출입증", message)

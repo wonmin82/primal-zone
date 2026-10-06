@@ -33,6 +33,27 @@ class RegionTests(WorldCommandTest):
         for module in ("enemies", "explorers", "loot"):
             self.enterContext(patch(f"typeclasses.{module}.delay"))
 
+    def test_bootstrap_definition_hp_keeps_full_idle_and_scaled_encounters(self):
+        enemy = next(obj for obj in room_enemies(self.rooms["ridge"]) if obj.db.enemy_id == "alpha")
+        current_id = enemy.db.enemy_id
+        for hp, old_max, new_max, combat, expected in ((190, 190, 270, False, 270), (150, 190, 270, False, 150),
+                                                       (270, 270, 190, False, 190), (150, 270, 190, False, 150),
+                                                       (190, 190, 270, True, 190)):
+            with self.subTest(hp=hp, old_max=old_max, new_max=new_max, combat=combat):
+                enemy.db.hp, enemy.db.max_hp = hp, old_max
+                enemy.db.state = "alive"
+                enemy.db.combatants = [self.char1.pk] if combat else []
+                enemy.db.scaling_participants = 1
+                with patch.dict(ENEMIES[current_id], hp=new_max):
+                    build_world()
+                self.assertEqual((enemy.db.hp, enemy.db.max_hp), (expected, new_max))
+        enemy.db.hp, enemy.db.max_hp = 200, 297
+        enemy.db.combatants = [self.char1.pk, self.char2.pk]
+        enemy.db.scaling_participants = 2
+        with patch.dict(ENEMIES[current_id], hp=170):
+            build_world()
+        self.assertEqual((enemy.db.hp, enemy.db.max_hp, enemy.db.scaling_participants), (200, 297, 2))
+
     def test_content_integrity_and_stable_first_region(self):
         self.assertEqual(errors(INTERACTABLES), [])
         self.assertEqual(len(REGIONS), 3)

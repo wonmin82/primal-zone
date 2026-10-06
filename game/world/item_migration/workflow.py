@@ -1,5 +1,6 @@
 """명시적 dry-run/apply/verify/cutover와 offline 방어선."""
 
+from collections import Counter
 from contextlib import contextmanager
 from pathlib import Path
 from time import time
@@ -11,7 +12,7 @@ from world.item_runtime import VERSION, maintenance, native_runtime
 from world.loot_entities.models import CurrencyLoot, CurrencyLootShare, LootClaim
 from world.multiplayer import world_change
 
-from .scan import digest, json_state, ledger, plan, raw_source, sources
+from .scan import digest, entitlement_grants, json_state, ledger, plan, raw_source, sources
 
 
 @contextmanager
@@ -107,6 +108,11 @@ def verify():
                     if any(str(row.pk) != str(obj.db.active_light_item_id) for row in enabled) or obj.db.active_light_item_id and lights.active is None:
                         errors.append(f"explorer:{obj.pk}: active light invariant")
                     owned = {row.definition_id for row in api.items_owned_by(obj)}
+                    amounts = Counter()
+                    for row in api.items_owned_by(obj):
+                        amounts[row.definition_id] += row.quantity
+                    if entitlement_grants(raw, amounts):
+                        errors.append(f"explorer:{obj.pk}: 진행·fixed discovery entitlement missing")
                     for quest, reward in BOSS_REWARDS.items():
                         if raw_source(kind, obj)["quests"].get(quest, {}).get("claimed"):
                             credential = "outpost_supply_pass" if quest == "radio_tower" else "special_supply_pass"

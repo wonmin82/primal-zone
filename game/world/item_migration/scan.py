@@ -9,7 +9,7 @@ from evennia.objects.models import ObjectDB
 from evennia.utils.dbserialize import deserialize
 
 from world.content import ITEMS
-from world.content.item_mapping import BOSS_REWARDS, LEGACY_ITEM_MAPPING
+from world.content.item_mapping import BOSS_REWARDS, FIXED_DISCOVERY_REWARDS, LEGACY_ITEM_MAPPING
 from world.item_entities import api
 from world.item_entities.models import ItemMigrationLedger
 from world.item_runtime import VERSION
@@ -34,7 +34,7 @@ def raw_source(kind, obj):
         profile = deserialize(obj.db.profile)
         if not isinstance(profile, dict) or not profile:
             raise ValueError("Explorer profile이 없거나 형식이 올바르지 않습니다.")
-        value = {key: profile.get(key, {}) for key in ("inventory", "equipment", "storage", "light_sources", "quests")}
+        value = {key: profile.get(key, {}) for key in ("inventory", "equipment", "storage", "light_sources", "quests", "discoveries")}
         if profile.get("version", 1) < 4:
             from world.quests import progress_defaults
 
@@ -65,6 +65,21 @@ def quantities(value):
         if type(amount) is not int or amount < 0:
             raise ValueError(f"invalid quantity: {identity}={amount}")
     return value
+
+
+def entitlement_grants(raw, owned):
+    """owner tree 수량으로 필요한 신규 진행·발견 보상만 계획한다."""
+    grants = {}
+    if not raw["quests"].get("radio_tower", {}).get("generator_fixed"):
+        amount = owned.get("generator_repair_part", 0)
+        if amount > 3:
+            raise ValueError("정비용 회수부품 entitlement 수량이 3개를 초과합니다.")
+        if amount < 3:
+            grants["generator_repair_part"] = 3 - amount
+    for discovery, identity in FIXED_DISCOVERY_REWARDS.items():
+        if raw["discoveries"].get(discovery) and not owned.get(identity):
+            grants[identity] = 1
+    return grants
 
 
 def plan(kind, obj):
@@ -124,7 +139,7 @@ def plan(kind, obj):
         if native and (raw["inventory"] or any(raw["equipment"].values()) or raw["storage"] or raw["light_sources"]):
             raise ValueError("native 캐릭터에 변환 ledger 없는 legacy item blob이 존재합니다.")
         if not native and any(ITEMS[target(row.definition_id)].get("item_type") != "credential"
-                              and row.definition_id not in BOSS_REWARDS.values() for row in existing):
+                              and row.definition_id not in (*BOSS_REWARDS.values(), *FIXED_DISCOVERY_REWARDS.values(), "generator_repair_part") for row in existing):
             raise ValueError("legacy 캐릭터에 entitlement 이외 native 아이템이 존재합니다.")
         if not native:
             inventory = dict(quantities(raw["inventory"]))
@@ -164,6 +179,19 @@ def plan(kind, obj):
             if raw["quests"].get(quest, {}).get("claimed"):
                 credential = "outpost_supply_pass" if quest == "radio_tower" else "special_supply_pass"
                 expected["items"] += sum(not any(row.definition_id == identity for row in existing) for identity in (credential, reward))
+        owned = Counter()
+        for row in existing:
+            owned[target(row.definition_id)] += row.quantity
+        if not native:
+            for values in (inventory, raw["storage"]):
+                for identity, amount in values.items():
+                    owned[target(identity)] += amount
+        grants = entitlement_grants(raw, owned)
+        expected["items"] += len(grants)
+        if raw["quests"].get("radio_tower", {}).get("generator_fixed") and owned["generator_repair_part"]:
+            warnings.append("발전기 수리 완료 owner에 정비용 회수부품이 남아 있습니다. 자동 삭제하지 않습니다.")
+        return dict(kind=kind, identity=obj.pk, digest=digest(raw), warnings=warnings, completed=False,
+                    expected=dict(expected), entitlement_grants=grants)
     return dict(kind=kind, identity=obj.pk, digest=digest(raw), warnings=warnings, completed=False, expected=dict(expected))
 
 

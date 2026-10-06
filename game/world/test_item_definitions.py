@@ -21,6 +21,10 @@ class ItemDefinitionTests(unittest.TestCase):
                     self.assertFalse(definition["stackable"])
                     self.assertTrue(definition["unique_per_owner"])
                     self.assertTrue(can_item_operation(identity, "burn"))
+                elif identity == "generator_repair_part":
+                    self.assertEqual(definition["max_stack"], 3)
+                    self.assertTrue(can_item_operation(identity, "submit"))
+                    self.assertFalse(definition["transferable"])
                 else:
                     self.assertIsNone(definition["max_stack"])
                 for operation in ("drop", "give", "store", "sell"):

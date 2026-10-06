@@ -70,7 +70,7 @@ class Commander(ActionObject):
         before = caller.profile()
         from world.credential_service import issuer_talk
 
-        result, granted = issuer_talk(caller, "outpost_supply_pass", rules.commander_talk)
+        result, granted, boss_granted = issuer_talk(caller, "outpost_supply_pass", rules.commander_talk)
         after = caller.profile()
         if result == "start":
             body = ft.text(
@@ -97,6 +97,8 @@ class Commander(ActionObject):
             body = view.quest(after)
         if granted:
             body = ft.text(body, "\n", ft.item("outpost_supply_pass"), "을 받았다." if result == "complete" else "을 무료로 재발급받았다.")
+        if boss_granted:
+            body = ft.text(body, "\n", ft.item("ridge_predator_mark"), "을 받았다.")
         caller.msg(ft.text(ft.token("npc", self.key), "\n\n", body))
 
 
@@ -177,7 +179,7 @@ class MaintenanceLog(ActionObject):
             ft.text(
                 content_name("maintenance_log"),
                 "을 펼쳐 복구 절차를 읽었다.\n  ",
-                ft.item("scrap"),
+                ft.item("generator_repair_part"),
                 " 3개로 ",
                 content_name("generator"),
                 "를 수리하면 능선의 문을 열 수 있다.\n  ",
@@ -195,11 +197,15 @@ class SupplyCache(ActionObject):
     actions = ("조사",)
 
     def act(self, caller, action, args):
+        existing_parts = caller.profile_snapshot()["inventory"].get("generator_repair_part", 0)
         caller.change(rules.claim_cache)
+        missing_parts = max(0, 3 - existing_parts)
         caller.msg(
             ft.text(
-                ft.token("object", self.key), "에서 ", ft.item("bandage"), " 2개, ",
-                ft.item("scrap"), " 3개와 ", ft.item("expedition_tag"), "를 찾아 챙겼다."
+                ft.token("object", self.key), "에서 ", ft.item("bandage"), " 2개",
+                ft.text(", ", ft.item("generator_repair_part"), f" {missing_parts}개") if missing_parts else "",
+                "와 ", ft.item("expedition_tag"), "를 찾아 챙겼다.",
+                " 정비용 회수부품은 기존 보유량을 포함해 3개를 확보했다." if existing_parts else "",
             )
         )
 
@@ -517,7 +523,7 @@ class Pathfinder(ActionObject):
         before = caller.profile()
         from world.credential_service import issuer_talk
 
-        result, granted = issuer_talk(caller, "special_supply_pass", rules.jungle_talk)
+        result, granted, boss_granted = issuer_talk(caller, "special_supply_pass", rules.jungle_talk)
         after = caller.profile()
         if result == "start":
             body = "관측소와 수몰 도로의 표식을 확인해 주세요. 두 기록을 맞추면 거목의 신호 장치가 연구구역 길을 열 겁니다."
@@ -533,6 +539,8 @@ class Pathfinder(ActionObject):
             body = view.quest(after)
         if granted:
             body = ft.text(body, "\n", ft.item("special_supply_pass"), "을 받았다." if result == "complete" else "을 무료로 재발급받았다.")
+        if boss_granted:
+            body = ft.text(body, "\n", ft.item("predator_scale_charm"), "을 받았다.")
         caller.msg(ft.text(ft.token("npc", self.key), "\n\n", body))
 
 

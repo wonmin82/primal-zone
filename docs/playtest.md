@@ -628,7 +628,7 @@ game과 격리 서버의 정적 파일을 수집하고 실제 DOM의 JS `?v=hq-s
 구매는 크레딧으로 한 번에 1개이며, 장비를 얻은 뒤 별도로 `무기이름 무장` 또는 `방어구이름 착용`을 입력합니다.
 표의 장비 효과는 해당 장비 자체의 수치입니다. 교체할 때는 기존 장비 효과를 빼고 새 효과를 적용합니다.
 예를 들어 낡은마체테에서 강철마체테로 바꾸면 공격력이 4 증가합니다.
-**발전기 수리에 필요한 회수부품 3개는 별도로 확보하세요.**
+**수송차 보급상자에서 발전기 수리용 정비용 회수부품 3개를 확보하세요. 일반 회수부품은 정산 자원입니다.**
 
 ### 3-2. 탐험과 발전기 복구
 
@@ -641,7 +641,7 @@ game과 격리 서버의 정적 파일을 수집하고 실제 DOM의 JS `?v=hq-s
 | 3 | `서` → `북` → `동` | 초지, 발톱 자국 오솔길을 거쳐 폐쇄된 관리동에 도착합니다. |
 | 4 | `정비기록 조사` | 발전기 수리 방법을 읽고 임무 안내가 바뀝니다. |
 | 5 | `동` | 멈춰 선 발전실에 도착합니다. |
-| 6 | 회수부품 3개 이상을 가진 상태에서 `발전기 수리` | 부품 3개가 소모되고 경험치 50을 받습니다. 통신탑 능선 진입이 열립니다. |
+| 6 | 정비용 회수부품 3개를 가진 상태에서 `발전기 수리` | 부품 3개가 소모되고 경험치 50을 받습니다. 통신탑 능선 진입이 열립니다. |
 | 7 | `임무`, `지도` | 다음 목표가 우두머리 처치로 바뀌고, 방문한 장소와 연결 방향이 표시됩니다. |
 
 방에 적이 있어도 직접 공격하기 전에는 전투가 시작되지 않습니다.
@@ -888,7 +888,7 @@ Full은 이어 본부 전체 서비스·실제 패배/회복·통신탑/밀림 �
 | 가입 실패 | 이름 형식·중복, 비밀번호 안내, 최근 반복 가입 여부를 확인합니다. 이미 가입한 계정은 접속하기를 사용합니다. |
 | 공격이 멈춰 있음 | `종료`·재접속 후에는 `대상이름 사냥`으로 살아 있는 상대를 다시 지정해야 합니다. 다른 그룹의 점유 또는 재생성 대기 중인지도 확인합니다. |
 | 장비가 나오지 않음 | 확률 드롭은 여러 번 실패할 수 있습니다. 자원 정산소의 부품 정산과 지원동 NPC의 크레딧 구매 경로를 사용합니다. |
-| 수리 또는 능선 진입 실패 | 임무 수락, 정비기록 조사, 회수부품 3개 확보, 발전기 복구 순서를 확인합니다. |
+| 수리 또는 능선 진입 실패 | 임무 수락, 정비기록 조사, 정비용 회수부품 3개 확보, 발전기 복구 순서를 확인합니다. |
 | 회복 후 체력이 기대만큼 늘지 않음 | 최대 체력 제한, 붕대 수량과 이어진 적의 공격 피해를 로그에서 확인합니다. |
 | 화면 변경 사항이 반영되지 않음 | CSS·JavaScript를 수정했다면 아래 정적 파일 수집 명령을 실행한 뒤 브라우저를 새로고침합니다. |
 
@@ -1138,7 +1138,7 @@ Compact 최종 자동 검증은 PR #3의 `064e616` 이후 추가 커밋과 동�
 3. 0개/-1개/abc개/보유량 초과와 부품 없이 모두를 입력한다. Credits·inventory·storage가 바뀌지 않아야 한다. `강철마체테 교환`/`강화 조끼 교환`으로 장비가 지급되어서는 안 된다.
 4. 보이는 정산관을 숨기거나 다른 Room으로 옮기면 기존 위치의 명령·Web·hint가 서비스를 제공하지 않아야 한다. 실제 다른 안전 Room에서는 객체를 따라 이용하고 unsafe/전투는 거절한다. 여러 정산관이면 bare 입력은 대상 지정을 요구하며 번호로 하나를 고른다. hidden NPC는 개수에 포함하지 않는다.
 5. 가방 scrap 6개/0C에서 6개 정산해 60C를 받은 뒤 `남` → `동` → `동` → `승강기` → `3층` → `내리기` → `동` → `북`으로 무기점에 들어간다. 상점 버튼·Credit 가격만 표시되는 목록·`강철마체테 구매`(60C)를 확인한다.
-6. 정산하지 않은 scrap 3개로 윤대장 임무 수락·정비 기록 조사·발전기 수리를 진행한다. 부품 3개 소비와 기존 임무 진행이 유지되어야 한다. 부품의 전달·공용/개인 보관·loot도 기존 규칙을 따른다.
+6. 수송차의 정비용 회수부품 3개로 윤대장 임무 수락·정비 기록 조사·발전기 수리를 진행한다. 정비부품3개만 submit되고 일반 scrap은 보존되어야 한다. 일반 scrap의 전달·공용/개인 보관·loot는 유지하며 정비부품의 이전·정산·소각은 거절되어야 한다.
 7. 데스크톱과 390px에서 자원 표시·정산 control의 줄바꿈과 가로 overflow, application console 오류를 확인한다. 자동 한글 문자열 입력과 실제 OS IME 검증을 구분한다.
 
 전체 smoke에는 장비 직접 교환 전제가 없고 크레딧 구매와 4단계 의료 동선을 유지한다. 이번 정산 검증에 가입 rate limit의 610초 대기가 있는 전체 smoke를 추가하지 않는다. 실제 검증 결과는 아래에 시점별로 기록한다.
@@ -1202,3 +1202,22 @@ Full의 actual first combat round는 2.804초, 시체→ground 29.924초, 같은
 브라우저 DOM 자동화·실제 server restart E2E·OS IME·Windows CI·PostgreSQL CI·coverage·전체 boss/progression 검증과 공개 가입 610초 정책 검사는 이번 P0에서 미실행이다. JS/UI 변경이 없어 node 검사와 브라우저/정적 파일 수집을 추가하지 않았다(격리 서버 setup의 collectstatic은 수행). 일반 PR/main CI는 `test`와 Quick `smoke`만 실행하며 Full은 일반 CI에 포함하지 않는다. 최신 PR HEAD의 원격 결과는 PR Validation과 인계 원격 기록에 별도로 남긴다.
 
 [PR #20](https://github.com/wonmin82/primal-zone/pull/20)의 CI 설정 수정 HEAD `d85d83ece5d300342c7b1a30d1fe98c5dab01220`에서 [test](https://github.com/wonmin82/primal-zone/actions/runs/36526697395/job/109271210799)와 [smoke](https://github.com/wonmin82/primal-zone/actions/runs/36526697395/job/109271210590)가 모두 success다. 실제 Ubuntu 결과는 check 통과, pure 99개/0.728초, integration 250개/95.112초, total 349개, runner 101.100초, Quick 전체 19.001초다. 최초 CI의 job 시작 전 startup_failure는 선택적 upload-artifact가 저장소 허용 목록에 없어서 발생했으며, 보안 설정을 유지하고 shell/Python 로그 tail 출력으로 해결했다. DB는 출력/업로드하지 않는다. 이 문서 기록 이후 최종 HEAD의 두 CI도 별도로 확인해 PR Validation에 남긴다. 실행 코드가 동일하므로 기록 갱신만을 위해 로컬 전체 검사를 반복하지 않았다.
+
+
+## PR #34 review fixes — targeted validation (2026-10-06)
+
+시작 HEAD `fbb44170828c56ec9fb2af595643d9eed5f31680`에서 귀속 이전·진행 자원·fixed reward 소급·bootstrap HP·Boss 메시지만 수정한다. 아래 실행끼리 겹치는 module 수는 합산하지 않는다. 가격/drop/공식 tuning과 실제 플레이 DB migration은 하지 않는다.
+
+- 초기 `scripts/dev.py test tests.test_item_migration tests.test_phase6_runtime tests.test_credentials --parallel 2 --reverse`:39개/43.882초 중 inside fixture의 필수 socket 누락1건 오류. Canonical inside fixture에 socket을 지정해 보정했다.
+- `game` cwd에서 `..\.venv\Scripts\python.exe -X utf8 -m unittest world.test_final_content world.test_rules`:43개/0.510초 성공.
+- `game` cwd에서 `..\.venv\Scripts\python.exe -X utf8 -m unittest world.test_final_content world.test_rules world.test_item_definitions world.test_settlement`:53개 중 새 quest resource의 max_stack3을 반영하지 않은 이전 기본값 기대1건 실패. 해당 fixture 보정 후53개/0.658초 성공.
+- `scripts/dev.py test tests.test_item_migration tests.test_phase6_runtime tests.test_credentials tests.test_regions tests.test_integration tests.test_settlement tests.test_text tests.test_item_interactions tests.test_incinerator --parallel 2 --reverse`:125개/112.836초 중2실패/1오류. 이전 scrap 기반 generator fixture·기존100칩 표시 기대·ItemEntity ValidationError 처리 누락을 보정했다. 나머지122개는 성공했다.
+- 실패3건 및 확장한 owner-scope/fixed-reward/canonical-cache 회귀만 재실행: `scripts/dev.py test tests.test_phase6_runtime.Phase6RuntimeTests.test_final_report_messages_only_announce_actual_unique_grants tests.test_phase6_runtime.Phase6RuntimeTests.test_fresh_cache_repair_parts_cannot_be_lost_and_submit_leaves_scrap tests.test_integration.GameplayIntegrationTests.test_raw_commands_purchase_equip_and_quest tests.test_item_migration.ItemMigrationTests.test_repair_entitlement_fills_owner_tree_preserves_scrap_and_is_idempotent tests.test_item_migration.ItemMigrationTests.test_fixed_rewards_missing_and_inventory_existing_are_not_duplicated tests.test_integration.GameplayIntegrationTests.test_cache_reward_is_personal_and_once_only --parallel 2 --reverse`:6개/17.323초 성공. Production의 가격/HP/타이머 변경으로 fixture를 통과시키지 않았다.
+- `scripts/dev.py check`:새 import 정렬3건 실패 후 정렬만 보정하여 성공. Final diff check와 이후 신규 소지품/메시지 회귀 결과는 아래에 별도로 기록한다.
+
+직접 검증하는 경계는 unique personal/shared/give, 일반 shared transfer, repair part 모든 처분·상점·정산 거절 및 generator submit, owner inventory/personal/inside 수량 보충과 shared 제외, discoveries digest, 소급 중복 방지·source rollback/retry·sequence 불변, full/damaged/combat HP와 scaling, 실제 NPC first/repeat/reissue 메시지다. 변경된 UI asset은 없어 browser/node/정적 수집을 하지 않는다. Local full suite·smoke-full·전체 browser/multiplayer·OS IME·PostgreSQL contention·multi-server·full balance simulation은 미실행이다. 최신 HEAD 자동 CI의 pure/integration/Quick 결과는 PR Validation에 run/SHA로 기록한다.
+
+
+- 최종 `scripts/dev.py test tests.test_phase6_runtime.Phase6RuntimeTests.test_existing_entitlements_do_not_repeat_cache_parts_or_report_credential tests.test_integration.GameplayIntegrationTests.test_cache_reward_is_personal_and_once_only tests.test_item_entities --parallel 2 --reverse`:28개/13.662초 성공. 이미 지급한 정비부품은 cache에서 추가하지 않고 기존 출입증도 final report에서 신규 지급으로 안내하지 않는다.
+- 최종 `scripts/dev.py check` / `git diff --check`:성공. Full smoke helper는 보급상자에서 정비부품을 확보하도록 실제 진행 경로만 갱신했으며 smoke-full은 실행하지 않았다.
+- 실제 플레이 DB SHA256 `B1318296F505B9B7522FCBDEDFF7642A06CF055E9DE72802198C70E6B8A7F700`,733184bytes, UTCmtime2026-09-22 12:29:13은 불변이다.

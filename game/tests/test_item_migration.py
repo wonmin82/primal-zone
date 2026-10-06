@@ -313,3 +313,104 @@ class ItemMigrationTests(GameCommandTest):
         row.refresh_from_db()
         self.assertEqual((row.pk, row.sequence, row.location_kind), (identity, sequence, "personal_storage"))
         self.assertEqual(api.items_owned_by(self.char1).filter(definition_id="ridge_predator_mark").count(), 1)
+
+
+    def test_repair_entitlement_fills_owner_tree_preserves_scrap_and_is_idempotent(self):
+        shared = create_object(Container, key="별도 공용 부품함", location=self.room1)
+        api.create_item("generator_repair_part", quantity=3, location_kind="shared_storage", owner_object=shared)
+        for amount, location, fixed in ((0, "inventory", False), (1, "personal_storage", False),
+                                        (2, "inside", False), (3, "inventory", False), (0, "inventory", True)):
+            with self.subTest(amount=amount, location=location, fixed=fixed):
+                player = create_object(Explorer, key=f"진행보정{amount}{location}{fixed}", location=self.room1)
+                player.push_state = Mock()
+                profile = rules.new_profile()
+                profile["inventory"]["scrap"] = 20
+                profile["quests"]["radio_tower"]["generator_fixed"] = fixed
+                player.db.profile = profile
+                if amount:
+                    if location == "inside":
+                        # owner tree 기준이며 child의 직접 owner FK는 없다.
+                        parent = api.create_item("outpost_supply_pass", location_kind="inventory", owner_object=player)
+                        api.create_item("generator_repair_part", quantity=amount, location_kind="inside", parent_item=parent, socket="payload")
+                    else:
+                        api.create_item("generator_repair_part", quantity=amount, location_kind=location, owner_object=player)
+                with migration_context():
+                    convert_source("explorer", player, time())
+                    rows = api.items_owned_by(player)
+                    self.assertEqual(sum(row.quantity for row in rows if row.definition_id == "generator_repair_part"), 0 if fixed else 3)
+                    self.assertEqual(sum(row.quantity for row in rows if row.definition_id == "scrap"), 20)
+                    before = (json_state(player), ItemSequence.objects.get(pk=1).last_value)
+                    self.assertTrue(convert_source("explorer", player, time())["skipped"])
+                    self.assertEqual(before, (json_state(player), ItemSequence.objects.get(pk=1).last_value))
+        self.assert_applied()
+
+    def test_fixed_discovery_entitlements_use_whole_owner_scope_and_digest(self):
+        self.profile["discoveries"].update(supply_cache=True, jungle_cache=True)
+        self.char1.db.profile = self.profile
+        tag = api.create_item("expedition_tag", location_kind="personal_storage", owner_object=self.char1)
+        identity = (tag.pk, tag.sequence)
+        before = (ItemSequence.objects.get(pk=1).last_value, ItemMigrationLedger.objects.count(), json_state(self.char1))
+        plan = next(row for row in item_migration.dry_run()["sources"] if row["identity"] == self.char1.pk)
+        self.assertEqual(plan["entitlement_grants"], {"generator_repair_part": 3, "mental_stability_module": 1})
+        self.assertEqual(before, (ItemSequence.objects.get(pk=1).last_value, ItemMigrationLedger.objects.count(), json_state(self.char1)))
+        self.assert_applied()
+        tag.refresh_from_db()
+        self.assertEqual((tag.pk, tag.sequence), identity)
+        for definition in ("expedition_tag", "mental_stability_module"):
+            self.assertEqual(api.items_owned_by(self.char1).filter(definition_id=definition).count(), 1)
+        self.assertFalse(api.items_owned_by(self.char2).filter(definition_id__in=("expedition_tag", "mental_stability_module")).exists())
+        state = (json_state(self.char1), ItemSequence.objects.get(pk=1).last_value)
+        self.assertEqual(item_migration.apply()["errors"], [])
+        self.assertEqual(state, (json_state(self.char1), ItemSequence.objects.get(pk=1).last_value))
+        self.profile["discoveries"]["jungle_cache"] = False
+        self.char1.db.profile = self.profile
+        self.assertIn("digest", str(item_migration.verify()["errors"]))
+
+    def test_fixed_rewards_missing_and_inventory_existing_are_not_duplicated(self):
+        self.profile["discoveries"].update(supply_cache=True, jungle_cache=True)
+        self.char1.db.profile = self.profile
+        module = api.create_item("mental_stability_module", location_kind="inventory", owner_object=self.char1)
+        second = deserialize(self.char2.db.profile)
+        second["discoveries"]["supply_cache"] = True
+        self.char2.db.profile = second
+        existing_tag = api.create_item("expedition_tag", location_kind="inventory", owner_object=self.char2)
+        self.assert_applied()
+        self.assertEqual(api.items_owned_by(self.char2).get(definition_id="expedition_tag").pk, existing_tag.pk)
+        self.assertEqual(api.items_owned_by(self.char1).filter(definition_id="expedition_tag").count(), 1)
+        self.assertEqual(api.items_owned_by(self.char1).get(definition_id="mental_stability_module").pk, module.pk)
+        record = ItemMigrationLedger.objects.get(source_kind="explorer", source_identity=self.char1.pk)
+        api.delete_item(api.items_owned_by(self.char1).get(definition_id="expedition_tag"))
+        record.expected_state = json_state(self.char1)
+        record.save()
+        self.assertIn("entitlement missing", str(item_migration.verify()["errors"]))
+
+    def test_new_entitlement_failure_rolls_back_source_and_sequence_then_retries(self):
+        self.profile["discoveries"]["supply_cache"] = True
+        self.char1.db.profile = self.profile
+        before = (json_state(self.char1), deserialize(self.char1.db.profile), ItemSequence.objects.get(pk=1).last_value)
+        original = api.create_item
+        def fail(identity, **kwargs):
+            if identity == "expedition_tag":
+                self.assertEqual(sum(row.quantity for row in api.items_owned_by(self.char1) if row.definition_id == "generator_repair_part"), 3)
+                raise RuntimeError("fixed entitlement failure")
+            return original(identity, **kwargs)
+        with migration_context(), patch.object(api, "create_item", side_effect=fail), self.assertRaises(RuntimeError):
+            convert_source("explorer", self.char1, time())
+        self.assertEqual(before, (json_state(self.char1), deserialize(self.char1.db.profile), ItemSequence.objects.get(pk=1).last_value))
+        self.assertFalse(ItemMigrationLedger.objects.filter(source_identity=self.char1.pk).exists())
+        self.assert_applied()
+
+    def test_repair_verify_and_completed_fixed_warning_do_not_delete_items(self):
+        self.profile["quests"]["radio_tower"]["generator_fixed"] = True
+        self.char1.db.profile = self.profile
+        row = api.create_item("generator_repair_part", quantity=1, owner_object=self.char1, location_kind="inventory")
+        report = item_migration.dry_run()
+        self.assertIn("수리 완료", str(report))
+        self.assert_applied()
+        self.assertEqual(api.items_owned_by(self.char1).get(pk=row.pk).quantity, 1)
+        record = ItemMigrationLedger.objects.get(source_kind="explorer", source_identity=self.char2.pk)
+        part = api.items_owned_by(self.char2).get(definition_id="generator_repair_part")
+        api.delete_item(part)
+        record.expected_state = json_state(self.char2)
+        record.save()
+        self.assertIn("entitlement missing", str(item_migration.verify()["errors"]))

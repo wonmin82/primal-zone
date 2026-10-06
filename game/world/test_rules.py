@@ -317,7 +317,7 @@ class RuleTests(TestCase):
     def test_generator_requires_clue_and_consumes_materials_once(self):
         profile = rules.new_profile()
         profile["quests"]["radio_tower"]["started"] = True
-        rules.add_item(profile, "scrap", 3)
+        rules.add_item(profile, "generator_repair_part", 3)
         with self.assertRaises(rules.RuleError):
             rules.fix_generator(profile)
         profile["quests"]["radio_tower"]["record_read"] = True

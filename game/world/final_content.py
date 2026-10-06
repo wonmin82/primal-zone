@@ -7,7 +7,7 @@ from world.content.loot_v1 import LOOT
 from world.firearms import STANDARD_MAGAZINES
 from world.item_entities.policy import can_item_operation, definition_errors
 
-FIXED = {"expedition_tag": "supply_cache", "scrap": "supply_cache", "mental_stability_module": "jungle_cache"}
+FIXED = {"expedition_tag": "supply_cache", "generator_repair_part": "supply_cache", "mental_stability_module": "jungle_cache"}
 
 
 def acquisition_matrix():
@@ -20,6 +20,7 @@ def acquisition_matrix():
                 result[identity].append(shop)
     for identity, source in FIXED.items():
         result[identity].append(source)
+    result["generator_repair_part"].append("migration:generator_unfixed")
     for quest, identity in BOSS_REWARDS.items():
         result[identity].append(quest + ":final_report")
     for enemy, data in LOOT.items():
@@ -41,6 +42,15 @@ def package_costs(identity):
 def errors():
     issues = alias_errors(ITEMS)
     matrix = acquisition_matrix()
+    repair = ITEMS.get("generator_repair_part", {})
+    if (repair.get("stackable") is not True or repair.get("max_stack") != 3
+            or repair.get("transferable") is not False or repair.get("unique_per_owner") is not False
+            or any(can_item_operation("generator_repair_part", operation) != (operation == "submit")
+                   for operation in ("submit", "drop", "give", "store", "sell", "burn", "consume", "equip", "unequip", "loot", "load", "unload"))
+            or any("generator_repair_part" in shop["purchase_catalog"] for shop in SHOP_CATALOGS.values())
+            or any("generator_repair_part" in dict(data.get(key, (0, ()))[1] if key == "resource" else data.get(key, ()))
+                   for data in LOOT.values() for key in ("resource", "special"))):
+        issues.append("generator_repair_part: submit-only 진행 자원 정의/획득 경계 위반")
     for identity, definition in ITEMS.items():
         issues.extend(definition_errors(identity, definition))
         for key in ("value", "purchase_unit_value", "resale_unit_value"):

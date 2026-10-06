@@ -160,7 +160,7 @@ class GameplayIntegrationTests(WorldCommandTest):
             self.call(
                 gameplay.Investigate(),
                 "보급상자",
-                "보급상자에서 붕대 2개, 회수부품 3개와 탐사인식표를 찾아 챙겼다.",
+                "보급상자에서 붕대 2개, 정비용 회수부품 3개와 탐사인식표를 찾아 챙겼다.",
                 caller=character,
             )
         self.call(
@@ -173,7 +173,7 @@ class GameplayIntegrationTests(WorldCommandTest):
         self.call(gameplay.Talk(), "윤대장", "윤대장", caller=self.char1)
         self.char1.location = self.rooms["office"]
         self.call(gameplay.Investigate(), "정비기록", "정비기록을 펼쳐", caller=self.char1)
-        self.char1.change(lambda profile: profile["inventory"].update(scrap=3))
+        self.char1.change(lambda profile: profile["inventory"].update(generator_repair_part=3))
         self.char1.location = self.rooms["generator"]
         output = self.call(gameplay.Repair(), "발전기", caller=self.char1)
         self.assertIn("시설 조명이 하나둘 켜진다.", output)
@@ -202,7 +202,7 @@ class GameplayIntegrationTests(WorldCommandTest):
         self.char1.execute_cmd("정비 기록 조사")
         self.assertTrue(self.char1.profile()["quests"]["radio_tower"]["record_read"])
         self.char1.location = self.rooms["generator"]
-        self.char1.change(lambda data: data["inventory"].update(scrap=9))
+        self.char1.change(lambda data: data["inventory"].update(scrap=9, generator_repair_part=3))
         self.char1.execute_cmd("발전 기 수리")
         self.assertTrue(self.char1.profile()["quests"]["radio_tower"]["generator_fixed"])
         self.char1.execute_cmd("귀환")

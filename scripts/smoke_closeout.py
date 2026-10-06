@@ -120,12 +120,14 @@ class Closeout:
         self.scenario.phase = "progression"
         player = self.first
         await self.dock(player)
-        await route(player, (("북", "grass"), ("북", "trail"), ("북", "marsh")))
+        await route(player, (("북", "grass"), ("동", "wreck")))
+        await player.act("보급상자 조사", lambda s: count_item(s, "generator_repair_part") == 3)
+        await route(player, (("서", "grass"), ("북", "trail"), ("북", "marsh")))
         await player.expect_text("북", "발전기")
         await route(player, (("남", "trail"), ("동", "office")))
         await player.act("정비기록 조사", lambda s: "발전기 수리" in s["quest"])
         await route(player, (("동", "generator"),))
-        await player.act("발전기 수리", lambda s: count_item(s, "scrap") == 0)
+        await player.act("발전기 수리", lambda s: count_item(s, "generator_repair_part") == 0)
         # Earn the first boss's preparation level through real kills, not an oversized HP fixture.
         await self.kill('고장난경비기')
         await player.act('시체에서 모두 가져')

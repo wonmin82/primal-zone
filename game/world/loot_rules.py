@@ -5,6 +5,13 @@ from random import Random
 from world.content.loot_v1 import LOOT
 
 
+def updated_enemy_hp(old_hp, old_max, maximum, state, has_combatants):
+    """정의 갱신 때 full/idle만 새 최대 체력 기준 full로 보존한다."""
+    if state == "alive" and not has_combatants and old_hp >= old_max:
+        return maximum
+    return min(old_hp, maximum)
+
+
 def choice(options, value):
     total = 0
     for identity, weight in options:

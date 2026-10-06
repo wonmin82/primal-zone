@@ -451,7 +451,7 @@ def fix_generator(profile):
         raise RuleError("이미 발전기를 복구했습니다.")
     if not progress["record_read"]:
         raise RuleError("관리동의 정비기록을 먼저 조사하세요.")
-    consume(profile, "scrap", 3, operation="submit")
+    consume(profile, "generator_repair_part", 3, operation="submit")
     progress["generator_fixed"] = True
     gain_xp(profile, 50)
 
@@ -688,7 +688,7 @@ def claim_cache(profile):
     if profile["discoveries"].get("supply_cache"):
         raise RuleError("이미 보급품을 챙겼습니다.")
     add_item(profile, "bandage", 2)
-    add_item(profile, "scrap", 3)
+    add_item(profile, "generator_repair_part", max(0, 3 - profile["inventory"].get("generator_repair_part", 0)))
     profile["discoveries"]["supply_cache"] = True
     add_item(profile, "expedition_tag")
 

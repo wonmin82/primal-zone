@@ -206,13 +206,13 @@ class SettlementWorldTests(SettlementFixture, WorldCommandTest):
         for raw in ("남", "서", "승강기", "1층", "북", "서"):
             self.command(raw)
         self.command("윤대장 대화")
-        self.char1.change(lambda p: rules.add_item(p, "scrap", 3))
+        self.char1.change(lambda p: rules.add_item(p, "generator_repair_part", 3))
         self.char1.location = self.rooms["office"]
         self.command("정비 기록 조사")
         self.char1.location = self.rooms["generator"]
         self.command("발전기 수리")
         self.assertTrue(self.char1.profile()["quests"]["radio_tower"]["generator_fixed"])
-        self.assertNotIn("scrap", self.char1.profile()["inventory"])
+        self.assertNotIn("generator_repair_part", self.char1.profile()["inventory"])
         self.assertEqual(self.char1.home, self.rooms["dock"])
 
     def test_scrap_remains_transferable_storable_and_lootable_material(self):

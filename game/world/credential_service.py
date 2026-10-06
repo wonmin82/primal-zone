@@ -40,9 +40,10 @@ def issuer_talk(character, credential_id, operation):
     with world_change():
         lock_character_items(character)
         granted = False
+        boss_granted = False
 
         def talk(profile):
-            nonlocal granted
+            nonlocal granted, boss_granted
             result = operation(profile)
             if result == "complete":
                 from world.content.item_mapping import BOSS_REWARDS
@@ -50,9 +51,10 @@ def issuer_talk(character, credential_id, operation):
                 identity = BOSS_REWARDS[CREDENTIAL_QUESTS[credential_id]]
                 if not any(row.definition_id == identity for row in api.items_owned_by(character)):
                     api.create_item(identity, location_kind="inventory", owner_object=character)
+                    boss_granted = True
             if profile["quests"][CREDENTIAL_QUESTS[credential_id]]["claimed"] and not has_credential(character, credential_id):
                 grant_credential(character, credential_id)
                 granted = True
             return result
 
-        return character.change(talk), granted
+        return character.change(talk), granted, boss_granted

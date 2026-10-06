@@ -88,3 +88,12 @@ EquipmentProfile.inventory는 Entity에서 파생한 일시적 pure rule 계산 
 격리 tests.test_item_migration/tests.test_phase6_runtime에서 source 전체 범위, 수량/equipment 포함, native tree·identity 보존, read-only dry-run, source 실패·retry, missing/corrupt verify, cutover guard, fresh player, archive 불변을 검증한다. 실행별 결과와 실패 이력은 [playtest](playtest.md)를 따른다.
 
 실제 플레이 DB 변환, historical corpus 전체 audit, PostgreSQL 경쟁·multi-server·전체 multiplayer/browser·OS IME·smoke-full·full balance simulation은 미실행이며 Phase 7/운영 전 점검으로 남는다.
+
+
+## PR #34 리뷰 추가 entitlement
+
+Explorer raw source/digest에는 discoveries도 포함한다. `radio_tower.generator_fixed=false`이면 owner tree의 정비용 회수부품 총량을3개로 채우며 기존 scrap은 변환하거나 차감하지 않는다. Inventory/equipment/personal_storage/inside 후손은 같은 owner scope이며 shared Container/다른 owner의 수량은 제외한다. 총량3 초과는 preflight 오류다. 수리 완료 source에 남은 부품은 자동 삭제하지 않고 warning으로 보고한다.
+
+`supply_cache=true`이고 owner scope에 탐사인식표가 없으면1개, `jungle_cache=true`이고 정신안정모듈이 없으면1개를 생성한다. 기존 row는 위치와 무관하게 중복 생성하지 않는다. Dry-run의 source별 entitlement_grants는 필요한 stable ID/수량을 표시하며 읽기 전용이다.
+
+이 보정은 기존 inventory/storage/light/Credential/Boss reward와 같은 Explorer transaction에 포함된다. 생성 실패 시 ItemSequence/rows/profile/marker/ledger가 rollback된다. Completed source는 digest/native snapshot 검증 후 skip하고 verify는 진행·발견 entitlement를 독립적으로 대조한다. Apply/verify/cutover 및 global marker 구조는 유지하며 실제 플레이 DB에는 실행하지 않았다.
