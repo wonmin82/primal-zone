@@ -46,6 +46,13 @@ def _matches(raw_string, cmdset, caller, match_index=None, session=None, **kwarg
     parts = text.rsplit(None, 1)
     action = "말" if quoted else parts[-1].lower()
     args = text[1:].strip() if quoted else parts[0] if len(parts) == 2 else ""
+    # 여러 단어로 된 명시적 행동 alias도 대상 뒤에서만 인식한다.
+    multiword = sorted({name for cmd in game_commands for name in (cmd.key, *cmd.aliases)
+                        if " " in name}, key=len, reverse=True)
+    if not quoted:
+        suffix = next((name for name in multiword if text.lower().endswith(" " + name)), None)
+        if suffix:
+            action, args = suffix, text[:-len(suffix)].rstrip()
     candidates = [cmd for cmd in game_commands if action in (cmd.key.lower(), *cmd.aliases)]
     # 채팅 외의 엔진 명령은 인자 끝에 게임 행동 이름이 있어도 원래 문법을 유지한다.
     engine_matches = []

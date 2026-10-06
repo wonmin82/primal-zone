@@ -45,8 +45,8 @@ class ShopTests(WorldCommandTest):
             for raw in ("상품", seller.key + " 상품"):
                 output = self.command(raw)
                 self.assertIn("[" + seller.key + "]", output)
-                for item in {item for catalog in SHOP_CATALOGS.values() for item in catalog}:
-                    self.assertEqual(ITEMS[item]["name"] in output, item in SHOP_CATALOGS[shop_id])
+                for item in {item for catalog in SHOP_CATALOGS.values() for item in catalog["purchase_catalog"]}:
+                    self.assertEqual(ITEMS[item]["name"] in output, item in SHOP_CATALOGS[shop_id]["purchase_catalog"])
                 self.assertNotIn("회수부품", output)
             self.assertIn(seller.key + "에게 물건이름 구매", self.command(seller.key + " 보기"))
             self.assertIn("판매 목록", self.command(seller.key + " 대화"))
@@ -146,11 +146,11 @@ class ShopTests(WorldCommandTest):
             actions = multiplayer_state(self.char1)["interactables"][0]["actions"]
             self.assertEqual(actions[0]["command"], seller.key + " 상품")
             self.assertEqual([a["command"] for a in actions if a["command"].endswith(" 구매")],
-                             [seller.key + "에게 " + ITEMS[item]["name"] + " 구매" for item in SHOP_CATALOGS[shop_id]])
+                             [seller.key + "에게 " + ITEMS[item]["name"] + " 구매" for item in SHOP_CATALOGS[shop_id]["purchase_catalog"]])
             self.assertEqual(render(context_for(self.char1)), seller.key + " 상품")
             self.assertIn("1개를 받아", self.command(actions[1]["command"]))
         for zone, expected in (("storage_room", {"보기"}), ("training_room", {"힘 +1 배분"}),
-                               ("infirmary", {"진료", "휴식", "체질 +1 배분"}), ("salvage_office", {"환율"}),
+                               ("infirmary", {"진료", "휴식", "체질 +1 배분"}), ("salvage_office", {"환율", "보기"}),
                                ("dock", {"대화"}), ("office", {"조사"}), ("generator", {"수리"})):
             self.char1.location = self.rooms[zone]
             self.assertEqual({a["label"] for obj in multiplayer_state(self.char1)["interactables"] for a in obj["actions"]}, expected)

@@ -51,4 +51,14 @@ def definition_errors(identity, definition):
     from world.equipment import definition_errors as equipment_errors
     from world.item_states import definition_errors as state_errors
 
+    if definition.get("item_type") == "credential":
+        if (definition.get("stackable") is not False or definition.get("max_stack") != 1
+                or definition.get("unique_per_owner") is not True):
+            issues.append(f"{identity}: 출입증은 수량 1의 소유자별 고유 아이템이어야 합니다.")
+        if not isinstance(policy, dict) or any(policy.get(key) is not (key == "burn")
+                                               for key in TREE_OPERATION_SCOPES):
+            issues.append(f"{identity}: 출입증은 소각만 허용합니다.")
+        if not definition.get("credential_properties", {}).get("quest"):
+            issues.append(f"{identity}: 출입증 재발급 임무가 필요합니다.")
+
     return issues + equipment_errors(identity, definition) + state_errors(identity, definition)

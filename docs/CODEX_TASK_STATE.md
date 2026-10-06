@@ -2,6 +2,42 @@
 
 확인일: 2026-10-06. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
 
+## PR #33 문서 마감·병합 및 소스 브랜치 정리 (2026-10-06)
+
+사용자가 문서 마감 후 [PR #33](https://github.com/wonmin82/primal-zone/pull/33) 병합과 소스 브랜치 삭제를 요청했다. 아래 구현·리뷰 단계의 병합 금지/OPEN 설명은 당시 요청 범위이며 이번 명시적 병합 요청을 제한하지 않는다. Phase 6은 별도 요청 전 시작하지 않는다.
+
+- 마감 시작 fetch에서 local/remote/PR HEAD는 `0e5be5e4fe162f993adc92db459cbeeeabb41bf8`, origin/main은 `248c849470bb709259902bd7f35780894a4c7b78`다. 작업 트리는 clean, main 대비 ahead3/behind0이며 다른 worktree에서 소스 branch를 사용하지 않는다. 최신 main을 이미 포함해 불필요한 rebase/이력 재작성을 하지 않는다.
+- 리뷰 HEAD의 [Game checks37411748278](https://github.com/wonmin82/primal-zone/actions/runs/37411748278)는 check·순수192개/1.055초·통합526개/242.912초·Quick smoke30.882초 성공이다. 문서 마감 HEAD와 병합된 main은 각각 새 run/SHA의 CI 결과를 PR Validation/마감 기록에서 확인하며 리뷰 HEAD 결과로 대신하지 않는다.
+- 이번 마감은 Task State/playtest만 수정한다. 출입증 raw selector와 일반 stack parser 경계, 접근·재발급·legacy/Phase 6 문서를 현재 구현과 대조했다. 실행 코드/테스트/의존성/UI asset은 리뷰 검증 당시와 같아 targeted21개와 당시 check 성공을 재사용한다. 문서의 링크·명령·이력을 검토하고 git diff --check를 실행하며 로컬 게임 검사·browser·smoke는 반복하지 않는다.
+- 최신 main 포함·non-draft·충돌 없음·필수 CI·리뷰 조건을 확인하고 merge commit으로 병합한다. source HEAD가 main에 포함된 것을 확인한 뒤 원격/로컬 codex/credential-access-shops-incinerator를 삭제하고 로컬 main을 fast-forward로 갱신한다. 실제 병합 commit·main CI·삭제 결과는 PR 마감 기록과 원격 상태를 기준으로 확인한다.
+- PostgreSQL 실제 경쟁·multi-server·전체 browser/multiplayer matrix·OS IME·full migration·balance simulation 공백은 유지한다. 플레이 DB·비밀 설정·밸런스·profile version10을 변경하지 않는다. 아래 Phase 1~5 기록과 실패/재실행 이력은 당시 결과로 보존한다.
+
+## PR #33 Phase 5 출입증 소각 확정 리뷰 수정 (2026-10-06)
+
+시작 fetch에서 local/remote/PR HEAD는 `f60c6c5c08d0486aa49961bc4458651254f6e6ab`, branch는 기존 `codex/credential-access-shops-incinerator`, origin/main은 `248c849470bb709259902bd7f35780894a4c7b78`다. 작업 트리는 clean이고 main 대비 ahead2/behind0였다. 시작 HEAD CI37406457142 test/smoke success는 이전 검증이며 이번 리뷰 수정 HEAD의 성공을 대신하지 않는다. 기존 PR/branch에 수정 commit만 추가하고 병합하지 않는다.
+
+- 일반 수량 parser가 출입증의 1개도 quantity1로 해석해 삭제를 허용한 문제만 수정한다. incinerator_service는 raw 출입증 selector를 먼저 해석하고 exact selector + 소각 확정에서만 삭제한다. confirmed에서 1개/N개/모두를 일반 parser로 우회하지 않는다.
+- 두 출입증·legacy/native 모두 첫 안내, 정상 삭제, 수량/순서 오류 거절, service 직접 호출, profile/전체 rows/ItemSequence/active refs/접근권 불변과 재발급을 검증한다. 일반 붕대와 숫자가 들어간 탄약의 1/N개/모두 소각은 유지한다.
+- 최종 tests.test_incinerator/tests.test_credentials targeted21개/23.191초(runner34.609초), check, git diff --check 성공이다. 수정 전 재현 실패와 추가 fixture 오류 이력은 playtest에 보존하고 이전 실행과 합산하지 않는다. full suite·smoke-full·전체 browser는 이번 요청의 좁은 범위에 따라 로컬 미실행이다.
+- production 변경은 incinerator_service 하나다. 공통 stack parser·command alias·Credential definition/policy·ItemEntity·Access/Shop/Quest/Reissue·Phase 6은 변경하지 않는다. 실제 검사와 수정 전 실패 기록은 [playtest](playtest.md)의 PR #33 소각 문법 리뷰 항목을 따른다. 최신 HEAD CI는 PR Review fixes/Validation에 별도 run/SHA로 기록한다.
+
+## Phase 5 — Credential + Access + Shops + Incinerator (2026-10-06)
+
+사용자의 Phase 5 요청에 따라 시작 main `248c849470bb709259902bd7f35780894a4c7b78`에서 새 `codex/credential-access-shops-incinerator` branch를 만들었다. fetch 시 local/main과 origin/main이 같고 작업 트리는 clean, 열린 PR은 없었다. Phase 1~4가 포함되어 있으며 baseline의 Game checks37390803018 test/smoke success를 확인했다. 이는 Phase 5 수정 HEAD의 검증과 별개다. 이번 요청은 구현·문서·commit·push·PR·최신 CI까지이며 PR은 병합하지 않는다.
+
+- Credential은 모든 backend에서 실제 ItemEntity만 SSOT다. non-stack/unique_per_owner/max_stack1/기존 unique_scope_key DB constraint를 사용한다. owner 전체 tree scope를 검사하고 burn만 허용한다. 임무 최종 보고의 XP/credits/붕대/claimed·출입증·profile 저장을 기존 world_change에 묶고 원래 issuer에서 출입증만 재발급한다. native의 새 붕대 reward도 Entity에만 저장한다. 기존 claimed 캐릭터에 startup 지급이나 자동 migration은 없다.
+- common can_enter/entry_message는 availability → 개인 출입증 → 기존 quest gate를 읽기 전용으로 검사한다. Exit와 Explorer.at_pre_move를 통해 Web 방향·직접 이동·승강기·귀환 등 현재 gameplay 경로가 같은 API를 사용한다. restricted→public 출구는 허용하며 party 권한을 공유하지 않는다. collective party movement 기능은 없다.
+- 본부 북쪽 전초 장비고/병기고와 남쪽 unavailable 예약 시설, 실제 상인2명과 정산소 소각기를 기존 managed bootstrap에 연결했다. 기존 stable room/NPC ID와 가격·수치를 유지한다. bootstrap idempotency는 격리 DB에서 확인하며 플레이 월드에서 build_world를 실행하지 않는다.
+- Shop V2는 purchase_catalog와 category accepts를 분리한다. T1/T2 기존 판매 ID만 기본점/전초 시설로 재배치한다. shop_service는 legacy profile adapter 또는 native ItemEntity source/sink를 사용하고 firearm은 full_standard로 구매한다. shopkeeper Entity 재고나 상품별 quest 검사, dual-write는 없다. 잔탄 매입은 기존 magazine_resale helper와 fixture 가격으로 검증하며 실제 최종 가격은 Phase 6이다.
+- 공통 parse_stack_quantity는 1/N개/모두와 stable instance 번호를 구별하며 기존 정산에도 적용한다. destroy_quantity는 부분 판매/소각 후 잔여 UUID/sequence/state를 유지한다. before/after hook의 active reference 정리와 실패 rollback을 보존한다. 출입증 확인은 정확한 후치 alias 소각 확정일 때만 명시적으로 전달하며 pending state나 문자열 확정 추론은 없다.
+- inventory/Web의 추가 Entity 표시는 legacy에서는 출입증만, native에서는 기존 Entity snapshot을 사용한다. 일반 legacy inventory/equipment/storage/light_sources, Container/loot blob과 profile version10은 그대로다. pure rules에 ORM query를 추가하지 않았으며 equipment/combat/recovery/loot math는 변경하지 않는다.
+
+최종 로컬 검증은 [playtest의 Phase 5 기록](playtest.md#phase-5-출입증접근상점소각-검증)에 기록한다. 순수71개/0.661초와 통합 targeted223개/156.765초(runner166.067초), check/diff가 성공했다. 개수는 재실행이나 이전 Phase와 합산하지 않는다. 개발 중 fixture의 기존 방/상점 수·정산관 첫 객체 전제, legacy 여분 장비 Web 판매 후보와 실제 시각 경계 실패를 구분해 보정했다. 경제 실패 원자성 test의 Explorer 시각만 고정하고 recovery formula/interval은 바꾸지 않았다. 마지막 코드 검증 이후 문서 변경은 게임 검사 재실행 조건이 아니다. 최신 PR HEAD CI run/SHA와 결과는 PR Validation에서 별도로 확인해 기록한다.
+
+[PR #33](https://github.com/wonmin82/primal-zone/pull/33)을 OPEN/non-draft로 생성했다. 구현 HEAD `ed79f48dfce2df74d8774e7babaa1f2c7f336bed`의 Game checks37406287020은 check/Quick smoke30.118초 성공이며 순수192개 중 출입증 max_stack=None의 이전 기대값2개가 실패해 통합을 시작하지 않았다. 정의 fixture를 max_stack1/non-stack/unique/burn 계약으로 보정하고 관련 순수73개/0.808초 및 check/diff가 성공했다. production 코드는 동일해223개를 재실행하지 않는다. 최신 보정 HEAD CI는 새 run/SHA로 PR Validation에서 확인하며 최초 실패 이력을 보존한다. 병합하지 않는다.
+
+PostgreSQL 실제 contention·multi-server race·전체 browser/multiplayer matrix·OS IME·local full suite·smoke-full·full-world migration·balance simulation은 미실행이다. JS/CSS/template 변경이 없어 browser/node/정적 파일 수집을 수행하지 않고 서버 action payload를 검사한다. 새로운 Django schema migration은 없다. Phase 6은 최종 content/가격, claimed entitlement의 명시적 출입증 migration과 일반 legacy full migration/integrity/runtime cutover를 수행할 수 있다. 자동 변환·최종 가격·boss reward·enemy/drop balance는 이번 diff에 없다. 상세 API와 이동 조사표는 [Phase 5 설계](credentials-access-shops.md)를 따른다. 아래 Phase 1~4 기록은 당시 이력으로 보존한다.
+
 ## PR #32 문서 마감·병합 및 소스 브랜치 정리 (2026-10-06)
 
 사용자가 문서 마감 후 [PR #32](https://github.com/wonmin82/primal-zone/pull/32) 병합과 소스 브랜치 삭제를 요청했다. 아래 구현·리뷰 단계의 merge 금지/OPEN 유지 설명은 당시 요청 범위이며 이번 명시적 병합 요청을 제한하지 않는다. Phase 5는 별도 요청 전 시작하지 않는다.

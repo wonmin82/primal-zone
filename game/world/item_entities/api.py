@@ -317,6 +317,32 @@ def delete_item(item, *, operation=None):
         after_item_change(change)
 
 
+def destroy_quantity(item, quantity, *, operation):
+    """판매·소각의 부분 스택은 잔여 UUID/sequence/state를 유지한다."""
+    with world_change():
+        from world.equipment_service import after_item_change, before_item_change
+
+        current = _current(item)
+        change = before_item_change(current)
+        locked = {row.pk: row for row in lock_items([item, *change.item_ids])}[item_id(item)]
+        if (locked.location_kind, locked.owner_object_id, locked.parent_item_id) != (
+                current.location_kind, current.owner_object_id, current.parent_item_id):
+            raise ValidationError("아이템의 위치나 소유자가 바뀌었습니다. 다시 선택하세요.")
+        if operation not in ("sell", "burn"):
+            raise ValidationError("수량 폐기는 판매 또는 소각에만 사용합니다.")
+        _check_tree_operation(locked, (), operation)
+        if type(quantity) is not int or not 0 < quantity <= locked.quantity:
+            raise ValidationError("폐기할 수량을 확인하세요.")
+        if quantity == locked.quantity:
+            locked.delete()
+        else:
+            if not ITEMS[locked.definition_id]["stackable"] or locked.children.exists():
+                raise ValidationError("내부 물품이 없는 스택만 부분 폐기할 수 있습니다.")
+            locked.quantity -= quantity
+            locked.save()
+        after_item_change(change)
+
+
 def _default_state(definition_id):
     from world.item_entities.policy import definition_errors
     from world.item_states import default_state

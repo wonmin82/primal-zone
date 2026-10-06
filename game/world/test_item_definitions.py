@@ -11,7 +11,13 @@ class ItemDefinitionTests(unittest.TestCase):
         for identity, definition in ITEMS.items():
             with self.subTest(identity=identity):
                 self.assertEqual(definition_errors(identity, definition), [])
-                self.assertIsNone(definition["max_stack"])
+                if definition["item_type"] == "credential":
+                    self.assertEqual(definition["max_stack"], 1)
+                    self.assertFalse(definition["stackable"])
+                    self.assertTrue(definition["unique_per_owner"])
+                    self.assertTrue(can_item_operation(identity, "burn"))
+                else:
+                    self.assertIsNone(definition["max_stack"])
                 for operation in ("drop", "give", "store", "sell"):
                     self.assertEqual(
                         can_item_operation(identity, operation), definition["transferable"]

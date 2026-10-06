@@ -1,5 +1,58 @@
 # 원시구역 테스트 안내
 
+## PR #33 문서 마감 및 병합 검증
+
+2026-10-06 문서 마감·병합 요청의 시작 HEAD는 `0e5be5e4fe162f993adc92db459cbeeeabb41bf8`, main은 `248c849470bb709259902bd7f35780894a4c7b78`다. 리뷰 HEAD의 [Game checks37411748278](https://github.com/wonmin82/primal-zone/actions/runs/37411748278)는 check·순수192개/1.055초·통합526개/242.912초·Quick smoke30.882초 성공이며 로컬21개와 합산하지 않는다.
+
+마감 변경은 Task State와 이 검증 기록뿐이다. 실행 코드·테스트·설정·UI asset이 리뷰 검증 당시와 같아 아래 targeted21개/check 성공을 재사용하고 로컬 게임 검사·smoke·browser·node를 반복하지 않는다. 문서 경로·링크·명령과 과거 결과를 대조하고 git diff --check를 실행한다. 문서 HEAD 및 병합 commit의 자동 test/Quick smoke는 각각 새 run/SHA로 [PR #33 Validation/병합 마감 기록](https://github.com/wonmin82/primal-zone/pull/33)에 남긴다. 아래 병합 금지 설명은 이전 요청 시점의 범위이며 이번 명시적 병합 요청이 우선한다. 기존 PostgreSQL/multi-server·OS IME·전체 browser·migration·balance 공백은 유지한다.
+
+## PR #33 출입증 소각 확정 문법 리뷰 검증
+
+시작 HEAD `f60c6c5c08d0486aa49961bc4458651254f6e6ab`의 incinerator_service·tests.test_incinerator만 수정하고 아래 명령을 격리 settings_test DB에서 실행한다. 기존 Phase 5 결과와 재실행 개수를 합산하지 않는다.
+
+```powershell
+.\.venv\Scripts\python.exe scripts/dev.py test tests.test_incinerator tests.test_credentials --parallel 2 --reverse
+.\.venv\Scripts\python.exe scripts/dev.py check
+git diff --check
+```
+
+- 수정 전 새 confirmation regression2개(legacy/native)는10.026초, runner24.577초에 실패했다. 두 출입증의 1개 confirmation이 삭제되어 후속 불변 비교까지 실패 subcase16개가 발생했다. 이는 각각 별도 test16개를 실행한 숫자가 아니다.
+- 첫 수정 후 관련20개/24.264초, runner34.269초 성공했다. 이후 숫자 이름의 ammo9mm/556/762를 실제 command로 1/N개/모두 소각하는 회귀를 추가했다. 공통 parser와 ammo 정의는 변경하지 않았다.
+- 추가 회귀를 포함한 첫21개/23.908초, runner33.831초는9mm fixture의 잘못된 stable ID ammo_9mm로 생성 단계1건이 실패했다. 실제 정의 ID ammo_9로 fixture만 바로잡았고 production 정의는 변경하지 않았다.
+- 최종 같은 targeted 명령은21개/23.191초, runner34.609초 성공했다. check와 git diff --check도 성공했다. 이전20개나 실패 실행과 합산하지 않는다. 최종 코드 검사 이후 문서만 마감하므로 게임 검사를 반복하지 않는다.
+- malformed confirmed command와 service 직접 호출에서 profile·ItemEntity rows·ItemSequence·active refs·access 불변을 확인한다. 두 출입증 정상 확인/삭제·stable ID/local index·기존 재발급, 일반 붕대 수량/모두 및 일반 물품의 소각 확정 거절도 포함한다.
+- local full suite·smoke-full·전체 browser regression은 요청 범위에 따라 미실행이다. JS/CSS/template 변경이 없어 browser/node/정적 수집을 수행하지 않는다. 이전 CI37406457142 성공으로 대신하지 않고 최신 PR HEAD의 test/Quick smoke를 새 run/SHA로 PR Validation에 기록한다. 기존 PostgreSQL/multi-server·OS IME·full migration·balance 공백은 유지한다.
+
+## Phase 5 출입증·접근·상점·소각 검증
+
+시작 main은 `248c849470bb709259902bd7f35780894a4c7b78`, branch는 `codex/credential-access-shops-incinerator`다. 아래는 Phase 5 미커밋 diff의 격리 settings_test DB 검사이며 Phase 1~4 결과나 재실행 개수를 합산하지 않는다. 실제 구조/명령은 [출입증·접근·상점](credentials-access-shops.md)을 따른다.
+
+```powershell
+.\.venv\Scripts\python.exe scripts/dev.py check
+.\.venv\Scripts\python.exe scripts/dev.py test tests.test_credentials tests.test_access tests.test_shop_entities tests.test_incinerator tests.test_item_entities tests.test_item_interactions tests.test_headquarters tests.test_parties tests.test_integration tests.test_shops tests.test_equipment tests.test_firearms tests.test_settlement tests.test_text tests.test_rewards tests.test_regions tests.test_lifecycle tests.test_economy tests.test_command_shortcuts --parallel 2 --reverse
+git diff --check
+```
+
+관련 pure 검사는 game 디렉터리에서 `../.venv/Scripts/python.exe -X utf8 -m unittest world.test_shop_rules world.test_shops world.test_settlement world.test_headquarters world.test_rules world.test_economy`를 실행한다. 최종 순수71개/0.661초 성공이다. 위 통합 명령은223개/156.765초, runner166.067초 성공이며 실패/skip은 없다. check/diff도 성공했다. 로그는 Git 제외 work/phase5-closeout-targeted.log다. 마지막 코드 검증 이후 문서만 갱신하므로 게임 검사를 반복하지 않는다.
+
+회귀는 실제 임무 보고/출입증 재발급/고유 DB constraint·모든 operation 거절·숨겨진 owner scope·보상/profile/sequence 전체 rollback, 개인 access/예약 시설/제한실 퇴장/기존 ridge/방향·직접 이동, 실제 bootstrap 재실행, legacy/native 거래와 source/sink, 1/N개/모두·duplicate selector·장착 복사본 보호·loaded firearm 거절, fixture 탄창 잔탄 매입, 소각 same-room/perception/정확한 확정·burn→access loss→reissue, active-light 삭제 및 실패 원복을 포함한다. Web 서버 payload와 공통 후치 parser/개인 줄임말 회귀도 검사한다.
+
+### 개발 중 실패와 재검증
+
+- 최초 pure 명령을 저장소 root에서 실행해 world import 오류5개가 났으며 실제 test body는 실행되지 않았다. game에서 다시 실행했다. 초기 순수69개는 기존 catalog/방 개수/NPC 전제에서15개 실패, 보정 후69개는 전초 방 hint 기대값1개 실패했다. 최종 관련 순수71개는 위 명령으로 성공했다.
+- 초기 통합61개/75.686초는 기존 본부 traversal이 모든 새 방에 무조건 입장할 수 있다고 가정한 subcase8개가 실패했다. 권한 없는 새 목적지의 거절을 기대하도록 해당 fixture를 맞췄다. 새 Phase 5 module의 첫30개/29.875초(runner38.796초)는 성공했다. 이는 이후 보완된 최종 전체 관련 검사와 별도다.
+- 확대161개/114.461초(runner123.776초)는 정산소의 첫 객체가 정산관이라는 기존 fixture2개가 실패했다. 소각기가 함께 배치되므로 정산관을 이름으로 선택하고 hidden NPC 검사는 해당 정산관만 검사하도록 보정했다.
+- 확대201개/143.536초(runner152.658초)는 legacy 여분 무기의 모두 판매 Web action 누락1개와 기존 총 방 수52 기대값1개가 실패했다. snapshot의 legacy 장착 복사본만 제외하고 기존 모두 판매 동작을 유지하며 새 방4개를 포함해 기대값56으로 맞췄다.
+- 수정 영향4개 module의51개/39.894초(runner49.008초)는 경제 실패 비교 중 actual wall-clock 회복 경계가 넘어1개 실패했다. 해당 원자성 method의 Explorer 시각만100으로 고정했다. 나머지 검사와 출입증의 잘못된 확정 순서 거절은 통과했다. 이후 `tests.test_economy tests.test_command_shortcuts --parallel 2 --reverse`는40개/17.459초(runner26.800초) 성공했다. gameplay recovery 주기/공식은 변경하지 않았다.
+
+최신 PR HEAD의 자동 Game checks/test/Quick smoke는 push 후 별도 run/SHA로 기록하며 baseline main CI37390803018 성공으로 대신하지 않는다. PR을 병합하지 않는다. 로컬 full suite·smoke-full·전체 browser/multiplayer matrix·OS IME·PostgreSQL contention·multi-server race·full-world migration·balance simulation은 요청의 단계별 전략에 따라 미실행이다. JS/CSS/template를 수정하지 않아 browser/node/정적 수집은 미실행이고 Web action은 서버 payload test로 검사한다. production 가격/수치/profile schema와 플레이 DB·비밀 설정을 변경하지 않았다.
+
+### PR #33 최초 CI와 정의 fixture 보정
+
+구현 HEAD `ed79f48dfce2df74d8774e7babaa1f2c7f336bed`의 [Game checks37406287020](https://github.com/wonmin82/primal-zone/actions/runs/37406287020)는 check와 Quick smoke30.118초 성공, test 실패다. 순수192개 중 출입증2개에서 기존 모든 max_stack=None 기대값이 실패했고 통합 suite는 시작하지 않았다. 출입증의 max_stack1/non-stack/unique_per_owner/burn 허용을 명시적으로 검사하도록 해당 순수 fixture만 보정했다. 일반 아이템의 max_stack=None/legacy transfer 정책 검사는 유지하며 실행 코드와 가격·규칙은 바꾸지 않았다.
+
+game에서 `../.venv/Scripts/python.exe -X utf8 -m unittest world.test_item_definitions world.test_shop_rules world.test_shops world.test_settlement world.test_headquarters world.test_rules world.test_economy`는73개/0.808초 성공했고 check/diff도 성공했다. 마지막 production 코드가 같아 targeted223개를 다시 실행하지 않는다. 로컬71개와73개를 합산하지 않으며 최초 CI 실패를 성공으로 덮어쓰지 않는다. 이후 최신 HEAD의 전체 자동 test/Quick smoke 결과는 [PR #33 Validation](https://github.com/wonmin82/primal-zone/pull/33)에 새 run/SHA로 기록한다.
+
 ## PR #32 Phase 4 리뷰 수정 검증
 
 기준 HEAD `13cb330eb5a28784bab48688a8afa11291582d14` 위 리뷰2건만 수정한 diff를 격리 settings_test DB로 검사했다. 기존 Phase 4 검증과 아래 결과를 합산하지 않는다.

@@ -114,7 +114,7 @@ def inventory(profile):
 
 def shop(shop_id, seller):
     lines = []
-    for key in SHOP_CATALOGS[shop_id]:
+    for key in SHOP_CATALOGS[shop_id]["purchase_catalog"]:
         parts = [ft.item(key), ft.token("reward", format_currency(rules.purchase_price(key)))]
         lines.append(ft.join(parts, " · "))
     lines.append(

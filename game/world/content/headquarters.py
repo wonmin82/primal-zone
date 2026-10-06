@@ -197,6 +197,25 @@ for direction, name, desc in (
         "exits": {OPPOSITE_DIRECTIONS[direction]: "support_roof"},
     }
 
+# 진행 권한과 가용성은 공간에만 둔다. 남쪽 예약 시설도 실제 목적지를 갖는다.
+for zone, name, corridor, direction, credential, available in (
+    ("outpost_equipment", "전초 장비고", "support_3f_w2", "북", "outpost_supply_pass", True),
+    ("outpost_weapon", "전초 병기고", "support_3f_e2", "북", "outpost_supply_pass", True),
+    ("reserved_equipment", "다음 단계 장비고", "support_3f_w2", "남", "special_supply_pass", False),
+    ("reserved_weapon", "다음 단계 병기고", "support_3f_e2", "남", "special_supply_pass", False),
+):
+    ROOMS[zone] = {"name": name, "desc": f"{name}의 출입문 너머로 장비 보급 시설이 보인다.",
+                   "exits": {OPPOSITE_DIRECTIONS[direction]: corridor},
+                   "access": {"available": available, "credential": credential}}
+    ROOMS[corridor]["exits"][direction] = zone
+    ROOMS[corridor]["blocked_exits"].pop(direction)
+    ROOMS[corridor]["desc"] += f" {direction}쪽에는 {name} 출입문이 있다."
+ROOMS["armor_shop"]["name"] = "3F 서쪽 기본 장비점"
+ROOMS["weapon_shop"]["name"] = "3F 동쪽 기본 병기점"
+ROOMS["supply_shop"]["name"] = "1F 보급품 상점"
+ROOMS["outpost_equipment"]["hints"] = [{"target": "outpost_equipment_shopkeeper", "action": "상품"}]
+ROOMS["outpost_weapon"]["hints"] = [{"target": "outpost_weapon_shopkeeper", "action": "상품"}]
+
 for room in ROOMS.values():
     room.update(safe=True, enemies=[], exposure="indoor", light_profile="artificial")
 for zone in ROOF_ROOMS:

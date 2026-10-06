@@ -12,10 +12,12 @@ from world.test_headquarters import content_targets
 
 class ShopRulesTests(TestCase):
     def test_catalogs_preserve_all_fourteen_prices_without_legacy_table(self):
-        self.assertEqual({shop: {item: ITEMS[item]["value"] for item in catalog} for shop, catalog in SHOP_CATALOGS.items()}, {
+        self.assertEqual({shop: {item: ITEMS[item]["value"] for item in catalog["purchase_catalog"]} for shop, catalog in SHOP_CATALOGS.items()}, {
             "supply": {"flashlight": 30, "battery": 6, "bandage": 8, "field_ration": 4, "water": 3},
-            "weapon": {"spear": 35, "blade": 60, "jungle_blade": 95, "carbine": 130, "heavy_carbine": 240},
-            "armor": {"leather_suit": 35, "tactical_vest": 85, "armor": 65, "heavy_suit": 190},
+            "weapon": {"spear": 35, "blade": 60, "carbine": 130},
+            "outpost_weapon": {"jungle_blade": 95, "heavy_carbine": 240},
+            "armor": {"leather_suit": 35, "armor": 65},
+            "outpost_equipment": {"tactical_vest": 85, "heavy_suit": 190},
         })
         self.assertFalse(hasattr(content, "SHOP"))
         self.assertFalse(hasattr(content.items, "SHOP"))
@@ -37,11 +39,11 @@ class ShopRulesTests(TestCase):
         for price in (0, -1, True, 8.5, "8"):
             with patch.dict(ITEMS["bandage"], value=price):
                 self.assertTrue(any("가격" in issue for issue in shop_errors()))
-        with patch.dict(SHOP_CATALOGS, supply=(*SHOP_CATALOGS["supply"], "missing")):
+        with patch.dict(SHOP_CATALOGS, supply={**SHOP_CATALOGS["supply"], "purchase_catalog": (*SHOP_CATALOGS["supply"]["purchase_catalog"], "missing")}):
             self.assertTrue(any("아이템 정의" in issue for issue in shop_errors()))
-        with patch.dict(SHOP_CATALOGS, weapon=(*SHOP_CATALOGS["weapon"], "bandage")):
+        with patch.dict(SHOP_CATALOGS, weapon={**SHOP_CATALOGS["weapon"], "purchase_catalog": (*SHOP_CATALOGS["weapon"]["purchase_catalog"], "bandage")}):
             self.assertTrue(any("중복" in issue for issue in shop_errors()))
-        with patch.dict(SHOP_CATALOGS, supply=()):
+        with patch.dict(SHOP_CATALOGS, supply={**SHOP_CATALOGS["supply"], "purchase_catalog": ()}):
             self.assertTrue(any("비었습니다" in issue for issue in shop_errors()))
         for field, value in (("room", "dock"), ("shop_id", "missing"), ("actions", ["구매"])):
             targets = content_targets()

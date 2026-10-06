@@ -209,6 +209,8 @@ class EconomyTests(WorldCommandTest):
         self.assertIn("식별 표식", self.command("보급칩 보기"))
 
     def test_value_sale_and_server_actions_preserve_equipped_copy(self):
+        # 실패 원자성 비교 도중 실제 회복 경계가 넘어가는 영향을 제거한다.
+        self.enterContext(patch("typeclasses.explorers.time", return_value=100))
         self.char1.location = self.rooms["weapon_shop"]
         self.char1.change(lambda p: p["inventory"].update(blade=3))
         self.command("낡은마체테 해제")

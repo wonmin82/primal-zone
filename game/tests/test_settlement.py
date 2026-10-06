@@ -113,7 +113,7 @@ class SettlementCommandsTests(SettlementFixture, WorldCommandTest):
         for raw in ("환율", "회수부품 교환", "정산관 환율", "정산관에게 회수부품 교환"):
             self.assertNotIn("칩을 받았다", self.command(raw))
             self.assertEqual(self.char1.profile(), before)
-        self.assertEqual(multiplayer_state(self.char1)["interactables"], [])
+        self.assertFalse(any(obj["name"] == self.officer.key for obj in multiplayer_state(self.char1)["interactables"]))
         self.assertEqual(render(context_for(self.char1)), "")
         self.officer.locks.add("view:all()")
         self.char1.change(lambda p: p.update(combat_target=999))
@@ -121,7 +121,7 @@ class SettlementCommandsTests(SettlementFixture, WorldCommandTest):
         for raw in ("환율", "회수부품 교환"):
             self.assertIn("전투 중입니다", self.command(raw))
             self.assertEqual(self.char1.profile(), before)
-        self.assertEqual(multiplayer_state(self.char1)["interactables"][0]["actions"], [])
+        self.assertEqual(next(obj["actions"] for obj in multiplayer_state(self.char1)["interactables"] if obj["name"] == self.officer.key), [])
         self.assertEqual(render(context_for(self.char1)), "")
         self.char1.change(lambda p: p.update(combat_target=None))
         self.officer.location = self.rooms["support_roof"]
@@ -142,7 +142,7 @@ class SettlementCommandsTests(SettlementFixture, WorldCommandTest):
 class SettlementWorldTests(SettlementFixture, WorldCommandTest):
     def test_server_actions_resource_snapshot_and_settlement_push(self):
         self.prepare(scrap=7, credits=0)
-        actions = multiplayer_state(self.char1)["interactables"][0]["actions"]
+        actions = next(obj["actions"] for obj in multiplayer_state(self.char1)["interactables"] if obj["name"] == self.officer.key)
         self.assertEqual([action["command"] for action in actions],
                          ["자원 정산관 환율", "자원 정산관에게 회수부품 모두 교환"])
         self.assertEqual(render(context_for(self.char1)), "자원 정산관 환율")
@@ -157,7 +157,7 @@ class SettlementWorldTests(SettlementFixture, WorldCommandTest):
         for state in payloads:
             self.assertEqual(state["credits"], 7 * SALVAGE_CREDIT_RATE)
             self.assertEqual(state["resources"], {"scrap": {"name": "회수부품", "count": 0}})
-        self.assertEqual([action["command"] for action in multiplayer_state(self.char1)["interactables"][0]["actions"]],
+        self.assertEqual([action["command"] for action in next(obj["actions"] for obj in multiplayer_state(self.char1)["interactables"] if obj["name"] == self.officer.key)],
                          ["자원 정산관 환율"])
         self.char1.location = self.rooms["support_1f_w2"]
         self.assertNotIn("정산관", self.command("북 보기"))
