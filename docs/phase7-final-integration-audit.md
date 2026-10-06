@@ -42,6 +42,8 @@ Baseline & Documentation Closeout. 현재 문서와 historical 기록을 분리�
 
 PR #35 restart 리뷰의 coverage 공백은 before→stopped shutdown invariant와 stopped→after strict preservation으로 보강했다. 실제 ON/active UUID 광원을 전제로 정상 shutdown의 OFF/started_at=None/시간 정산·참조 제거와 일반 item/주무기 불변을 Full E2E에서 검사했다. 재실행 Full558.589초 성공이며 첫 기존 progression 전투 실패도 playtest에 보존한다. Production·Quick timing·fixture/balance는 변경하지 않았다. 수정 HEAD의 정확한 CI는 PR Validation을 따르며 notes 판정을 유지한다.
 
+후속 CI의 기존 vocabulary 불변 검사가 자연회복 경계를 지나 실패해 해당 테스트의 관찰 시각만 고정했다. 실패 run37545750843과 후속 검증을 playtest/PR Validation에 구분한다. Production·Full 실행 코드와 수치는 그대로다.
+
 ## Phase 7B
 
 Integration & Legacy Compatibility Validation. 실제 browser/입력/멀티플레이와 격리 Canonical Legacy Migration Corpus를 검증한다. 아래 항목은 7A에서 수행하지 않는다.

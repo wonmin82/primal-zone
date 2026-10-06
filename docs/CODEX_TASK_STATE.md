@@ -9,6 +9,8 @@
 - 첫 Full은 새 restart 구간에 도달하기 전 기존 성장 전투에서 회복품을 소진하고 패배했다. 변경 없는 동일 코드의 재실행은558.589초 성공했다. Before 실제 ON/active UUID 광원의 raw power1800.000 → stopped OFF/started_at=None/active_light=None·power1517.858(`project_power` 시각 범위 내), after는 stopped item 전체 strict 보존·active_light None·active weapon 보존을 실제 E2E로 확인했다. Corpse29.361초/respawn44.179초/protection120.333초, restart/relogin과 기존 storage/loot/party/world 검사도 성공했다.
 - 개발 DB SHA256 `B1318296F505B9B7522FCBDEDFF7642A06CF055E9DE72802198C70E6B8A7F700`,size733184,mtime_ns1790080153765082800 불변이다. 실패 로그/DB는 보존하고 성공 run은 owned process 종료/cleanup을 완료했다. Production·Quick 경로·fixture 수치는 변경하지 않았다.
 - 수정 commit push 뒤 latest HEAD와 일치하는 CI는 PR #35 Validation에 실제 SHA/run/count/time을 기록한다. 기존 시작 HEAD의 성공으로 대신하지 않는다. READY FOR PHASE 7B WITH NOTES를 유지하며 이전 notes와 이번 기존 progression smoke 실패 이력을 인계한다. 이 수정은 7B/7C/PostgreSQL 작업을 시작하지 않는다.
+- 리뷰 수정 HEAD `4263d7daa75f2b717c5d5a0569ba39fc7371ab49`의 CI37545750843은 check·pure203개/0.697초·Quick48.403초 성공, integration569개/227.188초(runner230.928초) 중 기존 vocabulary 불변 테스트1건 실패였다. 제거된 명령 실행 중 10초 자연회복 경계를 지나 recovery timestamp/boundary가 바뀐 fixture 문제로, 해당 테스트만 관찰 시각을 고정하고 recovery 기준을 맞췄다. Production·Full 코드가 동일하므로 앞의 Full 결과는 유지하고, 실패 이력과 후속 exact-head CI는 PR Validation에 구분한다.
+- `.\.venv\Scripts\python.exe scripts/dev.py test tests.test_vocabulary --parallel 2 --reverse`:8개/7.818초(runner17.389초) 성공, `scripts/dev.py check` 성공. 테스트 시각 고정 외 동작 변경은 없다.
 
 ## Phase 7A — Baseline & Documentation Closeout (2026-10-06)
 

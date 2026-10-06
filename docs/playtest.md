@@ -20,6 +20,8 @@ Windows의 기존 terminate는 shutdown callback을 건너뛸 수 있어 Full �
 - 실제 `startup-items` assertion: stopped→after 모든 ItemEntity dict를 strict 비교해 광원 추가 정산·quantity/tree/state mutation을 허용하지 않았다. After active_light=None, stopped와 동일한 OFF state/잔량1517.858, 주무기 보존 및 relogin이 성공했다. Storage/loot/party/facility/elevator·combat/claim 정리·corpse/respawn callback 재예약 기존 검사도 유지하며 통과했다.
 - 성공 run의 owned process 종료/cleanup과 개발 DB 전후 SHA256 `B1318296F505B9B7522FCBDEDFF7642A06CF055E9DE72802198C70E6B8A7F700`,size733184,mtime_ns1790080153765082800(UTC2026-09-22T12:29:13.7650828Z) 불변을 확인했다. 실제 플레이 DB에는 mutation/migration을 실행하지 않았다. 최신 수정 commit의 exact-head CI는 PR #35 Validation에 별도로 기록한다.
 - Quick 경로는 변경하지 않아 기존 최종 연속3회 결과를 유지하고 새 실행으로 표현하지 않는다. Local full suite·browser/IME·corpus·PostgreSQL·balance simulation·fresh operational DB도 이번 좁은 리뷰 수정에서 실행하지 않는다.
+- 수정 HEAD `4263d7daa75f2b717c5d5a0569ba39fc7371ab49`의 CI37545750843: check·pure203개/0.697초·Quick48.403초 성공, integration569개/227.188초(runner230.928초)에서 `test_inventory_aliases_and_removed_commands_are_not_active`1건 실패. 기존 명령 거절 불변 테스트가 실제 10초 회복 경계를 지나 recovery timestamp/boundary까지 비교한 문제다. 해당 테스트의 관찰 시각과 recovery 기준만 고정했다. Production·smoke 실행 코드는 바뀌지 않아 위 Full을 다시 실행하지 않는다. 후속 CI는 PR Validation에 별도로 기록하며 이전 실패를 삭제하지 않는다.
+- `.\.venv\Scripts\python.exe scripts/dev.py test tests.test_vocabulary --parallel 2 --reverse`:8개/7.818초(runner17.389초) 성공. `scripts/dev.py check`도 성공했다. 이전 Full과 smoke 단위 검증을 커밋·문서 갱신만으로 반복하지 않는다.
 
 ## Phase 7A baseline validation (2026-10-06)
 
