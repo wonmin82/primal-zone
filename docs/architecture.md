@@ -1,5 +1,15 @@
 # 원시구역 구조와 설계 결정
 
+## Phase 6 최종 runtime과 명시적 변환
+
+일반 아이템은 ItemEntity, 실물 전리품 권리는 LootClaim, 보급칩 전리품은 CurrencyLoot/CurrencyLootShare, 접근 권한은 Credential ItemEntity가 SSOT다. 아래 Phase 1~5의 legacy 설명은 당시 기록이며 cutover 이후 gameplay backend로 사용하지 않는다. `ItemRuntime.version=1`과 Explorer/native loot marker를 검사하고 미변환 world는 서버 시작과 일반 item 접근에서 migration-required 오류를 낸다.
+
+`item_migration.scan/convert/audit/workflow`는 source 계획, 원자적 변환, legacy/native 독립 대조, 운영 단계로 나뉜다. ItemMigrationLedger는 version/kind/영속 ObjectDB ID의 DB unique와 원본 digest·완료 snapshot을 저장한다. apply는 source별 완료만 기록하고 global marker는 verify 성공 후 별도 cutover에서 설정한다. 로그인·명령·startup conversion과 dual-write는 없다. 실제 운영 절차와 재시도는 [item-migration](item-migration.md)을 따른다.
+
+EquipmentProfile의 inventory는 DB에서 파생한 일시적 수량 계산 context다. pure rules의 보상·소모 delta는 owner lock 안에서 item_inventory가 실제 Entity에 적용하고 저장할 때 legacy item 필드는 원형으로 되돌린다. equipment/storage/light_sources legacy 필드는 gameplay에서 읽지 않는다. item location·UUID·tree·state mutation은 기존 API와 full_clean을 사용하며 장비 및 광원 reference hook을 유지한다. quest 자원 제출은 명시적 tree operation `submit`으로 구분한다. Shopkeeper는 재고를 소유하지 않고 source/sink로 동작한다.
+
+가격·modifier·drop·Boss scaling은 pure content/rules 계층, actual-shot 감소·지급·migration은 persistence 계층이다. Boss 참여자 수는 기존 reward_groups를 재사용하고 한 encounter에서 감소하지 않는다. 추가 max HP만 current HP에 더해 이미 입힌 damage를 보존한다. 전체 회복 또는 respawn 후 다음 encounter는 1명 기준으로 시작한다. [최종 콘텐츠](final-content.md)의 확정 수치를 임의 tuning하지 않는다.
+
 ## Phase 5 출입증·접근·거래 경계
 
 Quest state는 entitlement/진행 이력이고 실제 access authority는 Credential ItemEntity다. Room access는 availability와 개인 credential을 읽기 전용 can_enter로 검사한다. legacy/native backend와 관계없이 credential_service가 지급·재발급을 소유하고 pure rules의 보상과 profile 저장을 outer world_change로 묶는다. 임무 완료만으로 입장시키거나 profile inventory에 출입증을 복제하지 않는다.

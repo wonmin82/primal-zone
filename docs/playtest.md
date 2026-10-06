@@ -1,5 +1,35 @@
 # 원시구역 테스트 안내
 
+## Phase 6 targeted validation (2026-10-06)
+
+시작 main `94bc1e788fec5547841fb5f87e105854a69cc92b`, branch `codex/content-balance-full-migration`에서 실행했다. 아래 개수는 각 실행의 결과이며 서로 합산하지 않는다. 실제 플레이 DB에는 migration apply/cutover를 실행하지 않았다.
+
+```powershell
+.\.venv\Scripts\python.exe scripts/dev.py test tests.test_item_migration tests.test_phase6_runtime tests.test_item_entities tests.test_equipment_entities tests.test_firearms tests.test_shop_entities tests.test_rewards tests.test_regions tests.test_loot_entities tests.test_currency_loot tests.test_credentials tests.test_lighting_entities tests.test_item_interactions tests.test_incinerator tests.test_recovery --parallel 2 --reverse
+```
+
+위 integration targeted227개/123.185초(runner132.233초)는 성공했다. 이후 raw flashlight preflight와 profile 누락 방어선을 포함한 dedicated `scripts/dev.py test tests.test_item_migration tests.test_phase6_runtime --parallel 2 --reverse`는23개/21.810초(runner31.514초) 성공했다. 최신 PR HEAD의 CI run/SHA는 PR Validation에 별도로 기록한다. CI의 전체 자동 suite/Quick smoke와 로컬 targeted 검사를 구분한다.
+
+- 개발 중 초기 migration6개는 in-memory SQLite URI를 offline override가 거절해5건 오류가 있었다. test override를 SQLite memory URI로 제한해 보완한 뒤6개/8.002초 성공했다. 초기 content pure5개는0.024초 성공했다.
+- 초기 영향 범위 통합175개는8실패/7오류였다. raw loot entry 정규화 순서, unknown definition 오류 형태와 ordinary enemy bootstrap의 잘못된 HP 복원을 고쳤다. 최종 stable ID/가격/drop/structured modifier로 기존 fixture를 갱신한 뒤 관련108개/64.061초(runner73.590초)가 성공했다.
+- pure94개는 이전 definition/가격·numeric column fixture에서10실패/61오류가 있었고, 이후2실패/1오류→1실패를 보정해94개/0.915초 성공했다. unittest를 저장소 루트에서 실행한 import 오류는 game cwd로 수정했다. production fallback이나 확정 수치 변경으로 해결하지 않았다.
+- 추가 integration113개는5실패/4오류였다. native Credential 파생 inventory 기대값·명칭 substring·recovery 시각·partial pickup 인자·Boss scaling 기대값과 기존 Lv4 준비 fixture를 수정했다. 관련87개에서 준비 fixture 한 건이 추가 실패했고, 최종 Lv4 평균 장비/기술/소비품 준비로 보정한 뒤 migration/runtime/combat/shops36개/36.468초(runner46.315초)가 성공했다. 이후 runtime version과 profile 누락 방어선은 위 최종 targeted에서 별도 검증한다.
+- 최종 pure 확장 명령(game cwd): `..\.venv\Scripts\python.exe -X utf8 -m unittest world.test_final_content world.test_item_definitions world.test_shop_rules world.test_equipment_engine world.test_firearms world.test_economy world.test_recovery world.test_rules world.test_shops world.test_settlement world.test_progression`은113개/0.706초 성공했다. 첫113개는 이전 Boss DEF를 전제한 penetration 피해 기대값 한 건에서 실패했고, 최종 carbine 공격8/shooting+2%/Boss DEF6에 맞춰 기대값을105/150으로 보정했다.
+- 격리 Quick smoke 첫 세 실행은 party claim outsider 거절 단계에서 실패했고 각각 play DB fingerprint 불변과 own process 종료를 확인했다. native profile binding의 동일 snapshot 중복 조회와 수량 delta가 없는 저장의 불필요한 item lock/query를 줄여 재검증한다. 실제 item delta는 기존 owner→UUID lock과 stale quantity 재검증을 유지한다. production combat/recovery/protection 타이머는 변경하지 않는다.
+- `scripts/dev.py check`: 최종 코드 검사 성공. `git diff --check`: 공백/EOF 오류를 수정한 뒤 성공. settings_test의 `makemigrations item_entities --check --dry-run`: 미생성 schema 변경 없음.
+- `world.balance_sanity.report()`: Lv4 능선 Boss basic12/heavy9, Lv7 밀림 Boss13/10 opportunities. DEF10에서 raw30의0/30% penetration은20/22 피해다. 대표2H/1H+shield/1H+offhand/dual 조합은21/4,19/6,19/4,19/4 ATK/DEF다. 경비카빈 vs 경비기4발 비용12칩은 loot EV26.905의44.6%로 목표보다 높아 Phase 7 검토로 남긴다. EV와 모든 acquisition/가격은 [final-content.md](final-content.md)를 따른다.
+- local full suite·smoke-full·전체 browser/multiplayer·OS IME·PostgreSQL contention·multi-server stress·full balance simulation은 미실행이다. JS/CSS/template 변경이 없어 browser/node/정적 asset 수집을 추가하지 않았다. Web shop/action 및 native state는 서버 payload 테스트로 검사한다. Full smoke helper의 최종 장비명과 이미 해제된 fixture를 맞췄으나 full closeout은 실행하지 않았다.
+- 운영 backup/offline/dry-run/apply/verify/cutover 절차는 [item-migration.md](item-migration.md)에 문서로만 작성했다. 테스트는 격리 DB를 사용한다. 작업 중 플레이 DB SHA256은 `B1318296F505B9B7522FCBDEDFF7642A06CF055E9DE72802198C70E6B8A7F700`, size733184, UTC mtime2026-09-22 12:29:13으로 유지됨을 대조한다.
+
+Phase 6 후속 검증: 중복 snapshot/query와 수량 변화 없는 저장의 lock 비용을 줄인 뒤 관련 `tests.test_phase6_runtime tests.test_item_migration tests.test_shop_entities tests.test_credentials --parallel 2 --reverse`는43개/36.212초(runner45.304초) 성공했다. native 기존 Boss unique 보존·복수 ON fixture를 추가한 dedicated25개/23.130초(runner32.440초)도 성공했다. 네 번째 Windows Quick smoke는 파티 공동 전투·outsider 거절을 성공했으나1초 corpse/2초 protection 경계를 지나 보호된 시체 회수 검사에서 실패했다. 플레이 DB 불변과 own process 종료는 모두 확인했다. Ubuntu의 최신 HEAD CI Quick 결과는 별도로 기록한다.
+
+Decision interpretation: 최종 T1 drop에 회수부품이 없어 발전기 수리가 불가능한 점을 사용자에게 확인했다. 승인에 따라 수송차 보급상자에서 회수부품3개를 기존 보상과 함께 한 번 지급한다. drop 확률·수리 비용·one-time flag는 유지한다.
+
+승인된 수송차 보급상자 보완 이후 관련73개/57.427초 실행에서 기존 보급상자 출력 기대값 한 건이 실패했다. 새 보상 출력과 일치하도록 fixture를 보정했으며 실제 native 발전기 제출은 수송차 보급상자의3개를 사용하도록 연결했다. 후속 재검증 결과는 마감 기록에 남긴다.
+
+
+최종 보완 검증: cache 보상 안내의 이전 기대값으로 관련73개 중1건 실패한 뒤 기대값을 새 보상으로 맞췄다. 이후46개 실행에서 tests.test_text의 이전 시작 장비/숫자 column/단일 scrap drop 기대값3건이 실패했다. 실제 최종 장비와 독립 resource/special roll 계약에 맞춘 후 `scripts/dev.py test tests.test_text tests.test_phase6_runtime tests.test_item_migration tests.test_integration.GameplayIntegrationTests.test_cache_reward_is_personal_and_once_only --parallel 2 --reverse`는38개/35.987초(runner50.940초) 성공했다. 승인된 cache를 실제 generator 재료로 제출하는 native 경로도 포함한다. 추가 maintenance 방어선 전용1개는0.651초(runner11.125초) 성공했고 apply/cutover 거절 시 profile/rows/ledger/sequence/marker 불변을 확인했다. game cwd의 `..\.venv\Scripts\python.exe -X utf8 -m unittest world.test_rules world.test_final_content`는43개/0.500초 성공했다. 최신 check/diff도 성공했다. 실행별 개수는 합산하지 않는다.
+
 ## PR #33 문서 마감 및 병합 검증
 
 2026-10-06 문서 마감·병합 요청의 시작 HEAD는 `0e5be5e4fe162f993adc92db459cbeeeabb41bf8`, main은 `248c849470bb709259902bd7f35780894a4c7b78`다. 리뷰 HEAD의 [Game checks37411748278](https://github.com/wonmin82/primal-zone/actions/runs/37411748278)는 check·순수192개/1.055초·통합526개/242.912초·Quick smoke30.882초 성공이며 로컬21개와 합산하지 않는다.

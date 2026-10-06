@@ -1,5 +1,7 @@
 # 출입증·접근·상점·소각 — Phase 5
 
+Phase 6 현재 상태: cutover 후 일반 gameplay는 native ItemEntity만 사용한다. 아래 legacy adapter/Phase 6 예정 설명은 Phase 1~5의 설계·검증 기록이며 maintenance migration과 historical audit fixture의 호환 경계로 남는다. 최신 저장·운영 정책은 [item-migration](item-migration.md), 최종 콘텐츠·가격은 [final-content](final-content.md)를 따른다.
+
 ## 출입증과 임무
 
 `outpost_supply_pass`(전초 보급구역 출입증)과 `special_supply_pass`(특수 보급구역 출입증)은 backend와 무관하게 실제 ItemEntity만 authoritative하다. profile inventory에는 저장하지 않는다. non-stack/quantity1/max_stack1/unique_per_owner이며 `unique_scope_key` DB uniqueness를 그대로 사용한다. 알려진 operation 중 burn만 허용하고 unknown은 fail-closed다.

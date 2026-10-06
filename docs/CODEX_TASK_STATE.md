@@ -2,6 +2,22 @@
 
 확인일: 2026-10-06. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.
 
+## Phase 6 — Final Content + Balance + Full Migration + Runtime Cutover (2026-10-06)
+
+시작 main은 `94bc1e788fec5547841fb5f87e105854a69cc92b`, branch는 `codex/content-balance-full-migration`이다. fetch 시 clean, 열린 PR 없음, Phase 1~5 포함, baseline Game checks37413051057 test/smoke 성공을 확인했다. 이 baseline CI는 Phase 6 HEAD 결과를 대신하지 않는다. 이번 요청은 구현·검증·문서·commit·push·PR·최신 CI까지이며 병합하지 않는다.
+
+- Decision interpretation: T1 drop에서 회수부품 획득이 사라져 초기 progression이 막히는 문제를 사용자에게 확인했고, 수송차 보급상자에서 회수부품3개를 한 번 추가 지급하도록 승인받았다. drop 확률과 발전기 비용은 유지한다.
+- 최종 T0/T1/T2/Boss 정의·가격·ammo bundle·firearm package·구매 catalog와 획득 matrix를 반영했다. 구매 목록과 category 매입은 독립적이며 field-only accessory와 T2 장비도 기본점에서 매입한다. 최종 숫자와 stable ID는 [final-content.md](final-content.md)에 모았다.
+- resource/consumable 한 종류와 special 최대 하나의 독립 roll, Boss trophy 100%, firearm enemy partial magazine을 구현했다. Enemy V1 수치와 기존 reward eligibility에 기반한 Boss HP 상승을 적용하며 encounter 중 downscale하지 않는다. 최종 보고는 기존 보상·Credential·Boss unique를 같은 transaction에서 지급한다.
+- version1 ledger와 global marker, Explorer의 `item_runtime_version`을 추가했다. source는 Explorer·공용 Container·Corpse·DroppedLoot이며 inventory 총량 안에서 equipment 한 개를 선택한다. personal storage owner는 Explorer, shared storage owner는 Container다. 기존 native UUID/sequence/state/tree를 보존하며 중앙 mapping으로 이전 definition ID만 maintenance에서 치환한다.
+- `scripts/dev.py migrate-items --dry-run/--apply/--verify/--cutover`는 서로 분리되어 있다. dry-run/verify는 read-only, apply는 source 단위 atomic/retry, completed ledger도 digest/native snapshot과 독립 수량·권리 audit를 검사한다. cutover는 verify 오류 또는 미승인 warning이 있으면 거절한다. 운영 offline guard와 격리 in-memory test override를 구분한다.
+- cutover 후 일반 gameplay는 Entity를 authoritative하게 사용한다. 계산용 profile inventory는 Entity 수량으로 만들고 저장할 때 기존 legacy item blob은 원형으로 보존한다. legacy fallback·lazy migration·dual-write는 없다. 신규 Explorer는 Entity 시작 장비와 붕대를 직접 생성하며 item profile 필드를 저장하지 않는다. marker/version 또는 profile 누락은 오류다.
+- migration 운영 절차와 retry/rollback 경계는 [item-migration.md](item-migration.md), 실제 로컬 validation 및 실패 보정 이력은 [playtest.md](playtest.md#phase-6-targeted-validation-2026-10-06)를 따른다. 최신 PR HEAD CI run/SHA/test/smoke는 PR Validation에 별도 기록한다.
+- sanity: Lv4 능선 Boss basic12/heavy9, Lv7 밀림 Boss13/10 opportunities. 예상 loot EV는 9.785/16.57/26.905/22.94/34.59/36.715칩이다. 경비카빈 vs 경비기4발 비용12칩은 EV의44.6%로15~30% 목표보다 높아 Phase 7 검토로 남긴다. 확정 수치와 확률은 tuning하지 않았다.
+- 실제 플레이 DB migration은 실행하지 않았다. local full suite·smoke-full·browser/OS IME·전체 multiplayer·PostgreSQL contention·multi-server·full balance simulation도 미실행이다. Phase 7은 운영 데이터 역사 corpus audit와 전체 regression/simulation에 집중할 수 있으나 실제 production migration은 backup/offline 검토 후 별도 실행해야 한다.
+
+아래 Phase 1~5 기록은 당시 요청과 검증 이력으로 보존한다.
+
 ## PR #33 문서 마감·병합 및 소스 브랜치 정리 (2026-10-06)
 
 사용자가 문서 마감 후 [PR #33](https://github.com/wonmin82/primal-zone/pull/33) 병합과 소스 브랜치 삭제를 요청했다. 아래 구현·리뷰 단계의 병합 금지/OPEN 설명은 당시 요청 범위이며 이번 명시적 병합 요청을 제한하지 않는다. Phase 6은 별도 요청 전 시작하지 않는다.

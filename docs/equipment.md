@@ -1,5 +1,7 @@
 # 장비·Modifier·Defense V1 (Phase 2)
 
+Phase 6 현재 상태: cutover 후 일반 gameplay는 native ItemEntity만 사용한다. 아래 legacy adapter/Phase 6 예정 설명은 Phase 1~5의 설계·검증 기록이며 maintenance migration과 historical audit fixture의 호환 경계로 남는다. 최신 저장·운영 정책은 [item-migration](item-migration.md), 최종 콘텐츠·가격은 [final-content](final-content.md)를 따른다.
+
 ## 계산과 저장 경계
 
 `world.equipment_service`가 ItemEntity/Explorer Attribute를 조회하고, frozen `EquipmentItem`·`EquipmentSnapshot`을 제공한다. `world.equipment`, `world.modifiers`, `world.rules`, `world.progression`, `world.recovery`는 ORM·Evennia·네트워크를 import하지 않는다. `EquipmentProfile`은 한 작업에서 같은 snapshot을 사용하는 일시적인 dict context이며 저장할 때 일반 dict로 바꾼다. profile version은 10이고 profile schema migration은 없다. Phase 3의 ItemEntity magazine socket 제약 migration은 [영속 기반](item-entities.md)에 별도로 기록한다.

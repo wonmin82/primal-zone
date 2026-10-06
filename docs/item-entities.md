@@ -1,10 +1,10 @@
 # ItemEntity 기반·장비·상태형 아이템
 
-새 아이템 row의 SSOT는 `world.item_entities.models.ItemEntity`다. Phase 2 장비와 Phase 3 광원·총기 서비스는 명시적으로 선택한 ItemEntity 또는 legacy 저장소를 공통 snapshot으로 계산한다. 기존 캐릭터의 runtime SSOT는 legacy profile이며 전리품은 Phase 4의 명시적 native backend, 상점은 Phase 5의 legacy/native facade를 사용하며 전체 저장 전환은 Phase 6이다. 새 row와 자동 동기화하거나 dual-write하지 않는다. 상세 계약은 [장비·Modifier·Defense V1](equipment.md)과 [광원·총기](lighting-firearms.md)를 따른다. profile version은 10이다.
+Phase 6 cutover 이후 일반 아이템의 runtime SSOT는 `world.item_entities.models.ItemEntity`다. 전리품은 ItemEntity/LootClaim과 CurrencyLoot/Share, 접근은 Credential Entity를 사용한다. legacy profile/blob은 운영 변환 후 보존하되 gameplay의 fallback/read/write 대상이 아니다. [운영 migration](item-migration.md), [최종 정의·가격·획득](final-content.md), [장비](equipment.md), [광원·총기](lighting-firearms.md)를 함께 따른다. profile version은 10이며 새 schema는 migration ledger/global marker다.
 
 ## 정의와 모델
 
-정적 정의는 기존 `world.content.ITEMS`에 유지한다. `stackable`, `max_stack`, `unique_per_owner`, `operation_policy`, `item_type`을 추가하며 가격·기존 ID·표시명·전투 수치를 바꾸지 않는다. 무기·방어구·상태형 도구는 비스택, 일반 소비품·재료는 스택이다. 일반 스택의 `max_stack`은 None이며 출입증은 1이다. 기존 `transferable`에서 이동 policy를 파생해 현재 명령과의 호환성을 유지한다. 후속 단계에서 실제 명령을 새 domain으로 전환할 때 해당 필드도 정리한다.
+정적 정의는 `world.content.ITEMS`에 유지하며 최종 장비는 `content/final_items.py`에서 합친다. `stackable`, `max_stack`, `unique_per_owner`, `operation_policy`, `item_type`을 추가하며 stable ID는 표시명과 독립적이고 이전 장비 ID는 `content/item_mapping.py` 한 곳에서 변환한다. 무기·방어구·상태형 도구는 비스택, 일반 소비품·재료는 스택이다. 일반 스택의 `max_stack`은 None이며 출입증과 Boss unique는 1이다. 기존 `transferable`에서 이동 policy를 파생해 현재 명령과의 호환성을 유지한다. 일반 runtime의 이동·보관·거래·소모는 Entity에만 적용한다.
 
 `ItemEntity`는 UUID PK, definition_id, quantity, location_kind, owner_object, parent_item, slot, socket, JSON state, sequence, nullable unique_scope_key를 저장한다. `definition_id`는 DB FK가 아니라 registry key다. 소유 위치·정의별 순번과 부모/socket에 index를 둔다.
 
@@ -104,3 +104,9 @@ before/after_item_change는 equipment뿐 아니라 inventory source/destination/
 출입증은 legacy/native와 무관하게 실제 ItemEntity만 SSOT다. 전초/특수 출입증은 non-stack, max_stack1, unique_per_owner로 owner tree의 unique_scope_key DB uniqueness를 사용한다. burn만 허용하고 drop/give/store/sell/consume/equip/unequip/loot/load/unload와 unknown operation은 거절한다. issuer 보상·재발급은 owner lock과 기존 ItemEntity API/sequence/world_change를 재사용한다. profile inventory에 복제하지 않고 legacy presentation에는 출입증 snapshot만 추가한다.
 
 `destroy_quantity(item, quantity, operation="sell"|"burn")`은 수량 검증 후 전체면 삭제, 부분이면 기존 source quantity만 줄인다. 잔여 UUID/sequence/state/unique_scope를 유지하며 children이 있는 stack의 부분 폐기는 거절한다. 기존 before/after item change에서 active reference를 같은 transaction에 정리하고 실패하면 전부 rollback한다. loaded firearm structural protection, split/merge/claim 계약은 유지한다. 출입증 확정 소각·접근 상실·issuer 무료 재발급과 Shop source/sink는 [Phase 5 설계](credentials-access-shops.md)를 따른다.
+
+## Phase 6 정의·가격·변환 보존
+
+`equipment_properties`와 구조화된 modifier가 최종 장비의 수치다. 탄약은 `purchase_unit_value`, `resale_unit_value`, `purchase_quantity`를 분리하고 총기는 body `value`와 package `purchase_unit_value`를 분리한다. 일반 매입가는 floor(value/2), explicit resale이 있으면 그것을 쓴다. field-only는 purchase catalog에 없고 drop/fixed discovery가 있으며 category 기반 resale은 가능하다. Boss unique는 가격이 없고 equip/unequip/store만 허용한다.
+
+일반 gameplay에서 생성된 definition_id와 sequence는 불변이다. 명시적 maintenance context에서 중앙 legacy mapping과 정확히 일치하는 definition 변경만 허용하며 기존 UUID·sequence·state·tree를 유지한다. 기존 native 총기의 탄창을 새 full 탄창으로 교체하지 않는다. legacy firearm 신규 변환만 full_standard를 사용한다. ledger와 global marker는 schema migration 0004이고 실제 월드 변환은 Django RunPython이 아닌 분리된 운영 서비스다.

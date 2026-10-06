@@ -1,5 +1,7 @@
 # 광원·총기·탄창 (Phase 3)
 
+Phase 6 현재 상태: cutover 후 일반 gameplay는 native ItemEntity만 사용한다. 아래 legacy adapter/Phase 6 예정 설명은 Phase 1~5의 설계·검증 기록이며 maintenance migration과 historical audit fixture의 호환 경계로 남는다. 최신 저장·운영 정책은 [item-migration](item-migration.md), 최종 콘텐츠·가격은 [final-content](final-content.md)를 따른다.
+
 ## 저장과 계산 경계
 
 `lighting_service`와 `firearm_service`가 ORM·Explorer Attribute·원자적 변경을 맡는다. `lighting.LightSnapshot/LightItem`, `firearms.FirearmSnapshot/MagazineSnapshot`과 `EquipmentSnapshot/EquipmentItem`은 gameplay 정보다. `rules`, `progression`, modifier와 visibility 계산에는 ORM·Evennia 의존성을 추가하지 않았다. `active_weapon()`은 backend-neutral EquipmentItem이며 `active_weapon_item()`은 영속 작업용 Entity row다. 총기도 `loaded_magazine()`과 `loaded_magazine_item()`을 구분한다.
