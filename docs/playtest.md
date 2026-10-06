@@ -1241,3 +1241,7 @@ Pure/native 경계에서 미수리 정비부품0/1/3개는 총3개로만 보충�
 Version3 cache_claimed=true fixture의 dry-run은 tag1개 entitlement를 계획하고 profile/Entity/sequence/ledger를 변경하지 않았다. Apply/verify 성공과 재실행 tag/sequence/ledger 불변, 기존 tag UUID/sequence 보존, jungle_cache key 보존, cache_claimed=false 무지급, 완료 뒤 원본 cache_claimed 변경 시 digest 오류를 검증했다. 기존 source failure/sequence rollback/retry와 unique 이전·submit-only 정책·HP 보정·Boss 메시지 회귀도 위 module에 포함한다.
 
 실제 플레이 DB SHA256 `B1318296F505B9B7522FCBDEDFF7642A06CF055E9DE72802198C70E6B8A7F700`,733184bytes, UTCmtime2026-09-22 12:29:13은 불변이다. 운영 migration·local full suite·smoke-full·browser matrix는 미실행이며 UI asset 변경은 없다. 경비카빈 ammo/gross44.6%와 Phase 7 공백은 유지하고 balance 수치를 변경하지 않았다. 최종 push의 정확한 HEAD/run/check/pure/integration/Quick 결과는 PR Validation에 기록한다.
+
+
+- 최종 cache 수정 HEAD `7dbe10797b993926e6f37b60ae33e14304ec93fb`의 Game checks37445691423은 check/pure200개/1.167초/Quick30.060초 성공, 통합568개/301.186초에서 기존 `test_indirect_request_cannot_create_or_replace_pending`1건이 실패했다. 실제 recovery boundary를 약10ms 차이로 지나 profile 전체 무변경 비교가 달라졌다. Cache/migration 관련 회귀는 성공했으며 이 실패 이력을 보존한다.
+- 해당 shortcut fixture에만 기존과 동일한 Explorer 관찰 시각100을 적용했다. Production recovery/타이머/가격/HP/drop은 변경하지 않았다. `.\.venv\Scripts\python.exe scripts/dev.py test tests.test_command_shortcuts --parallel 2 --reverse`:22개/14.637초 성공(runner23.629초). 후속 check/diff 성공. 동일한 production 코드의 위 pure46개·통합53개는 반복 실행하지 않았다.

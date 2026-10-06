@@ -11,7 +11,7 @@ Resolved:
 - Post-migration generator cache regrant: 발전기 수리 완료 후 최초 cache에서도 정비부품을 지급하지 않는다. 미수리 상태에서는 부족분만 보충한다.
 - Pre-v4 cache_claimed entitlement compatibility: raw discoveries.supply_cache로 정규화하며 기존 discovery key와 archived profile을 보존한다. Pure profile normalization과 동일한 의미다.
 
-Deferred: 경비카빈 ammo/gross 약44.6% → Phase 7 full balance simulation. 이번 수정에서 가격·drop·전투 수치·schema·ledger/cutover 구조를 변경하지 않는다. 실제 플레이 DB migration은 미실행이다. 이번 pure46개/0.515초·integration53개/66.853초와 check/diff가 성공했다. 실행 근거는 playtest에, 최종 정확한 HEAD CI는 PR Validation에 기록한다. 이전 기록은 아래에 보존한다.
+Deferred: 경비카빈 ammo/gross 약44.6% → Phase 7 full balance simulation. 이번 수정에서 가격·drop·전투 수치·schema·ledger/cutover 구조를 변경하지 않는다. 실제 플레이 DB migration은 미실행이다. 이번 pure46개/0.515초·integration53개/66.853초와 check/diff가 성공했다. 실행 근거는 playtest에, 최종 정확한 HEAD CI는 PR Validation에 기록한다. CI37445691423은 check/pure/Quick 성공 후 기존 shortcut fixture의 recovery 시각 경계1건으로 통합 실패했다. 실패 fixture의 관찰 시각만 고정한 후 shortcut22개와 check/diff가 성공했다. Production 코드와 기존 targeted 근거는 동일하며 최신 보정 HEAD CI는 PR에 따로 기록한다. 이전 기록은 아래에 보존한다.
 
 # Current Task State
 

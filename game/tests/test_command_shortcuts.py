@@ -234,6 +234,7 @@ class CommandShortcutsTests(WorldCommandTest):
         self.assertIsNone(self.char1.ndb.shortcut_delete_all_request)
 
     def test_indirect_request_cannot_create_or_replace_pending(self):
+        self.enterContext(patch("typeclasses.explorers.time", return_value=100))
         self.register("삭제요청", "줄임말 모두 삭제")
         before = self.char1.profile_snapshot()
         for raw in ("삭제요청", "상태, 줄임말 모두 삭제 해"):
