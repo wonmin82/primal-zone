@@ -53,6 +53,12 @@ Push의 GitHub 기본 branch 경고를 read-only Dependabot API로 확인했다.
 
 이후 문서 마감만 추가하며 동일 로컬 게임 검사/smoke를 반복하지 않는다. 최종 PR HEAD의 새 CI 결과는 [PR #35 Validation](https://github.com/wonmin82/primal-zone/pull/35)에 정확한 SHA/run과 함께 별도로 기록한다. 위 snapshot 결과가 이후 HEAD의 CI 성공을 대신하지 않는다.
 
+### 문서 마감 HEAD CI 실패 및 HQ 시각 fixture 보완 (2026-10-07)
+
+HEAD `f3a418c55aba007351fdb3283ecb9b5ee30f431c`의 [run37481815990](https://github.com/wonmin82/primal-zone/actions/runs/37481815990)은 check·pure201개/1.231초·Quick49.144초 성공, integration569개/297.541초(runner304.242초)에서 `test_training_follows_actual_npc_safe_room_and_peace`1건 실패다. 훈련 거절 전후 전체 profile 비교가 실제 10초 자연회복 경계를 지나 recovery timestamp만 달라졌다. 실패를 성공 이력으로 덮어쓰지 않는다.
+
+해당 fixture의 `typeclasses.explorers.time`을100으로 고정하고 초기 recovery를 정산했다. Production 회복·훈련 권한·수치는 변경하지 않았다. `.\.venv\Scripts\python.exe scripts/dev.py test tests.test_hq_services --parallel 2 --reverse`는6개/14.215초(runner28.428초) 성공했고 `scripts/dev.py check`와 `git diff --check`도 성공했다. 게임/smoke 코드가 동일하므로 기존 로컬 전체 기준선·Full·최종 Quick3회 결과를 유지한다. 보완 HEAD의 전체 suite는 최신 CI에서 다시 확인한다.
+
 ## Phase 6 targeted validation (2026-10-06)
 
 시작 main `94bc1e788fec5547841fb5f87e105854a69cc92b`, branch `codex/content-balance-full-migration`에서 실행했다. 아래 개수는 각 실행의 결과이며 서로 합산하지 않는다. 실제 플레이 DB에는 migration apply/cutover를 실행하지 않았다.

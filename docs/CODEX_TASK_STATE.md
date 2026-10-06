@@ -20,6 +20,8 @@
 
 - Infrastructure observation:기본 main의 기존 [Dependabot open4건](https://github.com/wonmin82/primal-zone/security/dependabot)(Twisted high1, Autobahn/DRF medium3)을 API로 확인했다. Runtime 노출/공격 재현은 미검증이며 별도 보안 triage가 필요하다. 이번 PR은 dependency/lock/settings를 변경하지 않는다.
 
+- 마감 CI 실패 이력: HEAD `f3a418c55aba007351fdb3283ecb9b5ee30f431c`의 run37481815990은 check·pure201개/1.231초·Quick49.144초 성공, integration569개/297.541초 중 HQ 훈련 권한 불변 테스트1건 실패였다. 두 profile 비교 사이 실제 10초 회복 시각이 변한 fixture 경계이며 production recovery는 변경하지 않았다. 2026-10-07 해당 테스트의 Explorer observation/recovery 시각만 고정한 뒤 `tests.test_hq_services --parallel 2 --reverse`6개/14.215초(runner28.428초), check/diff가 성공했다. 이후 최신 HEAD 전체 CI는 PR Validation에서 별도로 확인한다.
+
 아래 Phase 1~6 기록은 각 작업 시점의 historical record다. 당시 실패·미실행 사실을 현재 결과로 소급 수정하지 않는다.
 
 ## Phase 6 — PR #34 문서 마감·병합 인계 (2026-10-06)
