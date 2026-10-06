@@ -1245,3 +1245,11 @@ Version3 cache_claimed=true fixture의 dry-run은 tag1개 entitlement를 계획�
 
 - 최종 cache 수정 HEAD `7dbe10797b993926e6f37b60ae33e14304ec93fb`의 Game checks37445691423은 check/pure200개/1.167초/Quick30.060초 성공, 통합568개/301.186초에서 기존 `test_indirect_request_cannot_create_or_replace_pending`1건이 실패했다. 실제 recovery boundary를 약10ms 차이로 지나 profile 전체 무변경 비교가 달라졌다. Cache/migration 관련 회귀는 성공했으며 이 실패 이력을 보존한다.
 - 해당 shortcut fixture에만 기존과 동일한 Explorer 관찰 시각100을 적용했다. Production recovery/타이머/가격/HP/drop은 변경하지 않았다. `.\.venv\Scripts\python.exe scripts/dev.py test tests.test_command_shortcuts --parallel 2 --reverse`:22개/14.637초 성공(runner23.629초). 후속 check/diff 성공. 동일한 production 코드의 위 pure46개·통합53개는 반복 실행하지 않았다.
+
+
+## Phase 6 PR #34 문서 마감 검증 (2026-10-06)
+
+- 구현 기준 HEAD `07eeec845128f450e4606c28f1c1239650d86c5b`의 [Game checks37446497165](https://github.com/wonmin82/primal-zone/actions/runs/37446497165):check 성공, pure200개/0.864초·integration568개/250.502초 성공. Quick smoke attempt1/2는 공동 전투 이후1초 corpse 전환 경계의 시체2칩 회수 timeout이었다. 실패 smoke만 재실행한 attempt3은28.145초 성공했고 test는 성공한 동일 HEAD 결과를 유지했다. 단축 timing 안정성은 Phase 7 공백으로 남긴다.
+- 이번 문서 마감은 실행 코드·schema·의존성을 변경하지 않는다. 기존 로컬 pure46개/0.515초·migration/runtime/regions53개/66.853초·shortcut22개/14.637초 결과를 유지하고 게임 테스트·browser·local smoke를 재실행하지 않는다. 문서의 명령·링크·cache 정책·운영 절차를 대조하고 `git diff --check`를 확인한다.
+- 실제 production/play DB migration은 미실행이다. 백업→서버 정지→dry-run→apply→verify→cutover→서버 시작 절차는 별도 maintenance 작업이며 PR 병합만으로 데이터 변환을 실행하지 않는다.
+- 사용자 병합 승인에 따른 문서 마감 최신 HEAD와 병합 main의 CI는 각각 PR Validation과 최종 보고에 별도 run/SHA로 기록한다. 과거 성공 결과를 새 HEAD 검사로 대신하지 않는다. 이전 실패·재실행 이력과 Phase 7 미검증 항목은 유지한다.

@@ -1,3 +1,15 @@
+## Phase 6 — PR #34 문서 마감·병합 인계 (2026-10-06)
+
+사용자가 문서 마감 후 PR #34 병합과 소스 브랜치 삭제를 승인했다. 구현·리뷰 보정 기준 HEAD는 `07eeec845128f450e4606c28f1c1239650d86c5b`이며 당시 최신 main `94bc1e788fec5547841fb5f87e105854a69cc92b`를 포함한다. 이후 문서 마감은 실행 코드·schema·의존성을 변경하지 않는다.
+
+- 최종 구현 CI [Game checks37446497165](https://github.com/wonmin82/primal-zone/actions/runs/37446497165): check 성공, pure200개/0.864초, integration568개/250.502초 성공. Quick smoke는 첫 두 attempt의 시체2칩 회수 timeout 뒤 실패 job만 재실행한 attempt3에서28.145초 성공했다. 성공한 동일 HEAD test 결과를 유지했으며 실패 이력을 삭제하지 않는다.
+- 진행·귀속·fixed discovery·HP·Boss 메시지와 최종 cache/pre-v4 호환 이슈는 해결됐다. 구현 구조 및 migration 운영 절차는 [final-content](final-content.md), [item-migration](item-migration.md)을 따른다. 실제 플레이 DB migration은 미실행이며 기존 DB fingerprint는 불변이다.
+- 문서만 마감하므로 기존 로컬 pure46개·통합53개·shortcut22개 성공 근거를 유지하고 Python/browser/smoke를 로컬에서 반복하지 않는다. 링크·명령·최종 정책과 diff를 확인한다. 문서 마감 HEAD의 자동 CI와 병합된 main의 CI는 별도로 확인하여 PR Validation/최종 보고에 기록한다.
+- 남은 Phase 7 범위: 전체 local/운영 regression, smoke-full, browser/OS IME, 전체 multiplayer, PostgreSQL contention·multi-server race, historical corpus audit, full balance simulation, 단축 Quick smoke timing 안정성. 경비카빈 ammo/gross44.6% 재검토도 Phase 7로 남긴다. 이번 마감에서 수치를 조정하거나 Phase 7을 시작하지 않는다.
+- PR 최종 병합은 latest main 반영·latest HEAD CI·충돌/리뷰 상태 확인 후 merge commit 방식으로 수행한다. 소스 브랜치는 main에 반영됐음을 검증한 뒤 삭제한다. 실제 DB apply/cutover는 이 병합 요청의 범위가 아니다.
+
+아래 Phase 6/이전 Phase 기록은 각 실행 시점의 이력으로 보존한다.
+
 ## Phase 6 — PR #34 최종 cache 리뷰 수정 (2026-10-06)
 
 시작 HEAD `980d506064b1b58b98ccf6ccd11a3cd8b356a5fc`, branch `codex/content-balance-full-migration`, main `94bc1e788fec5547841fb5f87e105854a69cc92b`에서 기존 PR만 수정한다.
