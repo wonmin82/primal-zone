@@ -42,6 +42,8 @@ def raw_source(kind, obj):
             for old, flag in {"quest_started": "started", "record_read": "record_read", "generator_fixed": "generator_fixed",
                               "boss_defeated": "boss_defeated", "quest_claimed": "claimed"}.items():
                 value["quests"]["radio_tower"][flag] = bool(profile.get(old))
+            value["discoveries"] = dict(value.get("discoveries") or {})
+            value["discoveries"]["supply_cache"] = bool(profile.get("cache_claimed", False))
         return value
     return deserialize(obj.db.items if kind == "container" else obj.db.entries) or ({} if kind == "container" else [])
 

@@ -1,3 +1,18 @@
+## Phase 6 — PR #34 최종 cache 리뷰 수정 (2026-10-06)
+
+시작 HEAD `980d506064b1b58b98ccf6ccd11a3cd8b356a5fc`, branch `codex/content-balance-full-migration`, main `94bc1e788fec5547841fb5f87e105854a69cc92b`에서 기존 PR만 수정한다.
+
+Resolved:
+
+- Boss unique shared-storage transfer: 개인 보관만 허용하는 기존 ownership invariant 유지.
+- Generator progression resource split 및 migration entitlement: submit-only 정비용 회수부품과 owner scope 총3개 보장 유지.
+- Fixed discovery entitlement: 기존 supply/jungle 완료의 신규 보상 소급 유지.
+- Enemy HP bootstrap 및 Boss unique reward message: 기존 full/idle 보정과 실제 지급 메시지 유지.
+- Post-migration generator cache regrant: 발전기 수리 완료 후 최초 cache에서도 정비부품을 지급하지 않는다. 미수리 상태에서는 부족분만 보충한다.
+- Pre-v4 cache_claimed entitlement compatibility: raw discoveries.supply_cache로 정규화하며 기존 discovery key와 archived profile을 보존한다. Pure profile normalization과 동일한 의미다.
+
+Deferred: 경비카빈 ammo/gross 약44.6% → Phase 7 full balance simulation. 이번 수정에서 가격·drop·전투 수치·schema·ledger/cutover 구조를 변경하지 않는다. 실제 플레이 DB migration은 미실행이다. 이번 pure46개/0.515초·integration53개/66.853초와 check/diff가 성공했다. 실행 근거는 playtest에, 최종 정확한 HEAD CI는 PR Validation에 기록한다. 이전 기록은 아래에 보존한다.
+
 # Current Task State
 
 확인일: 2026-10-06. 이 문서는 새 Codex 세션을 위한 상태 인계이며, 기능의 상세 설계는 [architecture.md](architecture.md), 사용법은 [README](../README.md), 검증 절차·과거 기록은 [playtest.md](playtest.md)를 따른다. 시작 시 실제 Git/원격 상태를 다시 확인한다.

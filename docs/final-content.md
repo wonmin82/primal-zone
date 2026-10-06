@@ -140,7 +140,7 @@ world.test_final_content와 관련 pure regressions, tests.test_phase6_runtime/t
 
 ## PR #34 리뷰 보완 — 진행 자원·귀속·발견 보상
 
-초기 Phase 6의 일반 회수부품3개 보급안을 리뷰에서 정비용 회수부품(`generator_repair_part`)으로 대체했다. 일반 scrap의 field drop·정산 환율·처분 정책은 그대로이며 발전기는 정비용 부품3개만 submit한다. 수송차 보급상자는 붕대2개·탐사인식표와 정비용 부품 총3개를 확보하게 한다. Migration에서 이미 지급한 부품은 중복 지급하지 않는다.
+초기 Phase 6의 일반 회수부품3개 보급안을 리뷰에서 정비용 회수부품(`generator_repair_part`)으로 대체했다. 일반 scrap의 field drop·정산 환율·처분 정책은 그대로이며 발전기는 정비용 부품3개만 submit한다. 수송차 보급상자는 캐릭터당 최초 조사에서 붕대2개·탐사인식표1개를 지급한다. 발전기 미수리 상태에서만 기존 정비용 부품을 포함해 총3개가 되도록 부족분을 보충한다. 발전기 수리 완료 후에는 정비부품을 지급하거나 기존 잔여분을 삭제하지 않는다. 따라서 migration 지급 → 발전기 수리 → 최초 보급상자 조사에서도 사용할 수 없는 부품이 재생성되지 않는다.
 
 정비용 회수부품은 stack/max_stack3, transferable=false, submit-only이며 shop 구매·매입·가치·drop·give·store·burn·consume 대상이 아니다. Alias는 정비부품/발전기부품이다. 획득처는 fixed discovery와 명시적인 미수리 migration entitlement다.
 

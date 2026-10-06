@@ -197,15 +197,17 @@ class SupplyCache(ActionObject):
     actions = ("조사",)
 
     def act(self, caller, action, args):
-        existing_parts = caller.profile_snapshot()["inventory"].get("generator_repair_part", 0)
+        profile = caller.profile_snapshot()
+        generator_fixed = profile["quests"]["radio_tower"]["generator_fixed"]
+        existing_parts = profile["inventory"].get("generator_repair_part", 0)
         caller.change(rules.claim_cache)
-        missing_parts = max(0, 3 - existing_parts)
+        missing_parts = 0 if generator_fixed else max(0, 3 - existing_parts)
         caller.msg(
             ft.text(
                 ft.token("object", self.key), "에서 ", ft.item("bandage"), " 2개",
                 ft.text(", ", ft.item("generator_repair_part"), f" {missing_parts}개") if missing_parts else "",
                 "와 ", ft.item("expedition_tag"), "를 찾아 챙겼다.",
-                " 정비용 회수부품은 기존 보유량을 포함해 3개를 확보했다." if existing_parts else "",
+                " 정비용 회수부품은 기존 보유량을 포함해 3개를 확보했다." if existing_parts and not generator_fixed else "",
             )
         )
 

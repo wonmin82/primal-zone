@@ -429,11 +429,26 @@ class RuleTests(TestCase):
 
 
 class GrowthRuleTests(TestCase):
+    def test_supply_cache_only_replenishes_unfinished_generator_parts(self):
+        for fixed, amount, expected in ((False, 0, 3), (False, 1, 3), (False, 3, 3),
+                                         (True, 0, 0), (True, 1, 1)):
+            with self.subTest(fixed=fixed, amount=amount):
+                profile = rules.new_profile()
+                profile["quests"]["radio_tower"]["generator_fixed"] = fixed
+                profile["inventory"]["generator_repair_part"] = amount
+                bandages = profile["inventory"].get("bandage", 0)
+                rules.claim_cache(profile)
+                self.assertEqual(profile["inventory"].get("generator_repair_part", 0), expected)
+                self.assertEqual(profile["inventory"]["bandage"], bandages + 2)
+                self.assertEqual(profile["inventory"]["expedition_tag"], 1)
+                self.assertTrue(profile["discoveries"]["supply_cache"])
+
     def test_quest_migration_preserves_completion_and_one_time_cache(self):
         old = rules.new_profile()
         old.update(version=3, xp=333, credits=111, visited=["dock", "ridge"])
         old.pop("quests")
         old.pop("discoveries")
+        old["discoveries"] = {"jungle_cache": True}
         old.update(
             quest_started=True, record_read=True, generator_fixed=True,
             boss_defeated=True, quest_claimed=True, cache_claimed=True,
@@ -445,6 +460,7 @@ class GrowthRuleTests(TestCase):
             "boss_defeated": True, "claimed": True,
         })
         self.assertTrue(migrated["discoveries"]["supply_cache"])
+        self.assertTrue(migrated["discoveries"]["jungle_cache"])
         self.assertEqual((migrated["xp"], migrated["credits"], migrated["visited"]), (333, 111, ["dock", "ridge"]))
         self.assertEqual(rules.migrate_profile(migrated), migrated)
         for operation in (rules.claim_quest, rules.claim_cache):

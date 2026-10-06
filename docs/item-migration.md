@@ -97,3 +97,10 @@ Explorer raw source/digest에는 discoveries도 포함한다. `radio_tower.gener
 `supply_cache=true`이고 owner scope에 탐사인식표가 없으면1개, `jungle_cache=true`이고 정신안정모듈이 없으면1개를 생성한다. 기존 row는 위치와 무관하게 중복 생성하지 않는다. Dry-run의 source별 entitlement_grants는 필요한 stable ID/수량을 표시하며 읽기 전용이다.
 
 이 보정은 기존 inventory/storage/light/Credential/Boss reward와 같은 Explorer transaction에 포함된다. 생성 실패 시 ItemSequence/rows/profile/marker/ledger가 rollback된다. Completed source는 digest/native snapshot 검증 후 skip하고 verify는 진행·발견 entitlement를 독립적으로 대조한다. Apply/verify/cutover 및 global marker 구조는 유지하며 실제 플레이 DB에는 실행하지 않았다.
+
+
+## PR #34 최종 cache 호환 보정
+
+Profile version<4의 `cache_claimed`는 `discoveries.supply_cache`로 정규화해 raw source와 기존 digest에 포함한다. 기존 discoveries의 다른 key(예: jungle_cache)는 보존하며 `rules.migrate_profile()`도 같은 해석을 사용한다. 오래된 cache 완료 캐릭터는 탐사인식표 entitlement 대상이며 owner scope에 이미 존재하면 UUID/sequence를 유지하고 중복 생성하지 않는다. Archived legacy profile은 현재 형식으로 다시 저장하지 않는다. 완료 후 원본 cache_claimed가 바뀌면 digest mismatch로 verify가 거절한다.
+
+수송차 보급상자는 캐릭터당 한 번 붕대2개·탐사인식표1개를 지급한다. 발전기 미수리 상태에서만 정비부품이 총3개가 되도록 부족분을 보충하며 수리 완료 상태에서는 지급하지 않는다. Migration entitlement로 먼저 받은 부품을 사용한 뒤 cache를 열어도 부품이 재생성되지 않는다. 이는 정상 gameplay의 pure rule 보정이며 lazy entitlement나 legacy runtime fallback을 추가하지 않는다.

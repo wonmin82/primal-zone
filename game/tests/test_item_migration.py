@@ -14,7 +14,7 @@ from world import item_migration, rules
 from world.item_entities import api
 from world.item_entities.models import ItemEntity, ItemMigrationLedger, ItemRuntime, ItemSequence
 from world.item_migration.convert import convert_source
-from world.item_migration.scan import json_state
+from world.item_migration.scan import json_state, raw_source
 from world.item_migration.workflow import migration_context
 from world.loot_entities.models import CurrencyLoot, LootClaim
 
@@ -240,6 +240,66 @@ class ItemMigrationTests(GameCommandTest):
         self.assert_applied()
         self.assertTrue({"ridge_predator_mark", "predator_scale_charm", "outpost_supply_pass", "special_supply_pass"} <= set(api.items_owned_by(self.char1).values_list("definition_id", flat=True)))
         self.assertTrue(api.items_owned_by(self.char2).filter(definition_id="ridge_predator_mark").exists())
+
+    def test_pre_v4_cache_claimed_entitlement_is_read_only_and_retry_safe(self):
+        old = rules.new_profile()
+        old.pop("quests")
+        old.pop("discoveries")
+        old.update(version=3, cache_claimed=True, quest_started=True, record_read=True,
+                   generator_fixed=True, boss_defeated=True, quest_claimed=True)
+        self.char2.db.profile = deepcopy(old)
+        normalized = rules.migrate_profile(old)
+        raw = raw_source("explorer", self.char2)
+        self.assertEqual(raw["quests"], normalized["quests"])
+        self.assertEqual(raw["discoveries"], normalized["discoveries"])
+        before = (deserialize(self.char2.db.profile), json_state(self.char2),
+                  ItemSequence.objects.get(pk=1).last_value, list(ItemMigrationLedger.objects.values()))
+        report = item_migration.dry_run()
+        self.assertEqual(report["errors"], [])
+        source = next(row for row in report["sources"] if row["identity"] == self.char2.pk)
+        self.assertEqual(source["entitlement_grants"], {"expedition_tag": 1})
+        self.assertEqual(before, (deserialize(self.char2.db.profile), json_state(self.char2),
+                                 ItemSequence.objects.get(pk=1).last_value, list(ItemMigrationLedger.objects.values())))
+        self.assert_applied()
+        tag = api.items_owned_by(self.char2).get(definition_id="expedition_tag")
+        self.assertEqual(tag.quantity, 1)
+        self.assertEqual(deserialize(self.char2.db.profile), old)
+        state = (json_state(self.char2), ItemSequence.objects.get(pk=1).last_value,
+                 list(ItemMigrationLedger.objects.order_by("pk").values()))
+        self.assertEqual(item_migration.apply()["errors"], [])
+        self.assertEqual(state, (json_state(self.char2), ItemSequence.objects.get(pk=1).last_value,
+                                list(ItemMigrationLedger.objects.order_by("pk").values())))
+        old["cache_claimed"] = False
+        self.char2.db.profile = old
+        self.assertIn("digest", str(item_migration.verify()["errors"]))
+
+    def test_pre_v4_cache_preserves_other_discoveries_and_existing_tag(self):
+        old = rules.new_profile()
+        old.pop("quests")
+        old.update(version=3, cache_claimed=True, discoveries={"jungle_cache": True})
+        self.char2.db.profile = deepcopy(old)
+        tag = api.create_item("expedition_tag", owner_object=self.char2, location_kind="inventory")
+        identity = (tag.pk, tag.sequence)
+        raw = raw_source("explorer", self.char2)
+        self.assertEqual(raw["discoveries"], {"supply_cache": True, "jungle_cache": True})
+        self.assertEqual(raw["discoveries"], rules.migrate_profile(old)["discoveries"])
+        source = next(row for row in item_migration.dry_run()["sources"] if row["identity"] == self.char2.pk)
+        self.assertNotIn("expedition_tag", source["entitlement_grants"])
+        self.assert_applied()
+        current = api.items_owned_by(self.char2).get(definition_id="expedition_tag")
+        self.assertEqual((current.pk, current.sequence), identity)
+        self.assertEqual(api.items_owned_by(self.char2).filter(definition_id="mental_stability_module").count(), 1)
+
+    def test_pre_v4_unclaimed_cache_does_not_grant_tag(self):
+        old = rules.new_profile()
+        old.pop("quests")
+        old.pop("discoveries")
+        old.update(version=3, cache_claimed=False)
+        self.char2.db.profile = old
+        source = next(row for row in item_migration.dry_run()["sources"] if row["identity"] == self.char2.pk)
+        self.assertNotIn("expedition_tag", source["entitlement_grants"])
+        self.assert_applied()
+        self.assertFalse(api.items_owned_by(self.char2).filter(definition_id="expedition_tag").exists())
 
     def test_independent_quantity_audit_rejects_matching_but_wrong_snapshot(self):
         self.assert_applied()

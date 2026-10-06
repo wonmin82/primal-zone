@@ -187,6 +187,61 @@ class Phase6RuntimeTests(WorldCommandTest):
                 self.char1.change(operation)
             self.assertEqual(self.state(), before)
 
+    def test_migration_repair_then_first_cache_does_not_regrant_unusable_parts(self):
+        # setUp의 명시적 apply/verify/cutover로 legacy character에게 먼저 지급됐다.
+        self.assertFalse(self.archived["discoveries"].get("supply_cache"))
+        self.assertFalse(self.archived["quests"]["radio_tower"]["generator_fixed"])
+        self.assertEqual(self.char1.profile()["inventory"]["generator_repair_part"], 3)
+        self.char1.change(lambda p: p["quests"]["radio_tower"].update(started=True, record_read=True))
+        generator = self.obj("generator")
+        self.char1.location = generator.location
+        generator.perform_action(self.char1, "수리")
+        profile = self.char1.profile()
+        self.assertTrue(profile["quests"]["radio_tower"]["generator_fixed"])
+        self.assertNotIn("generator_repair_part", profile["inventory"])
+        bandages = profile["inventory"].get("bandage", 0)
+        cache = self.obj("supply_cache")
+        self.char1.location = cache.location
+        with patch.object(self.char1, "msg") as output:
+            cache.perform_action(self.char1, "조사")
+            message = str(output.call_args_list)
+            self.assertIn("붕대", message)
+            self.assertIn("탐사인식표", message)
+            self.assertNotIn("정비용 회수부품", message)
+        profile = self.char1.profile()
+        self.assertEqual(profile["inventory"]["bandage"], bandages + 2)
+        self.assertEqual(profile["inventory"]["expedition_tag"], 1)
+        self.assertNotIn("generator_repair_part", profile["inventory"])
+        self.assertTrue(profile["discoveries"]["supply_cache"])
+        self.assert_archived_items()
+
+    def test_cache_parts_and_messages_follow_generator_progress(self):
+        from evennia import create_object
+
+        cache = self.obj("supply_cache")
+        for fixed, amount, expected in ((False, 0, 3), (False, 1, 3), (False, 3, 3),
+                                         (True, 0, 0), (True, 1, 1)):
+            with self.subTest(fixed=fixed, amount=amount):
+                player = create_object(Explorer, key=f"보급경계{fixed}{amount}", location=cache.location)
+                player.push_state, player.schedule_recovery = Mock(), Mock()
+                player.change(lambda p: p["quests"]["radio_tower"].update(generator_fixed=fixed))
+                if amount:
+                    api.create_item("generator_repair_part", quantity=amount, owner_object=player, location_kind="inventory")
+                bandages = player.profile()["inventory"].get("bandage", 0)
+                with patch.object(player, "msg") as output:
+                    cache.perform_action(player, "조사")
+                    message = str(output.call_args_list)
+                profile = player.profile()
+                self.assertEqual(profile["inventory"].get("generator_repair_part", 0), expected)
+                self.assertEqual(profile["inventory"]["bandage"], bandages + 2)
+                self.assertEqual(profile["inventory"]["expedition_tag"], 1)
+                if fixed:
+                    self.assertNotIn("정비용 회수부품", message)
+                else:
+                    self.assertIn("정비용 회수부품", message)
+                    if amount < 3:
+                        self.assertIn(f"{3 - amount}개", message)
+
     def test_native_quest_submission_consumes_resources_without_legacy_write(self):
         self.char1.change(lambda p: p["quests"]["radio_tower"].update(started=True, record_read=True))
         self.char1.change(rules.claim_cache)

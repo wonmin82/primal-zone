@@ -535,7 +535,8 @@ def migrate_profile(profile):
         for old, flag in legacy.items():
             progress["radio_tower"][flag] = bool(result.pop(old, False))
         result["quests"] = progress
-        result["discoveries"] = {"supply_cache": bool(result.pop("cache_claimed", False))}
+        result["discoveries"] = dict(result.get("discoveries") or {})
+        result["discoveries"]["supply_cache"] = bool(result.pop("cache_claimed", False))
     if version < 8:
         from commands.vocabulary import migrate_shortcuts
 
@@ -688,7 +689,10 @@ def claim_cache(profile):
     if profile["discoveries"].get("supply_cache"):
         raise RuleError("이미 보급품을 챙겼습니다.")
     add_item(profile, "bandage", 2)
-    add_item(profile, "generator_repair_part", max(0, 3 - profile["inventory"].get("generator_repair_part", 0)))
+    if not profile["quests"]["radio_tower"]["generator_fixed"]:
+        missing = max(0, 3 - profile["inventory"].get("generator_repair_part", 0))
+        if missing:
+            add_item(profile, "generator_repair_part", missing)
     profile["discoveries"]["supply_cache"] = True
     add_item(profile, "expedition_tag")
 
