@@ -10,13 +10,17 @@
 - Full 준비 보완 전 Quick 경로 연속 #1/#2/#3: 113.180초 / 93.723초 / 92.409초 성공. 초기 단축 점유/참여·0.25초 join·1초 corpse 경계 실패는 Quick 전용 설정/요청 순서를 보완했다. 2.5/10/2/20초 중간 실행의 outsider 응답 timeout 1건은 실제 응답 기록이 없어 정확한 원인을 확정하지 않았으며 마지막 응답 진단을 추가했다. 실패·중간 성공은 최종 3회와 구분해 [playtest](playtest.md)에 보존한다.
 - Full 최종 성공: 621.653초(launcher622.694초). corpse29.191초/respawn43.950초/protection119.614초, 두 임무/보스/최종 보고·HQ·패배/회복·실제 Portal+Server restart/relogin·native UUID/sequence/tree/state/storage/loot 보존을 확인했다. 광원은 정상 OFF/잔량 정산·참조 제거를 별도 검사한다. 준비금/교관 위치/전투 선택과 restart predicate의 실패4회 및 보완 이력은 playtest에 보존한다. Production gameplay 타이머·가격·보상·balance는 변경하지 않았다.
 
-아래 Phase 1~6 기록은 각 작업 시점의 historical record다. 당시 실패·미실행 사실을 현재 결과로 소급 수정하지 않는다.
-
 - Full 성공 뒤 동일 최종 code Quick #1/#2/#3:91.901초/90.169초/88.972초 모두 성공. 각 실행을 별도 기록하며 앞선 성공·재실행과 합산하지 않는다.
 - 개발 DB 전후 SHA256 `B1318296F505B9B7522FCBDEDFF7642A06CF055E9DE72802198C70E6B8A7F700`,733184bytes,mtime_ns1790080153765082800 불변. 모든 smoke는 별도 DB/계정/owned process와 cleanup을 사용했다.
 - Findings:production P0/P1/P2 없음. P3/harness 준비·관찰·native restart 검사를 보완했다. 이전 outsider 응답 timeout1건은 당시 응답 미수집으로 원인을 확정하지 않았고 진단을 추가했다. 최종 연속3회·Full 성공으로 기준선은 통과했으며 이 reliability 이력은 notes로 유지한다. Documentation의 stale 현재형은 정리하고 historical 결과는 보존했다.
 - 검증한 최종 smoke code는 `f1128d09691fc2774f7439efb4de690ee7567bdf`에 커밋됐다. 이후 문서 마감만으로 동일 로컬 검사를 반복하지 않는다.
-- Local 기준으로 Phase 7B 진입 가능이며 PR 생성·exact latest HEAD CI를 확인한 뒤 원격 마감 결과를 기록한다. Phase 7B/7C와 PostgreSQL 작업은 실행하지 않는다.
+- [PR #35](https://github.com/wonmin82/primal-zone/pull/35)는 main 대상 OPEN/non-draft이며 병합하지 않는다. 검증한 문서 snapshot HEAD `58a5cb8d5ef83de5bdb225cd8b9b0d7b7d4ddcf0`의 [Game checks37480587656](https://github.com/wonmin82/primal-zone/actions/runs/37480587656)는 check 성공, pure201개/0.924초, integration569개/274.955초(runner280.853초), Quick50.076초 성공이다. Smoke code commit은 위 `f1128d0`이며 문서 마감 commit은 `58a5cb8`이다.
+- 이후 이 CI 기록만 마감하는 문서 commit은 동일 실행 코드의 로컬 검사를 반복하지 않는다. 그 최종 HEAD의 정확한 CI SHA/run/result는 PR Validation과 최종 보고에서 별도로 확인한다. 문서에 기록한 이전 snapshot의 성공을 최종 HEAD CI로 대신하지 않는다.
+- Phase 7B 진입 판단은 READY FOR PHASE 7B WITH NOTES다. 최종 code의 Full/Quick 연속3회와 자동 CI는 성공했으며 이전 응답 timeout 이력 및 기존 의존성 보안 알림의 별도 triage를 인계한다. Phase 7B/7C와 PostgreSQL 작업은 실행하지 않는다.
+
+- Infrastructure observation:기본 main의 기존 [Dependabot open4건](https://github.com/wonmin82/primal-zone/security/dependabot)(Twisted high1, Autobahn/DRF medium3)을 API로 확인했다. Runtime 노출/공격 재현은 미검증이며 별도 보안 triage가 필요하다. 이번 PR은 dependency/lock/settings를 변경하지 않는다.
+
+아래 Phase 1~6 기록은 각 작업 시점의 historical record다. 당시 실패·미실행 사실을 현재 결과로 소급 수정하지 않는다.
 
 ## Phase 6 — PR #34 문서 마감·병합 인계 (2026-10-06)
 

@@ -43,6 +43,16 @@ Full 성공 이후 실행 코드를 변경하지 않고 `.\.venv\Scripts\python.
 
 미해결 production P0/P1/P2는 발견하지 않았다. P3/harness의 잘못된 준비·관찰·restart 기대값을 보완했다. 이전 outsider 응답 timeout1건은 정확한 원인을 확정하지 못했지만 응답 진단 추가 후 Quick경로3회와 Full 보완 뒤 최종3회에서 재현되지 않았다. 이 이력은 reliability 참고 사항이며 원인을 해결했다고 단정하지 않는다. 최신 PR HEAD CI는 별도 마감 기록을 따른다. Browser/실제 OS IME/수동 1~4인 E2E/Canonical Legacy Migration Corpus는 7B, full balance·경비카빈 ammo/gross 약44.6%·fresh operational DB는 7C다. PostgreSQL/multi-server는 future infrastructure이며 설치/이관/접속/경쟁 검사를 하지 않았다.
 
+### 기존 의존성 보안 알림 관찰
+
+Push의 GitHub 기본 branch 경고를 read-only Dependabot API로 확인했다. 기존 open4건은 Twisted DNS compression-chain DoS(high)1건, Autobahn permessage-deflate payload 제한(medium)1건, Django REST framework(medium)2건이다. [기존 알림 목록](https://github.com/wonmin82/primal-zone/security/dependabot)을 별도 보안 triage 대상으로 기록한다. 이번 변경에서 도입한 의존성은 없고 설치·lock·운영 설정을 바꾸지 않았다. 해당 advisory의 현재 runtime 노출 조건/공격 재현은 수행하지 않았으므로 이 기능 기준선의 P0/P1/P2 재현 결과와 별도다.
+
+### PR #35 CI 검증 snapshot
+
+[Game checks37480587656](https://github.com/wonmin82/primal-zone/actions/runs/37480587656)는 HEAD `58a5cb8d5ef83de5bdb225cd8b9b0d7b7d4ddcf0`에서 `uv run python scripts/dev.py check`, `uv run python scripts/dev.py test --parallel 2`, `uv run python scripts/dev.py smoke`를 실행했다. Check 성공, pure201개/0.924초, integration569개/274.955초(runner280.853초), Quick50.076초 성공이다. 로컬 기준선200/568개와 추가 인프라 회귀를 합산하지 않는다.
+
+이후 문서 마감만 추가하며 동일 로컬 게임 검사/smoke를 반복하지 않는다. 최종 PR HEAD의 새 CI 결과는 [PR #35 Validation](https://github.com/wonmin82/primal-zone/pull/35)에 정확한 SHA/run과 함께 별도로 기록한다. 위 snapshot 결과가 이후 HEAD의 CI 성공을 대신하지 않는다.
+
 ## Phase 6 targeted validation (2026-10-06)
 
 시작 main `94bc1e788fec5547841fb5f87e105854a69cc92b`, branch `codex/content-balance-full-migration`에서 실행했다. 아래 개수는 각 실행의 결과이며 서로 합산하지 않는다. 실제 플레이 DB에는 migration apply/cutover를 실행하지 않았다.

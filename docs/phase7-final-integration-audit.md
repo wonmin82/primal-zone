@@ -34,9 +34,11 @@ Baseline & Documentation Closeout. 현재 문서와 historical 기록을 분리�
 - [x] smoke-full (production timing)
 - [x] 개발 DB fingerprint 불변
 - [x] no unresolved P0/P1/P2
-- [ ] PR 생성·latest HEAD CI 성공 (병합하지 않음)
+- [x] PR 생성·CI 성공 ([PR #35](https://github.com/wonmin82/primal-zone/pull/35), 병합하지 않음)
 
-실행 결과는 완료 시 [작업 상태](CODEX_TASK_STATE.md)에 기록한다. 원인 불명 Quick timeout이 반복되면 7A를 닫지 않는다.
+실행 결과와 검증 snapshot SHA/run은 [작업 상태](CODEX_TASK_STATE.md)에 기록했다. 문서 마감 이후 최종 HEAD의 CI는 PR Validation에서 별도로 확인하며 이전 snapshot으로 대신하지 않는다. 최종 동일 code의 Full/Quick 연속3회가 성공했으며 이전 outsider 응답 timeout1건의 정확한 원인은 미확정 이력으로 보존한다. 원인 불명 Quick timeout이 반복되면 7A를 닫지 않는다.
+
+기존 main의 Dependabot open4건(Twisted high1, Autobahn/DRF medium3)은 별도 보안 triage 관찰 사항이다. Runtime 노출/공격 재현은 미검증이며 이번 PR은 의존성을 변경하지 않는다. 이 사항과 reliability 이력을 포함한 7B 진입 판단은 READY FOR PHASE 7B WITH NOTES다.
 
 ## Phase 7B
 
