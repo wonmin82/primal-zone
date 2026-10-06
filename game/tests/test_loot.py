@@ -46,9 +46,9 @@ class LootTests(WorldCommandTest):
         self.enemy.receive_attack(self.char1, now=102.5, rng=rng)
         self.enemy.finish_death(self.char1, now=102.5, rng=rng)
         self.assertEqual(Corpse.objects.count(), 1)
-        rng.random.assert_called_once()
+        self.assertEqual(rng.random.call_count, 3)
         self.assertEqual(self.char1.profile()["xp"], 22)
-        self.assertNotIn("scrap", self.char1.profile()["inventory"])
+        self.assertNotIn("water", self.char1.profile()["inventory"])
         with patch("world.lifecycle.time", return_value=103):
             self.assertIn(corpse.key, self.rooms["grass"].return_appearance(self.char1, observed_at=103))
         self.assertEqual(room_enemies(self.rooms["grass"]), [])
@@ -59,11 +59,11 @@ class LootTests(WorldCommandTest):
         corpse, _, _ = self.kill()
         with self.assertRaises(RuleError):
             take_loot(self.char2, corpse=True, now=103)
-        take_loot(self.char1, "scrap", corpse=True, now=103)
-        self.assertEqual(self.char1.profile()["inventory"]["scrap"], 1)
+        take_loot(self.char1, "water", corpse=True, now=103)
+        self.assertEqual(self.char1.profile()["inventory"]["water"], 1)
         self.assertEqual(len(corpse.db.entries), 2)
         take_loot(self.char1, corpse=True, now=104)
-        self.assertEqual(self.char1.profile()["inventory"]["cutting_machete"], 1)
+        self.assertEqual(self.char1.profile()["inventory"]["security_goggles"], 1)
         with self.assertRaises(RuleError):
             take_loot(self.char1, corpse=True, now=104)
 
@@ -74,9 +74,9 @@ class LootTests(WorldCommandTest):
             [self.char1.id, self.char2.id],
         )
         take_loot(self.char2, corpse=True, now=103)
-        self.assertEqual(self.char1.profile()["inventory"]["scrap"], 1)
-        self.assertEqual(self.char2.profile()["inventory"]["cutting_machete"], 1)
-        self.assertNotIn("scrap", self.char2.profile()["inventory"])
+        self.assertEqual(self.char1.profile()["inventory"]["water"], 1)
+        self.assertEqual(self.char2.profile()["inventory"]["security_goggles"], 1)
+        self.assertNotIn("water", self.char2.profile()["inventory"])
         self.assertEqual(party.state()["round_robin_cursor"], 2)
 
     def test_decay_preserves_reservation_respawn_preserves_ground_and_ffa(self):
@@ -95,17 +95,17 @@ class LootTests(WorldCommandTest):
         self.enemy.reconcile(now=148)
         self.assertEqual(self.enemy.db.state, "alive")
         self.assertEqual(DroppedLoot.objects.count(), 3)
-        take_loot(self.char2, "scrap", corpse=False, now=222.5)
-        self.assertEqual(self.char2.profile()["inventory"]["scrap"], 1)
+        take_loot(self.char2, "water", corpse=False, now=222.5)
+        self.assertEqual(self.char2.profile()["inventory"]["water"], 1)
         take_loot(self.char2, corpse=False, now=223)
-        self.assertEqual(self.char2.profile()["inventory"]["cutting_machete"], 1)
+        self.assertEqual(self.char2.profile()["inventory"]["security_goggles"], 1)
         self.assertEqual(DroppedLoot.objects.count(), 0)
 
     def test_ground_owner_can_collect_before_expiry(self):
         corpse, _, _ = self.kill()
         corpse.reconcile(now=133)
-        take_loot(self.char1, "scrap", corpse=False, now=134)
-        self.assertEqual(self.char1.profile()["inventory"]["scrap"], 1)
+        take_loot(self.char1, "water", corpse=False, now=134)
+        self.assertEqual(self.char1.profile()["inventory"]["water"], 1)
 
     def test_raw_item_names_ignore_spaces(self):
         self.kill()
@@ -113,8 +113,8 @@ class LootTests(WorldCommandTest):
             patch("typeclasses.loot.time", return_value=103),
             patch("world.lifecycle.time", return_value=103),
         ):
-            self.char1.execute_cmd("시체에서 회수 부품 가져")
-        self.assertEqual(self.char1.profile()["inventory"]["scrap"], 1)
+            self.char1.execute_cmd("시체에서 정제 수 가져")
+        self.assertEqual(self.char1.profile()["inventory"]["water"], 1)
 
     def test_death_failure_rolls_back_hp_rewards_and_corpse(self):
         self.enemy.engage(self.char1, now=100)
@@ -144,8 +144,10 @@ class LootTests(WorldCommandTest):
         corpse = room_loot(self.rooms["ridge"])[0]
         self.assertEqual(
             {entry["assigned_player"] for entry in corpse.db.entries if entry["kind"] == "item"},
-            {self.char1.id, self.char2.id},
+            {self.char2.id},  # trophy 한 entry는 한 allocation unit이다.
         )
+        self.assertEqual({entry["reserved_player"] for entry in corpse.db.entries if entry["kind"] == "currency"},
+                         {self.char1.id, self.char2.id})
         take_loot(self.char1, corpse=True, now=103)
         self.assertEqual(len(corpse.db.entries), 2)
         take_loot(self.char2, corpse=True, now=103)
@@ -163,8 +165,8 @@ class LootTests(WorldCommandTest):
             [player.profile()["inventory"] for player in (self.char1, self.char2)], inventories
         )
         take_loot(self.char1, corpse=True, now=104)
-        self.assertEqual(self.char1.profile()["inventory"]["scrap"], 1)
-        self.assertEqual(self.char2.profile()["inventory"]["cutting_machete"], 1)
+        self.assertEqual(self.char1.profile()["inventory"]["water"], 1)
+        self.assertEqual(self.char2.profile()["inventory"]["security_goggles"], 1)
 
     def test_decay_failure_restores_corpse_and_retry_does_not_duplicate_ground(self):
         corpse, _, _ = self.kill()

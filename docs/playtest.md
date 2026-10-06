@@ -36,6 +36,12 @@ Decision interpretation: 최종 T1 drop에 회수부품이 없어 발전기 수�
 
 같은 HEAD의 Linux Quick smoke는21.718초 성공했다. 실제 first round0.643초, corpse→ground0.786초, respawn/protection1.782초와 공동 전투·부분 currency·권리·shop·relogin을 확인했다. 이는 Windows의 실패4회를 성공으로 바꾸는 근거가 아니며 서로 별도 기록이다. 보정 후 최신 HEAD CI는 별도 run/SHA로 PR Validation에 기록한다.
 
+### PR #34 최종 콘텐츠에 따른 기존 회귀 fixture 보정
+
+HEAD `dde2a6068761f3f5b9de63a2fc19ca3defd03309`의 [CI37433581120](https://github.com/wonmin82/primal-zone/actions/runs/37433581120)는 check·순수197개/1.143초·Quick26.295초 성공이며 통합552개/270.759초(runner276.931초)는12실패/11오류다. 이전 가격·scrap/weapon drop·armor ID·단순 slot column 기대값과 공유 suppress fixture의 HP 전제를 보정한다. trophy 한 entry가 하나의 allocation unit이라는 확정 규칙은 유지하며 currency의 각 group 권리를 함께 검사한다. historical legacy fixture는 별도 shield/offhand hands 배치를 표현하지 못하므로 해당 5종은 실제 native 착용·해제 명령/active reference/archive 불변 전용 회귀로 검사했다(1개/4.601초, runner14.957초 성공). production gameplay·가격·drop·allocation·scaling은 이 보정에서 바꾸지 않는다.
+
+`tests.test_economy tests.test_equipment tests.test_growth_review tests.test_lifecycle tests.test_loot tests.test_targets tests.test_settlement tests.test_command_shortcuts --parallel 2 --reverse`의 관련97개/68.413초(runner77.772초)는 장비 화면의 이전 공격력 기대값1건에서 실패했다. 최종 정글장도+기본 공격은14, 전술방호복 방어는4로 기대값을 보정한 뒤 실패 method 전용1개/4.157초(runner13.109초)가 성공했다. 나머지96개는 첫 실행에서 통과했고 이후 해당 기대값과 native 전용 추가 회귀 외의 production/test 변경이 없어 재실행하지 않는다. check/diff도 성공했다. 실행별 수와 subcase 실패 수는 합산하지 않는다.
+
 ## PR #33 문서 마감 및 병합 검증
 
 2026-10-06 문서 마감·병합 요청의 시작 HEAD는 `0e5be5e4fe162f993adc92db459cbeeeabb41bf8`, main은 `248c849470bb709259902bd7f35780894a4c7b78`다. 리뷰 HEAD의 [Game checks37411748278](https://github.com/wonmin82/primal-zone/actions/runs/37411748278)는 check·순수192개/1.055초·통합526개/242.912초·Quick smoke30.882초 성공이며 로컬21개와 합산하지 않는다.

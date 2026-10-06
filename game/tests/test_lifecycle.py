@@ -1,4 +1,3 @@
-from random import Random
 from unittest.mock import Mock, patch
 
 from typeclasses.enemies import room_enemies
@@ -29,7 +28,10 @@ class LifecycleTests(WorldCommandTest):
         enemy = room_enemies(self.rooms["grass"])[0]
         enemy.engage(self.char1, now=100)
         enemy.db.hp = 1
-        enemy.receive_attack(self.char1, now=102.5, rng=Random(1))
+        rng = Mock()
+        rng.randint.return_value = 1
+        rng.random.return_value = 0
+        enemy.receive_attack(self.char1, now=102.5, rng=rng)
         corpse = room_loot(self.rooms["grass"])[0]
         original = [dict(entry) for entry in corpse.db.entries]
         # runtime task가 사라진 상황을 흉내 내고 DB의 객체를 다시 조회한다.
@@ -48,7 +50,7 @@ class LifecycleTests(WorldCommandTest):
         self.assertEqual([dict(obj.db.entries[0]) for obj in ground], original)
         reconcile_world(now=223, restart=True)
         take_loot(self.char2, corpse=False, now=223)
-        self.assertEqual(self.char2.profile()["inventory"]["scrap"], 1)
+        self.assertEqual(self.char2.profile()["inventory"]["water"], 1)
 
     def test_restart_clears_live_and_dangling_combat_without_party_change(self):
         party = invite(self.char1, self.char2, now=100)

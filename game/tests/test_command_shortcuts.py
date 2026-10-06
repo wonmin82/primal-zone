@@ -49,7 +49,7 @@ class CommandShortcutsTests(WorldCommandTest):
         profile = self.char1.profile_snapshot()
         self.assertEqual(profile["inventory"]["cutting_machete"], 1)
         self.assertEqual(profile["equipment"]["weapon"], "cutting_machete")
-        self.assertEqual(profile["credits"], 40)
+        self.assertEqual(profile["credits"], 45)
         self.run_raw("귀환, 승강기, 3층, 동, 북 해")
         self.assertEqual(self.char1.zone, "weapon_shop")
 

@@ -193,7 +193,7 @@ class SettlementWorldTests(SettlementFixture, WorldCommandTest):
         self.assertIn(f"{SALVAGE_CREDIT_RATE}칩", self.command("정산관 환율"))
         self.command("회수부품 6개 교환")
         self.assertNotIn("scrap", self.char1.profile()["inventory"])
-        self.assertEqual(self.char1.profile()["credits"], ITEMS["cutting_machete"]["value"])
+        self.assertEqual(self.char1.profile()["credits"], 6 * SALVAGE_CREDIT_RATE)
         for raw in ("남", "동", "동", "승강기", "3층", "동", "북"):
             self.command(raw)
         self.assertEqual(self.char1.zone, "weapon_shop")
@@ -201,7 +201,7 @@ class SettlementWorldTests(SettlementFixture, WorldCommandTest):
         self.assertNotIn("교환", shop)
         self.assertNotIn("회수부품", shop)
         self.command("절단마체테 구매")
-        self.assertEqual(self.char1.profile()["credits"], 0)
+        self.assertEqual(self.char1.profile()["credits"], 6 * SALVAGE_CREDIT_RATE - ITEMS["cutting_machete"]["value"])
         self.assertEqual(self.char1.profile()["inventory"]["cutting_machete"], 1)
         for raw in ("남", "서", "승강기", "1층", "북", "서"):
             self.command(raw)

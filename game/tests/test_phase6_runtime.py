@@ -64,6 +64,22 @@ class Phase6RuntimeTests(WorldCommandTest):
         for field in ("inventory", "equipment", "storage", "light_sources"):
             self.assertEqual(saved[field], self.archived[field])
 
+    def test_final_shields_and_offhands_use_native_hands_with_wear_command(self):
+        active = self.char1.db.active_weapon_item_id
+        for identity in ("folding_shield", "portable_analyzer", "composite_shield",
+                         "tactical_analyzer", "emergency_injector"):
+            with self.subTest(item=identity):
+                row = api.create_item(identity, location_kind="inventory", owner_object=self.char1)
+                self.char1.execute_cmd(f"{ITEMS[identity]['name']} 착용")
+                row.refresh_from_db()
+                self.assertEqual((row.location_kind, row.slot), ("equipment", "hands"))
+                self.assertEqual(equipment_service.hand_usage(self.char1), 2)
+                self.assertEqual(self.char1.db.active_weapon_item_id, active)
+                self.char1.execute_cmd(f"{ITEMS[identity]['name']} 벗어")
+                row.refresh_from_db()
+                self.assertEqual((row.location_kind, row.slot), ("inventory", None))
+                self.assert_archived_items()
+
     def test_native_ammo_bundle_firearm_package_sale_and_burn(self):
         shop = self.obj("weapon_shopkeeper")
         shop_service.buy(self.char1, shop, "ammo_556")

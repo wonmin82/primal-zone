@@ -31,7 +31,8 @@ class EquipmentTests(WorldCommandTest):
         self.char1.change(lambda p: p["inventory"].update({i: 1 for i in ITEMS}))
         for identity, data in ITEMS.items():
             action = EQUIPMENT_ACTIONS.get(data["slot"])
-            if not action:
+            # historical legacy slot fixture는 shield/offhand의 별도 hands 배치를 표현하지 못한다.
+            if not action or data.get("item_type") == "hand_equipment":
                 continue
             with self.subTest(item=identity):
                 old = self.char1.profile()["equipment"].get(data["slot"])
@@ -88,7 +89,7 @@ class EquipmentTests(WorldCommandTest):
         self.char1.change(lambda p: p.update(credits=1000))
         for name, identity, alias in (
             ("절단마체테", "cutting_machete", "WIELD"),
-            ("강화방호조끼", "armor", "wear"),
+            ("강화방호조끼", "reinforced_vest", "wear"),
         ):
             self.char1.location = self.rooms["weapon_shop" if identity == "cutting_machete" else "armor_shop"]
             self.char1.execute_cmd(f"{name} 구매")
@@ -112,7 +113,7 @@ class EquipmentTests(WorldCommandTest):
         state = message.call_args.kwargs["pz_state"][0][0]
         for entry in state["inventory"]:
             data = ITEMS[entry["id"]]
-            self.assertEqual(entry["slot"], {"weapon": "hands", "armor": "body"}.get(data["slot"], data["slot"]))
+            self.assertEqual(entry["slot"], data.get("equipment_properties", {}).get("slot", data["slot"]))
             self.assertEqual(entry["equip_action"], EQUIPMENT_ACTIONS.get(data["slot"]))
             if data["slot"] not in EQUIPMENT_ACTIONS:
                 continue
@@ -131,7 +132,7 @@ class EquipmentTests(WorldCommandTest):
             self.char1.change(lambda p: rules.unequip(p, p["equipment"][slot], slot))
             self.char1.change(lambda p: rules.equip(p, identity, slot))
         self.assertIn(ITEMS["jungle_longblade"]["name"] + " [주무기]", view.equipment(self.char1.profile()))
-        self.assertEqual((rules.stats(self.char1.profile())["attack"], rules.stats(self.char1.profile())["defense"]), (16, 3))
+        self.assertEqual((rules.stats(self.char1.profile())["attack"], rules.stats(self.char1.profile())["defense"]), (14, 4))
         for shop_id, catalog in SHOP_CATALOGS.items():
             self.assertEqual({ITEMS[i]["name"] for i in catalog["purchase_catalog"]}, set(tokens(view.shop(shop_id, "상인"), "item")))
         for action, alias in (("무장", "wield"), ("착용", "wear")):

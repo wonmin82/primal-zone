@@ -383,7 +383,7 @@ class TargetIntegrationTests(WorldCommandTest):
         party = invite(self.char1, self.char2)
         respond(self.char2, True)
         other = create_object(Explorer, key="외부탐사자", location=self.char1.location)
-        a = self.source([self.entry(party=party), self.entry("armor", 1, self.char2, party)])
+        a = self.source([self.entry(party=party), self.entry("reinforced_vest", 1, self.char2, party)])
         b = self.source([self.entry(player=other)])
         c = self.source([self.entry("bandage", 2, self.char2, party)])
         original = deepcopy(list(b.db.entries))
@@ -404,7 +404,7 @@ class TargetIntegrationTests(WorldCommandTest):
         party = invite(self.char1, self.char2)
         respond(self.char2, True)
         a = self.source([self.entry(party=party)])
-        b = self.source([self.entry("armor", 1, self.char2, party)])
+        b = self.source([self.entry("reinforced_vest", 1, self.char2, party)])
         before = [self.char1.profile(), self.char2.profile()]
         with patch.object(self.char2, "save_profile", side_effect=RuntimeError("injected")):
             with self.assertRaises(RuntimeError):
