@@ -3,7 +3,7 @@
 사냥하고 장비를 모으며, 잊힌 섬을 탐험하는 한국어 웹 MUD.
 사냥·장비·성장을 우선하고, 모든 주요 임무를 혼자 진행할 수 있도록 만든다.
 
-Item System V1의 Phase 1~6과 Phase 7A/B는 main에 병합됐다. Phase 7C의 밸런스·fresh 운영 경로 구현과 검증은 완료했으며 [PR #37](https://github.com/wonmin82/primal-zone/pull/37)은 OPEN 상태다. 현재 판정은 **ITEM SYSTEM V1 READY TO CLOSE WITH NOTES**이며, 최종 완료는 PR 병합과 새 main의 exact-head CI 성공 후 별도로 기록한다. SQLite + single Evennia server를 지원하며 PostgreSQL/multi-server와 legacy 정리는 별도 후속 작업이다. [최종 콘텐츠](docs/final-content.md), [밸런스 분석](docs/phase7c-balance-analysis.md), [fresh 검증](docs/phase7c-fresh-operational-validation.md), [마감 상태·제한 사항](docs/CODEX_TASK_STATE.md)을 참고한다. 최종 PR HEAD의 CI는 해당 PR Validation에서 확인한다.
+Item System V1의 Phase 1~7C를 완료했다. [PR #37](https://github.com/wonmin82/primal-zone/pull/37)과 [test-only CI 안정화 PR #38](https://github.com/wonmin82/primal-zone/pull/38)을 병합하고 새 main exact-head test·smoke 성공을 확인했다. 최종 상태는 **ITEM SYSTEM V1 COMPLETE**다. 지원 topology는 SQLite + single Evennia server이며, PostgreSQL/multi-server·외부 배포와 HTTPS/WSS/TLS·production monitoring·legacy adapter/field/archive 정리와 기타 product roadmap은 별도 후속 작업이다. [최종 콘텐츠](docs/final-content.md), [밸런스 분석](docs/phase7c-balance-analysis.md), [fresh 검증](docs/phase7c-fresh-operational-validation.md), [최종 마감 근거·제한 사항](docs/CODEX_TASK_STATE.md)을 참고한다. 최종 문서 PR 병합 뒤 저장소 HEAD의 CI·브랜치 정리 결과는 해당 PR Validation에 기록한다.
 
 ## 현재 구현
 
