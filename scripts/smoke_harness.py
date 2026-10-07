@@ -56,7 +56,7 @@ class Harness:
         self.credentials = [(name, secrets.token_urlsafe(24))
                             for name in ("검증가", "검증나", "검증다")]
 
-    def prepare(self):
+    def prepare(self, setup_script=None):
         parent = ROOT / "work" / "smoke"
         parent.mkdir(parents=True, exist_ok=True)
         self.run_dir = Path(tempfile.mkdtemp(prefix=self.mode + "-", dir=parent)).resolve()
@@ -76,7 +76,7 @@ class Harness:
             self.reservations.append(reservation)
         self.env = smoke_environment(self.run_dir, self.mode, self.ports)
         with (self.run_dir / "setup.log").open("w", encoding="utf-8") as log:
-            subprocess.run([sys.executable, str(ROOT / "scripts" / "smoke_setup.py")],
+            subprocess.run([sys.executable, str(setup_script or ROOT / "scripts" / "smoke_setup.py")],
                            cwd=game, env=self.env, input=json.dumps(self.credentials), text=True,
                            stdout=log, stderr=subprocess.STDOUT, timeout=SETUP_TIMEOUT, check=True)
 
