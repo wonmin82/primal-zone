@@ -1,3 +1,20 @@
+## Phase 7C — Balance & Fresh Native Operational Closeout (2026-10-07)
+
+- Base main: `393a8589adc33b3098028f9a33aab793a5fec38d` (Phase7B merge 포함). Branch: `codex/phase7c-balance-operational-closeout`. PR: [PR #37](https://github.com/wonmin82/primal-zone/pull/37). 최신 PR HEAD/CI는 PR Validation에 exact SHA와 run ID로 기록하며 이전 main/Phase7B 결과로 대신하지 않는다. PR은 병합하지 않는다.
+- 목적/지원: SQLite + single Evennia server에서 Item System V1의 마지막 balance/fresh operational 검증을 수행한다. 기존 개발 DB·legacy corpus를 fresh로 사용하지 않으며 실제 장기 플레이 DB를 생성/교체하지 않는다. PostgreSQL/multi-server·legacy 삭제는 시작하지 않는다.
+- Baseline: 실제 SSOT/rules를 읽는 `scripts/phase7c_balance.py`, legal Lv1/Lv4/Lv7·13build·64seed·두 Boss의2~4인 party. Guard carbine/sentinel3.766발·9.414초·incoming26.125·gross26.905·ammo11.297·42.0%. Minimal/2H/shield/firearm/support의 TTK·incoming·mental·recovery·lootEV·shop pacing을 [분석](phase7c-balance-analysis.md)에 기록했다.
+- 선택: 5.56mm purchase unit3→2칩,20발60→40칩 한 건. Final ammo7.531·net19.374·28.0%, 옛4발 sanity44.6→29.7%. Resale1/다른 탄약/package/magazine/gear/enemy/drop/XP/Boss scaling/Defense/recovery는 유지한다. Attack8→10은33.5%로 목표 미달·T1/T2 차이 축소, sentinel currency20→32는 EV38.905로 progression 왜곡하여 거절했다. 모든 package arbitrage invariant 유지.
+- 자동 회귀: 관련 pure16개/0.209초, Phase6 runtime15개/27.787초(runner38.348초), 환경21개/15.262초(runner26.958초), check PASS. 최종 전체: pure207개/2.760초·integration582개/447.581초(runner457.456초), 전체463.298초/exit0·failure0/error0 PASS. 옛 bundle/credits 기대 두 실패와 실제10초 회복 경계를 넘은 기존 환경 테스트의 간헐성은 [playtest](playtest.md)에 보존한다. 시각 고정은 test-only 최소 보정이며 production 타이밍을 바꾸지 않는다.
+- Quick: 최종 production 수치의 #1 106.426초/#2 102.496초/#3 98.289초 각각 성공. Full695.863초 성공, corpse29.305/respawn48.288/protection123.332초 관찰·두 임무/보스/보고·normal restart/relogin·ONlight 정상 OFF settlement·일반 item/주무기 불변·startup strict preservation 확인.
+- Fresh: [재현 문서](phase7c-fresh-operational-validation.md), `scripts/phase7c_fresh.py`의 final511.030초 PASS. Empty schema에서 runtime/Explorer 없음 → 실제 first Server runtime1/ledger0 → ordinary register2계정/20칩/XP0/starter Entity → 실제 gameplay → final runtime1/ledger0. 준비금900칩만 offline에서 grind 단축하며 XP/quest/items/rewards는 정상 명령으로 생성한다. 최초 foreground launcher reset만 private adapter로 생략하고 실제 normal restart/relogin을 별도 실행한다.
+- Fresh gameplay: shop/buy/sell·personal/shared storage·light/battery·gun20발 full package·loose unload/load·실제 발사20→18·spare reload·physical/currency loot·수리 submit·두 보스/최종 보고·두 Credential/access·두 unique. Restart 광원1799.660→1426.242 정상 OFF·참조 clear, UUID/sequence/tree/equipment/active weapon·profile/quests/credits/storage 보존. 앞선 여섯 harness/명령/fixture 보정 실패는 삭제하지 않았다.
+- DB 안전: 개발 `evennia.db3` SHA256 `B1318296F505B9B7522FCBDEDFF7642A06CF055E9DE72802198C70E6B8A7F700`,733184bytes,mtime_ns1790080153765082800 전후 동일. 성공 fresh DB는 cleanup하고 비밀 없는 evidence를 ignored work에 보존한다. Migration command 미호출. ID/mapping/schema/state/entitlement 변경 없음으로 Phase7B corpus 전체 재실행은 불필요하다.
+- Remaining: production P0/P1/P2 없음. P3/notes: 과거 Full reliability·최소Lv4 모든 role의 solo Boss 승리를 보장하지 않음·support의 finite sustain/party 역할·simulation scheduler/latency 근사·실제 mobile device matrix 미실행·Dependabot/security triage·IME 사용자 확인의 세부 trace 한계. Phase7B Windows/Chrome 실제 IME 완료를 유지한다.
+- 실행 코드 검증 commit: `2d997fd07afcd44559c176f94a6bf4fab8c3a3eb`; 이후 마감 변경은 문서만이다. 새 검증 근거 없이 과거 CI를 최신 HEAD로 대신하지 않는다.
+- 최종 판단: **ITEM SYSTEM V1 READY TO CLOSE WITH NOTES** (local 기능·밸런스·fresh 검증 완료; 최신 PR HEAD의 CI 최종 결과는 PR Validation에 별도 기록). Final exact-head CI/mergeability/review는 PR Validation에 기록한다. Deferred Infrastructure는 PostgreSQL/multi-server, Post-V1 Cleanup은 legacy adapter/fields/migration-only helper/archive 정리다. 새 gameplay subsystem이나 migration 구조 변경은 없다.
+
+아래 Phase7B/7A/1~6은 historical record이며 당시 실패·성공·미실행·병합 요청 사실을 소급 변경하지 않는다.
+
 ## Phase 7B — PR #36 문서 마감 및 병합 준비 (2026-10-07)
 
 - 사용자가 문서 마감·PR #36 병합·소스 브랜치 삭제를 요청했다. 최신 `origin/main`은 `52fa4d5813dffcfd6fed08013c69001e62a9b0d0`이며 PR branch가 이미 포함하므로 불필요한 rebase나 기존 commit rewrite는 하지 않는다. Working tree clean·OPEN/non-draft·MERGEABLE/CLEAN·미해결 review thread 0개를 확인했다.

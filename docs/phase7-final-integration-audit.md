@@ -98,37 +98,43 @@ Lv6 밀림 Boss 전투의 반복 실패는 Full 전용 실제 사냥으로 Lv7�
 
 ## Phase 7C
 
-Balance & Fresh Native Operational Closeout. 전체 simulation과 최종 운영 시작을 준비한다. 경비카빈 ammo/gross 약 44.6%는 이 단계에서 shots-to-kill·refill cadence·melee/firearm progression과 함께 검토한다. 7A에서는 수치를 변경하지 않는다.
+Balance & Fresh Native Operational Closeout. 현재 수치 동결 → 실제 규칙의 deterministic 측정 → 후보 비교 → 최소 변경 → 동일 조건 재측정 → 전체 회귀/production Full → fresh empty DB/실제 계정/gameplay/restart/relogin 순서로 수행했다. [밸런스 분석](phase7c-balance-analysis.md), [fresh 재현과 경계](phase7c-fresh-operational-validation.md), [실패·성공 기록](playtest.md)을 따른다.
 
-- [ ] minimal/untrained build
-- [ ] balanced build
-- [ ] 2H offense
-- [ ] 1H + shield
-- [ ] firearm
-- [ ] support/heal
-- [ ] party build
-- [ ] TTK
-- [ ] incoming damage
-- [ ] mental economy
-- [ ] recovery
-- [ ] ammo economy
-- [ ] loot EV
-- [ ] shop progression
-- [ ] T1 → T2 pacing
-- [ ] Boss solo balance
-- [ ] Boss party balance
-- [ ] guard-carbine ammo/gross review
-- [ ] final balance changes (근거 있는 필요 변경만)
-- [ ] regression
-- [ ] fresh empty SQLite setup
-- [ ] native runtime bootstrap
-- [ ] fresh account
-- [ ] starter ItemEntity
-- [ ] complete gameplay smoke
-- [ ] restart/relogin
-- [ ] Item System V1 closeout
+경비카빈의 합법적 Lv4 build baseline ammo/gross42.0%(옛 단순4발44.6%)를 5.56mm purchase3→2칩 한 건으로28.0%(단순4발29.7%)로 개선했다. Resale·다른 가격·enemy/gear/drop/Defense/recovery/scaling은 변경하지 않았다. Package arbitrage·권총 방패 역할·T1/T2 비용과 solo/party resource 부담을 함께 비교했다. 모든 최소레벨 build의 Boss 승리를 보장하는 수치로 tuning하지 않았으며 solo는 준비/성장/재훈련을 활용한다.
 
-7A의 격리 smoke setup은 최종 운영 DB 생성이나 V1 운영 시작으로 표시하지 않는다.
+- [x] minimal/untrained build
+- [x] balanced build
+- [x] 2H offense
+- [x] 1H + shield
+- [x] firearm
+- [x] support/heal
+- [x] party build
+- [x] TTK
+- [x] incoming damage
+- [x] mental economy
+- [x] recovery
+- [x] ammo economy
+- [x] loot EV
+- [x] shop progression
+- [x] T1 → T2 pacing
+- [x] Boss solo balance
+- [x] Boss party balance
+- [x] guard-carbine ammo/gross review
+- [x] final balance changes (5.56mm purchase unit만 최소 조정)
+- [x] regression (check·pure207개·integration582개 성공)
+- [x] fresh empty SQLite setup
+- [x] native runtime bootstrap
+- [x] fresh account (실제 public register2계정)
+- [x] starter ItemEntity
+- [x] complete gameplay smoke
+- [x] restart/relogin
+- [x] Item System V1 closeout (기능·balance·fresh 검증 마감; 최신 PR CI는 Validation의 별도 gate)
+
+Quick106.426/102.496/98.289초 각각 성공, production Full695.863초 성공. Corpse29.305/respawn48.288/protection123.332초 관찰, 두 Boss/보고와 실제 normal restart/relogin/native preservation을 확인했다. Fresh511.030초에서 schema-only runtime/Explorer 없음 → first Server runtime1/ledger0 → ordinary account/starter → 실제 두 임무·보스·보고·Credential → restart/relogin final runtime1/ledger0이 성공했다. Fresh의 최초 foreground launcher reset 요청만 private adapter로 생략하고 뒤의 정상 restart를 실제 실행했다. 준비금900칩으로 grind만 단축하며 핵심 보상·XP·임무 전이는 bypass하지 않았다. Fresh는 migration command를 사용하지 않았다.
+
+기존 개발 DB fingerprint 전후 동일·성공 fixture cleanup·실패 owned process 정지를 확인했다. Definition ID/schema/state/mapping/entitlement 변경이 없어 Phase7B corpus 전체는 재실행하지 않는다. Fresh validation DB를 실제 장기 플레이 DB로 자동 채택하지 않는다. pure207개/2.760초·integration582개/447.581초(runner457.456초), 전체463.298초/exit0·failure0/error0 PASS. 이전 수치 기대 실패·테스트 회복 경계 간헐성과 여섯 fresh 보정 실패는 playtest에 보존한다.
+
+Final judgment: **ITEM SYSTEM V1 READY TO CLOSE WITH NOTES** (local 기능·밸런스·fresh 검증 완료; 최신 PR HEAD의 CI 최종 결과는 PR Validation에 별도 기록). Exact PR HEAD의 CI/run과 review 상태는 [PR #37](https://github.com/wonmin82/primal-zone/pull/37) Validation에서 확인한다. 지원 topology 내 production P0/P1/P2 없음. Simulation latency/order 근사·Full fixture 과거 reliability·최소레벨 solo role 준비·실제 mobile device matrix·의존성 security triage·IME 상세 trace 한계는 notes다. PostgreSQL/multi-server와 Post-V1 legacy adapter/field/archive cleanup은 별도 작업이며 Phase7 완료 조건이 아니다.
 
 ## Deferred Infrastructure
 
@@ -154,6 +160,8 @@ Balance & Fresh Native Operational Closeout. 전체 simulation과 최종 운영 
 P0는 데이터 손상/기동 불가, P1은 핵심 runtime blocker, P2는 일반 재현 가능한 gameplay regression, P3는 낮은 위험 UX/test reliability다. 문서 오류는 Documentation, 통합·corpus는 Deferred 7B, balance/운영 시작은 Deferred 7C, PostgreSQL은 Infrastructure로 분류한다. P0/P1/P2가 남으면 7A 종료 불가다. Quick harness 수정이 있으면 수정 후 3회 연속 성공과 smoke-full 성공이 필요하다.
 
 ## Current / Historical / Roadmap 문서 audit
+
+아래 분류는 Phase7A 당시의 historical audit다. 당시 future였던 7B/7C는 위 각 단계의 최신 결과를 따른다.
 
 `git grep -n`으로 README/docs의 `후속 단계`, `Phase 6`, `legacy SSOT`, `아직.*않`, `미구현`, `적용하지 않았다`를 검색하고 문맥을 분류한다. 모든 미래 표현을 일괄 삭제하지 않는다.
 
