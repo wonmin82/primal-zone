@@ -94,6 +94,8 @@ Lv6 밀림 Boss 전투의 반복 실패는 Full 전용 실제 사냥으로 Lv7�
 
 리뷰 전 실행 코드의 check·pure204개/2.399초·integration574개/449.634초와 Quick84.846초·Full628.071초가 성공했다. Valid post-cutover 보강9개 시나리오58.696초에서도 고유 보상 폐기 거절·migrated loot·발전기 수리 뒤 cache의 재지급 없음·legacy item archive 불변이 성공했다. 당시 지원 topology에서 미해결 P0/P1/P2는 없었으며 코드 검증 기준 판정은 **READY FOR PHASE 7C WITH NOTES**다. Fixture reliability 이력과 기존 보안 triage, 사용자 확인 IME의 세부 로그 한계는 보존한다. [PR #36](https://github.com/wonmin82/primal-zone/pull/36)의 최종 문서 HEAD·exact CI·review 상태는 PR Validation에 별도로 기록한다. 아래 7C/Infrastructure는 미실행이다.
 
+사용자가 PR #36 문서 마감·병합·소스 브랜치 삭제를 요청했다. 직전 최종 문서 HEAD `9ad163dc4d0502337c160c3000ec6e6dfb88b74e`의 [CI37612069275](https://github.com/wonmin82/primal-zone/actions/runs/37612069275)는 check·pure204개·integration582개·Quick47.980초 성공이며 exact SHA를 확인했다. 최신 main을 포함하고 review thread0개·MERGEABLE/CLEAN이다. 문서 마감 HEAD와 병합 main의 CI·실제 병합 결과는 [PR #36 Validation](https://github.com/wonmin82/primal-zone/pull/36)에 별도로 기록한다. 판정은 READY FOR PHASE 7C WITH NOTES를 유지하며 아래 Phase 7C/Infrastructure는 미실행이다.
+
 ## Phase 7C
 
 Balance & Fresh Native Operational Closeout. 전체 simulation과 최종 운영 시작을 준비한다. 경비카빈 ammo/gross 약 44.6%는 이 단계에서 shots-to-kill·refill cadence·melee/firearm progression과 함께 검토한다. 7A에서는 수치를 변경하지 않는다.

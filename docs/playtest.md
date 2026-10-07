@@ -2,6 +2,14 @@
 
 이 문서는 각 작업 시점의 historical validation record를 포함한다. 과거 미실행·미구현 기록은 당시 사실이며 현재 구현은 [architecture](architecture.md), [final-content](final-content.md), [최신 작업 상태](CODEX_TASK_STATE.md)를 따른다.
 
+## PR #36 문서 마감·병합 준비 (2026-10-07)
+
+최신 원격 확인에서 main은 `52fa4d5813dffcfd6fed08013c69001e62a9b0d0`, PR HEAD는 `9ad163dc4d0502337c160c3000ec6e6dfb88b74e`이며 main 포함·tree clean·MERGEABLE/CLEAN·review thread0개다. 사용자가 병합과 소스 브랜치 삭제를 요청했다.
+
+직전 문서 HEAD의 [CI37612069275](https://github.com/wonmin82/primal-zone/actions/runs/37612069275)는 exact SHA 일치·check 성공·pure204개/1.085초·integration582개/291.589초(runner297.829초)·Quick47.980초 성공이다. 아래 local/actual 성공·실패 이력을 유지하며 이번 문서-only 마감에서는 실행 코드가 같아 local regression/Full을 반복하지 않는다. 문서 링크·fence·`git diff --check`를 확인하고, 마감 commit 및 병합 main의 새 CI와 병합 결과는 PR Validation에서 별도 확인한다.
+
+개발 DB의 SHA256 `B1318296F505B9B7522FCBDEDFF7642A06CF055E9DE72802198C70E6B8A7F700`, size733184, mtime_ns1790080153765082800이 이전 기록과 같음을 재확인했다. 실제 플레이 DB migration·PostgreSQL·Phase 7C·balance tuning은 실행하지 않는다.
+
 ## PR #36 — Offline Guard / Corpus Evidence Review Fix (2026-10-07)
 
 시작 HEAD `6fe5541201a4303b591f080c524a9bcaa028301e`, 기존 Phase 7B branch/PR만 수정한다. 아래 실행은 저장소 `.venv` Python 환경을 사용했다. 기존 PID + process-local SESSIONS 검사는 Windows의 다른 Evennia process 정지를 증명하지 못한 P1 검증 한계였다. 현재 구현은 같은 환경의 launcher AMP structured status와 orphan process 보조 검사로 fail closed한다. IME 사용자 수동 확인은 유지하며 자동 재검증하지 않았다.

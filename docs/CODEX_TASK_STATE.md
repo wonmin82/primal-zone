@@ -1,3 +1,11 @@
+## Phase 7B — PR #36 문서 마감 및 병합 준비 (2026-10-07)
+
+- 사용자가 문서 마감·PR #36 병합·소스 브랜치 삭제를 요청했다. 최신 `origin/main`은 `52fa4d5813dffcfd6fed08013c69001e62a9b0d0`이며 PR branch가 이미 포함하므로 불필요한 rebase나 기존 commit rewrite는 하지 않는다. Working tree clean·OPEN/non-draft·MERGEABLE/CLEAN·미해결 review thread 0개를 확인했다.
+- 직전 최종 HEAD `9ad163dc4d0502337c160c3000ec6e6dfb88b74e`의 [Game checks 37612069275](https://github.com/wonmin82/primal-zone/actions/runs/37612069275)는 check 성공, pure204개/1.085초·integration582개/291.589초(runner297.829초)·Quick47.980초 성공이다. CI head SHA가 당시 PR latest HEAD와 정확히 일치했다.
+- 이번 마감은 문서만 변경한다. 직전 성공 이후 gameplay·migration·smoke·dependency 변경이 없어 local suite/Full을 반복하지 않는다. Markdown 링크·fence·`git diff --check`를 확인하며 새 문서 HEAD와 병합 main의 CI·실제 병합 commit·브랜치 삭제 결과는 [PR #36 Validation](https://github.com/wonmin82/primal-zone/pull/36)에 별도 기록한다. 이전 HEAD 성공을 새 HEAD의 CI로 대신하지 않는다.
+- Phase 7B 판정은 READY FOR PHASE 7C WITH NOTES다. Actual OS Korean IME 사용자 Windows/Chrome 수동 확인을 유지한다. Full fixture reliability·실제 모바일 기기 미검증·IME 상세 전송 trace 미수집·Dependabot/security triage·PostgreSQL contention 미검증 notes와 실패 이력은 보존한다.
+- Phase 7C와 PostgreSQL/multi-server는 시작하지 않는다. 경비카빈 ammo/gross≈44.6%를 포함한 balance tuning·최종 fresh operational DB·V1 closeout은 후속 요청 범위다. 개발 DB에 migration/cutover를 실행하지 않았으며 fingerprint 불변을 재확인했다.
+
 ## PR #36 — Phase 7B Offline Guard / Corpus Evidence Review Fix (2026-10-07)
 
 - 시작 HEAD: `6fe5541201a4303b591f080c524a9bcaa028301e`. Base main: `52fa4d5813dffcfd6fed08013c69001e62a9b0d0`. 기존 branch `codex/phase7b-integration-legacy-validation`과 [PR #36](https://github.com/wonmin82/primal-zone/pull/36)만 수정한다. Fetch 후 tree clean·OPEN/non-draft/CLEAN/MERGEABLE·review thread 0건을 확인했다. 기존 commit을 rewrite하거나 PR을 병합하지 않는다.
