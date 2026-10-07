@@ -1,3 +1,14 @@
+## Phase 7A — PR #35 문서 마감·병합 인계 (2026-10-07)
+
+사용자가 PR #35 문서 마감·병합과 소스 브랜치 삭제를 요청했다. 최종 실행 코드 HEAD는 `2c23c1f377e41fb2ed0332e14942da8f487124a3`이며 최신 main `75f41316a5e174df2a02ade46a7ac03dc8924318`를 포함한다. 문서 마감은 실행 코드·schema·의존성·타이밍·balance를 변경하지 않는다.
+
+- [Game checks37546292732](https://github.com/wonmin82/primal-zone/actions/runs/37546292732): check 성공, pure203개/0.915초, integration569개/239.580초(runner244.439초), Quick47.921초 성공. CI SHA와 위 실행 코드 HEAD가 일치한다. 이전 CI와 Full 실패 이력은 아래에 보존한다.
+- Local Full558.589초 성공은 shutdown 전후 일반 item 불변·실제 ON 광원 OFF/잔량 정산/참조 제거와 startup/relogin strict preservation을 포함한다. 이후 해당 실행 코드 변경이 없으므로 병합 준비만으로 local 테스트나 smoke를 반복하지 않는다.
+- 현재 판정은 READY FOR PHASE 7B WITH NOTES다. 기존 smoke reliability 이력과 의존성 보안 triage를 인계한다. Browser/OS IME/수동 multiplayer/Canonical Legacy Migration Corpus는 7B, balance/경비카빈 ammo-gross 약44.6%/fresh operational closeout은 7C다. PostgreSQL은 별도 infrastructure이며 이번 작업에서 시작하지 않는다.
+- 문서 마감 HEAD와 병합된 main의 정확한 SHA/CI, merge commit, 소스 브랜치 정리 결과는 [PR #35](https://github.com/wonmin82/primal-zone/pull/35)의 Validation과 최종 보고에 기록한다. 위 실행 코드 CI를 문서 마감 또는 병합 main의 CI로 대신하지 않는다.
+
+아래 기록은 각 작업 시점의 historical record다. 당시의 병합 금지·실패·미실행 사실을 소급 변경하지 않는다.
+
 ## PR #35 — Restart Preservation Review Fix (2026-10-07)
 
 시작 fetch의 PR/local/remote HEAD는 `c8416685191a32ee892300e1abcdaff2d32bdb63`, source는 `codex/phase7a-baseline-docs-closeout`, base main은 `75f41316a5e174df2a02ade46a7ac03dc8924318`이다. Tree clean, OPEN/non-draft/CLEAN/MERGEABLE, review thread0건과 이전 HEAD CI37539287152 성공을 확인했다. 기존 branch/PR만 수정하며 병합하지 않는다.

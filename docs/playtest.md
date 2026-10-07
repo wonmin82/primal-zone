@@ -2,6 +2,12 @@
 
 이 문서는 각 작업 시점의 historical validation record를 포함한다. 과거 미실행·미구현 기록은 당시 사실이며 현재 구현은 [architecture](architecture.md), [final-content](final-content.md), [최신 작업 상태](CODEX_TASK_STATE.md)를 따른다.
 
+## PR #35 문서 마감·병합 검증 인계 (2026-10-07)
+
+사용자 요청으로 Phase 7A 문서를 마감하고 병합·소스 브랜치 정리를 진행한다. 실행 코드 HEAD `2c23c1f377e41fb2ed0332e14942da8f487124a3`의 [CI37546292732](https://github.com/wonmin82/primal-zone/actions/runs/37546292732)는 check·pure203개/0.915초·integration569개/239.580초(runner244.439초)·Quick47.921초 모두 성공했다. 아래 restart 리뷰 수정의 Full558.589초와 이전 baseline 결과는 실제 실행 시점별 근거로 유지하며 합산하지 않는다.
+
+이후 변경은 문서뿐이므로 local Python/browser/smoke를 반복하지 않는다. 문서 경로·링크·diff를 검사하고 문서 마감 HEAD 및 병합 main의 CI를 각각 확인한다. 정확한 SHA/run/result와 merge commit·브랜치 삭제 결과는 PR Validation/최종 보고에 기록한다. 이전 실패 이력·개발 DB 불변·READY FOR PHASE 7B WITH NOTES 및 7B/7C deferred 범위는 유지한다.
+
 ## PR #35 restart preservation review fix (2026-10-07)
 
 시작 HEAD `c8416685191a32ee892300e1abcdaff2d32bdb63`에서 기존 PR source만 수정한다. 이전 Full의 stopped→after 비교는 shutdown 중 mutation을 baseline으로 흡수할 수 있었다. 아래 새 검증은 이전 성공·실패 기록을 대체하지 않는다.

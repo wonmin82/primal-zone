@@ -34,7 +34,7 @@ Baseline & Documentation Closeout. 현재 문서와 historical 기록을 분리�
 - [x] smoke-full (production timing)
 - [x] 개발 DB fingerprint 불변
 - [x] no unresolved P0/P1/P2
-- [x] PR 생성·CI 성공 ([PR #35](https://github.com/wonmin82/primal-zone/pull/35), 병합하지 않음)
+- [x] PR 생성·실행 코드 CI 성공 ([PR #35](https://github.com/wonmin82/primal-zone/pull/35), 병합·문서 마감 CI 상태는 PR Validation 참조)
 
 실행 결과와 검증 snapshot SHA/run은 [작업 상태](CODEX_TASK_STATE.md)에 기록했다. 문서 마감 이후 최종 HEAD의 CI는 PR Validation에서 별도로 확인하며 이전 snapshot으로 대신하지 않는다. 최종 동일 code의 Full/Quick 연속3회가 성공했으며 이전 outsider 응답 timeout1건의 정확한 원인은 미확정 이력으로 보존한다. 원인 불명 Quick timeout이 반복되면 7A를 닫지 않는다.
 
@@ -43,6 +43,8 @@ Baseline & Documentation Closeout. 현재 문서와 historical 기록을 분리�
 PR #35 restart 리뷰의 coverage 공백은 before→stopped shutdown invariant와 stopped→after strict preservation으로 보강했다. 실제 ON/active UUID 광원을 전제로 정상 shutdown의 OFF/started_at=None/시간 정산·참조 제거와 일반 item/주무기 불변을 Full E2E에서 검사했다. 재실행 Full558.589초 성공이며 첫 기존 progression 전투 실패도 playtest에 보존한다. Production·Quick timing·fixture/balance는 변경하지 않았다. 수정 HEAD의 정확한 CI는 PR Validation을 따르며 notes 판정을 유지한다.
 
 후속 CI의 기존 vocabulary 불변 검사가 자연회복 경계를 지나 실패해 해당 테스트의 관찰 시각만 고정했다. 실패 run37545750843과 후속 검증을 playtest/PR Validation에 구분한다. Production·Full 실행 코드와 수치는 그대로다.
+
+최종 실행 코드 HEAD `2c23c1f377e41fb2ed0332e14942da8f487124a3`의 [CI37546292732](https://github.com/wonmin82/primal-zone/actions/runs/37546292732)는 check·pure203개·integration569개·Quick 모두 성공했다. 사용자가 문서 마감·병합·소스 브랜치 삭제를 요청했으며, 문서만 변경하는 마감 HEAD와 병합 main의 CI는 PR Validation에 별도로 기록한다. READY FOR PHASE 7B WITH NOTES를 유지하며 7B/7C 작업은 시작하지 않는다.
 
 ## Phase 7B
 
