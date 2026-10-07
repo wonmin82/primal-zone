@@ -1,10 +1,16 @@
 # 아이템 월드 migration과 runtime cutover
 
+## Phase 7B Canonical corpus 검증
+
+[Canonical Legacy Migration Corpus](phase7-legacy-migration-corpus.md)의 코드 builder와 격리 file SQLite에서 valid/warning/invalid CLI를 실행했다. Dry-run/verify 파일 불변, source atomic apply, 재실행 row/sequence/ledger 불변, unknown source 정상화 후 retry, 수량 손상 verify/cutover 거절, warning 미승인/승인 경계를 확인했다. Valid cutover 뒤 네 실제 session의 native gameplay와 archived item blob 불변도 확인했다. 상세 fixture·명령·실행 디렉터리·실패 이력은 corpus 문서와 playtest를 따른다.
+
+실제 file DB의 offline guard에서 발견한 잘못된 Evennia session API는 `get_sessions(include_unloggedin=True)`로 수정했다. 인증 전 session도 있으면 offline migration을 거절한다. Migration ledger·source transaction·global cutover 계약은 그대로다. 이 결과는 실제 production DB migration이나 PostgreSQL concurrency 검증을 의미하지 않는다.
+
 ## 현재 용도: legacy compatibility
 
 현재 전환할 실제 production/play DB는 없다. 최종 운영 시작은 [fresh installation](installation.md#fresh-installation과-legacy-upgrade)의 빈 SQLite → schema → 첫 서버 시작의 native initialization/world bootstrap 경로다. Fresh DB에 apply/cutover를 실행하지 않는다.
 
-아래 workflow는 과거 개발 DB·구버전 설치본 업그레이드·오래된 백업 복원을 위한 별도 호환 경로이며 migration 구현의 regression 대상이다. 실제 production migration/cutover/rollback rehearsal은 Phase 7 필수 조건이 아니다. [Phase 7B](phase7-final-integration-audit.md#phase-7b)에서 Canonical Legacy Migration Corpus의 valid/warning/invalid 흐름을 검증한다. PostgreSQL DB engine 이관은 이 도구의 역할이 아니며 [future infrastructure](postgresql-transition.md)다.
+아래 workflow는 과거 개발 DB·구버전 설치본 업그레이드·오래된 백업 복원을 위한 별도 호환 경로이며 migration 구현의 regression 대상이다. 실제 production migration/cutover/rollback rehearsal은 Phase 7 필수 조건이 아니다. [Phase 7B](phase7-final-integration-audit.md#phase-7b)에서 Canonical Legacy Migration Corpus의 valid/warning/invalid 흐름을 검증했다. PostgreSQL DB engine 이관은 이 도구의 역할이 아니며 [future infrastructure](postgresql-transition.md)다.
 
 ## 목적과 version
 
