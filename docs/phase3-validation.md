@@ -1,5 +1,7 @@
 # Phase 3 실제 검증 기록 (2026-10-06)
 
+이 문서는 각 작업 시점의 historical validation record를 포함한다. 과거 미실행·미구현 기록은 당시 사실이며 현재 구현은 [architecture](architecture.md), [final-content](final-content.md), [최신 작업 상태](CODEX_TASK_STATE.md)를 따른다.
+
 기준은 `b2ec5f5c0fc0e511a580d04891d655d7babc0cb3`에서 시작한 `codex/lighting-firearm`의 미커밋 구현이다. 최종 성공 이후 실행 코드 변경이 없으면 문서·Git 작업만으로 같은 검사를 반복하지 않는다. 각 실행 개수는 서로 합산하지 않는다.
 
 ## 최종 로컬 성공

@@ -1,10 +1,12 @@
 # ItemEntity 기반·장비·상태형 아이템
 
+## Current Runtime Contract
+
 Phase 6 cutover 이후 일반 아이템의 runtime SSOT는 `world.item_entities.models.ItemEntity`다. 전리품은 ItemEntity/LootClaim과 CurrencyLoot/Share, 접근은 Credential Entity를 사용한다. legacy profile/blob은 운영 변환 후 보존하되 gameplay의 fallback/read/write 대상이 아니다. [운영 migration](item-migration.md), [최종 정의·가격·획득](final-content.md), [장비](equipment.md), [광원·총기](lighting-firearms.md)를 함께 따른다. profile version은 10이며 새 schema는 migration ledger/global marker다.
 
 ## 정의와 모델
 
-정적 정의는 `world.content.ITEMS`에 유지하며 최종 장비는 `content/final_items.py`에서 합친다. `stackable`, `max_stack`, `unique_per_owner`, `operation_policy`, `item_type`을 추가하며 stable ID는 표시명과 독립적이고 이전 장비 ID는 `content/item_mapping.py` 한 곳에서 변환한다. 무기·방어구·상태형 도구는 비스택, 일반 소비품·재료는 스택이다. 일반 스택의 `max_stack`은 None이며 출입증과 Boss unique는 1이다. 기존 `transferable`에서 이동 policy를 파생해 현재 명령과의 호환성을 유지한다. 일반 runtime의 이동·보관·거래·소모는 Entity에만 적용한다.
+정적 정의는 `world.content.ITEMS`에 유지하며 최종 장비는 `content/final_items.py`에서 합친다. `stackable`, `max_stack`, `unique_per_owner`, `operation_policy`, `item_type`을 추가하며 stable ID는 표시명과 독립적이고 이전 장비 ID는 `content/item_mapping.py` 한 곳에서 변환한다. 무기·방어구·상태형 도구는 비스택, 일반 소비품·재료는 스택이다. 일반 스택의 `max_stack`은 None이고 발전기 quest resource는 3이며 출입증과 Boss unique는 1이다. 기존 `transferable`에서 이동 policy를 파생해 현재 명령과의 호환성을 유지한다. 일반 runtime의 이동·보관·거래·소모는 Entity에만 적용한다.
 
 `ItemEntity`는 UUID PK, definition_id, quantity, location_kind, owner_object, parent_item, slot, socket, JSON state, sequence, nullable unique_scope_key를 저장한다. `definition_id`는 DB FK가 아니라 registry key다. 소유 위치·정의별 순번과 부모/socket에 index를 둔다.
 
@@ -24,7 +26,7 @@ Object type, 정의 존재·metadata, 비스택 quantity=1, max_stack, JSON 객�
 
 ## API
 
-Phase 4 실물 권리는 별도 `LootClaim`이며 ItemEntity.state가 아니다. corpse_loot/world_loot root에만 연결하고 inside child는 root 권리를 따른다. claim이 남은 inventory/equipment/storage 이동은 save validation으로 거절한다. 전체 pickup은 claim 제거 후 같은 Entity 이동, 부분 pickup은 source claim 유지와 claim 없는 split destination 이동/merge다. `same_merge_context()`는 merge_state와 root 배정 단위·권리의 ClaimContext를 함께 비교한다. 다른 claim/allocation unit은 권리 필드가 같아도 병합하지 않는다. generic split은 claim을 자동 복사하지 않는다. 자세한 API·expiry/decay·화폐 모델은 [전리품 권리](loot-claims.md)를 따른다.
+Phase 4 실물 권리는 별도 `LootClaim`이며 ItemEntity.state가 아니다. corpse_loot/world_loot root에만 연결하고 inside child는 root 권리를 따른다. claim이 남은 inventory/equipment/storage 이동은 save validation으로 거절한다. 전체 pickup은 claim 제거 후 같은 Entity 이동, 부분 pickup은 source claim 유지와 claim 없는 split destination 이동/merge다. `same_merge_context()`는 merge_state와 root 배정 단위·권리의 ClaimContext를 함께 비교한다. 다른 claim/allocation unit은 권리 필드가 같아도 병합하지 않는다. generic split은 claimed root를 거절하며 partial pickup만 trusted split으로 claim 없는 fragment를 즉시 inventory로 옮긴다. 자세한 API·expiry/decay·화폐 모델은 [전리품 권리](loot-claims.md)를 따른다.
 
 `world.item_entities.api`가 다음 연산을 제공한다. 변경 함수의 item/parent 인자는 저장된 ItemEntity 또는 UUID를 받는다. owner_object는 영속 Evennia Object다.
 
@@ -67,11 +69,11 @@ operation은 호출자가 직접 조작하는 root의 행동이다. contained ch
 
 변경 API는 기존 `world_change()`에 통합한다. 다중 lock은 대상 ID를 먼저 모아 중복 제거·정렬한 뒤 그 순서로 select_for_update를 수행한다. 트리 이동은 루트·후손·목적지의 조상도 수집한다. UUID 정렬은 lock 순서에만 사용한다. SQLite에서는 select_for_update가 별도 row lock을 제공하지 않으므로 현재 단일 Evennia 서버의 RLock·atomic 경계를 유지한다. 다중 게임 서버 운영과 PostgreSQL 동시 요청은 이번 검증 범위가 아니다.
 
-`unique_per_owner`의 key는 `<실제 root owner ID>:<definition ID>`다. 개인 보관·장착·inside도 같은 소유자로 계산하며 이동 시 트리 전체 key를 같은 transaction에서 갱신한다. 중복 충돌 시 루트 이동을 포함한 변경 전체를 rollback한다. 일반 아이템의 key는 None이어서 중복 소유를 허용한다. Credential 콘텐츠나 지급은 후속 단계다.
+`unique_per_owner`의 key는 `<실제 root owner ID>:<definition ID>`다. 개인 보관·장착·inside도 같은 소유자로 계산하며 이동 시 트리 전체 key를 같은 transaction에서 갱신한다. 중복 충돌 시 루트 이동을 포함한 변경 전체를 rollback한다. 일반 아이템의 key는 None이어서 중복 소유를 허용한다. Credential 콘텐츠와 원자적 지급·재발급·확정 소각이 구현되어 있다.
 
 새 모델은 Django 일반 모델이므로 실패한 transaction에서 얻었던 Entity 인스턴스는 다시 조회한다. API는 전달된 객체의 stale 필드를 신뢰하지 않고 ID로 잠근 row를 읽는다. 기존 Evennia profile·Attribute·location 캐시와 after_change callback의 rollback은 기존 world_change를 사용한다.
 
-## Migration과 후속 단계
+## Schema와 explicit migration
 
 앱은 `world.item_entities.apps.ItemEntitiesConfig`다. `0001_initial`은 Evennia objects migration에 의존하는 두 테이블·constraint·index를 만들고 `0002_initialize_sequence`는 get_or_create로 발급기를 준비한다. 반복 초기화는 이미 사용한 순번을 초기화하지 않는다. Phase 3의 `0003_magazine_socket`은 socket="magazine"인 parent/socket에만 조건부 unique를 추가한다. generic 다른 socket은 제한하지 않는다. 이번 개발에서는 격리 테스트 DB에만 migration을 적용했으며 플레이 DB를 변경하지 않았다.
 
@@ -81,7 +83,7 @@ operation은 호출자가 직접 조작하는 root의 행동이다. contained ch
 ..\.venv\Scripts\python.exe -m evennia migrate --noinput
 ```
 
-ItemEntity migration과 Phase 4 loot_entities schema는 profile·공용 상자·기존 시체·바닥 물품을 읽거나 옮기지 않는다. 기존 캐릭터는 legacy에만 쓰고, 명시적으로 Entity backend를 선택한 빈 신규/fixture 캐릭터의 장비·광원·총기와 native 전리품은 새 모델에만 쓴다. 이중 쓰기는 없다. Phase 6에서 범위별 legacy migration·검증·cutover를 구현한다. Phase 2 장비·modifier·Defense, Phase 3 활성 광원·총기/탄창, Phase 4 LootClaim·CurrencyLoot를 연결했다. Credential·신규 상점·최종 콘텐츠·밸런스는 후속 단계다.
+Schema migration은 테이블·제약·발급기/marker만 준비하며 legacy world를 자동 변환하지 않는다. Fresh 빈 DB는 schema 생성 후 첫 서버 시작에서 native marker/world를 직접 초기화한다. Legacy DB에는 versioned full-world migration의 dry-run/apply/verify/cutover가 필요하다. Inventory/equipment/storage/loot/currency/light/reference/entitlement를 포함하며 이미 있는 native identity/tree/state는 보존한다. [설치](installation.md)와 [호환 migration](item-migration.md)을 따른다.
 
 ## 검증 범위
 
@@ -93,7 +95,7 @@ ItemEntity migration과 Phase 4 loot_entities schema는 profile·공용 상자·
 
 before/after_item_change는 equipment뿐 아니라 inventory source/destination/parent root 소유자도 잠그고 active weapon/light를 같은 transaction에서 reconcile한다. split/merge도 owner→UUID 순서를 유지한다. 조회와 lock 사이 parent 변경도 거절하며 stale 입력은 ID로 최신 row를 확인한다. loaded firearm의 sell/burn은 row 변경 전에 구조적으로 거절하고 loaded magazine 자체의 sell/burn은 definition policy를 따른다. 일반 tree 이전은 내부 magazine state와 sequence를 보존한다. 중앙 merge_state·claim 확장 지점과 UUID/sequence/PROTECT/unique_scope 발급 계약은 유지한다.
 
-전체 suite·Web/browser 전체 회귀·다인 전체 시나리오·전체 저장 변환·balance simulation의 종합 matrix는 7단계 범위다. Phase 1 구현/리뷰에서는 로컬 Full을 생략했지만, Phase 2 리뷰의 명시적 요청으로 수정한 closeout를 포함한 smoke-full을 실제438.541초에 통과했다. 이 단일 Full 시나리오가 Phase 7 전체 검증을 대신하지 않는다. 기존 GitHub workflow의 자동 전체 suite·Quick smoke는 그대로 실행하며 로컬 targeted 결과와 구분한다. Phase 1 마감·Phase 2 구현/리뷰·문서 마감의 실행 결과는 작업 상태에서 구분한다. 최신 HEAD와 병합된 main의 CI는 각각 해당 SHA로 확인한다. 실제 PostgreSQL row-lock 경쟁과 다중 서버 동시성은 아직 검증하지 않았다. 상세 회귀 절차는 [Phase 1 테스트 안내](playtest.md#pr-29-리뷰-수정의-검증-기준)와 [Phase 2 리뷰 테스트 안내](playtest.md#pr-30-phase-2-리뷰의-검증-기준)를 따른다.
+현재 검증은 [Phase 7A/B/C audit](phase7-final-integration-audit.md)에 따라 나뉜다. 다음은 historical 검증 기록이다. Phase 1 구현/리뷰에서는 로컬 Full을 생략했지만, Phase 2 리뷰의 명시적 요청으로 수정한 closeout를 포함한 smoke-full을 실제438.541초에 통과했다. 이 단일 Full 시나리오가 Phase 7 전체 검증을 대신하지 않는다. 기존 GitHub workflow의 자동 전체 suite·Quick smoke는 그대로 실행하며 로컬 targeted 결과와 구분한다. Phase 1 마감·Phase 2 구현/리뷰·문서 마감의 실행 결과는 작업 상태에서 구분한다. 최신 HEAD와 병합된 main의 CI는 각각 해당 SHA로 확인한다. 실제 PostgreSQL row-lock 경쟁과 다중 서버 동시성은 아직 검증하지 않았다. 상세 회귀 절차는 [Phase 1 테스트 안내](playtest.md#pr-29-리뷰-수정의-검증-기준)와 [Phase 2 리뷰 테스트 안내](playtest.md#pr-30-phase-2-리뷰의-검증-기준)를 따른다.
 
 ## Phase 2 연결
 
@@ -101,7 +103,7 @@ before/after_item_change는 equipment뿐 아니라 inventory source/destination/
 
 ## Phase 5 출입증과 부분 폐기
 
-출입증은 legacy/native와 무관하게 실제 ItemEntity만 SSOT다. 전초/특수 출입증은 non-stack, max_stack1, unique_per_owner로 owner tree의 unique_scope_key DB uniqueness를 사용한다. burn만 허용하고 drop/give/store/sell/consume/equip/unequip/loot/load/unload와 unknown operation은 거절한다. issuer 보상·재발급은 owner lock과 기존 ItemEntity API/sequence/world_change를 재사용한다. profile inventory에 복제하지 않고 legacy presentation에는 출입증 snapshot만 추가한다.
+출입증은 legacy/native와 무관하게 실제 ItemEntity만 SSOT다. 전초/특수 출입증은 non-stack, max_stack1, unique_per_owner로 owner tree의 unique_scope_key DB uniqueness를 사용한다. burn만 허용하고 drop/give/store/sell/consume/equip/unequip/loot/load/unload와 unknown operation은 거절한다. issuer 보상·재발급은 owner lock과 기존 ItemEntity API/sequence/world_change를 재사용한다. profile inventory에 복제하지 않으며 현재 native inventory snapshot으로 표시한다. Phase 5 당시 legacy presentation에는 출입증만 추가했다.
 
 `destroy_quantity(item, quantity, operation="sell"|"burn")`은 수량 검증 후 전체면 삭제, 부분이면 기존 source quantity만 줄인다. 잔여 UUID/sequence/state/unique_scope를 유지하며 children이 있는 stack의 부분 폐기는 거절한다. 기존 before/after item change에서 active reference를 같은 transaction에 정리하고 실패하면 전부 rollback한다. loaded firearm structural protection, split/merge/claim 계약은 유지한다. 출입증 확정 소각·접근 상실·issuer 무료 재발급과 Shop source/sink는 [Phase 5 설계](credentials-access-shops.md)를 따른다.
 
@@ -117,3 +119,9 @@ before/after_item_change는 equipment뿐 아니라 inventory source/destination/
 Native 사용자 이전은 같은 owner 내부 위치 변경과 owner-changing transfer를 구분한다. Shared storage 입출고와 give는 root 및 내부 tree의 transferable=true가 필요하다. Boss unique는 개인 보관 가능하지만 공용 보관 및 양도는 불가하다. 비정상 공용 귀속 row도 정상 gameplay로 회수하여 새 owner에게 귀속하지 않는다.
 
 `generator_repair_part`는 max_stack3의 submit-only quest resource다. 일반 scrap과 별개이며 발전기 수리3개 제출 외 정상 소실·이전 경로를 차단한다. Migration의 정비부품/fixed discovery entitlement는 owner tree 기준이며 ItemEntity schema/operation framework를 변경하지 않는다.
+
+## Historical Phase 1~5 transition boundary
+
+아래 설명은 native runtime 전환 전의 단계별 경계다. 현재 ItemEntity SSOT·fresh bootstrap·legacy explicit migration 계약을 대체하지 않는다.
+
+ItemEntity migration과 Phase 4 loot_entities schema는 profile·공용 상자·기존 시체·바닥 물품을 읽거나 옮기지 않는다. 기존 캐릭터는 legacy에만 쓰고, 명시적으로 Entity backend를 선택한 빈 신규/fixture 캐릭터의 장비·광원·총기와 native 전리품은 새 모델에만 쓴다. 이중 쓰기는 없다. Phase 6에서 범위별 legacy migration·검증·cutover를 구현한다. Phase 2 장비·modifier·Defense, Phase 3 활성 광원·총기/탄창, Phase 4 LootClaim·CurrencyLoot를 연결했다. Credential·신규 상점·최종 콘텐츠·밸런스는 후속 단계다.

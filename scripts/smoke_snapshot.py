@@ -21,19 +21,36 @@ def snapshot():
     from typeclasses.loot import Corpse, DroppedLoot
     from world.bootstrap import get_room, stale_definitions
     from world.environment_state import lifecycle_script
+    from world.item_entities import api
+    from world.loot_service import source_entries
 
+    def owned_items(owner):
+        # archive profile/storage/db.items는 native restart 보존의 증거가 아니다.
+        return {str(item.pk): {"definition": item.definition_id, "quantity": item.quantity,
+                               "sequence": item.sequence, "location": item.location_kind,
+                               "parent": str(item.parent_item_id) if item.parent_item_id else None,
+                               "slot": item.slot, "socket": item.socket, "state": item.state}
+                for item in api.items_owned_by(owner)}
+
+    from time import time
+
+    observed_at = time()
     script = lifecycle_script()
     return {
+        "observed_at": observed_at,
         "players": {player.key: {"profile": player.profile_snapshot(), "zone": player.zone,
-                                  "home": player.home.db.zone_id, "id": player.id}
+                                  "home": player.home.db.zone_id, "id": player.id,
+                                  "active_weapon": player.db.active_weapon_item_id,
+                                  "active_light": player.db.active_light_item_id,
+                                  "items": owned_items(player)}
                     for player in Explorer.objects.all() if player.key != "admin"},
         "elevator": get_room("support_elevator").db.current_stop,
-        "box": deserialize(search_tag("shared_container", category="primal_interactable")[0].db.items),
+        "box": owned_items(search_tag("shared_container", category="primal_interactable")[0]),
         "facilities": deserialize(script.db.facilities),
         "clock": deserialize(script.db.environment)["clock"],
         "enemies": {str(enemy.id): {"state": enemy.db.state, "combatants": list(enemy.db.combatants or []),
                                     "claim": deserialize(enemy.db.claim)} for enemy in Enemy.objects.all()},
-        "loot": {str(obj.id): {"corpse": isinstance(obj, Corpse), "entries": deserialize(obj.db.entries)}
+        "loot": {str(obj.id): {"corpse": isinstance(obj, Corpse), "entries": source_entries(obj)}
                  for model in (Corpse, DroppedLoot) for obj in model.objects.all()},
         "stale": stale_definitions(),
     }

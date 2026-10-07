@@ -2,6 +2,16 @@
 
 로컬 PC에 게임 서버를 설치하고 웹 브라우저로 접속하는 방법입니다. 아래 설치 명령은 Windows PowerShell 기준입니다. 명령을 한 줄씩 실행하고 성공 여부를 확인한 뒤 다음 단계로 진행하세요.
 
+## Fresh installation과 legacy upgrade
+
+현재 프로젝트에는 보존·전환해야 할 실제 플레이 DB가 없습니다. 새 플레이의 기본 운영 경로는 **fresh empty SQLite + single Evennia server**입니다. 아래 1~6절은 fresh installation을 설명합니다. 개발 DB 파일이 있으면 빈 DB로 오인하거나 삭제하지 마세요.
+
+Fresh 경로는 빈 DB → `dev.py setup`의 Django schema 생성 → 첫 `dev.py start`의 `initialize_fresh()` → `ItemRuntime.version=1` → native world bootstrap → 새 Explorer 생성입니다. Starter ItemEntity를 직접 만들며 legacy inventory를 생성한 뒤 변환하지 않습니다. Fresh DB에서는 `migrate-items --apply`/`--cutover`를 실행하지 않습니다.
+
+과거 개발 DB·구버전 설치본·오래된 백업이 있는 경우만 **legacy compatibility upgrade**를 사용합니다. Server/Portal 정지 → backup → code update → dependency sync → schema migration → maintenance mode → `migrate-items --dry-run` → `--apply` → `--verify` → `--cutover` → maintenance 해제 → server start 순서입니다. 정확한 명령·warning 처리·retry/rollback 경계는 [아이템 migration 운영 절차](item-migration.md)를 따릅니다. 기존 DB는 startup/login 시 자동 변환하지 않으며 cutover 전 일반 runtime은 migration-required로 거절합니다.
+
+Migration tooling은 fresh install 필수 단계가 아니라 historical DB upgrade/backup restoration/regression 대상입니다. PostgreSQL은 [향후 전환 계획](postgresql-transition.md)이며 현재 지원 topology와 [Phase 7](phase7-final-integration-audit.md) 완료 조건에 포함하지 않습니다.
+
 ## 필요한 환경
 
 | 항목 | 필요한 환경과 역할 |
@@ -83,6 +93,8 @@ uv run python scripts/dev.py setup
 
 관리자 계정 `admin`은 최초 생성 시 비밀번호 로그인이 비활성화됩니다. 일반 플레이에는 다음 단계에서 별도의 탐사자 계정을 만듭니다.
 
+`setup` 자체는 아이템 data migration이나 global cutover를 실행하지 않습니다. 실제 빈 world 확인과 native runtime marker 초기화·world bootstrap은 다음 단계의 첫 서버 시작에서 수행합니다.
+
 ## 5. 실행과 접속
 
 서버를 시작합니다.
@@ -158,4 +170,4 @@ uv run python scripts/dev.py test
 
 플레이 기록을 보존하려면 DB를 삭제하거나 덮어쓰지 않습니다. 비밀 설정과 DB는 Git에 올리지 않습니다.
 
-명령이 인식되지 않으면 설치 후 터미널을 새로 열었는지 확인합니다. 게임 페이지나 서버 연결 문제가 발생하면 [테스트 안내의 문제 해결 절차](playtest.md#6-막혔을-때-확인할-사항)를 참고합니다. 실제 사냥·장비·임무·재접속 검증 절차도 같은 문서에 있습니다.
+명령이 인식되지 않으면 설치 후 터미널을 새로 열었는지 확인합니다. 게임 페이지나 서버 연결 문제가 발생하면 [테스트 안내의 문제 해결 절차](playtest.md#7-막혔을-때-확인할-사항)를 참고합니다. 실제 사냥·장비·임무·재접속 검증 절차도 같은 문서에 있습니다.

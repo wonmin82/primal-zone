@@ -38,6 +38,9 @@ class VocabularyTests(WorldCommandTest):
         return "\n".join(str(call.args[0]) for call in output.call_args_list if call.args)
 
     def test_inventory_aliases_and_removed_commands_are_not_active(self):
+        # 제거된 명령의 불변성을 실제 10초 자연회복 경계와 분리한다.
+        self.enterContext(patch("typeclasses.explorers.time", return_value=100))
+        self.char1.reconcile_recovery(emit_prompt=False)
         outputs = [self.raw(command) for command in ("소지품", "가방", "가진거", "i", "인벤토리", "소")]
         self.assertEqual(len(set(outputs)), 1)
         self.assertIn("소지품", outputs[0])

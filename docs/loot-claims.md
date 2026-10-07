@@ -2,7 +2,7 @@
 
 Phase 6 현재 상태: cutover 후 일반 gameplay는 native ItemEntity만 사용한다. 아래 legacy adapter/Phase 6 예정 설명은 Phase 1~5의 설계·검증 기록이며 maintenance migration과 historical audit fixture의 호환 경계로 남는다. 최신 저장·운영 정책은 [item-migration](item-migration.md), 최종 콘텐츠·가격은 [final-content](final-content.md)를 따른다.
 
-Phase 4는 기존 ItemEntity·장비·광원·총기를 유지하며 권리와 화폐를 분리한다. 실제 검증은 [playtest](playtest.md#phase-4-lootclaim--currencyloot-검증), 인계는 [CODEX_TASK_STATE](CODEX_TASK_STATE.md)를 따른다. Phase 5 콘텐츠와 Phase 6 월드 변환은 수행하지 않는다.
+현재 physical loot는 ItemEntity+root LootClaim, currency는 CurrencyLoot/CurrencyLootShare가 authoritative하다. Spatial Corpse/DroppedLoot는 container이며 blob은 legacy upgrade/audit 입력이다. 전체 검증 경계는 [Phase 7 audit](phase7-final-integration-audit.md), 당시 Phase 4 실행 기록은 [playtest](playtest.md#phase-4-lootclaim--currencyloot-검증)를 따른다.
 
 ## legacy entry 의미와 모델 대응
 
@@ -40,7 +40,7 @@ Phase 4는 기존 ItemEntity·장비·광원·총기를 유지하며 권리와 �
 
 `integrity_errors(source)`는 native marker+legacy entries와 legacy/non-native marker+native rows 양쪽 불일치를 보고한다. 빈 native marker 자체는 정상이다. 불일치를 자동 복구하거나 lazy migration하지 않는다.
 
-`Corpse.from_enemy(..., backend="item_entities")`는 기존 drop/allocation 결과를 모델로 생성한다. 관련 player/party owner를 먼저 잠그고 같은 world_change에서 cursor와 rows를 처리한다. 기본 backend는 legacy여서 현재 일반 사냥을 강제로 전환하지 않는다. native 생성 실패는 rows·sequence·party cursor·새 공간을 rollback한다. 총기 drop에 full 탄창을 자동 생성하지 않으며 기존 콘텐츠·가격·보상 수치를 유지한다.
+`Corpse.from_enemy()`의 일반 runtime은 native다. 기존 allocation helper와 최종 Drop V1 결과를 Entity/claim/currency로 생성하며 player/party owner를 먼저 잠근다. 실패 시 rows·sequence·cursor·새 공간을 rollback한다. Enemy 총기는 partial acquisition contract를 사용하며 full 탄창을 자동 지급하지 않는다.
 
 ## 실물 pickup와 claim-aware merge
 
@@ -76,7 +76,19 @@ Firearm root에만 claim이 있고 magazine child에는 없다. 전체 tree 회�
 
 여러 source를 회수하는 command는 전체 집합을 먼저 잠근다. before/after_item_change·active weapon/light reconciliation·recovery 경계를 유지한다. 신뢰된 decay만 operation=None이고 사용자 회수는 operation="loot"다. raw QuerySet.update/bulk_create로 검증을 우회하지 않는다. `integrity_errors(source)`는 출처 단위 모델/권리/지분을 검사한다.
 
-## Phase 6 boundary와 known gaps
+## 검증과 호환 경계
+
+정상 사냥·pickup·decay는 native만 사용하며 legacy blob에 같은 unit을 다시 저장하지 않는다. Wallet은 profile credits다. 명시적 전체 legacy upgrade는 [item-migration](item-migration.md), 현재 자동 기준선과 7B/7C 미검증 범위는 [Phase 7 audit](phase7-final-integration-audit.md)을 따른다. PostgreSQL contention·multi-server는 future infrastructure다.
+
+## Historical Phase 4 implementation boundary
+
+아래는 Phase 4 당시의 backend 선택·후속 범위다. 현재 사냥 backend를 설명하지 않는다.
+
+Phase 4는 기존 ItemEntity·장비·광원·총기를 유지하며 권리와 화폐를 분리한다. 실제 검증은 [playtest](playtest.md#phase-4-lootclaim--currencyloot-검증), 인계는 [CODEX_TASK_STATE](CODEX_TASK_STATE.md)를 따른다. Phase 5 콘텐츠와 Phase 6 월드 변환은 수행하지 않는다.
+
+`Corpse.from_enemy(..., backend="item_entities")`는 기존 drop/allocation 결과를 모델로 생성한다. 관련 player/party owner를 먼저 잠그고 같은 world_change에서 cursor와 rows를 처리한다. 기본 backend는 legacy여서 현재 일반 사냥을 강제로 전환하지 않는다. native 생성 실패는 rows·sequence·party cursor·새 공간을 rollback한다. 총기 drop에 full 탄창을 자동 생성하지 않으며 기존 콘텐츠·가격·보상 수치를 유지한다.
+
+### Phase 6 boundary와 known gaps (당시 기록)
 
 legacy Corpse/DroppedLoot.db.entries는 기존 생성·회수·decay의 SSOT다. native는 새 모델만 갱신하고 같은 unit을 blob에 쓰지 않는다. profile inventory/equipment/storage/light_sources와 Container.db.items는 유지한다. native 실물은 native recipient에게, legacy 실물은 legacy recipient에게만 회수한다. backend 사이의 자동 변환·임시 Entity·dual-write는 거절한다. 화폐 wallet은 기존 profile credits다.
 

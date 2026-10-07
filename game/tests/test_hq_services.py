@@ -98,6 +98,9 @@ class ServiceRelocationTests(WorldCommandTest):
 
     def test_training_follows_actual_npc_safe_room_and_peace(self):
         from world import rules
+        # 훈련 권한 실패의 불변성을 실제 10초 자연회복 경계와 분리한다.
+        self.enterContext(patch("typeclasses.explorers.time", return_value=100))
+        self.char1.reconcile_recovery(emit_prompt=False)
         instructor = search_tag('trainer_heavy', category='primal_interactable')[0]
         self.char1.change(lambda p: p.update(xp=rules.xp_threshold(2)))
         self.char1.location = instructor.location

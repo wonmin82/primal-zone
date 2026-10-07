@@ -18,10 +18,103 @@ from world.timing import PRODUCTION_TIMING, configured_timings
 
 PROJECT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT))
+sys.path.insert(0, str(PROJECT / "scripts"))
 from scripts import dev, smoke_harness  # noqa: E402
+from scripts.smoke_closeout import (  # noqa: E402
+    assert_shutdown_items,
+    assert_startup_items,
+    stop_for_restart,
+)
 
 
 class SmokeContractsTests(TestCase):
+    def test_shutdown_preserves_rows_and_only_settles_enabled_light_power(self):
+        from copy import deepcopy
+
+        saved = {"light": {"definition": "flashlight", "quantity": 1, "sequence": 8,
+                           "location": "inventory", "parent": None, "slot": None, "socket": None,
+                           "state": {"power_type": "battery", "remaining_power": 100,
+                                     "enabled": True, "started_at": 10}},
+                 "stack": {"definition": "bandage", "quantity": 3, "state": {}}}
+        restored = deepcopy(saved)
+        restored["light"]["state"].update(enabled=False, started_at=None, remaining_power=85)
+        saved["off"] = deepcopy(saved["light"])
+        saved["off"]["state"].update(enabled=False, started_at=None)
+        restored["off"] = deepcopy(saved["off"])
+        assert_shutdown_items(saved, restored, 20, 30)
+        for field, value in (("quantity", 2), ("sequence", 9), ("location", "personal_storage"),
+                             ("definition", "bandage"), ("parent", "other"),
+                             ("slot", "hands"), ("socket", "magazine")):
+            broken = deepcopy(restored)
+            broken["light"][field] = value
+            with self.subTest(field=field), self.assertRaises(AssertionError):
+                assert_shutdown_items(saved, broken, 20, 30)
+        for field, value in (("remaining_power", 95), ("remaining_power", 75),
+                             ("enabled", True), ("started_at", 20), ("power_type", "unknown")):
+            broken = deepcopy(restored)
+            broken["light"]["state"][field] = value
+            with self.subTest(field=field, value=value), self.assertRaises(AssertionError):
+                assert_shutdown_items(saved, broken, 20, 30)
+        for identity, field, value in (("stack", "quantity", 2), ("stack", "state", {"changed": True}),
+                                       ("stack", "parent", "other"), ("off", "state", {})):
+            broken = deepcopy(restored)
+            broken[identity][field] = value
+            with self.subTest(identity=identity, field=field), self.assertRaises(AssertionError):
+                assert_shutdown_items(saved, broken, 20, 30)
+        for identity in ("stack", "added"):
+            broken = deepcopy(restored)
+            if identity == "stack":
+                del broken[identity]
+            else:
+                broken[identity] = deepcopy(restored["stack"])
+            with self.subTest(identity=identity), self.assertRaises(AssertionError):
+                assert_shutdown_items(saved, broken, 20, 30)
+
+    def test_startup_preserves_items_strictly_without_light_settlement_exception(self):
+        from copy import deepcopy
+
+        stopped = {"item": {"definition": "flashlight", "quantity": 1, "sequence": 8,
+                             "location": "inventory", "parent": None, "slot": None, "socket": None,
+                             "state": {"enabled": False, "started_at": None, "remaining_power": 85}}}
+        assert_startup_items(stopped, deepcopy(stopped))
+        for field, value in (("quantity", 2), ("sequence", 9), ("location", "personal_storage"),
+                             ("parent", "other"), ("state", {"enabled": False, "remaining_power": 80})):
+            restored = deepcopy(stopped)
+            restored["item"][field] = value
+            with self.subTest(field=field), self.assertRaises(AssertionError):
+                assert_startup_items(stopped, restored)
+        with self.assertRaises(AssertionError):
+            assert_startup_items(stopped, {})
+        # startup은 ON → OFF 정산을 두 번째로 허용하지 않는다.
+        live = deepcopy(stopped)
+        live["item"]["state"].update(enabled=True, started_at=10)
+        with self.assertRaises(AssertionError):
+            assert_startup_items(live, stopped)
+
+    def test_full_restart_requests_isolated_shutdown_and_checks_owned_process_exit(self):
+        from unittest.mock import Mock
+
+        with tempfile.TemporaryDirectory() as folder:
+            process = Mock()
+            process.wait.return_value = 0
+            harness = SimpleNamespace(mode="full", run_dir=Path(folder), env={"isolated": "yes"},
+                                      processes=[("server", process)], check_alive=Mock())
+            with patch("scripts.smoke_closeout.subprocess.run") as command:
+                stop_for_restart(harness)
+                arguments = command.call_args.args[0]
+                self.assertEqual(arguments, [sys.executable, "-m", "evennia", "stop",
+                                             "--settings", "settings_smoke"])
+                self.assertEqual(command.call_args.kwargs["cwd"], Path(folder) / "game")
+                self.assertEqual(command.call_args.kwargs["env"], harness.env)
+                self.assertTrue(command.call_args.kwargs["check"])
+                process.wait.return_value = 1
+                with self.assertRaises(AssertionError):
+                    stop_for_restart(harness)
+            harness.mode = "quick"
+            with patch("scripts.smoke_closeout.subprocess.run") as command, self.assertRaises(AssertionError):
+                stop_for_restart(harness)
+            command.assert_not_called()
+
     def test_enemy_delay_canonical_setting_precedes_legacy_fallback(self):
         key = "ENEMY_RECOVERY_DELAY_SECONDS"
         self.assertEqual(configured_timings(SimpleNamespace(PRIMAL_ENEMY_RESET_SECONDS=3))[key], 3)
@@ -40,7 +133,15 @@ class SmokeContractsTests(TestCase):
         self.assertEqual(configured_timings(SimpleNamespace()), expected)
         self.assertEqual(smoke_timings("full"), expected)
         self.assertEqual(set(QUICK_TIMING), set(expected))
-        self.assertTrue(all(0 < value < expected[key] for key, value in QUICK_TIMING.items()))
+        idle_deadlines = {"COMBAT_INTERVAL", "CLAIM_TIMEOUT_SECONDS", "PARTICIPATION_TIMEOUT_SECONDS"}
+        self.assertTrue(all(0 < value < expected[key] for key, value in QUICK_TIMING.items()
+                            if key not in idle_deadlines))
+        # 처리/화면 전송 지연이 공격 기회보다 길어도 Quick 참가 자격이 사라지지 않는다.
+        self.assertEqual({key: QUICK_TIMING[key] for key in idle_deadlines},
+                         {key: expected[key] for key in idle_deadlines})
+        self.assertGreaterEqual(QUICK_TIMING['CORPSE_TTL_SECONDS'], 10)
+        self.assertGreater(QUICK_TIMING['LOOT_PROTECTION_SECONDS'],
+                           QUICK_TIMING['CORPSE_TTL_SECONDS'] + QUICK_TIMING['RESPAWN_DELAY_SECONDS'])
         config = SimpleNamespace(**{"PRIMAL_" + key: value for key, value in QUICK_TIMING.items()})
         self.assertEqual(configured_timings(config), smoke_timings("quick"))
         with self.assertRaises(ValueError):

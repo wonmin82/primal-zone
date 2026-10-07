@@ -1,5 +1,11 @@
 # 아이템 월드 migration과 runtime cutover
 
+## 현재 용도: legacy compatibility
+
+현재 전환할 실제 production/play DB는 없다. 최종 운영 시작은 [fresh installation](installation.md#fresh-installation과-legacy-upgrade)의 빈 SQLite → schema → 첫 서버 시작의 native initialization/world bootstrap 경로다. Fresh DB에 apply/cutover를 실행하지 않는다.
+
+아래 workflow는 과거 개발 DB·구버전 설치본 업그레이드·오래된 백업 복원을 위한 별도 호환 경로이며 migration 구현의 regression 대상이다. 실제 production migration/cutover/rollback rehearsal은 Phase 7 필수 조건이 아니다. [Phase 7B](phase7-final-integration-audit.md#phase-7b)에서 Canonical Legacy Migration Corpus의 valid/warning/invalid 흐름을 검증한다. PostgreSQL DB engine 이관은 이 도구의 역할이 아니며 [future infrastructure](postgresql-transition.md)다.
+
 ## 목적과 version
 
 migration version 1은 기존 profile/blob 아이템을 최종 ItemEntity·LootClaim·CurrencyLoot/Share로 변환한다. ItemMigrationLedger는 `(migration_version, source_kind, source_identity)` DB unique와 completed/completed_at, 원본 source_digest, expected_state, created_counts, warnings를 저장한다. global `ItemRuntime(id=1).version=1`은 모든 대상 verify가 성공한 뒤 별도로 설정한다. Explorer에도 item_runtime_version=1을 기록한다.
@@ -87,7 +93,7 @@ EquipmentProfile.inventory는 Entity에서 파생한 일시적 pure rule 계산 
 
 격리 tests.test_item_migration/tests.test_phase6_runtime에서 source 전체 범위, 수량/equipment 포함, native tree·identity 보존, read-only dry-run, source 실패·retry, missing/corrupt verify, cutover guard, fresh player, archive 불변을 검증한다. 실행별 결과와 실패 이력은 [playtest](playtest.md)를 따른다.
 
-실제 플레이 DB 변환, historical corpus 전체 audit, PostgreSQL 경쟁·multi-server·전체 multiplayer/browser·OS IME·smoke-full·full balance simulation은 미실행이며 Phase 7/운영 전 점검으로 남는다.
+기존 자동 fixture의 실행 이력과 현재 smoke/자동 기준선은 [playtest](playtest.md)를 따른다. Canonical Legacy Migration Corpus·전체 multiplayer/browser·실제 OS IME는 Phase 7B, full balance simulation·최종 fresh operational setup은 Phase 7C다. PostgreSQL 경쟁·multi-server는 별도 infrastructure다. 실제 play DB 변환은 현재 대상이 없으며 Phase 7 필수 작업이 아니다.
 
 
 ## PR #34 리뷰 추가 entitlement

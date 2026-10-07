@@ -1,8 +1,8 @@
 # 원시구역 구조와 설계 결정
 
-## Phase 6 최종 runtime과 명시적 변환
+## 현재 runtime contract와 명시적 변환
 
-일반 아이템은 ItemEntity, 실물 전리품 권리는 LootClaim, 보급칩 전리품은 CurrencyLoot/CurrencyLootShare, 접근 권한은 Credential ItemEntity가 SSOT다. 아래 Phase 1~5의 legacy 설명은 당시 기록이며 cutover 이후 gameplay backend로 사용하지 않는다. `ItemRuntime.version=1`과 Explorer/native loot marker를 검사하고 미변환 world는 서버 시작과 일반 item 접근에서 migration-required 오류를 낸다.
+일반 아이템은 ItemEntity, 실물 전리품 권리는 LootClaim, 보급칩 전리품은 CurrencyLoot/CurrencyLootShare, 접근 권한은 Credential ItemEntity가 SSOT다. 문서 끝의 Phase 1~5 legacy 설명은 당시 기록이며 cutover 이후 gameplay backend로 사용하지 않는다. `ItemRuntime.version=1`과 Explorer/native loot marker를 검사하고 미변환 world는 서버 시작과 일반 item 접근에서 migration-required 오류를 낸다.
 
 `item_migration.scan/convert/audit/workflow`는 source 계획, 원자적 변환, legacy/native 독립 대조, 운영 단계로 나뉜다. ItemMigrationLedger는 version/kind/영속 ObjectDB ID의 DB unique와 원본 digest·완료 snapshot을 저장한다. apply는 source별 완료만 기록하고 global marker는 verify 성공 후 별도 cutover에서 설정한다. 로그인·명령·startup conversion과 dual-write는 없다. 실제 운영 절차와 재시도는 [item-migration](item-migration.md)을 따른다.
 
@@ -10,43 +10,15 @@ EquipmentProfile의 inventory는 DB에서 파생한 일시적 수량 계산 cont
 
 가격·modifier·drop·Boss scaling은 pure content/rules 계층, actual-shot 감소·지급·migration은 persistence 계층이다. Boss 참여자 수는 기존 reward_groups를 재사용하고 한 encounter에서 감소하지 않는다. 추가 max HP만 current HP에 더해 이미 입힌 damage를 보존한다. 전체 회복 또는 respawn 후 다음 encounter는 1명 기준으로 시작한다. [최종 콘텐츠](final-content.md)의 확정 수치를 임의 tuning하지 않는다.
 
-## Phase 5 출입증·접근·거래 경계
+## 현재 접근·상점·전리품 계약
 
-Quest state는 entitlement/진행 이력이고 실제 access authority는 Credential ItemEntity다. Room access는 availability와 개인 credential을 읽기 전용 can_enter로 검사한다. legacy/native backend와 관계없이 credential_service가 지급·재발급을 소유하고 pure rules의 보상과 profile 저장을 outer world_change로 묶는다. 임무 완료만으로 입장시키거나 profile inventory에 출입증을 복제하지 않는다.
+Quest state는 entitlement와 진행 이력이며 access authority는 실제 Credential ItemEntity다. `can_enter`는 Room availability → 개인 credential → 기존 quest 환경 gate를 읽기 전용으로 검사한다. 파티에 권한을 공유하지 않고 제한실에서 public 공간으로 나갈 수 있다. [출입증·접근·상점](credentials-access-shops.md)을 따른다.
 
-Shopkeeper는 공간상의 서비스 제공자이며 Entity 재고 owner가 아니다. shop_service가 purchase_catalog/accepts를 분리하고 source/sink 거래를 처리한다. 일반 legacy 거래·소각은 profile adapter, native 거래·소각은 ItemEntity API를 사용한다. Legacy의 추가 Entity 소지품 표시는 Credential에만 한정한다. 공통 수량 parser와 destroy_quantity는 부분 stack identity를 유지한다. 기존 lock·reference·회복·LootClaim/화폐 경계를 대체하지 않으며 가격·콘텐츠 전체/migration/cutover는 Phase 6에 남긴다. 자세한 API·모든 이동 경로 조사표는 [출입증·접근·상점](credentials-access-shops.md)을 따른다.
+Shopkeeper는 재고 owner가 아닌 source/sink 서비스다. `purchase_catalog`는 구매 목록, `accepts`는 매입 category다. `shop_service`는 credits와 ItemEntity 생성·삭제를 한 transaction으로 처리한다. 일반 아이템·소각·보관도 native Entity를 사용하며 archive profile 필드에 쓰지 않는다. [장비](equipment.md), [광원·총기](lighting-firearms.md), [전리품](loot-claims.md), [아이템 API](item-entities.md)는 현재 계약을 먼저 설명한다.
 
-## Phase 4 전리품 권리·화폐 (2026-10-06)
+## 지원 운영 구성과 설치
 
-Corpse/DroppedLoot는 공간 owner이며 실물은 ItemEntity, root 권리는 LootClaim, 보급칩은 CurrencyLoot와 player별 CurrencyLootShare다. 0인 share도 원래 요청 자격을 보존한다. 만료 조회는 읽기 전용이고 lifecycle에서 해당 source의 expired claim을 삭제한다. 부분 회수는 source claim 유지→claim 없는 split→inventory 이동/merge이며 전체 회수는 identity/sequence를 유지한다. decay는 tree·권리·화폐 share·보호 기한을 보존한다.
-
-`loot_service → LootSourceSnapshot/LootEntrySnapshot → 기존 권리/payout helper·command·presentation` 경계다. owner→UUID→claim/currency/share lock과 mutation은 persistence 계층에 있고 pure rules에 ORM을 넣지 않는다. generic merge도 root 배정 단위와 권리를 비교한다. 화폐 quantity·share·모든 recipient credits는 기존 world_change 하나에서 처리한다.
-
-현재 사냥과 기존 blob은 legacy SSOT를 유지한다. 신뢰된 native 생성만 새 모델을 선택하며 dual-write/lazy conversion은 없다. backend가 다른 실물 recipient로는 자동 변환하지 않는다. inventory/storage·world blob의 명시적 전체 migration/cutover는 Phase 6이다. 모델·API·기존 필드 대응·해석·검증 공백은 [전리품 권리](loot-claims.md)를 따른다.
-
-## Phase 3 광원·총기 (2026-10-06)
-
-`lighting_service/firearm_service → LightSnapshot/FirearmSnapshot/MagazineSnapshot/EquipmentSnapshot → pure rules/visibility/presentation` 경계로 연결한다. ORM은 persistence service에만 두며 rules/progression/modifier 계산에 넣지 않는다. flashlight power(초)/enabled와 magazine rounds는 ItemEntity.state가 단일 SSOT다. 총기는 rounds를 중복 저장하지 않고 inside/socket=magazine child를 조회한다. active_weapon과 active_light는 실제 Entity UUID 참조이며 같은 item transaction에서 reconcile한다.
-
-ON 잔량은 읽기 전용 projection이고 정상 관찰에서는 저장하지 않는다. switch/OFF/소진/이동/삭제/logout/shutdown에서 상태와 참조를 원자적으로 정리한다. source/destination/parent root의 Explorer owner를 ID 순으로 잠그고 전체 관련 UUID를 모아 잠근다. split/merge도 owner→UUID 순서를 사용한다. 총기 socket은 parent lock과 조건부 DB unique로 보호한다. 중앙 update_item_state는 full_clean/save를 적용하며 user load/unload는 명시적 root policy다.
-
-pure 전투 outcome의 shot_fired와 실제 magazine 감소를 기존 world_change에 묶는다. 빈 firearm은 공격 기회만 사용하고 mental/cooldown commit 전에 반환한다. 성공한 combat reload는 다음 기회 하나를 대체하며 no-op/실패는 기회를 유지한다. legacy firearm은 기본 ammo-free 계약을 유지한다. shared enemy HP·전리품 권리·성장·Defense V1·기존 가격은 바꾸지 않는다.
-
-legacy lighting은 기존 light_sources를 단일 adapter 경계에서 LightSnapshot으로 제공한다. profile inventory/equipment/storage/light_sources, Container.db.items와 Corpse/DroppedLoot legacy data의 SSOT는 Phase 6까지 유지한다. 명령으로 backend 선택/lazy migration/dual-write를 하지 않는다. 최종 V1 콘텐츠와 shop/drop wiring은 적용하지 않았다. 실제 API·명령·state·검증·Phase 4 운반 구조는 [광원·총기](lighting-firearms.md)를 따른다. 아래 과거 단계에서 광원/총기를 후속 단계라고 한 설명은 당시 범위다.
-
-## Phase 2 장비·Modifier·Defense (2026-10-05)
-
-현재 장비 계산은 `equipment_service → EquipmentSnapshot → equipment/modifiers/rules/recovery/presentation` 경계로 연결한다. ORM은 service에 있고 rules/progression/recovery의 계산은 DB·Evennia와 독립적이다. profile version은 10이다. 아래 과거 구현 설명의 고정 방어와 두 legacy 장비 slot은 이번 단계의 최종 계산·slot 계약보다 우선하지 않는다.
-
-Entity 장비는 equipment/Explorer/최종 slot에 저장하며 손 capacity2·반지2·나머지1과 손 조합을 검사한다. 주무기는 Explorer Attribute의 ItemEntity UUID 참조이며 공통 create/move/delete transaction 안에서 자동 선택·승계·제거한다. 장비 변경은 옛 recovery rate 정산 → 새 위치/주무기/snapshot → 새 max/rate 계산 → current clamp → 저장 순서다. 자원 무료 회복과 자동 장비 교체는 없다.
-
-기존 플레이어의 profile 장비 SSOT는 Phase 6까지 유지한다. 제거 가능한 `equipment_legacy` 단일 adapter가 weapon→hands, armor→body와 수치→modifier를 연결한다. 명시적으로 선택한 backend 한 곳만 쓰고 hidden migration/dual-write하지 않는다. stats/combat/recovery/presentation/Web는 공통 snapshot을 사용한다. legacy 이전·판매의 장착분 예약 direct-read만 해당 저장 shape와 함께 후속 단계에 남긴다.
-
-Modifier는 구조화된 target/op/value/scope의 add 합산·multiply 곱·clamp 계약이다. Defense V1은 `raw*20/(20+defense*(1-penetration))*(1-defense_skill_reduction)`이며 양방향 공통 helper에서 마지막에 int 내림·최소1을 적용한다. 성장·콘텐츠 수치는 유지한다. 상세 slot/selector/참조/기술·회복 적용/Phase 6 제거 경계는 [장비 설계](equipment.md), ItemEntity 불변조건은 [영속 기반](item-entities.md)에 기록한다.
-
-## ItemEntity 기반 1단계
-
-`world.item_entities` Django 앱이 독립 실물 아이템 row·전역 순번·canonical 위치·스택·부모 트리·원자적 API를 제공한다. 정적 정의는 기존 ITEMS registry다. 기존 gameplay의 profile/Attribute 저장은 아직 전환하지 않고 새 row와 이중 쓰기를 하지 않는다. profile version은 10이다. 장비·modifier·Defense는 Phase 2 서비스에 연결했고 총기 상태·LootClaim·화폐·Credential·전체 저장 변환은 후속 단계다. DB/application 제약, API와 migration 적용 경계는 [ItemEntity 기반](item-entities.md)을 따른다.
+현재 지원 구성은 SQLite + single Evennia server다. 현재 전환할 실제 플레이 DB는 없으며 최종 운영 시작은 fresh empty DB → schema → 첫 서버 시작의 `initialize_fresh`/ItemRuntime.version=1 → native bootstrap → 새 Explorer 순서다. 기존 DB 업그레이드는 별도 maintenance migration 경로다. [설치](installation.md), [Phase 7A/B/C 경계](phase7-final-integration-audit.md), [PostgreSQL future infrastructure](postgresql-transition.md)를 따른다.
 
 ## 정신력과 주기 회복
 
@@ -58,10 +30,10 @@ Modifier는 구조화된 target/op/value/scope의 add 합산·multiply 곱·clam
 | --- | --- | --- | --- |
 | 기본 | 2 + max_hp/60 | 4 + max_mental/20 | HP 제외, 정신력 유지 |
 | Room.recovery | hp_per_minute | mental_per_minute | 둘 다 제외 |
-| 장착 ITEMS.recovery_bonus | hp_per_minute | mental_per_minute | 둘 다 유지 |
+| 장착 ItemEntity recovery modifier | hp_per_minute | mental_per_minute | 둘 다 유지 |
 | recovery_effects | hp_per_minute | mental_per_minute | 둘 다 유지 |
 
-Room/Item metadata는 누락 시 0이며 integrity가 유한한 0 이상의 수만 허용한다. 초기 장소는 의무실 6/2, 본부 중앙홀 2/2, 폐쇄된 관리동 2/1, 옥상 9개 Room 0/2다. 출정 대기실에는 보너스가 없다. 장비는 소지품이 아닌 equipment의 모든 장착 값을 집계하고 현재 실제 회복 장비나 새 슬롯은 만들지 않는다. recovery_effects는 started_at/expires_at와 선택 회복률을 저장하며 시작·만료 시각으로 구간을 나눈다. 만료 시각까지의 기여를 반영한 뒤 expired effect를 제거한다. 활성 조건은 started_at <= now < expires_at이며 미래 효과만 필요하면 그 시작 시점 하나를 예약한다. 새 소비품·범용 buff API는 없다.
+Room/Item metadata는 누락 시 0이며 integrity가 유한한 0 이상의 수만 허용한다. 초기 장소는 의무실 6/2, 본부 중앙홀 2/2, 폐쇄된 관리동 2/1, 옥상 9개 Room 0/2다. 출정 대기실에는 보너스가 없다. 장비 회복은 native equipment snapshot의 장착 modifier를 집계한다. 생존모듈·재생모듈·정신안정모듈 등 실제 회복 장비가 존재한다. recovery_effects는 started_at/expires_at와 선택 회복률을 저장하며 시작·만료 시각으로 구간을 나눈다. 만료 시각까지의 기여를 반영한 뒤 expired effect를 제거한다. 활성 조건은 started_at <= now < expires_at이며 미래 효과만 필요하면 그 시작 시점 하나를 예약한다. 새 소비품·범용 buff API는 없다.
 
 Explorer.change와 전투의 직접 저장 경계는 변경 전 accrue를 수행한다. 공통 이동 hook의 checkpoint_recovery는 이전 Room의 기여만 저장하고 state/prompt를 보내지 않는다. Exit·귀환·승강기·패배 이동이 같은 규칙을 쓴다. move_to의 world_change는 목적지 hook 거절도 실패로 rollback하고, 도착 state와 방 출력은 성공 후 실행한다. world_change의 profile/location rollback을 유지한다. 현재 자원은 주기 commit 또는 기존 명시적 회복/피해에서만 바뀐다. 접속 중 실제 회복할 자원이 있을 때 다음 경계 하나만 예약하며 full 또는 전투 중 HP만 부족하고 bonus가 없으면 예약하지 않는다.
 
@@ -91,15 +63,15 @@ Web command echo는 별도 `› 명령` entry가 아니다. 마지막 entry가 �
 
 ## 보급칩 경제와 전리품 자산
 
-`world/content/economy.py`의 CURRENCY는 id=credits·이름=보급칩·단위=칩·별칭·설명의 SSOT다. `world/currency.py`의 format_currency는 127칩을 만들며 profile의 credits 숫자를 유지한다. 최신 profile version은 정신력 추가에 따른 9다. 화폐는 ITEMS나 inventory에 넣지 않는다. Web은 서버의 currency metadata/formatted/전리품 display_label과 take_command를 표시한다. take_target은 칩/칩 2 같은 명령 선택자, display_label은 8칩 같은 표시 문자열이며 화면 문자열을 재해석해 명령을 만들지 않는다.
+`world/content/economy.py`의 CURRENCY는 id=credits·이름=보급칩·단위=칩·별칭·설명의 SSOT다. `world/currency.py`의 format_currency는 127칩을 만들며 profile의 credits 숫자를 유지한다. 최신 profile version은 10이다. 화폐는 ITEMS나 inventory에 넣지 않는다. Web은 서버의 currency metadata/formatted/전리품 display_label과 take_command를 표시한다. take_target은 칩/칩 2 같은 명령 선택자, display_label은 8칩 같은 표시 문자열이며 화면 문자열을 재해석해 명령을 만들지 않는다.
 
-`world/loot_assets.py`의 읽기 전용 normalize_entry는 legacy {item, quantity}를 {kind: item, id, quantity}로 해석한다. 새 currency entry는 kind=currency·id=credits·quantity·eligible_players·remaining_shares와 공통 reservation/protection_until을 가진다. 초기 PR의 shares는 읽을 때 원래 key를 eligible_players로, 양수 몫을 remaining_shares로 해석한다. 입력을 변경하지 않고 반복 normalize도 안정적이며 새 저장은 분리된 구조를 사용한다. 상세 보기·Web·회수·decay가 이 계층을 공유하며 조회로 DB를 다시 쓰지 않는다.
+`world.loot_service`가 모델을 backend-neutral snapshot으로 제공한다. ItemEntity root와 LootClaim, CurrencyLoot/Share가 authoritative하며 legacy normalize_entry는 migration·historical 호환용이다. snapshot.as_entry의 eligible_players/remaining_shares는 share rows에서 파생한 pure 계산 입력이며 CurrencyLoot에 중복 저장하지 않는다. 조회는 DB를 변경하지 않는다.
 
-`rules.reward_allocation(amount, groups)`는 그룹 기여도 비례 → 파티 내부 균등 → deterministic 최대 나머지법으로 총량을 보존한다. XP는 처치 transaction에서 즉시 지급하고 enemy.currency는 그룹별 currency entry로 저장한다. eligible_players는 처치 시점 적격 참여자 snapshot으로 파티 변화·로그아웃과 무관하게 고정된다. remaining_shares는 아직 지급하지 않은 금액만 담는다. 보호 중 루팅 요청자는 protected distribution을 trigger할 자격을 가질 뿐, 자신의 remaining share가 0이라는 이유로 자격을 잃지 않는다. currency_payouts는 remaining_shares만 weight로 부분 지급한 뒤 몫과 quantity를 차감하며 0인 몫은 제거한다. 실제 지급은 session 없이도 persistent Explorer에 저장하며 수령 객체가 없으면 전체 transaction을 rollback한다. 다른 그룹 entry는 남는다. 보호 만료 후에는 남은 금액을 caller에게 지급하며 과거 자격/몫을 적용하지 않는다. 시체 decay는 quantity·eligible_players·remaining_shares·reservation·보호 deadline을 바닥으로 그대로 옮긴다.
+`rules.reward_allocation(amount, groups)`는 그룹 기여도 비례 → 파티 내부 균등 → deterministic 최대 나머지법으로 총량을 보존한다. XP는 즉시 지급하고 보급칩은 그룹별 CurrencyLoot로 생성한다. Share=0 행도 원래 eligibility를 유지한다. 부분 지급은 양수 remaining 몫만 weight로 쓰며 quantity·shares·offline 포함 모든 recipient credits가 같은 transaction에 저장된다. Missing recipient는 전체 rollback이다. 만료 후 잔액은 caller에게 지급하고 decay는 owner만 바꾸며 share·reservation·deadline을 보존한다.
 
 currency_request는 기존 TargetSelector에서 금액만 읽는다. 20칩은 양의 정수 금액, 칩 2는 공통 INDEX, 칩 모두는 ALL이다. source/관계 parsing은 기존 helper를 사용하고 여러 시체에는 ALL target을 요구한다. 기본 화폐 대상은 접근 가능한 entry에서 선택하며 기존 item 선택 정책은 바꾸지 않는다. player 간 전달·버리기와 전리품 회수는 world_change 안에서 관련 profile/loot를 함께 변경하고 실패 시 rollback한다. 임무·정산·NPC 판매는 직접 source, 구매·학습·패배는 sink이며 패배 손실은 드롭하지 않는다.
 
-ITEMS[*].value만 상품 가치와 구매가를 소유한다. SHOP_CATALOGS는 item ID tuple, Shopkeeper는 shop_id와 catalog의 취급 사실만 소유한다. purchase_price와 resale_price(value//2, 최소 1)가 가격을 계산한다. 가치/판매는 기존 구매의 seller selection·safe/peace/perception 정책을 재사용한다. 판매는 move_item의 transferable·장착 복사본 reservation을 사용하며 일반 판매에 수량 N개 문법은 추가하지 않는다. Web 기본 판매도 1개이며 판매 가능한 복사본이 2개 이상일 때만 별도 모두 판매와 총액(장착분 제외 수량 × 매입가)을 제공한다. value 없는 임무/resource는 매매하지 않는다.
+`SHOP_CATALOGS`는 purchase_catalog/accepts를 분리한다. 가격은 value와 explicit purchase_unit_value/resale_unit_value, 탄약 bundle의 purchase_quantity로 결정한다. 일반 resale은 floor(value/2), explicit resale은 우선한다. 탄창은 empty resale + 잔탄×ammo resale, 총기는 full_standard package로 구매한다. Stack 판매는 1/N개/모두, non-stack은 stable instance selector를 사용한다. field-only/T2 장비도 category/policy/가격이 맞으면 기본점에서 매입한다. [최종 가격·catalog](final-content.md)를 따른다.
 
 ## 목표와 구성
 
@@ -122,9 +94,11 @@ ITEMS[*].value만 상품 가치와 구매가를 소유한다. SHOP_CATALOGS는 i
 
 게임 명령은 `대상 + 행동`이다. 마지막 단어를 행동으로 해석하며, `'내용`은 나머지 전부를 채팅으로 처리한다. `내용 말`도 지원한다. 버튼은 같은 텍스트 명령을 보내며 서버가 권한과 결과를 결정한다. 메시지 문자열로 사망·보상 등 상태를 판정하지 않는다.
 
-## 본부 Room 구조 1단계
+<a id="본부-room-구조-1단계"></a>
 
-`world/content/headquarters.py`는 출정 대기실·본부 중앙홀, 지원동 1~3층의 복도 각 5칸, 시설 7곳과 옥상 중앙·공용 승강기의 기존 26개에 옥상 주변 8개를 더해 훈련 시설 3곳을 더해 Room 37개를 정의한다. 기존 `dock`과 탐사 구역 15곳은 유지한다. Region `headquarters`는 방문한 실제 Room을 기존 지도에 묶어 표시한다.
+## 현재 본부 Room 구조
+
+`world/content/headquarters.py`는 출정 대기실·본부 중앙홀, 지원동 1~3층 복도와 시설·공용 승강기, 옥상 9곳과 전초·예약 시설을 포함해 Room 41개를 정의한다. 기존 `dock`과 탐사 구역 15곳은 유지한다. Region `headquarters`는 방문한 실제 Room을 기존 지도에 묶어 표시한다.
 
 출정 대기실의 유일한 출구는 `남 → hq_concourse`다. 중앙홀은 `북 → staging_room`, `서 → dock`, `남 → support_1f_c`이며 부두의 `북 → grass`는 그대로다. 1층 중앙은 `북 → hq_concourse`, `서 → support_1f_w1`, `동 → support_1f_e1`이며 남쪽 출입구는 폐쇄되어 있다. 모든 정식 방향 출구는 반대 방향으로 복귀하며 별도 복귀 방향 예외는 없다. 각 층의 복도는 동서로 연결되고 기존 시설은 북쪽, 새 2층 훈련 시설 세 곳은 남쪽으로 진입하며 반대 방향으로 복귀한다. 층별 방향 그래프는 분리되어 있으며 2단계 승강기 명령으로 각 중앙 복도와 옥상을 오간다.
 
@@ -186,7 +160,7 @@ bootstrap은 stable `primal_interactable` tag로 기존 객체를 찾아 DB ID�
 
 ## 본부 5단계: 단일 화폐와 회수 자원 정산
 
-보급칩은 유일한 구매 currency, scrap은 material/resource다. `profile.inventory["scrap"]`와 개인 storage의 기존 저장 형식을 유지하며 migration·자동 환전은 없다. 적 전리품·이전·보관 정책과 발전기의 부품 3개 소비를 보존한다. `world/content/economy.py`의 `SALVAGE_CREDIT_RATE=10`은 정산율 SSOT다. 기존 장비용 EXCHANGE 정의/export와 구매 flag를 제거하고 `rules.buy(profile, shop_id, item_id)`는 6단계 SHOP_CATALOGS의 품목을 확인하고 ITEMS[item_id].value에서 보급칩 가격을 조회한다. 5단계 당시 부두 임시 상점은 6단계에서 실제 Shopkeeper로 대체됐다.
+보급칩은 유일한 구매 currency, scrap은 일반 경제 resource다. Native inventory/storage의 ItemEntity 수량을 사용하며 `SALVAGE_CREDIT_RATE=10`으로 정산한다. 발전기는 별도 submit-only `generator_repair_part` 3개를 소비하므로 일반 scrap을 잃어 진행이 막히지 않는다. 수송차 cache는 미수리 상태에서만 부족분을 보충하고 수리 완료 후 지급하지 않는다.
 
 실제 persistent `SettlementOfficer`의 stable ID는 `salvage_officer`, 표시명은 자원 정산관, alias는 정산관이며 `salvage_office`에 배치한다. 기존 bootstrap의 stable tag 재사용으로 객체 ID·alias·정상 배치를 유지하고 다른 객체·개인 profile·shared inventory를 초기화하지 않는다. integrity는 위치·환율/교환 action 정의·양의 정수 정산율과 기존 본부 구조를 검사한다.
 
@@ -200,9 +174,9 @@ bootstrap은 stable `primal_interactable` tag로 기존 객체를 찾아 DB ID�
 
 `Shopkeeper(ActionObject)`는 실제 persistent NPC다. `supply_shopkeeper`(보급관/보급상인)는 `supply_shop`, `weapon_shopkeeper`(무기상/무기 상인)는 `weapon_shop`, `armor_shopkeeper`(방어구상/방어구 상인)는 `armor_shop`에 배치한다. `db.shop_id`의 supply/weapon/armor가 catalog identity이며 Room ID나 NPC 이름에서 추론하지 않는다. bootstrap은 stable tag로 같은 객체를 재사용하고 정의의 위치·alias·shop_id를 정규화한다. 재고 상태·profile migration은 없다.
 
-`world/content/shops.py`의 `SHOP_CATALOGS`는 취급 품목만, `ITEMS[*].value`는 가격만 소유한다. 보급품 5종·무기 5종·방어구 4종의 기존 14개 가격을 모두 보존한다. `rules.buy(profile, shop_id, item_id)`는 비전투·유효 catalog·해당 상품·보급칩 충분 여부를 전부 검증한 뒤 credits와 소지품을 함께 변경한다. scrap 정산·임무 소비·전리품·기술 가격·패배 패널티는 변경하지 않는다. 무한 재고로 매번 1개만 판매한다.
+`world/content/shops.py`는 5개 상점의 purchase_catalog/accepts를 소유한다. `shop_service`가 같은 방·시야·safe·비전투·잔액·policy를 검증하고 credits와 native ItemEntity를 원자적으로 변경한다. 무한 재고 source/sink이며 탄약 구매는 purchase_quantity bundle, 총기는 full_standard package다. 상품별 quest/credential 조건은 없고 공간 access가 progression을 결정한다.
 
-`상품`(별칭 없음)과 `구매`는 현재 `room_objects`의 실제 보이는 Shopkeeper를 찾는다. 메뉴의 bare 후보는 모든 판매자, 구매의 bare 후보는 그 물건을 파는 판매자만이다. 0명 거절·1명 선택·여럿 대상 지정 요구이며 targeted 구매는 `무기상에게 강철마체테 구매`처럼 기존 parse_relation/names/selector/resolve를 사용한다. 번호는 기존 공통 정렬의 임시 번호다. 발견 후 같은 Room·safe·비전투를 검사하며 숨은 판매자는 selector·개수·오류·hint·Web에서 제외한다. 서비스는 실제 NPC를 따라 다른 safe Room에서도 동작한다.
+`상품`(별칭 없음)과 `구매`는 현재 `room_objects`의 실제 보이는 Shopkeeper를 찾는다. 메뉴의 bare 후보는 모든 판매자, 구매의 bare 후보는 그 물건을 파는 판매자만이다. 0명 거절·1명 선택·여럿 대상 지정 요구이며 targeted 구매는 `무기상에게 절단마체테 구매`처럼 기존 parse_relation/names/selector/resolve를 사용한다. 번호는 기존 공통 정렬의 임시 번호다. 발견 후 같은 Room·safe·비전투를 검사하며 숨은 판매자는 selector·개수·오류·hint·Web에서 제외한다. 서비스는 실제 NPC를 따라 다른 safe Room에서도 동작한다.
 
 메뉴는 실제 NPC 제목과 그 catalog의 보급칩 가격만 표시하고 상세 보기는 메뉴/targeted 구매 사용법을 안내한다. 각 시설 hint는 actual stable NPC와 상품 action을 참조하며 availability를 확인한다. 부두의 static 상점 hint·Shop/Buy gate·Web 상점 버튼을 제거했다. 다른 사용처가 없는 `GameCommand.at_dock()`과 global SHOP도 제거했다.
 
@@ -216,7 +190,7 @@ Integrity는 세 판매자 배치·catalog ID/행동, catalog 비어 있지 않�
 
 `ordered()`의 객체 ID 오름차순을 Room 서술, SURROUNDINGS, 보기, 공격, 콘텐츠 행동, 시체 회수에서 공유한다. 번호는 방 안의 보이는 후보에 붙이는 1부터 시작하는 transient presentation index이며 DB에 저장하거나 객체 ID 자체를 노출하지 않는다. 같은 이름끼리 번호를 붙이되 `시체`는 방 전체 Corpse pool을 사용한다. 시체가 만료되면 남은 시체 번호도 다시 계산된다.
 
-DEFAULT는 구조적으로 행동을 지원하는 첫 대상을 선택한다. INDEX는 표시 순서의 정확한 개체를 선택한다. 실제 점유·임무·한 번 보상·전리품 권한은 행동/규칙 계층이 판단하며 resolver가 가능한 다음 대상으로 자동 이동하지 않는다. 보기와 가져만 ALL을 지원한다. 공격·대화·조사·수리·무장·착용·구매·학습·파티 인물 조작은 단일 대상이다. 정산의 교환은 NPC 하나를 선택하고 회수부품에는 정산 전용 1/N개/모두 수량을 적용한다. 전투가 시작된 뒤 공격·강타·사격·간파·견제·치료·호흡·도망는 기존 combat_target을 사용한다. 특성의 `힘 2 배분`처럼 수량을 받는 명령은 해당 명령의 인자 문법을 유지한다. 파티 초대/관리의 기존 원격 캐릭터 범위도 유지한다.
+DEFAULT는 구조적으로 행동을 지원하는 첫 대상을 선택한다. INDEX는 표시 순서의 정확한 개체를 선택한다. 실제 점유·임무·한 번 보상·전리품 권한은 행동/규칙 계층이 판단하며 resolver가 가능한 다음 대상으로 자동 이동하지 않는다. 보기·가져와 허용된 물품 이전·스택 판매·소각은 각 행동의 ALL 계약을 따른다. 공격·대화·조사·수리·무장·착용·구매·학습·파티 인물 조작은 단일 대상이다. 정산의 교환은 NPC 하나를 선택하고 회수부품에는 1/N개/모두 수량을 적용한다. 스택 판매·소각도 같은 개 suffix 수량 parser를 사용한다. 전투가 시작된 뒤 공격·강타·사격·간파·견제·치료·호흡·도망는 기존 combat_target을 사용한다. 특성의 `힘 2 배분`처럼 수량을 받는 명령은 해당 명령의 인자 문법을 유지한다. 파티 초대/관리의 기존 원격 캐릭터 범위도 유지한다.
 
 `world/target_presentation.py`는 개체 수를 자연어로 묘사하고 필요한 경우에만 `'갈퀴사냥룡 1'`, `'시체 2'` 같은 지정 방법을 문장으로 안내한다. Room 본문과 세계 서술은 객체 표가 아니다. SURROUNDINGS·버튼·상태/조작 control에서는 빠른 인식과 조작을 위해 `시체 1 · 갈퀴사냥룡의 시체` 같은 compact label·번호·상태를 사용할 수 있다. `world/state.py`가 label/command를 생성하고 웹은 그대로 텍스트 명령을 전송하므로 클라이언트에 선택 parser를 복제하지 않는다.
 
@@ -318,27 +292,27 @@ Enemy가 HP/max HP, alive/respawning 상태, respawn_at, claim, claim_last_activ
 
 사망 전이는 HP 감소, alive→respawning, 경험치·임무 보상과 시체 화폐 snapshot, 드롭 추첨 한 번과 Corpse 한 개 생성을 같은 트랜잭션으로 처리한다. state와 HP 조건을 다시 검사하여 중복 호출을 무시한다. DB 실패 시 Evennia의 Attribute/identity/방 내용 캐시도 복구하고 화면 전송·예약 작업은 성공 후 처리한다.
 
-Corpse는 실제 방 객체이며 source spawn/enemy, created_at, decay_at과 loot entries를 저장한다. 회수부품 1개와 기존 확률 장비 드롭은 처치 시 한 번 결정된다. 경험치만 즉시 지급하고 보급칩·아이템은 소지품에 자동 지급하지 않는다. 보급칩은 그룹별 currency entry와 eligible_players/remaining_shares로 시체에 남는다.
+Corpse는 실제 공간 객체이며 source spawn/enemy, created_at, decay_at을 저장한다. Drop V1의 consumable/resource와 special은 독립 roll이며 각각 최대 1종/1개, Boss trophy는 별도 100%다. 경험치만 즉시 지급하고 실물 ItemEntity/LootClaim과 CurrencyLoot/Share가 시체에 남는다. Blob entries는 native loot SSOT가 아니다.
 
 공용 보스도 시체는 하나다. 각 아이템은 정렬된 보상 그룹의 누적 피해 비중 구간에, 전체 드롭 개수로 나눈 등간격 중점을 대응시켜 그룹을 결정한다. 예를 들어 50:50 두 그룹에 두 아이템이면 각각 하나씩 배정된다. 아이템 수가 적으면 기여 비중이 낮은 그룹은 아이템을 못 받을 수 있다. 경험치·보급칩 비례 배분과는 별개이며 첫 회수자가 전체 드롭을 갖지 않는다.
 
 선정된 파티의 실제 참여자를 가입 순서로 정렬하고 Party.round_robin_cursor를 적용한다. 아이템 한 개마다 순번을 증가시킨다. 현재 지원 모드는 round_robin뿐이며 `순번 파티분배`로 설정한다. free_for_all·need_greed·leader 방식과 관련 UI는 구현하지 않았다.
 
-각 entry는 item, quantity, reserved_party, reserved_player, assigned_player, protection_until을 저장한다. 보호 중에는 배정된 탐사자 또는 원래 파티원이 회수를 요청할 수 있으나 실제 소지품은 assigned_player에게 지급된다. 배정자는 탈퇴·접속 종료해도 바뀌지 않는다. 보호 종료 뒤에는 회수 명령자가 받는다. 특정 아이템은 한 개, `<아이템> 모두`는 선택한 출처의 같은 종류 전체 수량을 처리한다. 여러 시체 전체의 회수는 `모든 시체에서 모두 가져`로 명시한다.
+Physical root는 ItemEntity definition/quantity와 별도 LootClaim의 reserved_party/reserved_player/assigned_player/protection_until로 표현한다. 보호 중에는 배정된 탐사자 또는 원래 파티원이 회수를 요청할 수 있으나 실제 소지품은 assigned_player에게 지급된다. 배정자는 탈퇴·접속 종료해도 바뀌지 않는다. 보호 종료 뒤에는 회수 명령자가 받는다. 특정 아이템은 한 개, `<아이템> 모두`는 선택한 출처의 같은 종류 전체 수량을 처리한다. 여러 시체 전체의 회수는 `모든 시체에서 모두 가져`로 명시한다.
 
 시체는 처치 후 30초에 남은 entries를 DroppedLoot 방 객체로 옮기고 삭제된다. 원래 권한과 처치 후 120초인 protection_until은 그대로 유지된다. 적은 처치 후 45초(시체 30초 + 대기 15초)에 같은 spawn으로 재생성한다. 바닥 아이템은 재생성 시 삭제하지 않으며 현재 별도 영구 소멸 기한은 없다. 장기간 운영 시 누적량 관리 정책이 필요하다.
 
 ## 시각 기반 생명주기와 재시작
 
-상수는 world/multiplayer.py에서 관리한다. persistent timestamp가 진실이며 delay/task는 실행 편의다. 서버 시작, 5초 간격 WorldLifecycle script, 보기·공격·회수 시 같은 reconcile 함수를 사용한다. 지연된 시체는 바닥으로 옮기고 재생성 시각이 지난 적은 복원한다. 보호 만료는 metadata를 지우지 않고 현재 시각 비교로 FFA가 된다. 초대도 만료 시각으로 정리한다. 반복 reconcile은 전리품을 복제하지 않는다.
+Production 기본값은 world/timing.py, 실행 설정의 해석·사용은 world/multiplayer.py에서 관리한다. persistent timestamp가 진실이며 delay/task는 실행 편의다. 서버 시작, 5초 간격 WorldLifecycle script, 보기·공격·회수 시 같은 reconcile 함수를 사용한다. 지연된 시체는 바닥으로 옮기고 재생성 시각이 지난 적은 복원한다. 보호 만료 조회는 현재 시각 비교로 free로 해석하고 명시적 source reconcile은 expired LootClaim row만 삭제한다. 초대도 만료 시각으로 정리한다. 반복 reconcile은 전리품을 복제하지 않는다.
 
 재시작 때 개인 combat_target과 Enemy의 참여·위협도를 정리한다. 파티와 개인 성장 기록은 유지되며 접속 후 살아 있는 상대를 다시 지정한다. 오프라인 중 자동 사냥 보상을 주지 않는다. 비정상 연결 종료는 서버가 단절을 인지하기 전까지 전투가 진행될 수 있다.
 
 ## 기존 데이터와 운영 범위
 
-profile의 최신 버전은 10이다. v9 이하는 여덟 기술의 기본 Rank와 재투자 가능 훈련으로 정규화하며 자세한 성장 호환은 [성장 설계](progression.md)를 따른다. v1/v2의 개인 encounter 제거·전투 입력 필드·성장 기본값 변환을 거친 뒤, v1~v3의 첫 임무 boolean을 `quests.radio_tower`의 진행 필드로 옮긴다. `cache_claimed`는 `discoveries.supply_cache`로 옮긴다. v1~v4에는 개인 보관 `storage={}`의 기본값을 추가한다. XP, HP, credits, inventory, equipment(명시적 None 포함), kills, 완료 여부와 visited 및 개인 전투 상태를 유지한다. 이미 받은 보상은 재지급하지 않는다. v1~v5에는 개인 광원 `light_sources={}`, v1~v6에는 개인 줄임말 `command_shortcuts={}`를 보완한다. v8 이하에는 현재 최대 정신력과 빈 recovery_effects를 추가하며 timestamp는 첫 mutable accrue에서 초기화한다. migration은 시간을 조회하지 않고 profile_snapshot은 사본만 변환한다.
+profile version은 10이며 `rules.migrate_profile()`은 과거 성장·임무·discovery·명령 설정을 사본에서 정규화하는 pure helper다. ItemEntity로 아이템을 생성하거나 world source를 전환하는 함수가 아니다. XP/HP/credits/quest와 성장 호환은 [성장 설계](progression.md)를 따르고, legacy item 필드는 별도 archive로 보존한다.
 
-변환은 기존 프로필의 복사본에서 첫 임무·보급 boolean을 새 구조로 옮기고 오래된 key를 제거한다. 기존 플레이어는 현재 레벨에 해당하는 포인트를 즉시 사용할 수 있고, 무료 기본 기술 Rank 1과 미투자 특성은 기존 전투 성능을 유지한다. Party·Enemy·Corpse·DroppedLoot는 profile 밖에 있으므로 migration이 수정하지 않는다. 기존 DB의 로드 시 점진적으로 변환하며 DB 삭제·교체는 필요 없다. 위의 서버 재시작/재접속 전투 정리 정책과 migration 자체의 보존 정책은 별개다.
+기존 DB의 inventory/equipment/storage/container/loot/currency/light/reference/entitlement 전환은 versioned `item_migration`의 explicit maintenance workflow다. 전체 source apply/verify 이후 cutover해야 일반 gameplay를 시작할 수 있다. Profile 정규화가 로그인 시 item lazy migration이나 legacy gameplay fallback을 허용하지 않는다. 정확한 source 범위·ledger·retry는 [item-migration](item-migration.md)을 따른다.
 
 원자성 보장은 단일 Evennia 게임 서버 프로세스와 그 DB를 전제로 한다. 현재 잠금은 프로세스 내부 RLock이며 다중 게임 서버가 같은 월드를 동시에 쓰는 구조는 지원하지 않는다. PostgreSQL 설정 연결점은 있으나 이번 검증은 SQLite 기준이다. 수평 확장 전 DB 수준 락과 트랜잭션 경계·캐시 정책을 다시 설계해야 한다.
 
@@ -411,25 +385,25 @@ Room `requires.message`는 이동 실패 안내, optional `requires.observe_mess
 
 소지품과 보관 공간은 `item_id → quantity` 스택이다. `world.targets.stack_selector()`는 기존 DEFAULT/ALL을 재사용하고 inventory INDEX와 숫자 수량을 거절한다. `parse_relation()`이 `에게`/`에`/`에서`의 경계를 추출한 뒤 기존 selector와 room ordering으로 플레이어/상자 하나를 선택한다. 여러 플레이어·상자 동시 이전은 지원하지 않는다.
 
-`rules.move_item()`은 아이템의 명시적 `transferable` 정책, 보유 수량과 현재 equipment가 예약한 복사본 수를 검사한 뒤 source 차감·destination 증가·빈 스택 제거를 처리한다. 버려·줘·넣어·꺼내는 모두 이 규칙을 쓰며, `world.item_transfers.transfer()`가 기존 `world_change()`의 서버 잠금과 DB transaction 안에서 영속 소유자를 저장한다. 저장 실패 시 기존 DB/Evennia 캐시 rollback과 after_change 정책을 재사용한다. 마지막 공용 아이템의 두 요청도 같은 단일 서버에서 직렬 처리된다. 별도 거래/loot 권한 체계는 없다.
+`world.item_transfer_native`는 공통 Entity API/world_change를 사용해 사용자 버리기·give·personal/shared storage를 처리한다. operation policy를 유지하고 owner-changing transfer에는 root와 descendants의 transferable=true를 요구한다. 같은 owner 개인 보관은 ownership transfer가 아니므로 Boss unique는 개인 보관 가능, 공용 보관/give는 불가하다. 실패 시 row·profile·참조·회복과 Evennia 캐시를 rollback한다. legacy rules.move_item은 정상 gameplay SSOT가 아니다.
 
-공용 `Container.db.items`는 persistent shared storage다. `PersonalLocker`는 같은 world object를 보더라도 caller의 `profile.storage`만 읽고 쓴다. 두 객체는 지원동 1층 `storage_room`에 배치하며 bootstrap은 기존 DB 객체의 정적 이름·위치·alias만 동기화하고 contents를 초기화하지 않는다. 사용은 현재 Room의 실제 Container resolve를 따르며 Room ID gate를 두지 않는다. 기존 일회 조사 보급상자는 변경하지 않는다. 개인·공용 보관 용량과 nesting은 구현하지 않는다.
+공용 보관은 shared_storage/owner=Container인 ItemEntity, 개인 보관은 personal_storage/owner=Explorer인 ItemEntity다. PersonalLocker는 공간상의 서비스이며 아이템 owner가 아니다. 옛 Container.db.items/profile.storage는 archive이며 읽거나 쓰지 않는다. 두 객체는 지원동 1층 `storage_room`에 배치하며 bootstrap은 기존 DB 객체의 정적 이름·위치·alias만 동기화하고 contents를 초기화하지 않는다. 사용은 현재 Room의 실제 Container resolve를 따르며 Room ID gate를 두지 않는다. 기존 일회 조사 보급상자는 변경하지 않는다. 개인·공용 보관 용량과 nesting은 구현하지 않는다.
 
 밀림 신호전지는 `transferable=False`다. 다른 곳에 옮긴 뒤 수위 표식을 다시 조사하는 복제를 막기 위해 버려·줘·공용/개인 넣어 모두 차단한다. 회수부품과 보스 trophy는 반복 획득하거나 진행 flag로 판정하는 일반 물품이며 이동 가능하다. 직접 버린 물건과 corpse decay는 같은 DroppedLoot 생성 helper를 쓴다. 직접 버린 entry만 예약/배정 없이 protection_until=0으로 생성하고 기존 corpse 권한은 보존한다.
 
-equipment 슬롯은 `None`을 정상 값으로 허용한다. 해제/벗어는 소지 수량을 바꾸지 않으며 stats·상태·장비·전투 문장·웹 state에서 빈 슬롯을 처리한다. 맨손 공격은 기존 base attack과 성장 보정만 사용한다. migration은 명시적 None을 초기 장비로 되돌리지 않는다.
+native equipment row가 없으면 빈 슬롯이며 active_weapon은 None일 수 있다. 해제/벗어는 같은 Entity를 inventory로 옮기고 총 보유 수량을 바꾸지 않으며 stats·상태·장비·전투 문장·웹 state에서 빈 슬롯을 처리한다. 맨손 공격은 기존 base attack과 성장 보정만 사용한다. migration은 명시적 None을 초기 장비로 되돌리지 않는다.
 
 야전식량/정제수의 `consume_action`과 `heal`이 소비 행동과 고정 효과의 출처다. 비전투 중 하나만 사용하고 최대 HP에서는 소비하지 않는다. 플레이어 치료의 Rank·지혜 공식을 재사용하지 않는다. 모든 이전과 장비 해제도 비전투 중만 허용하며 줘의 받는 탐사자도 비전투 상태여야 한다. 웹은 서버의 remove_action/consume_action을 기존 텍스트 명령 버튼으로 전송한다.
 
 ## Region·임무·Gate 확장
 
-`world/content/starter.py`에는 기존 8개 Room/4종 Enemy의 stable ID를 보존한다. `deep_jungle.py`에는 7개 Room/4종 Enemy를 정의한다. `items.py`는 공통 아이템, `shops.py`는 세 상점의 item ID catalog만 담고 가격은 `items.py`의 value가 소유하며 `content/__init__.py`가 기존 `from world.content import ROOMS, ENEMIES, ITEMS` 경로를 유지한다. `REGIONS[region].rooms`는 각 지역 파일의 Room key에서 파생되므로 Room↔Region 소속을 두 곳에 입력하지 않는다. `ROOM_REGION`은 이 정의에서 파생된다. ID 충돌·참조 누락·출구 역방향·spawn 충돌은 `content.integrity.errors()`로 검사한다.
+`world/content/starter.py`와 `deep_jungle.py`는 지역 Room/Enemy stable ID를 보존한다. items.py/final_items.py는 최종 아이템·가격, shops.py는 5개 상점 schema, loot_v1.py는 독립 resource/consumable roll과 최대 하나의 special roll 및 별도 trophy를 정의한다. content/__init__.py는 ROOMS/ENEMIES/ITEMS export를 유지한다. Region membership은 Room key에서 파생하며 content integrity가 참조·alias·출구·spawn·확률·획득 경로를 검사한다.
 
-첫 지역 `dock`~`ridge`의 Room ID, `zone:enemy` spawn ID, 기존 아이템 ID를 바꾸지 않았다. `ridge` 북쪽에 밀림 입구를 연결했다. Spawn을 다른 Room으로 옮길 때는 새 Room의 `spawn_ids[enemy_id]`에 이전 stable tag를 명시하면 동일한 Enemy 객체와 HP를 유지한다. Room의 `requires`는 도착 시 필요한 임무 ID·진행 필드·거절 문구를 선언한다. `Explorer.at_pre_move()`는 이 데이터만 해석하며 지역 이름을 하드코딩하지 않는다. 통신탑은 발전기 복구, 밀림 입구는 첫 임무 보고, 연구구역 외곽은 밀림의 두 표식·신호전지를 확인한 신호 장치 가동을 요구한다. `exits`는 기존 `방향 → Room ID` 형태를 유지해 방향도·웹 버튼·서버 이동이 같은 정의를 읽는다.
+첫 지역 `dock`~`ridge`의 Room ID와 `zone:enemy` spawn ID를 보존한다. 최종 아이템 stable ID와 legacy source mapping은 [item-migration](item-migration.md)에 정의한다. `ridge` 북쪽에 밀림 입구를 연결했다. Spawn을 다른 Room으로 옮길 때는 새 Room의 `spawn_ids[enemy_id]`에 이전 stable tag를 명시하면 동일한 Enemy 객체와 HP를 유지한다. Room의 `requires`는 도착 시 필요한 임무 ID·진행 필드·거절 문구를 선언한다. `Explorer.at_pre_move()`는 이 데이터만 해석하며 지역 이름을 하드코딩하지 않는다. 통신탑은 발전기 복구, 밀림 입구는 첫 임무 보고, 연구구역 외곽은 밀림의 두 표식·신호전지를 확인한 신호 장치 가동을 요구한다. `exits`는 기존 `방향 → Room ID` 형태를 유지해 방향도·웹 버튼·서버 이동이 같은 정의를 읽는다.
 
 `world/quests.py`의 임무별 단계는 `flag/대상/의미 역할/설명`과 안내문으로 구성된다. 선행 임무 조건 `requires`와 시작 전 표시 여부 `visible_from_start`도 임무 정의가 소유하며, 안내 선택과 임무 화면은 이 정의를 순서대로 읽는다. profile은 `quests[quest_id][flag]`와 개인 일회 발견용 `discoveries[id]`를 저장한다. 조회 화면은 완료 임무를 한 줄로 압축하고 진행 임무의 완료·현재·대기 단계를 보여준다. 웹 `pz_state`는 현재 안내 외에 Region ID/이름을 전달한다. 실제 임무 행동은 `ActionObject` subclass와 순수 `rules` 함수가 처리하므로 임무 DSL이나 새 parser는 없다.
 
-`build_world()`는 Room 이름·설명, Exit 방향·별칭·목적지, 상호작용 객체 이름·별칭·위치, Enemy 이름·ID·최대 HP와 유휴 spawn 위치처럼 정적 정의가 소유하는 값을 동기화한다. 현재 HP는 유지하되 최대 HP가 낮아졌다면 새 최대치로 제한한다. Enemy의 교전 중 위치, state, respawn_at, claim, combatants, contribution, threat, round·timer·last_activity와 시체·바닥 전리품, 파티, 플레이어 profile·소지품·임무는 런타임이 소유하므로 초기화하지 않는다. 삭제된 관리 Exit/Interactable/spawn은 `stale_definitions()`로 보고하지만 자동 삭제하지 않는다. 실제 운영 DB에서 제거가 필요하면 상태와 참조를 확인한 뒤 별도 작업으로 정리한다. Region 3 추가 시 지역 정의, 필요하다면 작은 행동 subclass, 임무 정의 및 순수 규칙 함수를 더하고 무결성 검사를 통과시킨다.
+`build_world()`는 Room 이름·설명, Exit 방향·별칭·목적지, 상호작용 객체 이름·별칭·위치, Enemy 이름·ID·최대 HP와 유휴 spawn 위치처럼 정적 정의가 소유하는 값을 동기화한다. 이전 정의 기준 alive·full·idle(교전자 없음)이면 새 max HP 기준 full로 맞춘다. damaged idle/교전 중이면 current HP를 유지하고 새 max 이하로 clamp하며 Boss encounter scaling 참가자 상태를 보존한다. Enemy의 교전 중 위치, state, respawn_at, claim, combatants, contribution, threat, round·timer·last_activity와 시체·바닥 전리품, 파티, 플레이어 profile·소지품·임무는 런타임이 소유하므로 초기화하지 않는다. 삭제된 관리 Exit/Interactable/spawn은 `stale_definitions()`로 보고하지만 자동 삭제하지 않는다. 실제 운영 DB에서 제거가 필요하면 상태와 참조를 확인한 뒤 별도 작업으로 정리한다. Region 3 추가 시 지역 정의, 필요하다면 작은 행동 subclass, 임무 정의 및 순수 규칙 함수를 더하고 무결성 검사를 통과시킨다.
 
 밀림 신호전지는 두 번째 지역 임무 전용 열쇠다. 수위 표식은 문이 닫혀 있고 전지가 없을 때만 한 개를 지급하며, 신호 장치 가동은 조건을 모두 확인한 뒤 전지 한 개를 소비하고 gate_open을 기록한다. 철갑등짐승은 신호전지 대신 일반 회수부품을 확률적으로 남긴다. 이미 문을 연 개발 데이터의 잔여 전지는 bootstrap이나 profile 변환에서 임의로 삭제하지 않는다.
 
@@ -462,7 +436,7 @@ Room description은 지형·건축·분위기·지속되는 흔적, Environment�
 
 재시작 시 지난 deadline을 따라 최종 유효 구간까지 복구하고 과거 이벤트는 재생하지 않는다. 매우 긴 중단은 한 reconcile당 256회로 제한하고 이후 현재 시각에서 새 지속 구간을 시작한다. 이 제한을 넘는 중단은 세부 기상 이력을 재현하지 않는다. 변경은 기존 world_change transaction 안에서 저장하며 성공 후 callback으로 발행한다. 저장/외부 transaction 실패 시 상태와 알림을 되돌린다. 최종 weather 또는 period가 실제 달라진 zone의 **현재 session이 있는** 탐사자 중 해당 Room의 환경 표현이 달라진 사람에게만 1–2문장을 보낸다. 같은 날씨의 기간 갱신이나 매 sweep는 로그를 추가하지 않는다. 웹은 기존 sweep의 push_state(observed_at=now) 한 경로로 갱신한다.
 
-환경 데이터는 캐릭터에 저장하지 않는다. v6에서 추가한 개인 광원 상태는 최신 profile에서도 보존하며 타이머·점유·참여 보상·Corpse/DroppedLoot·파티 정책을 유지한다. LOS·날씨 API·조도 전파 엔진·환경 피해는 이 범위에 없다.
+환경 데이터는 캐릭터에 저장하지 않는다. 현재 개인 광원은 ItemEntity.state와 active_light 참조로 관리하고 legacy profile 광원 필드는 archive로 보존할 수 있지만 gameplay에서 읽지 않는다. 타이머·점유·참여 보상·Corpse/DroppedLoot·파티 정책은 해당 공통 서비스가 담당한다. LOS·외부 날씨 API·조도 전파 엔진·환경 피해는 제공하지 않는다.
 
 
 ## 관찰, 광원과 공용 시설
@@ -475,9 +449,9 @@ EnvironmentSnapshot은 viewer-independent 공용 환경이다. Room은 장소, O
 
 Light Source는 strength/range/power_type을, Power Source는 type/capacity_seconds를 선언한다. 호환성은 타입 일치로 판단하고 parser는 특정 battery ID를 분기하지 않는다. canonical 전원 삽입은 `<광원>에 <전원 소스> 넣어`이며 기존 parse_relation/stack_selector와 Store를 재사용한다. 예를 들어 `탐사용손전등에 고용량건전지 넣어`는 새 compatible 아이템 정의만 추가하면 같은 경로를 사용한다. 용량은 전원 정의가 소유하며 손전등 상수로 고정하지 않는다.
 
-v6부터 사용하는 `light_sources[item_id]`에는 on, power_source, charge_seconds, started_at을 저장한다. v1~v5 migration은 기존 inventory/equipment/storage/quest/growth/combat을 보존하고 빈 light_sources만 보완한다. 켠 동안의 잔량은 `charge_seconds - (now - started_at)`으로 투영한다. tick마다 차감·저장하지 않고 소진 때 한 번 off/0/전원 없음으로 확정한다. 꺼짐·마지막 session 종료·정상 서버 종료에는 잔량을 확정하며 오프라인 동안 사용하지 않는다. 강제 종료로 마지막 종료 hook이 실행되지 않으면 재시작에서 off로 정규화하며 종료 전 정확한 잔량은 보장하지 않는다.
+광원 runtime SSOT는 ItemEntity.state의 power_type/remaining_power/enabled/started_at과 Explorer의 active_light UUID다. ON 잔량은 읽기 전용 projection이며 OFF·소진·이동·logout/shutdown에서 정산한다. 옛 profile light_sources는 legacy upgrade 입력이며 gameplay fallback이 아니다. [현재 광원 계약](lighting-firearms.md)을 따른다.
 
-전원 삽입은 inventory 차감과 장치 상태 설정을 world_change transaction에 함께 저장한다. 잔량이 남은 전원은 교체를 거절하고 부분 충전 아이템 회수는 제공하지 않는다. stack 모델에서 마지막 광원을 이전하면 내부 전원은 폐기하고 안내한다. lighting.discard_device_state_if_unowned는 일반 전달·버리기·컨테이너 보관·판매가 마지막 복사본을 잃을 때 light_sources를 제거하는 공통 소유권 규칙이다. 판매 후 재구매해도 과거 전원/잔량은 부활하지 않는다. 여분 복사본만 이전할 때는 개인 active 상태를 보존한다. 전원/광원 일반 아이템의 이동 및 기존 장착·임무 아이템 보호는 공통 transfer 규칙을 유지한다.
+전원 삽입은 battery Entity 수량 차감과 flashlight Entity state 변경을 같은 world_change에 저장한다. 잔량이 남으면 교체를 거절하며 부분 전원 회수는 없다. 이동 시 광원은 OFF/참조를 정리하고 잔량을 보존한다. 소실 row의 전원은 함께 사라진다. Legacy 마지막 복사본의 light_sources 제거는 historical adapter 계약이며 native instance 상태와 혼합하지 않는다.
 
 공용 시설은 WorldLifecycle의 별도 `db.facilities = {"version": 1, "states": {"outpost_power": bool}}`에 저장하며 개인 generator_fixed에서 추론하지 않는다. `content/facilities.py`의 FACILITIES는 ID/초기값, Room `facility_lights`는 조명 연결, 저장 state는 현재 on/off를 소유한다. FACILITY_STATE_VERSION과 순수 new/normalize helper는 legacy bare dict의 True를 보존하고 None/빈 값에 기본값을 보완한다. 지원하지 않는 미래 버전은 오류로 중단하며 덮어쓰지 않는다. light_for 조회는 정규화 사본만 읽고 lifecycle/mutation transaction에서만 변환을 저장한다. 조명은 양수 strength와 always_on/power 중 정확히 하나를 선언한다.
 
@@ -503,7 +477,7 @@ Room `hints`는 stable INTERACTABLES ID/action 또는 일반 text를 참조한�
 | Manual Browser | 표시·버튼/명령 동등성·반응형·실제 OS IME를 필요한 범위에서 확인 | 자동 통과로 IME를 대체하지 않음 |
 | Auth/Registration policy | 공개 가입·이름/암호·production throttle 정책 | gameplay smoke의 선행 조건으로 사용하지 않음 |
 
-`world/timing.py`가 production 2.5/30/15/120/15/15/15초 기본값을 갖고 `world.multiplayer`는 선택적인 `PRIMAL_*` settings를 읽는다. `settings_test`는 타이머를 줄이지 않는다. `server/conf/smoke_support.py`의 Quick 값은 0.25/1/1/2/2/2/2초이며 Full은 production 기본값을 그대로 쓴다. 기존 적·캐릭터·Corpse의 실제 `delay()` 및 WorldLifecycle의 5초 sweep을 재사용한다. fake Clock나 새 scheduler framework를 만들지 않았다.
+`world/timing.py`가 production 2.5/30/15/120/15/15/15초 기본값을 갖고 `world.multiplayer`는 선택적인 `PRIMAL_*` settings를 읽는다. `settings_test`는 타이머를 줄이지 않는다. `server/conf/smoke_support.py`의 Quick 값은 2.5/10/2/20/15/15/2초이며 Full은 production 기본값을 그대로 쓴다. Quick에서 점유/참여 만료는 관찰 대상이 아니므로 production 15초를 유지하고 DB/state 전송 지연으로 유효 참가자가 지워지는 false timeout을 막는다. Quick의 outsider 거절/부분 pickup 요청은 병렬 전송해 불필요한 두 command 왕복을 피한다. 공동 전투는 2.5초 공격 간격으로 실제 join/state 전송 전에 한 명만 처치하는 race를 막고, 시체는 10초 관찰 창을 확보한다. 기존 실제 `delay()` 및 WorldLifecycle의 5초 sweep을 재사용하며 fake Clock나 새 scheduler framework는 없다.
 
 `scripts/smoke_harness.py`는 실행마다 새 작업 경로에 게임 코드/새 SECRET_KEY·SQLite를 준비하고 `smoke_setup.py`를 별도 프로세스에서 실행한다. DB 접근 전 marker·정확한 작업/DB 경로·SQLite engine을 검증한다. 사용자 PostgreSQL 환경은 제거한다. Smoke 전용 SQLite는 Portal+Server 재시작 중 읽기→쓰기 승격 경합을 막도록 IMMEDIATE transaction과 30초 busy timeout을 사용한다. 일반 플레이 DB 설정은 바꾸지 않는다. 정상 Evennia Account/Character API로 일반 fixture 계정을 만들고 기본 quest/파티/전투/시작 위치와 구매 자금/HP를 준비한다. 비밀번호는 runtime 메모리와 자식 stdin으로만 전달한다. 결과 장비/시체는 scenario의 실제 동작으로 생성한다.
 
@@ -520,4 +494,75 @@ runtime at_dock/global SHOP/EXCHANGE/교환 구매 flag 및 client service zone 
 
 Full만 `scripts/smoke_closeout.py`를 이어 실행한다. 공용/개인 보관, 정산·훈련·Doctor/Bed, 세 상점과 장착, 일반 귀환·실제 적 패배, 발전기 부품 소비·첫 보고, 밀림 표식/신호전지/gate·두 보스를 actual parser/DB/scheduler/WS로 검증한다. Snapshot은 marker/path/SQLite guard 이후 격리 DB에서 읽기만 하며 비밀번호를 조회하지 않는다. Quick은 기존 공동 사냥 1회와 빠른 연결 검증 범위를 유지한다.
 
-Restart는 harness가 소유한 foreground Portal과 Server를 모두 종료하고 같은 DB·설정·포트로 다시 시작한다. 새 migrate/fixture/reset은 하지 않는다. restart 동안만 기존 health monitor를 유예하고 readiness 실패/종료 오류는 그대로 실패한다. 재인증 후 캐릭터 DB ID·위치·home=dock·성장/임무/방문·보관, party membership, 승강기 3층·공용 상자·시설·환경 clock을 비교한다. live combat/claim은 정리되고 남은 시체 deadline과 respawn은 실제 callback/sweep으로 완료되며 전리품 entry는 ground에 보존된다. 광원은 기존 마지막 session/restart의 off 정책을 따르므로 지속 점등을 기대하지 않는다.
+Restart는 harness가 소유한 foreground Portal과 Server를 모두 종료하고 같은 DB·설정·포트로 다시 시작한다. 새 migrate/fixture/reset은 하지 않는다. restart 동안만 기존 health monitor를 유예하고 readiness 실패/종료 오류는 그대로 실패한다. 재인증 후 캐릭터 DB ID·위치·home=dock·성장/임무/방문, party membership, 승강기 3층·시설·환경 clock을 비교한다. Native player equipment/personal storage와 공용 상자는 실제 ItemEntity UUID·수량·sequence·canonical 위치/tree를 snapshot으로 비교하며 archive의 빈 equipment/storage/db.items를 보존 근거로 사용하지 않는다. Loot도 native source_entries를 읽는다. live combat/claim은 정리되고 남은 시체 deadline과 respawn은 실제 callback/sweep으로 완료되며 전리품은 ground에 보존된다. 광원은 기존 마지막 session/restart의 off 정책을 따르므로 지속 점등을 기대하지 않는다.
+
+## Historical Phase 1~5 implementation notes
+
+아래는 당시 구현 범위와 결정의 기록이다. 현재 backend·가격·획득·설치 판단은 위 현재 계약과 final-content/item-migration을 따른다. 당시의 미구현·후속 단계 표현은 현재 미구현 상태를 뜻하지 않는다.
+
+## Phase 5 출입증·접근·거래 경계
+
+Quest state는 entitlement/진행 이력이고 실제 access authority는 Credential ItemEntity다. Room access는 availability와 개인 credential을 읽기 전용 can_enter로 검사한다. legacy/native backend와 관계없이 credential_service가 지급·재발급을 소유하고 pure rules의 보상과 profile 저장을 outer world_change로 묶는다. 임무 완료만으로 입장시키거나 profile inventory에 출입증을 복제하지 않는다.
+
+Shopkeeper는 공간상의 서비스 제공자이며 Entity 재고 owner가 아니다. shop_service가 purchase_catalog/accepts를 분리하고 source/sink 거래를 처리한다. 일반 legacy 거래·소각은 profile adapter, native 거래·소각은 ItemEntity API를 사용한다. Legacy의 추가 Entity 소지품 표시는 Credential에만 한정한다. 공통 수량 parser와 destroy_quantity는 부분 stack identity를 유지한다. 기존 lock·reference·회복·LootClaim/화폐 경계를 대체하지 않으며 가격·콘텐츠 전체/migration/cutover는 Phase 6에 남긴다. 자세한 API·모든 이동 경로 조사표는 [출입증·접근·상점](credentials-access-shops.md)을 따른다.
+
+## Phase 4 전리품 권리·화폐 (2026-10-06)
+
+Corpse/DroppedLoot는 공간 owner이며 실물은 ItemEntity, root 권리는 LootClaim, 보급칩은 CurrencyLoot와 player별 CurrencyLootShare다. 0인 share도 원래 요청 자격을 보존한다. 만료 조회는 읽기 전용이고 lifecycle에서 해당 source의 expired claim을 삭제한다. 부분 회수는 source claim 유지→claim 없는 split→inventory 이동/merge이며 전체 회수는 identity/sequence를 유지한다. decay는 tree·권리·화폐 share·보호 기한을 보존한다.
+
+`loot_service → LootSourceSnapshot/LootEntrySnapshot → 기존 권리/payout helper·command·presentation` 경계다. owner→UUID→claim/currency/share lock과 mutation은 persistence 계층에 있고 pure rules에 ORM을 넣지 않는다. generic merge도 root 배정 단위와 권리를 비교한다. 화폐 quantity·share·모든 recipient credits는 기존 world_change 하나에서 처리한다.
+
+현재 사냥과 기존 blob은 legacy SSOT를 유지한다. 신뢰된 native 생성만 새 모델을 선택하며 dual-write/lazy conversion은 없다. backend가 다른 실물 recipient로는 자동 변환하지 않는다. inventory/storage·world blob의 명시적 전체 migration/cutover는 Phase 6이다. 모델·API·기존 필드 대응·해석·검증 공백은 [전리품 권리](loot-claims.md)를 따른다.
+
+## Phase 3 광원·총기 (2026-10-06)
+
+`lighting_service/firearm_service → LightSnapshot/FirearmSnapshot/MagazineSnapshot/EquipmentSnapshot → pure rules/visibility/presentation` 경계로 연결한다. ORM은 persistence service에만 두며 rules/progression/modifier 계산에 넣지 않는다. flashlight power(초)/enabled와 magazine rounds는 ItemEntity.state가 단일 SSOT다. 총기는 rounds를 중복 저장하지 않고 inside/socket=magazine child를 조회한다. active_weapon과 active_light는 실제 Entity UUID 참조이며 같은 item transaction에서 reconcile한다.
+
+ON 잔량은 읽기 전용 projection이고 정상 관찰에서는 저장하지 않는다. switch/OFF/소진/이동/삭제/logout/shutdown에서 상태와 참조를 원자적으로 정리한다. source/destination/parent root의 Explorer owner를 ID 순으로 잠그고 전체 관련 UUID를 모아 잠근다. split/merge도 owner→UUID 순서를 사용한다. 총기 socket은 parent lock과 조건부 DB unique로 보호한다. 중앙 update_item_state는 full_clean/save를 적용하며 user load/unload는 명시적 root policy다.
+
+pure 전투 outcome의 shot_fired와 실제 magazine 감소를 기존 world_change에 묶는다. 빈 firearm은 공격 기회만 사용하고 mental/cooldown commit 전에 반환한다. 성공한 combat reload는 다음 기회 하나를 대체하며 no-op/실패는 기회를 유지한다. legacy firearm은 기본 ammo-free 계약을 유지한다. shared enemy HP·전리품 권리·성장·Defense V1·기존 가격은 바꾸지 않는다.
+
+legacy lighting은 기존 light_sources를 단일 adapter 경계에서 LightSnapshot으로 제공한다. profile inventory/equipment/storage/light_sources, Container.db.items와 Corpse/DroppedLoot legacy data의 SSOT는 Phase 6까지 유지한다. 명령으로 backend 선택/lazy migration/dual-write를 하지 않는다. 최종 V1 콘텐츠와 shop/drop wiring은 적용하지 않았다. 실제 API·명령·state·검증·Phase 4 운반 구조는 [광원·총기](lighting-firearms.md)를 따른다. 아래 과거 단계에서 광원/총기를 후속 단계라고 한 설명은 당시 범위다.
+
+## Phase 2 장비·Modifier·Defense (2026-10-05)
+
+현재 장비 계산은 `equipment_service → EquipmentSnapshot → equipment/modifiers/rules/recovery/presentation` 경계로 연결한다. ORM은 service에 있고 rules/progression/recovery의 계산은 DB·Evennia와 독립적이다. profile version은 10이다. 아래 과거 구현 설명의 고정 방어와 두 legacy 장비 slot은 이번 단계의 최종 계산·slot 계약보다 우선하지 않는다.
+
+Entity 장비는 equipment/Explorer/최종 slot에 저장하며 손 capacity2·반지2·나머지1과 손 조합을 검사한다. 주무기는 Explorer Attribute의 ItemEntity UUID 참조이며 공통 create/move/delete transaction 안에서 자동 선택·승계·제거한다. 장비 변경은 옛 recovery rate 정산 → 새 위치/주무기/snapshot → 새 max/rate 계산 → current clamp → 저장 순서다. 자원 무료 회복과 자동 장비 교체는 없다.
+
+기존 플레이어의 profile 장비 SSOT는 Phase 6까지 유지한다. 제거 가능한 `equipment_legacy` 단일 adapter가 weapon→hands, armor→body와 수치→modifier를 연결한다. 명시적으로 선택한 backend 한 곳만 쓰고 hidden migration/dual-write하지 않는다. stats/combat/recovery/presentation/Web는 공통 snapshot을 사용한다. legacy 이전·판매의 장착분 예약 direct-read만 해당 저장 shape와 함께 후속 단계에 남긴다.
+
+Modifier는 구조화된 target/op/value/scope의 add 합산·multiply 곱·clamp 계약이다. Defense V1은 `raw*20/(20+defense*(1-penetration))*(1-defense_skill_reduction)`이며 양방향 공통 helper에서 마지막에 int 내림·최소1을 적용한다. 성장·콘텐츠 수치는 유지한다. 상세 slot/selector/참조/기술·회복 적용/Phase 6 제거 경계는 [장비 설계](equipment.md), ItemEntity 불변조건은 [영속 기반](item-entities.md)에 기록한다.
+
+## ItemEntity 기반 1단계
+
+`world.item_entities` Django 앱이 독립 실물 아이템 row·전역 순번·canonical 위치·스택·부모 트리·원자적 API를 제공한다. 정적 정의는 기존 ITEMS registry다. 기존 gameplay의 profile/Attribute 저장은 아직 전환하지 않고 새 row와 이중 쓰기를 하지 않는다. profile version은 10이다. 장비·modifier·Defense는 Phase 2 서비스에 연결했고 총기 상태·LootClaim·화폐·Credential·전체 저장 변환은 후속 단계다. DB/application 제약, API와 migration 적용 경계는 [ItemEntity 기반](item-entities.md)을 따른다.
+
+
+### Historical profile/blob·초기 경제·광원 경계
+
+`world/loot_assets.py`의 읽기 전용 normalize_entry는 legacy {item, quantity}를 {kind: item, id, quantity}로 해석한다. 새 currency entry는 kind=currency·id=credits·quantity·eligible_players·remaining_shares와 공통 reservation/protection_until을 가진다. 초기 PR의 shares는 읽을 때 원래 key를 eligible_players로, 양수 몫을 remaining_shares로 해석한다. 입력을 변경하지 않고 반복 normalize도 안정적이며 새 저장은 분리된 구조를 사용한다. 상세 보기·Web·회수·decay가 이 계층을 공유하며 조회로 DB를 다시 쓰지 않는다.
+
+`rules.reward_allocation(amount, groups)`는 그룹 기여도 비례 → 파티 내부 균등 → deterministic 최대 나머지법으로 총량을 보존한다. XP는 처치 transaction에서 즉시 지급하고 enemy.currency는 그룹별 currency entry로 저장한다. eligible_players는 처치 시점 적격 참여자 snapshot으로 파티 변화·로그아웃과 무관하게 고정된다. remaining_shares는 아직 지급하지 않은 금액만 담는다. 보호 중 루팅 요청자는 protected distribution을 trigger할 자격을 가질 뿐, 자신의 remaining share가 0이라는 이유로 자격을 잃지 않는다. currency_payouts는 remaining_shares만 weight로 부분 지급한 뒤 몫과 quantity를 차감하며 0인 몫은 제거한다. 실제 지급은 session 없이도 persistent Explorer에 저장하며 수령 객체가 없으면 전체 transaction을 rollback한다. 다른 그룹 entry는 남는다. 보호 만료 후에는 남은 금액을 caller에게 지급하며 과거 자격/몫을 적용하지 않는다. 시체 decay는 quantity·eligible_players·remaining_shares·reservation·보호 deadline을 바닥으로 그대로 옮긴다.
+
+ITEMS[*].value만 상품 가치와 구매가를 소유한다. SHOP_CATALOGS는 item ID tuple, Shopkeeper는 shop_id와 catalog의 취급 사실만 소유한다. purchase_price와 resale_price(value//2, 최소 1)가 가격을 계산한다. 가치/판매는 기존 구매의 seller selection·safe/peace/perception 정책을 재사용한다. 판매는 move_item의 transferable·장착 복사본 reservation을 사용하며 일반 판매에 수량 N개 문법은 추가하지 않는다. Web 기본 판매도 1개이며 판매 가능한 복사본이 2개 이상일 때만 별도 모두 판매와 총액(장착분 제외 수량 × 매입가)을 제공한다. value 없는 임무/resource는 매매하지 않는다.
+
+보급칩은 유일한 구매 currency, scrap은 material/resource다. `profile.inventory["scrap"]`와 개인 storage의 기존 저장 형식을 유지하며 migration·자동 환전은 없다. 적 전리품·이전·보관 정책과 발전기의 부품 3개 소비를 보존한다. `world/content/economy.py`의 `SALVAGE_CREDIT_RATE=10`은 정산율 SSOT다. 기존 장비용 EXCHANGE 정의/export와 구매 flag를 제거하고 `rules.buy(profile, shop_id, item_id)`는 6단계 SHOP_CATALOGS의 품목을 확인하고 ITEMS[item_id].value에서 보급칩 가격을 조회한다. 5단계 당시 부두 임시 상점은 6단계에서 실제 Shopkeeper로 대체됐다.
+
+`world/content/shops.py`의 `SHOP_CATALOGS`는 취급 품목만, `ITEMS[*].value`는 가격만 소유한다. 보급품 5종·무기 5종·방어구 4종의 기존 14개 가격을 모두 보존한다. `rules.buy(profile, shop_id, item_id)`는 비전투·유효 catalog·해당 상품·보급칩 충분 여부를 전부 검증한 뒤 credits와 소지품을 함께 변경한다. scrap 정산·임무 소비·전리품·기술 가격·패배 패널티는 변경하지 않는다. 무한 재고로 매번 1개만 판매한다.
+
+`rules.move_item()`은 아이템의 명시적 `transferable` 정책, 보유 수량과 현재 equipment가 예약한 복사본 수를 검사한 뒤 source 차감·destination 증가·빈 스택 제거를 처리한다. 버려·줘·넣어·꺼내는 모두 이 규칙을 쓰며, `world.item_transfers.transfer()`가 기존 `world_change()`의 서버 잠금과 DB transaction 안에서 영속 소유자를 저장한다. 저장 실패 시 기존 DB/Evennia 캐시 rollback과 after_change 정책을 재사용한다. 마지막 공용 아이템의 두 요청도 같은 단일 서버에서 직렬 처리된다. 별도 거래/loot 권한 체계는 없다.
+
+`world/content/starter.py`에는 기존 8개 Room/4종 Enemy의 stable ID를 보존한다. `deep_jungle.py`에는 7개 Room/4종 Enemy를 정의한다. `items.py`는 공통 아이템, `shops.py`는 세 상점의 item ID catalog만 담고 가격은 `items.py`의 value가 소유하며 `content/__init__.py`가 기존 `from world.content import ROOMS, ENEMIES, ITEMS` 경로를 유지한다. `REGIONS[region].rooms`는 각 지역 파일의 Room key에서 파생되므로 Room↔Region 소속을 두 곳에 입력하지 않는다. `ROOM_REGION`은 이 정의에서 파생된다. ID 충돌·참조 누락·출구 역방향·spawn 충돌은 `content.integrity.errors()`로 검사한다.
+
+v6부터 사용하는 `light_sources[item_id]`에는 on, power_source, charge_seconds, started_at을 저장한다. v1~v5 migration은 기존 inventory/equipment/storage/quest/growth/combat을 보존하고 빈 light_sources만 보완한다. 켠 동안의 잔량은 `charge_seconds - (now - started_at)`으로 투영한다. tick마다 차감·저장하지 않고 소진 때 한 번 off/0/전원 없음으로 확정한다. 꺼짐·마지막 session 종료·정상 서버 종료에는 잔량을 확정하며 오프라인 동안 사용하지 않는다. 강제 종료로 마지막 종료 hook이 실행되지 않으면 재시작에서 off로 정규화하며 종료 전 정확한 잔량은 보장하지 않는다.
+
+전원 삽입은 inventory 차감과 장치 상태 설정을 world_change transaction에 함께 저장한다. 잔량이 남은 전원은 교체를 거절하고 부분 충전 아이템 회수는 제공하지 않는다. stack 모델에서 마지막 광원을 이전하면 내부 전원은 폐기하고 안내한다. lighting.discard_device_state_if_unowned는 일반 전달·버리기·컨테이너 보관·판매가 마지막 복사본을 잃을 때 light_sources를 제거하는 공통 소유권 규칙이다. 판매 후 재구매해도 과거 전원/잔량은 부활하지 않는다. 여분 복사본만 이전할 때는 개인 active 상태를 보존한다. 전원/광원 일반 아이템의 이동 및 기존 장착·임무 아이템 보호는 공통 transfer 규칙을 유지한다.
+
+### Historical profile normalization boundary
+
+아래는 성장/profile 호환을 설명하던 당시 기록이다. 현재 full-world item migration 경로는 위 explicit maintenance 계약을 따른다.
+
+profile의 최신 버전은 10이다. v9 이하는 여덟 기술의 기본 Rank와 재투자 가능 훈련으로 정규화하며 자세한 성장 호환은 [성장 설계](progression.md)를 따른다. v1/v2의 개인 encounter 제거·전투 입력 필드·성장 기본값 변환을 거친 뒤, v1~v3의 첫 임무 boolean을 `quests.radio_tower`의 진행 필드로 옮긴다. `cache_claimed`는 `discoveries.supply_cache`로 옮긴다. v1~v4에는 개인 보관 `storage={}`의 기본값을 추가한다. XP, HP, credits, inventory, equipment(명시적 None 포함), kills, 완료 여부와 visited 및 개인 전투 상태를 유지한다. 이미 받은 보상은 재지급하지 않는다. v1~v5에는 개인 광원 `light_sources={}`, v1~v6에는 개인 줄임말 `command_shortcuts={}`를 보완한다. v8 이하에는 현재 최대 정신력과 빈 recovery_effects를 추가하며 timestamp는 첫 mutable accrue에서 초기화한다. migration은 시간을 조회하지 않고 profile_snapshot은 사본만 변환한다.
+
+변환은 기존 프로필의 복사본에서 첫 임무·보급 boolean을 새 구조로 옮기고 오래된 key를 제거한다. 기존 플레이어는 현재 레벨에 해당하는 포인트를 즉시 사용할 수 있고, 무료 기본 기술 Rank 1과 미투자 특성은 기존 전투 성능을 유지한다. Party·Enemy·Corpse·DroppedLoot는 profile 밖에 있으므로 migration이 수정하지 않는다. 기존 DB의 로드 시 점진적으로 변환하며 DB 삭제·교체는 필요 없다. 위의 서버 재시작/재접속 전투 정리 정책과 migration 자체의 보존 정책은 별개다.
