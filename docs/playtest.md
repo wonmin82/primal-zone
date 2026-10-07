@@ -2,6 +2,96 @@
 
 이 문서는 각 작업 시점의 historical validation record를 포함한다. 과거 미실행·미구현 기록은 당시 사실이며 현재 구현은 [architecture](architecture.md), [final-content](final-content.md), [최신 작업 상태](CODEX_TASK_STATE.md)를 따른다.
 
+## PR #36 문서 마감·병합 준비 (2026-10-07)
+
+최신 원격 확인에서 main은 `52fa4d5813dffcfd6fed08013c69001e62a9b0d0`, PR HEAD는 `9ad163dc4d0502337c160c3000ec6e6dfb88b74e`이며 main 포함·tree clean·MERGEABLE/CLEAN·review thread0개다. 사용자가 병합과 소스 브랜치 삭제를 요청했다.
+
+직전 문서 HEAD의 [CI37612069275](https://github.com/wonmin82/primal-zone/actions/runs/37612069275)는 exact SHA 일치·check 성공·pure204개/1.085초·integration582개/291.589초(runner297.829초)·Quick47.980초 성공이다. 아래 local/actual 성공·실패 이력을 유지하며 이번 문서-only 마감에서는 실행 코드가 같아 local regression/Full을 반복하지 않는다. 문서 링크·fence·`git diff --check`를 확인하고, 마감 commit 및 병합 main의 새 CI와 병합 결과는 PR Validation에서 별도 확인한다.
+
+개발 DB의 SHA256 `B1318296F505B9B7522FCBDEDFF7642A06CF055E9DE72802198C70E6B8A7F700`, size733184, mtime_ns1790080153765082800이 이전 기록과 같음을 재확인했다. 실제 플레이 DB migration·PostgreSQL·Phase 7C·balance tuning은 실행하지 않는다.
+
+## PR #36 — Offline Guard / Corpus Evidence Review Fix (2026-10-07)
+
+시작 HEAD `6fe5541201a4303b591f080c524a9bcaa028301e`, 기존 Phase 7B branch/PR만 수정한다. 아래 실행은 저장소 `.venv` Python 환경을 사용했다. 기존 PID + process-local SESSIONS 검사는 Windows의 다른 Evennia process 정지를 증명하지 못한 P1 검증 한계였다. 현재 구현은 같은 환경의 launcher AMP structured status와 orphan process 보조 검사로 fail closed한다. IME 사용자 수동 확인은 유지하며 자동 재검증하지 않았다.
+
+| 새 실행 / 관찰 | 실제 결과 |
+| --- | --- |
+| `scripts/dev.py test tests.test_item_migration.MigrationOfflineGuardTests --parallel 2 --reverse` | 초기 guard7개/2.652초(runner15.535초) 성공. 이후 connection refusal/timeout 구분 회귀1개 추가 |
+| `scripts/dev.py test tests.test_item_migration tests.test_legacy_corpus --parallel 2 --reverse` | 37개/45.479초(runner56.457초) 성공. source rollback/sequence/ledger/retry 기존 회귀 유지 |
+| `scripts/phase7b.py offline-guard`, #1 `full-z61ijgzb` | 실제 running apply/cutover 거절·DB snapshot 불변 성공. 정상 stop 후 기본 AMP connect2초가 timeout되어 offline acceptance 실패. 실패 DB/로그 보존·owned process cleanup·개발 DB 불변 |
+| 동일 actual guard #2 `full-c0t7e6c6` | AMP RUNNING과 apply/cutover 거절 성공. 정상 stop 뒤 `TimeoutError`를 명시적으로 확인. 이 오류를 offline으로 허용하지 않고 보존 |
+| 동일 actual guard #3 `full-0awmg6e5` | probe connect만10초/child30초로 제한 후69.828초 성공. PID 파일 없음, AMP Portal/Server RUNNING, apply exit1(5.403초), cutover exit1(6.398초), 전체 source/legacy·ledger·sequence·runtime 불변. Normal stop의 owned exit0·명시적 connection refused·process 정지·같은 settings guard 통과·read-only 확인. 성공 fixture cleanup/evidence export 완료 |
+| `scripts/dev.py test tests.test_item_migration.MigrationOfflineGuardTests tests.test_legacy_corpus --parallel 2 --reverse` | 최종 guard9개+corpus4개, 총13개/42.412초(runner56.984초) 성공. AMP 응답 없는 child 자체 종료 회귀 포함 |
+| 최종 probe actual guard #4 `full-v88bfgea` | connect10초/AMP reply12초/outer30초의 최종 코드로71.831초 성공. PID 없음·AMP 두 process RUNNING·apply exit1(7.171초)/cutover exit1(6.846초)·DB snapshot 불변·정상 stop/guard 통과/read-only·owned cleanup·개발 DB 불변 |
+| 첫 review `scripts/dev.py test --parallel 2` | Pure204개/2.821초·integration581개/509.610초 case 모두 OK. Concurrent targeted runner와 Windows clone 임시 파일 정리 충돌로 teardown `default_1.sqlite3` FileNotFoundError, 전체 exit1/outer527.108초. 성공 실행으로 처리하지 않고 로그 보존. Test runner를 순차 실행하여 재검증 |
+| 최종 review `scripts/dev.py check` / `scripts/dev.py test --parallel 2` | Check 성공. 순차 runner의 pure204개/2.724초·integration582개/470.025초(runner481.454초, setup8.185초/teardown0.001초), outer486.823초/exit0·failure0/error0. 앞선 teardown 실패는 위에 보존 |
+| `scripts/phase7b.py valid` | `full-9kankv09`: CLI 전체·apply2/read-only/corruption guard·cutover 성공. Post-cutover actual9개/73.100초 성공. Source11/ledger11/sequence55/runtime1 |
+| `scripts/phase7b.py warning` | `full-1p_hwaom`: 예상 recovery warning·미승인 cutover 거절/state 불변·승인 cutover 성공. Source11/ledger11/sequence55/runtime1 |
+| `scripts/phase7b.py invalid` | `full-sfk13ydz`: initial safe failure→unknown만 제거→failed source retry→verify/cutover 성공. Failure 파일 runtime0/ledger10/sequence46, final after 파일 runtime1/ledger11/sequence55. 파일 전체와 마지막 inspect 일치. 세 corpus coordinator 합580.991초이며 각 실행 결과를 합산 test count로 사용하지 않음 |
+
+Invalid after 파일이 repair 전에 저장되던 P3는 초기 실패 evidence와 최종 after evidence를 분리해 수정한다. 파일 전체와 최종 inspect equality/runtime1을 coordinator가 실제 run에서 검사한다. 아래 기존 Phase 7B 성공·실패 기록은 소급 변경하지 않는다. 세 actual CLI는 성공 fixture를 정리하고 evidence만 export했다. 최종 full/check는 위에 새 실행으로 기록했으며 exact-head CI는 마감 결과에 구분한다. Local Full은 common Harness/gameplay/smoke 코드가 그대로여서 기존628.071초를 재사용하며 새 실행으로 표현하지 않는다. 실행 코드 HEAD `12fe5a63d6b04e0bae71004e84c7e01db7115f39`의 [CI37610891382](https://github.com/wonmin82/primal-zone/actions/runs/37610891382)는 check·pure204개/1.139초·integration582개/317.248초(runner323.997초)·Quick52.696초 성공이다. CI head SHA가 해당 코드 HEAD와 같음을 확인했다. 이후 문서만 마감하며 그 최종 HEAD의 정확한 CI는 PR Validation/최종 보고에 별도로 기록한다. 이전 코드 HEAD 성공을 최종 문서 HEAD로 대신하지 않는다.
+
+## Phase 7B 통합·legacy 호환성 검증 (2026-10-07)
+
+Base `52fa4d5813dffcfd6fed08013c69001e62a9b0d0`, branch `codex/phase7b-integration-legacy-validation`. [실제 Chrome/독립 session 관찰 표](phase7b-integration-validation.md)와 [Canonical corpus 구성·재현](phase7-legacy-migration-corpus.md)을 연결한다. 아래는 이번에 실행한 결과이며 이전 Phase 수치와 합산하지 않는다.
+
+| 실제 실행 | 결과 |
+| --- | --- |
+| `scripts/dev.py test tests.test_item_migration.MigrationOfflineGuardTests --parallel 2 --reverse` | 수정 전1ERROR AttributeError(0.778초/runner11.408초), 실제 API 수정 후1PASS(0.474초/runner11.047초) |
+| `scripts/dev.py test tests.test_legacy_corpus tests.test_item_migration --parallel 2 --reverse` | 31개 중 새 invalid corpus fixture의 runtime row 누락1ERROR(63.959초/runner78.429초). 기존 migration 회귀 성공 |
+| `scripts/dev.py test tests.test_legacy_corpus --parallel 2 --reverse` | fixture update_or_create 보정 후4개/40.261초(runner54.572초) 성공 |
+| `scripts/dev.py test --parallel 2` | Full harness 보정 전: pure203개/3.018초, integration574개/544.461초, integration runner557.961초(Setup9.067초/Teardown0.007초). 실패0/error0 |
+| `scripts/dev.py check` | 성공. 신규 scripts 직접 ruff 검사도 성공 |
+| `scripts/dev.py smoke` |84.846초 성공, corpse9.504초/config10·respawn11.349초/config12·protection20.335초/config20 |
+| `scripts/phase7b.py valid` | 실제 SQLite management CLI dry/apply/verify/cutover·read-only·apply2·corruption guard 성공, source11/ledger11/sequence55/runtime1. Cutover 후 실제 네 session gameplay48.015초 성공 |
+| `scripts/phase7b.py warning` | missing equipment recovery warning, 승인 없는 cutover 실패/state 불변, accept-warnings 후 성공 |
+| `scripts/phase7b.py invalid` | unknown item source 실패·다른10source 완료·미완료 source item/ledger/sequence 오염 없음, 해당 source만 정상화해 retry 성공 |
+| `scripts/phase7b.py multiplayer` | 최종275.979초 성공, 네 Boss scaling/XP·late join·leave·party lifecycle·respawn reset |
+| `scripts/phase7b.py loot` |119.381초 성공, partial physical·zero-share/offline currency·corpse→ground·120초 expiry outsider |
+| `scripts/phase7b.py items` |41.845초 성공, empty firearm 기회/정신력/cooldown·highest reload9·loaded burn 거절·잔탄9 파괴·portable light one-ON |
+
+위 명령의 Python executable은 `.\.venv\Scripts\python.exe -X utf8`다. 첫 전체 성공 뒤 독립 E2E helper·성공 evidence cleanup·문서만 추가할 때는 suite를 반복하지 않았다. 이후 실제 Full harness 결함이 새로 발견돼 실패 회귀와 수정 후 최종 full suite를 다시 실행하며 결과를 아래에 구분한다. 첫 pure+integration reported duration은547.479초이고 별도 측정하지 않은 전체 launcher duration을 만들지 않는다.
+
+실제 Chrome UI는 `full-go1nh_az`와 `full-5p_qmfn0`에서 수행했다. Desktop/narrow 화면·게임 로그는 비밀 없는 evidence로 보존한다. 사용자 수동 OS IME 결과는 정상 확인이며 자동 composition event 결과로 대체하지 않는다. Source 권리·DB 상태는 read-only fixture snapshot으로 UI 관찰과 대조했다.
+
+### Full smoke에서 발견한 P3 harness defect
+
+첫 `scripts/dev.py smoke-full`은 `prepare_boss`의 미끄럼방지탐사화 구매 predicate에서 timeout으로 실패했다(`work/phase7b-full.log`, 실패 DB `full-sh8zi8b_`). Read-only snapshot은 동일 player가 정상 inventory 탐사화2개·credits204를 가진 것을 확인했다. 앞선 사냥 drop으로 이미1개가 있었고 정상 구매1개가 추가됐으나 harness가 수량==1을 기다렸다. Production shop/drop 오류가 아니다. 실제 구매 증분을 기존 수량+1로 검사하는 Full 전용 한 줄 조건으로 고쳤다. Fixture 가격/자금/HP/타이머와 Quick 경로는 그대로다.
+
+`world.test_smoke.SmokeRestartTests.test_full_boss_purchase_accepts_boots_previously_obtained_by_drop`는 수정 전1FAIL/0.010초를 재현했다. 수정 후 `world.test_smoke`15개/1.714초·pure discover204개/2.386초 성공, check/diff 성공이다. 새 Full/최종 full suite 결과는 완료 뒤 구분해 기록한다. 첫 Full의 corpse29.435초/respawn44.260초/protection121.036초·HQ/패배/회복 성공은 전체 Full 성공으로 표현하지 않는다.
+
+수정 뒤 최종 `.\.venv\Scripts\python.exe -X utf8 scripts/dev.py test --parallel 2`는 **pure204개/2.497초·integration574개/489.103초 모두 성공**했다(`work/phase7b-final-tests.log`). Integration runner500.433초, setup7.719초/teardown0.001초다. Test reported subtotal491.600초이며 별도 outer wall-clock은 측정하지 않았다. 새 Full-only pure 회귀가 추가됐고 이전203개 성공 수치를 최종 결과로 대신하지 않는다.
+
+두 번째 Full(`work/phase7b-full-2.log`, `full-8k10yk14`)은 수정한 탐사화 구매·Lv4 T1 준비·첫 Boss/보고·Lv6 T2 준비를 통과했으나 밀림의포식자 전투에서 패배했다. Read-only 실패 snapshot은 player XP521/credits19/붕대1·탐사인식표/접이식방패/탐사화/정글장도/전술방호복, Boss HP1/270·participant1·교전 cleanup을 확인했다. Phase 7A의 기존 progression 전투 변동과 함께 **P3 Full fixture reliability note**로 재평가하며 production defect나 최종 balance 결론으로 단정하지 않는다. Gameplay 수치·fixture·전투 선택을 바꾸지 않은 같은 코드의 세 번째 Full을 실행한다. 두 번째 corpse29.604초/respawn44.629초/protection121.591초 성공도 전체 성공과 구분한다.
+
+세 번째 Full(`work/phase7b-full-3.log`, `full-8qbwevvu`)도 XP521의 Lv6 밀림 Boss 전투에서 패배했다. Corpse29.066초/respawn43.917초/protection121.308초가 성공했지만 전체 성공은 아니다. 반복되는 fixture 승패 의존성을 줄이기 위해 Full 전용 동선에 실제 날쌘발톱룡·그늘추적룡 사냥과 corpse 회수를 추가했다. 실제 XP139로 Lv7에 도달한 뒤 상점의 붕대 보충·교관의 남은 성장점 배분/강타 R3·침대 휴식으로 재준비한다. Production stats/가격/drop/skills·시작 준비금·fixture XP·Quick path는 변경하지 않는다.
+
+네 번째 Full(`work/phase7b-full-4.log`, `full-if7hae52`)은 Lv7 HP184 준비·밀림 Boss·두 final report까지 성공했으나 restart 직전 청소룡 전투가 snapshot 전에 끝나 DB combat 전제가 실패했다. 검증나의 XP가22 증가한 로그로 처치를 확인했다. Corpse29.357초/respawn44.268초/protection122.235초는 성공했다. Full 전용으로 검증나가 실제 북쪽 trail로 이동해 갈퀴사냥룡과 교전하도록 변경하고 before의 active combat assertion과 모든 shutdown/startup 보존 검사를 유지한다. 해당 보완 뒤 `world.test_smoke`15개/5.942초·check가 성공했으며 다섯 번째 Full을 실행한다. 이전 Lv7 준비 수정 직후의 pure15개/1.678초 성공도 별도 실행이며 합산하지 않는다.
+
+다섯 번째 Full(`work/phase7b-full-5.log`)은 **628.071초 성공**했다. Corpse29.130초/respawn44.030초/protection122.039초로 production30/45/120초를 확인했다. 실제 Lv7 HP184 준비 뒤 밀림 Boss·두 최종 보고·후속 훈련과 정상 Evennia shutdown/restart/relogin이 성공했다. Before 실제 ON/active UUID 광원의 raw power1800.000→stopped1468.599는 `project_power` 관찰 시각 범위 안이었다. 같은 UUID의 OFF/started_at=None/active_light=None, 일반 item 전체·tree·주무기 불변과 stopped→after strict preservation을 확인했다. 기존 storage/loot/party/facility/elevator·combat/claim cleanup·corpse/respawn callback 검사, owned process 종료·성공 fixture cleanup·개발 DB fingerprint 불변도 성공했다. Quick/production 타이머·balance는 그대로이며 앞선 실패 이력을 최종 성공으로 대체하지 않는다.
+
+### 실패·보정 이력
+
+초기 corpus 준비의 admin 포함 count/켜진 light started_at 누락은 fixture를 고쳤다. 실제 CLI의 offline guard AttributeError는 production P1로 분리해 fail-first 회귀와 최소 fix를 만들었다. Native 보존 검사는 기존 UUID subset이 보존되면 새 정당한 generator entitlement가 추가되는 것을 허용해야 하므로 전체 item list equality였던 harness expectation만 바로잡았다. 최종 valid/warning/invalid CLI 재실행은 모두 성공했다. 초기 성공 출력만 있고 ledger0인 invalid probe는 검증 완료로 사용하지 않고 source/ledger 및 실제 오류 확인을 추가했다.
+
+Multiplayer 첫 실행은 login의 staging relocation 뒤 실제 route가 누락됐고, 높은 준비 build에서는 Boss가 관찰 전 죽었다. 실제 route와 일반 Lv7/T2 build를 준비하고 기존 eligible 첫 피해를 기다리게 보정했다. Boss4 late join 관찰은 concurrent C/D join으로 바꾸었으며 추가 피해가 가능한 live snapshot과 정확한 산술의 기존 deterministic 회귀를 구분했다. 일부10초 command 응답 timeout은 병행 setup/전체 test가 실행되던 환경에서 발생했고 정확한 개별 원인은 확정하지 않았다. Common Client/Quick나 production timer를 바꾸지 않고 7B late join/leave 관찰만30초 timeout을 사용한 최종 실행이 전체 성공했다. 오류를 gameplay 수치 변경으로 해결하지 않았다.
+
+Loot 초기 실행은 generic `시체 <index>` selector 대신 fixture object key를 입력하거나 ground currency의 사용자 오류 문구를 잘못 기대해 실패했다. 현재 지원 문법 `시체 N에서 ...`, `2칩 가져`, `모두 가져`와 실제 보호 응답을 사용해 수정했다. 물리 stack 부분 회수는 기존1개 contract를 사용하며 새 N개 loot parser를 추가하지 않았다. Stored fixture decay90초는 session 준비용 기존 deadline이고 신규 production corpse30초의 성공 근거로 쓰지 않는다.
+
+추가 item fixture의 첫 실행은 power_type을 definition 값 대신 잘못 입력해 validation에서 실패했다. Definition metadata를 사용하도록 보정했다. 다음 실행의 `도주` 대신 실제 등록 command `도망`을 사용하고, 소각 전에 equipped gun을 inventory로 해제해 loaded 구조 거절을 관찰하도록 순서를 바로잡았다. 이는 production bug나 policy 변경이 아니라 harness 준비/명령/기대 보정이다. 마지막41.845초 실행은 모든 item case가 성공했다.
+
+Valid post-cutover의 추가 고유 보상 거절 검사 첫 실행(`work/phase7b-valid-final.log`, `full-ur2vcw8f`)은 실제 정상 거절 문구가 `일반 상인이 매매할 수 없는 물건입니다.`인데 `취급하지`를 기대해 실패했다. 실제 판매 mutation이나 policy defect가 아니며 기대 token만 정상 응답에 맞췄다. 추가 migrated loot·repair→cache 연결 검사와 함께 새 격리 valid corpus에서 재실행한다. 해당 실패 DB/로그도 보존한다.
+
+새 valid 재실행(`work/phase7b-valid-final-2.log`, `full-bawmbrl8`)은 실제 CLI 전체 성공과 **post-cutover9개 시나리오58.696초 성공**이다. 고유 보상 개인 보관/공유·give·drop·sell·burn 거절 후 UUID/sequence/state, migrated firearm loot 동일 tree 회수·zero-share trigger2칩 지급, migration 정비부품3개 제출→최초 cache→정비부품0/붕대2·탐사인식표1/일반 scrap20 보존·archived item blob 불변을 확인했다. Owned process 종료·증거 export·성공 DB cleanup·개발 DB 불변도 성공했다. 이전48.015초 실행을 이 재실행의 수치로 바꾸거나 합산하지 않는다.
+
+### 최종 실행 코드 회귀와 문서 마감
+
+실행 코드 HEAD `eeffbeaf0d612b4df1a96a7969a3cb6b0b518bc6`의 `.\.venv\Scripts\python.exe -X utf8 scripts/dev.py test --parallel 2`는 **pure204개/2.399초·integration574개/449.634초 모두 성공**했다(`work/phase7b-closeout-tests.log`). Integration runner461.633초, setup7.663초/teardown0.001초다. Test reported subtotal452.033초이며 별도 outer launcher duration은 측정하지 않았다. 이후 실행 코드·dependency·설정 변경은 없고 check·문서6개 상대 링크/anchor/fence audit·diff check가 성공했다. Quick84.846초와 Full628.071초는 각각 위 실행 시점의 결과이며 문서 마감만으로 반복하지 않는다.
+
+Historical 제목 변경으로 끊긴 작업 상태 링크7곳은 대상 anchor만 보정했다. 과거 validation 사실은 유지한다. [PR #36](https://github.com/wonmin82/primal-zone/pull/36)의 문서 마감 이후 최신 HEAD SHA/run과 test·smoke 결과는 PR Validation에 별도로 기록하며 코드 HEAD의 성공 CI를 새 문서 HEAD의 CI로 대신하지 않는다. 최종 문서만 변경하는 commit 후 개발 DB fingerprint도 다시 확인한다.
+
+실패 DB/로그는 보존하며 각 실행의 owned Portal/Server는 종료됐다. 실제 개발 DB SHA256 `B1318296F505B9B7522FCBDEDFF7642A06CF055E9DE72802198C70E6B8A7F700`,size733184,mtime_ns1790080153765082800는 실행 전후 동일했다. 실제 production migration·PostgreSQL·balance tuning은 하지 않았다. 최신 Full/CI 결과는 완료 뒤 아래에 별도 기록한다.
+
 ## PR #35 문서 마감·병합 검증 인계 (2026-10-07)
 
 사용자 요청으로 Phase 7A 문서를 마감하고 병합·소스 브랜치 정리를 진행한다. 실행 코드 HEAD `2c23c1f377e41fb2ed0332e14942da8f487124a3`의 [CI37546292732](https://github.com/wonmin82/primal-zone/actions/runs/37546292732)는 check·pure203개/0.915초·integration569개/239.580초(runner244.439초)·Quick47.921초 모두 성공했다. 아래 restart 리뷰 수정의 Full558.589초와 이전 baseline 결과는 실제 실행 시점별 근거로 유지하며 합산하지 않는다.

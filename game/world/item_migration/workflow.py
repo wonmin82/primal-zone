@@ -1,5 +1,9 @@
 """명시적 dry-run/apply/verify/cutover와 offline 방어선."""
 
+import json
+import os
+import subprocess
+import sys
 from collections import Counter
 from contextlib import contextmanager
 from pathlib import Path
@@ -24,6 +28,27 @@ def migration_context():
         maintenance.reset(token)
 
 
+def require_evennia_stopped():
+    """현재 settings의 cross-process 상태가 정지로 확인될 때만 허용한다."""
+    environment = dict(os.environ, DJANGO_SETTINGS_MODULE=settings.SETTINGS_MODULE)
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "world.item_migration.runtime_status"],
+            cwd=settings.GAME_DIR, env=environment, capture_output=True, text=True,
+            encoding="utf-8", timeout=30, check=True,
+        )
+        status = json.loads(result.stdout.strip())
+        if status.get("error"):
+            raise ValueError(status["error"])
+        if (type(status.get("portal")) is not bool or type(status.get("server")) is not bool
+                or status.get("proof") not in ("amp", "connection-refused")):
+            raise ValueError("알 수 없는 status 응답")
+        if status["portal"] or status["server"]:
+            raise ValueError("Portal 또는 Server가 실행 중입니다.")
+    except (OSError, subprocess.SubprocessError, ValueError, TypeError, AttributeError) as failure:
+        raise ValueError(f"Evennia offline 확인 실패: {failure} migration을 거절합니다.") from failure
+
+
 def require_offline():
     if getattr(settings, "ITEM_MIGRATION_TEST_OVERRIDE", False):
         from django.db import connection
@@ -34,13 +59,10 @@ def require_offline():
         return
     if not getattr(settings, "ITEM_MAINTENANCE", False):
         raise ValueError("서버를 정지하고 ITEM_MAINTENANCE=True를 설정해야 합니다.")
+    require_evennia_stopped()
     folder = Path(settings.GAME_DIR) / "server"
     if any(folder.glob("*.pid")):
         raise ValueError("Evennia PID 파일이 남아 있습니다. 서버와 Portal 정지를 확인하세요.")
-    from evennia.server.sessionhandler import SESSIONS
-
-    if SESSIONS.count():
-        raise ValueError("온라인 세션이 존재합니다. maintenance migration을 거절합니다.")
 
 
 def dry_run():

@@ -205,11 +205,23 @@ class Closeout:
         await player.act("선발대 길잡이 대화", lambda s: "관측소" in s["quest"])
         await route(player, (("북", "jungle_watch"),))
         await player.act("관측 표식 조사", lambda s: "수위 표식" in s["quest"])
+        # Full은 실제 XP로 Lv7 준비를 만든다. 기능 E2E를 Lv6의 근소한 전투
+        # 승패에 의존시키지 않으며 확정 수치나 fixture XP를 바꾸지 않는다.
+        await self.kill("날쌘발톱룡")
+        await player.act("시체에서 모두 가져")
         await route(player, (("남", "jungle_edge"), ("동", "jungle_road")))
         await player.act("수위 표식 조사", lambda s: count_item(s, "jungle_cell") == 1)
         await route(player, (("북", "jungle_grove"),))
+        await self.kill("그늘추적룡")
+        await player.act("시체에서 모두 가져")
         await player.expect_text("북", "닫혀")
         await player.act("신호 장치 조사", lambda s: count_item(s, "jungle_cell") == 0)
+        assert player.state["level"] >= 7
+        await self.restock_boss(advanced=True, target_rank=3)
+        await self.dock(player)
+        await route(player, (("북", "grass"), ("북", "trail"), ("북", "marsh"),
+                             ("북", "ridge"), ("북", "jungle_edge"), ("동", "jungle_road"),
+                             ("북", "jungle_grove")))
         await route(player, (("북", "jungle_gate"), ("북", "jungle_nest")))
         await self.kill("밀림의포식자")
         await route(player, (("남", "jungle_gate"), ("남", "jungle_grove"),
@@ -251,10 +263,16 @@ class Closeout:
         else:
             await route(player, (('남', 'support_3f_e1'), ('서', 'support_3f_c'),
                                 ('서', 'support_3f_w1'), ('북', 'armor_shop')))
-            await player.act('미끄럼방지탐사화 구매', lambda s: count_item(s, 'non_slip_boots') == 1)
+            boots = count_item(player.state, 'non_slip_boots')
+            await player.act('미끄럼방지탐사화 구매', lambda s: count_item(s, 'non_slip_boots') == boots + 1)
             await player.act('미끄럼방지탐사화 착용', lambda s: s['equipment']['feet'] == '미끄럼방지탐사화')
         if count_item(player.state, 'expedition_tag') and not player.state['equipment']['neck']:
             await player.act('탐사인식표 착용', lambda s: s['equipment']['neck'] == '탐사인식표')
+        await self.restock_boss(advanced=advanced)
+
+    async def restock_boss(self, advanced=False, target_rank=2):
+        """현재 보유 장비를 유지하고 실제 상점·교관·침대로 다시 준비한다."""
+        player = self.first
         await player.act('귀환', lambda s: s['zone'] == 'support_roof')
         await self.floor(player, '1층', 'support_1f_c')
         await route(player, (('동', 'support_1f_e1'), ('북', 'supply_shop')))
@@ -274,9 +292,9 @@ class Closeout:
             await player.act(f'힘 {amount} 배분', lambda s: any(
                 a['id'] == 'strength' and a['allocated'] == strength + amount
                 for a in s['growth']['attributes']))
-        if next(skill['rank'] for skill in player.state['growth']['skills'] if skill['id'] == 'heavy') == 1:
+        while (rank := next(skill['rank'] for skill in player.state['growth']['skills'] if skill['id'] == 'heavy')) < target_rank:
             await player.act('타격교관에게 강타 배워', lambda s: any(
-                skill['id'] == 'heavy' and skill['rank'] == 2 for skill in s['growth']['skills']))
+                skill['id'] == 'heavy' and skill['rank'] == rank + 1 for skill in s['growth']['skills']))
         await route(player, (('남', 'support_2f_e1'), ('서', 'support_2f_c'),
                             ('서', 'support_2f_w1'), ('북', 'infirmary')))
         remaining = player.state['growth']['attribute_points']
@@ -299,7 +317,10 @@ class Closeout:
         await player.act("승강기", lambda s: s["zone"] == "support_elevator")
         await player.act("3층", lambda s: s["zone"] == "support_3f_c")
         await player.act("승강기", lambda s: s["zone"] == "support_elevator")
-        await self.second.act("어린청소룡 공격", lambda s: s["combat_target"] is not None)
+        # Lv1 검증나도 청소룡을 snapshot subprocess 초기화 중 처치할 수 있다.
+        # 실제 이동/교전으로 더 오래 유지되는 전투를 준비하고 아래 DB 전제를 유지한다.
+        await route(self.second, (("북", "trail"),))
+        await self.second.act("갈퀴사냥룡 공격", lambda s: s["combat_target"] is not None)
         # before: live server의 shutdown 직전 DB. 실제 ON 광원/주무기가 전제다.
         before = await asyncio.to_thread(self.scenario.harness.checkpoint)
         assert before["players"][self.second.name]["profile"]["combat_target"] is not None
