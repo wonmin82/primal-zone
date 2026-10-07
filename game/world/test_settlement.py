@@ -22,7 +22,7 @@ class SettlementRulesTests(TestCase):
         self.assertTrue(ITEMS["scrap"]["transferable"])
         self.assertFalse(hasattr(content, "SHOP"))
         self.assertEqual(rules.purchase_price("bandage"), 10)
-        self.assertEqual(rules.purchase_price("ammo_556"), 60)
+        self.assertEqual(rules.purchase_price("ammo_556"), 40)
 
     def test_one_and_all_quantities_preserve_every_other_field(self):
         for quantity in (1, 5):

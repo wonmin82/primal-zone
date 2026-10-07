@@ -1,6 +1,6 @@
 # V1 최종 콘텐츠·경제·획득
 
-정적 SSOT는 world/content/final_items.py, items.py, shops.py, loot_v1.py와 지역 ENEMIES다. 이 표는 해당 정의에서 작성했다. 고정 수치는 Phase 6 실행 프롬프트를 반영했고 sanity 차이 때문에 임의 tuning하지 않았다. 모든 weapon modifier는 active_weapon scope이며 나머지는 equipped scope다. 동일 ring 두 개 정책을 유지한다.
+정적 SSOT는 world/content/final_items.py, items.py, shops.py, loot_v1.py와 지역 ENEMIES다. 이 표는 해당 정의에서 작성했다. Phase 6 확정값을 기준으로 Phase 7C 측정 후 5.56mm 구매 단가만 3→2칩(20발 60→40칩)으로 조정했다. 판매1칩·총기 package·전투·drop 수치는 유지한다. 측정·후보·경제 불변조건은 [Phase 7C 분석](phase7c-balance-analysis.md)을 따른다. 모든 weapon modifier는 active_weapon scope이며 나머지는 equipped scope다. 동일 ring 두 개 정책을 유지한다.
 
 ## 장비·stable ID·modifier·가격·획득
 
@@ -75,7 +75,7 @@ multiply modifier의 1.02는 +2%, penetration/reduction의 add 0.01은 +1%p다. 
 | 7.62mm 표준탄창 / `mag_762_standard` | 50 | 1 | 50 | 25 |
 | 7.62mm 확장탄창 / `mag_762_extended` | 70 | 1 | 70 | 35 |
 | 9mm 권총탄 / `ammo_9` | 2 | 12 | 24 | 1 |
-| 5.56mm 카빈탄 / `ammo_556` | 3 | 20 | 60 | 1 |
+| 5.56mm 카빈탄 / `ammo_556` | 2 | 20 | 40 | 1 |
 | 7.62mm 소총탄 / `ammo_762` | 4 | 8 | 32 | 2 |
 
 탄창 매입은 빈 매입가 + 잔탄 × 해당 탄약의 per-round 매입가다. 총기는 full 표준 탄창을 포함하는 package만 구매하며 body만 구매하는 명령은 제공하지 않는다. 판매·소각 전에 탄창을 분리해야 한다.
@@ -121,7 +121,7 @@ accepts는 category 기반이고 purchase catalog와 독립이다. T2 무기/착
 
 기존 reward_groups의 eligible participant 수를 재사용한다. max HP는 floor(base HP × (1 + 0.75 × (n−1)))다. 1/2/3/4명은 1/1.75/2.50/3.25배이고 integer HP는 내린다. 공격력은 변하지 않는다. late eligible join 시 max HP 증가분만 current HP에 더하고 기존 damage를 보존한다. 같은 encounter에서는 참여자 이탈·timeout으로 downscale하지 않는다. respawn/완전 회복 후 다음 encounter는 1명 기준이다.
 
-## Deterministic balance sanity
+## Historical Phase 6 deterministic balance sanity
 
 - Lv4 평균 T1: 능선 Boss 기본 12 opportunities / 기술 활용 9. Lv7 T1/T2 혼합: 밀림 Boss 기본 13 / 기술 활용 10.
 - 손 조합의 대표 Lv4 ATK/DEF: {'2H': {'attack': 21, 'defense': 4, 'max_hp': 112}, '1H+shield': {'attack': 19, 'defense': 6, 'max_hp': 112}, '1H+offhand': {'attack': 19, 'defense': 4, 'max_hp': 112}, '1H+1H': {'attack': 19, 'defense': 4, 'max_hp': 112}}. 2H는 공격, shield는 방어, offhand는 간파 modifier, dual weapon은 active 선택의 역할 차이를 유지한다. 이 작은 계산으로 전체 build dominance를 판정하지 않는다.
@@ -129,7 +129,7 @@ accepts는 category 기반이고 purchase catalog와 독립이다. T2 무기/착
 - 경비카빈의 경비기 기본 공격 예시: 4발 ×3칩 = 12칩, 예상 전리품 가치 대비 44.6%. 목표15~30%보다 높다. 확정 attack/price/drop을 바꾸지 않고 Phase 7 ammo cost/build simulation 검토 항목으로 남긴다.
 - 칩+매입/정산 기준 EV: {'scavenger': 9.785, 'hunter': 16.57, 'sentinel': 26.905, 'dartclaw': 22.94, 'shellback': 34.59, 'stalker': 36.715}. 회수부품은 정산율10, firearm drop은 body+빈 탄창+평균 잔탄 매입가를 합친다. T1/T2 upgrades의 전투 횟수 체감은 Phase 7에서 검증한다.
 
-## 검증과 경계
+## Historical Phase 6 검증과 경계
 
 world.test_final_content와 관련 pure regressions, tests.test_phase6_runtime/tests.test_item_migration 및 영향 범위 통합 테스트로 정의·경제·drop·지급·변환을 검증한다. 실제 실행 결과/CI는 [playtest](playtest.md)에 남긴다. 전체 local suite·smoke-full·전체 browser/multiplayer·OS IME·PostgreSQL/multi-server 경쟁·full balance simulation과 실제 플레이 DB 변환은 미실행이다. [migration 운영 절차](item-migration.md)를 별도로 따른다.
 
@@ -138,7 +138,7 @@ world.test_final_content와 관련 pure regressions, tests.test_phase6_runtime/t
 초기 Phase 6에서는 T1 drop에서 사라진 발전기 자원을 보충하기 위해 수송차에 일반 회수부품3개를 추가했다. 이 초기안은 아래 PR #34 리뷰 결정으로 정비용 회수부품으로 대체되었다. 기존 cache의 신규 장비 보상도 아래 migration entitlement로 소급하며 cache 자체를 다시 열지는 않는다.
 
 
-## PR #34 리뷰 보완 — 진행 자원·귀속·발견 보상
+## Historical PR #34 리뷰 보완 — 진행 자원·귀속·발견 보상
 
 초기 Phase 6의 일반 회수부품3개 보급안을 리뷰에서 정비용 회수부품(`generator_repair_part`)으로 대체했다. 일반 scrap의 field drop·정산 환율·처분 정책은 그대로이며 발전기는 정비용 부품3개만 submit한다. 수송차 보급상자는 캐릭터당 최초 조사에서 붕대2개·탐사인식표1개를 지급한다. 발전기 미수리 상태에서만 기존 정비용 부품을 포함해 총3개가 되도록 부족분을 보충한다. 발전기 수리 완료 후에는 정비부품을 지급하거나 기존 잔여분을 삭제하지 않는다. 따라서 migration 지급 → 발전기 수리 → 최초 보급상자 조사에서도 사용할 수 없는 부품이 재생성되지 않는다.
 

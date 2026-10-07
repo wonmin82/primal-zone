@@ -85,7 +85,7 @@ class Phase6RuntimeTests(WorldCommandTest):
         shop = self.obj("weapon_shopkeeper")
         shop_service.buy(self.char1, shop, "ammo_556")
         self.assertEqual(self.char1.profile()["inventory"]["ammo_556"], 20)
-        self.assertEqual(self.char1.profile()["credits"], 1940)
+        self.assertEqual(self.char1.profile()["credits"], 1960)
         shop_service.buy(self.char1, shop, "guard_carbine")
         firearm = api.items_owned_by(self.char1).get(definition_id="guard_carbine")
         magazine = firearm.children.get()
