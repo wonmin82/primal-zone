@@ -79,6 +79,9 @@ class CommandShortcutsTests(WorldCommandTest):
         self.assertIn("체력", output)
 
     def test_malformed_or_expansion_error_executes_nothing(self):
+        fixed_now = self.char1.profile_snapshot()["recovery"]["updated_at"]
+        # 명령 거절과 무관한 자연회복 경계가 profile 불변 비교에 섞이지 않게 한다.
+        self.enterContext(patch("typeclasses.explorers.time", return_value=fixed_now))
         for raw in ("귀환 해", "귀환,, 상태 해", ", 귀환 해", "귀환, 상태, 해",
                     ", ".join(["귀환"] * (MAX_COMMANDS + 1)) + " 해"):
             before = deepcopy(self.char1.profile_snapshot())
