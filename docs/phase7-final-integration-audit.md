@@ -16,6 +16,10 @@ Phase 1~6 기능 구현은 PR #34에서 완료됐다. Phase 7은 현재 계약�
 | Legacy DB | explicit maintenance migration tooling을 통한 호환 |
 | PostgreSQL | [향후 infrastructure](postgresql-transition.md), Phase 7 exit criterion 아님 |
 
+## 현재 병합 전 상태
+
+Phase 1~6과 Phase 7A/B는 main에 병합됐고, Phase 7C 구현·검증은 완료했으며 [PR #37](https://github.com/wonmin82/primal-zone/pull/37)은 OPEN 상태다. 지원 topology 내 미해결 production P0/P1/P2는 없다. 현재 판정은 **ITEM SYSTEM V1 READY TO CLOSE WITH NOTES**이며 V1 최종 완료 선언은 병합과 새 main exact-head CI 이후다. 아래 Phase 7A/B 절은 각 단계 당시의 historical 검증 기록이다.
+
 ## Phase 7A
 
 Baseline & Documentation Closeout. 현재 문서와 historical 기록을 분리하고 자동 기준선의 안정성을 확인한다. 문서 오류에 코드를 맞추거나 확정 balance를 tuning하지 않는다.
@@ -128,13 +132,26 @@ Balance & Fresh Native Operational Closeout. 현재 수치 동결 → 실제 규
 - [x] starter ItemEntity
 - [x] complete gameplay smoke
 - [x] restart/relogin
-- [x] Item System V1 closeout (기능·balance·fresh 검증 마감; 최신 PR CI는 Validation의 별도 gate)
+- [x] Phase 7C implementation / validation closeout (기능·balance·fresh 검증 완료)
+- [ ] Item System V1 final closeout (PR #37 병합·새 main exact-head CI 이후)
 
 Quick106.426/102.496/98.289초 각각 성공, production Full695.863초 성공. Corpse29.305/respawn48.288/protection123.332초 관찰, 두 Boss/보고와 실제 normal restart/relogin/native preservation을 확인했다. Fresh511.030초에서 schema-only runtime/Explorer 없음 → first Server runtime1/ledger0 → ordinary account/starter → 실제 두 임무·보스·보고·Credential → restart/relogin final runtime1/ledger0이 성공했다. Fresh의 최초 foreground launcher reset 요청만 private adapter로 생략하고 뒤의 정상 restart를 실제 실행했다. 준비금900칩으로 grind만 단축하며 핵심 보상·XP·임무 전이는 bypass하지 않았다. Fresh는 migration command를 사용하지 않았다.
 
 기존 개발 DB fingerprint 전후 동일·성공 fixture cleanup·실패 owned process 정지를 확인했다. Definition ID/schema/state/mapping/entitlement 변경이 없어 Phase7B corpus 전체는 재실행하지 않는다. Fresh validation DB를 실제 장기 플레이 DB로 자동 채택하지 않는다. pure207개/2.760초·integration582개/447.581초(runner457.456초), 전체463.298초/exit0·failure0/error0 PASS. 이전 수치 기대 실패·테스트 회복 경계 간헐성과 여섯 fresh 보정 실패는 playtest에 보존한다.
 
 Final judgment: **ITEM SYSTEM V1 READY TO CLOSE WITH NOTES** (local 기능·밸런스·fresh 검증 완료; 최신 PR HEAD의 CI 최종 결과는 PR Validation에 별도 기록). Exact PR HEAD의 CI/run과 review 상태는 [PR #37](https://github.com/wonmin82/primal-zone/pull/37) Validation에서 확인한다. 지원 topology 내 production P0/P1/P2 없음. Simulation latency/order 근사·Full fixture 과거 reliability·최소레벨 solo role 준비·실제 mobile device matrix·의존성 security triage·IME 상세 trace 한계는 notes다. PostgreSQL/multi-server와 Post-V1 legacy adapter/field/archive cleanup은 별도 작업이며 Phase7 완료 조건이 아니다.
+
+## PR #37 병합 후 최종 마감 계획
+
+이번 문서 점검에서는 PR을 병합하거나 소스 브랜치를 삭제하지 않는다. 사용자의 명시적 병합 요청 이후 다음 결과를 확인한다.
+
+- [ ] 새 main HEAD와 PR #37 merge commit·양쪽 parent 확인
+- [ ] 새 main exact-head push CI의 test·smoke SUCCESS 확인
+- [ ] 소스 브랜치 삭제 요청과 병합 반영 확인 후 cleanup
+- [ ] Item System 관련 open PR 없음과 main 보호 설정 확인
+- [ ] 작은 docs-only closeout PR에서 README·CODEX_TASK_STATE·이 audit에 merge SHA·main SHA·CI run·cleanup 결과 기록
+
+위 확인이 모두 성공한 뒤에만 상태를 `ITEM SYSTEM V1 COMPLETE`로 전환한다. 이는 병합 후 작업이며 현재 PR의 병합 전 상태를 완료로 선언하지 않는다.
 
 ## Deferred Infrastructure
 

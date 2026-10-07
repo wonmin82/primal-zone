@@ -96,7 +96,7 @@ sequence 기반 local numbering은 state가 바뀌거나 inventory↔equipment�
 
 Firearm tree의 corpse/world 이동·pickup·decay는 root LootClaim 권리로 보호되고 child magazine은 별도 claim/selector로 노출하지 않는다. 실물·화폐·storage·Credential·shop·소각·명시적 full-world migration은 현재 구현되어 있다. [전리품](loot-claims.md), [migration](item-migration.md)을 따른다.
 
-Historical Phase 3의 순수/domain·격리 DB targeted·최소 Desktop/390px 검증과 실패/재검증 내역은 [playtest](playtest.md#phase-3-lighting--firearm-검증)와 [작업 상태](CODEX_TASK_STATE.md)에 기록한다. 현재 실제 OS IME·전체 browser/multiplayer matrix·Canonical Legacy Migration Corpus는 7B, full balance simulation은 7C, PostgreSQL 경쟁·multi-server는 future infrastructure다. 실제 플레이 DB migration 대상은 없다.
+Historical Phase 3의 순수/domain·격리 DB targeted·최소 Desktop/390px 검증과 실패/재검증 내역은 [playtest](playtest.md#phase-3-lighting--firearm-검증)와 [작업 상태](CODEX_TASK_STATE.md)에 기록한다. Chrome desktop/좁은 viewport·SQLite single-server의 1~4인 session·Canonical Legacy Migration Corpus와 사용자 수동 확인 Windows/Chrome OS IME는 [Phase 7B](phase7b-integration-validation.md)에서 검증했다. 대표 build balance와 fresh light/firearm gameplay·restart/relogin은 Phase 7C에서 검증했으며 [Phase 7 audit](phase7-final-integration-audit.md)을 따른다. 실제 mobile device matrix는 후속 검증이고 PostgreSQL 경쟁·multi-server는 별도 infrastructure다. 실제 플레이 DB migration 대상은 없다.
 
 ## Historical Phase 3 implementation boundary
 

@@ -2,6 +2,14 @@
 
 이 문서는 각 작업 시점의 historical validation record를 포함한다. 과거 미실행·미구현 기록은 당시 사실이며 현재 구현은 [architecture](architecture.md), [final-content](final-content.md), [최신 작업 상태](CODEX_TASK_STATE.md)를 따른다.
 
+## PR #37 병합 전 문서 점검 (2026-10-08)
+
+시작 main `393a8589adc33b3098028f9a33aab793a5fec38d`, PR HEAD `4157cba28353dfbbc3e7744850b89e2d2d0fd5e2`의 [CI37635605763](https://github.com/wonmin82/primal-zone/actions/runs/37635605763)는 test·smoke SUCCESS다. 인계 이후 새 commit 없이 OPEN/non-draft·MERGEABLE/CLEAN·ahead5/behind0·review thread0개를 확인했다.
+
+README/docs 전체 22개를 current contract·historical record·실제 후속 roadmap으로 구분해 읽었다. Loot의 7B/7C 미검증 표현과 migration/light의 완료 여부를 정리하고 Phase 7B snapshot·당시 출력 예·성장 v10 범위를 명시했다. 이전 3칩/60칩·44.6%·실패·당시 미실행 기록은 유지한다. 현재 5.56mm 2칩/20발40칩/resale1칩과 Phase 7C 결과는 실제 코드·기존 evidence와 대조했다. 22개 문서의 상대 링크/anchor228개·fence 오류0개, historical 기록 보존과 `git diff --check` 통과를 확인했다. 첫 audit helper는 표의 ID backtick을 빠뜨린 기대 문자열 때문에 실패했으며 helper만 실제 표 형식에 맞춰 보정한 뒤 통과했다. 문서 내용·가격 오류는 아니었다. 실행 코드 변경이 없어 local full/Quick/Full은 재실행하지 않는다. 새 문서 HEAD의 exact CI는 [PR #37 Validation](https://github.com/wonmin82/primal-zone/pull/37)에 별도로 기록한다.
+
+현재 판정은 **ITEM SYSTEM V1 READY TO CLOSE WITH NOTES**다. PR 병합·소스 브랜치 삭제·최종 완료 선언은 수행하지 않는다. 아래 실제 실행 결과와 실패 이력은 당시 기록 그대로 보존한다.
+
 ## Phase 7C — 밸런스·fresh native 운영 마감 (2026-10-07)
 
 Base `393a8589adc33b3098028f9a33aab793a5fec38d`, branch `codex/phase7c-balance-operational-closeout`. 아래는 이번 실제 local 실행이며 historical CI/7A/7B 결과로 대신하지 않는다. [분석](phase7c-balance-analysis.md), [fresh 재현](phase7c-fresh-operational-validation.md)을 연결한다. 최종 PR HEAD의 CI는 해당 PR Validation에 별도로 기록한다.
@@ -884,7 +892,7 @@ game과 격리 서버의 정적 파일을 수집하고 실제 DOM의 JS `?v=hq-s
 
 ### 3-3. 솔로 보스와 임무 보상
 
-첫 보스는 **Lv.4 이상, 획득 가능한 T1 무기·방호복, 체력·정신력 회복, 충분한 붕대**를 준비한다. 이는 수동 확인 준비 조건이며 실제 build별 소요·회복·탄약 경제의 최종 평가와 조정은 Phase 7C다.
+첫 보스는 **Lv.4 이상, 획득 가능한 T1 무기·방호복, 체력·정신력 회복, 충분한 붕대**를 준비한다. 이는 수동 확인 준비 조건이며 실제 build별 소요·회복·탄약 경제의 평가와 최소 조정 결과는 [Phase 7C 분석](phase7c-balance-analysis.md)을 따른다.
 Lv.4에 필요한 누적 경험치는 240입니다. 부족하면 사냥과 휴식을 반복합니다.
 비전투 상태로 귀환하면 옥상입니다. 의무실의 치료·휴식으로 회복하고 승강기 1층→중앙홀→부두에서 장비를 준비합니다.
 

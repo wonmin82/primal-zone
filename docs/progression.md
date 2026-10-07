@@ -97,4 +97,6 @@ profile v10은 XP(따라서 레벨), equipment/inventory/quests/발견·방문·
 
 ## 검증과 의도적 범위
 
+아래는 장기 성장 profile v10 개편 당시의 변경 범위다. 탄약이 이 개편 범위 밖이었다는 기록은 현재 탄약 기능의 미구현을 뜻하지 않는다. 현재 아이템·탄약 계약과 Phase 7C 경제 측정은 [최종 콘텐츠](final-content.md)와 [밸런스 분석](phase7c-balance-analysis.md)을 따른다.
+
 Lv.1~10의 기본 수치·적 수치는 유지한다. 보스 대응은 액티브 방어 대신 견제·사격·치료·붕대이며 solo 회귀를 검사한다. proficiency 자동 성장·학습 보급칩 비용은 제거했다. Master/상급 기술·Lv.133 이후·탄약·직업·반복 훈련 UX는 이번 범위 밖이다.

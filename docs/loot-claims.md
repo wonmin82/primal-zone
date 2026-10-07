@@ -78,7 +78,7 @@ Firearm root에만 claim이 있고 magazine child에는 없다. 전체 tree 회�
 
 ## 검증과 호환 경계
 
-정상 사냥·pickup·decay는 native만 사용하며 legacy blob에 같은 unit을 다시 저장하지 않는다. Wallet은 profile credits다. 명시적 전체 legacy upgrade는 [item-migration](item-migration.md), 현재 자동 기준선과 7B/7C 미검증 범위는 [Phase 7 audit](phase7-final-integration-audit.md)을 따른다. PostgreSQL contention·multi-server는 future infrastructure다.
+정상 사냥·pickup·decay는 native만 사용하며 legacy blob에 같은 unit을 다시 저장하지 않는다. Wallet은 profile credits다. 명시적 전체 legacy upgrade는 [item-migration](item-migration.md), 현재 자동 기준선과 Phase 7B/7C에서 완료한 검증 결과는 [Phase 7 audit](phase7-final-integration-audit.md)을 따른다. PostgreSQL contention·multi-server는 별도 infrastructure이며 실제 mobile device matrix는 이번 검증 범위 밖의 후속 검증이다.
 
 ## Historical Phase 4 implementation boundary
 

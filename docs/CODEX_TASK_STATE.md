@@ -1,3 +1,10 @@
+## Phase 7C — PR #37 병합 전 문서 점검 (2026-10-08)
+
+- 시작 상태: main `393a8589adc33b3098028f9a33aab793a5fec38d`, PR HEAD `4157cba28353dfbbc3e7744850b89e2d2d0fd5e2`, branch `codex/phase7c-balance-operational-closeout`. OPEN/non-draft·MERGEABLE/CLEAN·ahead5/behind0·review thread0개이며 인계 이후 추가 commit은 없다. 해당 시작 HEAD의 [Game checks 37635605763](https://github.com/wonmin82/primal-zone/actions/runs/37635605763)는 test·smoke SUCCESS다. 새 문서 HEAD의 CI 결과는 [PR #37 Validation](https://github.com/wonmin82/primal-zone/pull/37)에 별도로 기록한다.
+- Current/history audit: README와 docs 21개를 확인하고 loot/migration/light 문서의 Phase 7B/7C 미래·미검증 표현을 완료한 실제 검증 범위로 정리했다. Phase 7B snapshot 안내와 출력 예·성장 v10의 당시 범위 표지를 보완했다. 기존 가격·실패·CI·미실행 기록은 소급 변경하지 않았다. 현재 5.56mm purchase2칩/20발40칩/resale1칩은 코드·final-content와 일치한다.
+- 현재 공식 상태: Phase 1~6·7A·7B는 main 병합 완료, Phase 7C는 구현·검증 완료/PR #37 OPEN이다. production P0/P1/P2 없음. **ITEM SYSTEM V1 READY TO CLOSE WITH NOTES**를 유지하며 최종 완료 선언은 병합·새 main exact-head CI 이후의 별도 문서 마감으로 남긴다. [후속 확인 목록](phase7-final-integration-audit.md#pr-37-병합-후-최종-마감-계획)을 따른다.
+- 검증 경계: 이번 diff는 문서만이며 22개 문서의 상대 링크/anchor228개·fence 오류0개와 historical 기록 보존·현재 가격 일관성·`git diff --check` 통과를 확인했다. 실행 코드가 동일하므로 local suite·smoke를 반복하지 않는다. 새 PR/branch·병합·삭제는 수행하지 않는다. PostgreSQL/multi-server는 Deferred Infrastructure, legacy adapter/field/archive 정리는 Post-V1 Cleanup이다.
+
 ## Phase 7C — Balance & Fresh Native Operational Closeout (2026-10-07)
 
 - Base main: `393a8589adc33b3098028f9a33aab793a5fec38d` (Phase7B merge 포함). Branch: `codex/phase7c-balance-operational-closeout`. PR: [PR #37](https://github.com/wonmin82/primal-zone/pull/37). 최신 PR HEAD/CI는 PR Validation에 exact SHA와 run ID로 기록하며 이전 main/Phase7B 결과로 대신하지 않는다. PR은 병합하지 않는다.
