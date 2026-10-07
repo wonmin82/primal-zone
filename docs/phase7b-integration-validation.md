@@ -1,5 +1,7 @@
 # Phase 7B 통합 검증 시나리오
 
+이 문서는 Phase 7B 당시의 historical validation snapshot이다. 아래 가격·관찰 결과·후속 작업은 당시 사실로 보존한다. Phase 7C 이후 현재 밸런스와 최종 상태는 [밸런스 분석](phase7c-balance-analysis.md), [최종 콘텐츠](final-content.md), [Phase 7 audit](phase7-final-integration-audit.md)을 따른다.
+
 지원 대상은 SQLite + single Evennia server다. 모든 서버·계정·DB는 격리 fixture이며 실제 운영 데이터가 아니다. 준비금·장비·완료 직전 quest flag는 test fixture에서 구성하고 결과는 실제 서버 명령으로 만든다. Production 가격·전투·loot timer·balance는 변경하지 않는다.
 
 ## 재현 명령

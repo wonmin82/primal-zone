@@ -29,7 +29,7 @@ class FinalContentTests(TestCase):
         for identity, price in (("water", 3), ("field_ration", 5), ("bandage", 10), ("battery", 8), ("flashlight", 35)):
             self.assertEqual(rules.purchase_price(identity), price)
             self.assertEqual(rules.resale_price(identity), price // 2)
-        for identity, purchase, resale, quantity in (("ammo_9", 24, 1, 12), ("ammo_556", 60, 1, 20), ("ammo_762", 32, 2, 8)):
+        for identity, purchase, resale, quantity in (("ammo_9", 24, 1, 12), ("ammo_556", 40, 1, 20), ("ammo_762", 32, 2, 8)):
             self.assertEqual(rules.purchase_price(identity), purchase)
             self.assertEqual(rules.resale_price(identity), resale)
             self.assertEqual(ITEMS[identity]["purchase_quantity"], quantity)

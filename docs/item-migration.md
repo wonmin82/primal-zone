@@ -91,7 +91,7 @@ Read-only status probe의 연결 제한은10초, AMP 응답 deadline은12초, �
 6. apply를 실행한다. 오류 source를 명시적으로 처리한 후 재실행한다.
 7. verify error=0을 확인한다. 원본 digest 또는 native snapshot mismatch는 자동 repair하지 않는다.
 8. 필요한 warning을 검토하고 cutover를 실행한다.
-9. maintenance 설정을 해제한 뒤 서버를 시작한다. 후속 Phase 7/운영 smoke와 사용자 상태를 확인한다.
+9. maintenance 설정을 해제한 뒤 서버를 시작한다. 해당 DB의 운영 smoke와 사용자 상태를 확인한다.
 
 completed source는 digest/snapshot을 다시 검증하고 skip한다. 중단 후 A/B 완료·C 실패이면 A/B는 중복 생성하지 않고 C부터 안전하게 재시도한다. cutover 완료 후 apply는 거절한다. 원본 재변경·native 손상·추가 legacy source가 있으면 verify가 실패한다. verify의 strict snapshot은 gameplay 시작 전 maintenance closeout용이며 이후 정상 gameplay mutation을 migration 손상으로 오인하지 않는다. 이미 서비스가 시작된 DB에 apply로 되돌리거나 ledger snapshot을 덮어쓰지 않는다.
 
@@ -105,7 +105,7 @@ EquipmentProfile.inventory는 Entity에서 파생한 일시적 pure rule 계산 
 
 격리 tests.test_item_migration/tests.test_phase6_runtime에서 source 전체 범위, 수량/equipment 포함, native tree·identity 보존, read-only dry-run, source 실패·retry, missing/corrupt verify, cutover guard, fresh player, archive 불변을 검증한다. 실행별 결과와 실패 이력은 [playtest](playtest.md)를 따른다.
 
-기존 자동 fixture의 실행 이력과 현재 smoke/자동 기준선은 [playtest](playtest.md)를 따른다. Canonical Legacy Migration Corpus·전체 multiplayer/browser·실제 OS IME는 Phase 7B, full balance simulation·최종 fresh operational setup은 Phase 7C다. PostgreSQL 경쟁·multi-server는 별도 infrastructure다. 실제 play DB 변환은 현재 대상이 없으며 Phase 7 필수 작업이 아니다.
+기존 자동 fixture의 실행 이력과 현재 smoke/자동 기준선은 [playtest](playtest.md)를 따른다. Canonical Legacy Migration Corpus, Chrome desktop/좁은 viewport, SQLite single-server의 1~4인 session, 실제 Windows/Chrome OS IME 검증은 [Phase 7B](phase7b-integration-validation.md)에서 완료했다. 대표 build의 [밸런스 simulation](phase7c-balance-analysis.md)과 empty SQLite에서 시작하는 [fresh native 운영 경로 검증](phase7c-fresh-operational-validation.md)은 Phase 7C에서 완료했다. 실제 mobile device matrix와 모든 multiplayer race를 검증했다는 뜻은 아니다. PostgreSQL 경쟁·multi-server는 별도 infrastructure다. 실제 play DB 변환은 현재 대상이 없으며 Phase 7 필수 작업이 아니다.
 
 
 ## PR #34 리뷰 추가 entitlement

@@ -71,9 +71,10 @@ def report():
     carbine = build(4, ("guard_carbine", "reinforced_vest"))
     damage, _ = rules.player_attack(carbine, "sentinel", 0, 2.5, MeanRoll())
     shots = ceil(ENEMIES["sentinel"]["hp"] / damage)
+    ammo_cost = shots * ITEMS["ammo_556"]["purchase_unit_value"]
     penetration = {str(defense): {str(p): rules.apply_defense(30, defense, p) for p in (0, .1, .3)} for defense in (0, 2, 10)}
     return {"ridge_basic": opportunities(ridge, "alpha"), "ridge_skill": opportunities(ridge, "alpha", True),
             "jungle_basic": opportunities(jungle, "jungle_apex"), "jungle_skill": opportunities(jungle, "jungle_apex", True),
-            "hands": hand, "penetration": penetration, "carbine_shots": shots, "carbine_ammo_cost": shots * 3,
-            "carbine_income_ratio": round(shots * 3 / expected_loot_value("sentinel"), 3),
+            "hands": hand, "penetration": penetration, "carbine_shots": shots, "carbine_ammo_cost": ammo_cost,
+            "carbine_income_ratio": round(ammo_cost / expected_loot_value("sentinel"), 3),
             "loot_ev": {identity: expected_loot_value(identity) for identity in LOOT if not ENEMIES[identity].get("boss")}}

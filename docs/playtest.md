@@ -2,6 +2,73 @@
 
 이 문서는 각 작업 시점의 historical validation record를 포함한다. 과거 미실행·미구현 기록은 당시 사실이며 현재 구현은 [architecture](architecture.md), [final-content](final-content.md), [최신 작업 상태](CODEX_TASK_STATE.md)를 따른다.
 
+## PR #37 병합 전 문서 점검 (2026-10-08)
+
+시작 main `393a8589adc33b3098028f9a33aab793a5fec38d`, PR HEAD `4157cba28353dfbbc3e7744850b89e2d2d0fd5e2`의 [CI37635605763](https://github.com/wonmin82/primal-zone/actions/runs/37635605763)는 test·smoke SUCCESS다. 인계 이후 새 commit 없이 OPEN/non-draft·MERGEABLE/CLEAN·ahead5/behind0·review thread0개를 확인했다.
+
+README/docs 전체 22개를 current contract·historical record·실제 후속 roadmap으로 구분해 읽었다. Loot의 7B/7C 미검증 표현과 migration/light의 완료 여부를 정리하고 Phase 7B snapshot·당시 출력 예·성장 v10 범위를 명시했다. 이전 3칩/60칩·44.6%·실패·당시 미실행 기록은 유지한다. 현재 5.56mm 2칩/20발40칩/resale1칩과 Phase 7C 결과는 실제 코드·기존 evidence와 대조했다. 22개 문서의 상대 링크/anchor228개·fence 오류0개, historical 기록 보존과 `git diff --check` 통과를 확인했다. 첫 audit helper는 표의 ID backtick을 빠뜨린 기대 문자열 때문에 실패했으며 helper만 실제 표 형식에 맞춰 보정한 뒤 통과했다. 문서 내용·가격 오류는 아니었다. 실행 코드 변경이 없어 local full/Quick/Full은 재실행하지 않는다. 새 문서 HEAD의 exact CI는 [PR #37 Validation](https://github.com/wonmin82/primal-zone/pull/37)에 별도로 기록한다.
+
+현재 판정은 **ITEM SYSTEM V1 READY TO CLOSE WITH NOTES**다. PR 병합·소스 브랜치 삭제·최종 완료 선언은 수행하지 않는다. 아래 실제 실행 결과와 실패 이력은 당시 기록 그대로 보존한다.
+
+## Phase 7C — 밸런스·fresh native 운영 마감 (2026-10-07)
+
+Base `393a8589adc33b3098028f9a33aab793a5fec38d`, branch `codex/phase7c-balance-operational-closeout`. 아래는 이번 실제 local 실행이며 historical CI/7A/7B 결과로 대신하지 않는다. [분석](phase7c-balance-analysis.md), [fresh 재현](phase7c-fresh-operational-validation.md)을 연결한다. 최종 PR HEAD의 CI는 해당 PR Validation에 별도로 기록한다.
+
+### 측정 → 후보 → 최소 조정 → 재측정
+
+`python -X utf8 scripts/phase7c_balance.py --output work/phase7c/balance-final.json`은 실제 content/rules를 읽고 합법적 Lv1/Lv4/Lv7 build·64 seed·지원/2~4인 party를 계산한다. Baseline은 `--candidate pre-tuning-ammo`로 재현한다. 초기 분석 도구의 reward allocation list/dict 반환과 attack modifier 위치 기대는 실제 API에 맞춰 보정했다. Balance 값을 바꾸기 전에 baseline과 후보를 먼저 측정했다.
+
+- 경비카빈/경비기:3.766발·9.414초·incoming26.125·gross26.905. Baseline ammo11.297/net15.608/42.0% → 5.56mm purchase3→2 뒤 ammo7.531/net19.374/28.0%. 옛 단순4발 sanity44.6→29.7%. Resale1·20발 단위·package200/245·다른 탄약·enemy/gear/Defense/recovery/drop/Boss scaling은 그대로다.
+- Attack8→10 후보33.5%는 T1/T2 차이를 줄이며 목표 미달, currency20→32 후보29.0%는 모든 style EV를 부풀려 거절했다. Ammo drop 대폭 증가도 선택하지 않았다. 모든 package 분해 arbitrage invariant 유지.
+- Minimal 청소룡7.5초/incoming9.953, T1 근접 경비기10초/incoming27.969. Lv4 shield 능선40.117초·붕대7.984, Lv7 shield 밀림35.977초·붕대4.906, 각각64/64 승리. Lv4 모든 role의 보스 승리를 보장하지 않으며 support는 solo boss에 offense/성장/재훈련 준비가 필요하다. 첫 보고 보상과 반복 farm 수익은 구분한다.
+- 기본 HP3/min·SP6/min, 장비 회복과 실제 무료 본부 완전회복·T0/T1/T2 구매 비용·party 총량/지분을 분석했다. 이동·입력 latency와 실제 RNG drop은 simulation의 근사 한계다.
+
+### 자동 회귀의 실패와 보정
+
+| 실제 실행 | 결과와 처리 |
+| --- | --- |
+| 첫 `scripts/dev.py test --parallel 2` | pure207개/4.177초, 옛 정산 탄약 bundle60칩 기대1FAIL. 새40칩 계약으로 갱신; integration 미실행 |
+| 두 번째 전체 실행 | pure207개/2.619초 PASS, integration582개/539.594초(runner551.909초) 옛 구매 후credits1940 기대1FAIL. 새1960으로 갱신 |
+| `scripts/dev.py test tests.test_phase6_runtime --parallel 2 --reverse` | 15개/27.787초, runner38.348초 PASS |
+| 관련 pure `world.test_settlement world.test_balance_analysis world.test_final_content` | 16개/0.209초 PASS |
+| 세 번째 전체 실행 | pure207개/2.705초 PASS, integration582개/477.552초(runner488.378초/outer493.750초) 기존 환경 보기 불변 테스트1FAIL |
+| 실패 원인 / 최소 보정 | 관찰 timestamp1791381249.961805→1791381250.1017427이 정상 자연회복10초 경계를 넘음. 인접 테스트와 동일하게 해당 테스트의 시각만 고정; production 회복·타이밍·환경 조회 불변 assertion 유지 |
+| `scripts/dev.py test tests.test_environment --parallel 2 --reverse` | 21개/15.262초, runner26.958초 PASS |
+| 최종 `scripts/dev.py check` | PASS |
+| 최종 `scripts/dev.py test --parallel 2` | pure207개/2.760초·integration582개/447.581초(runner457.456초), 전체463.298초/exit0·failure0/error0 PASS |
+
+재실행 개수를 합산하지 않는다. 실패 로그는 `work/phase7c/full-test*.log`, 최종 로그는 `full-test-final-pass.log`에 보존한다. Test-only 시각 고정은 P3 reliability이며 production defect나 balance tuning으로 처리하지 않았다.
+
+### Quick / production Full
+
+최종 production 수치에서 Quick **#1 106.426초**, **#2 102.496초**, **#3 98.289초** 각각 PASS. Optional Harness setup 경로를 추가했으므로 기존 기본 Quick/Full이 그대로 동작함을 연속3회로 확인했다. 이후 환경 테스트의 시각만 고정했으므로 smoke 재실행 조건은 없다.
+
+`python scripts/dev.py smoke-full`: **695.863초 PASS**. Corpse29.305초/config30, respawn48.288초/config45, protection123.332초/config120을 관찰했다. Combat interval 설정2.5초(관찰 첫 round3.498초), enemy recovery delay15초 뒤 HP18→19 관찰25.897초였다. Polling/동시 격리 검증 부하가 관찰 지연에 포함되며 production timer를 바꾸지 않았다. 두 임무·보스·최종 보고·실제 restart/relogin이 성공했다. 광원1800→1415.687 정상 OFF 정산·active_light clear·일반 item/주무기 불변·startup strict preservation도 PASS.
+
+### Fresh empty DB: 실패 → 보정 → 성공
+
+각 `python -X utf8 scripts/phase7c_fresh.py`는 별도 empty SQLite/독립 run directory/owned Portal/Server를 사용한다. 실패 DB/로그는 보존하고 성공 DB는 제거했다. 실제 기존 DB나 legacy corpus를 복사하지 않았고 migration 네 mode는 한 번도 호출하지 않았다.
+
+| Run | 실제 결과 / 좁은 보정 |
+| --- | --- |
+| full-2iyt0lty,31.839초 | Evennia launcher가 settings 환경을 덮어써 schema와 parent ORM이 불일치. 실제 dev.setup의 migrate/collectstatic에 explicit settings adapter 적용 |
+| full-geb8f7q4,59.272초 | 실제 공개 가입의 세 번째 계정이 IP throttle에 거절됨. Throttle을 유지하고 필요한 일반 계정2개로 검증 |
+| full-fntzkyb6,111.705초 | 존재하지 않는 보급상 상품 selector 기대. 현재 generic 상품 명령 사용 |
+| full-i7w2463n,131.762초 | 체질 교관을 다른 방에서 호출. 실제 infirmary 교관 동선 사용 |
+| full-y6uglvh3,148.569초 | Read-only evidence가 direct owner 필터로 inside magazine 후손을 누락. 기존 api.items_owned_by 사용 |
+| full-bg2xaxmb,184.729초 | 실제 XP22는 Lv1인데 초기 준비가 Rank2를 요구. 초기 Rank1, 실제 사냥 XP 뒤 정상 훈련 |
+| full-hvjdlzmj,511.030초 | PASS: actual schema/first boot/native runtime1/ledger0/ordinary register2/starter/gameplay/restart/relogin |
+
+Fresh starter는 출정 대기실·XP0·20칩·HP60·벌목도/hands·작업복/body·붕대3개이고 legacy inventory/equipment/storage/light blob이 없다. Starter 증거 뒤 offline에서 검증가 준비금900칩만 지급해 grind를 단축했다. XP/quest/Credential/unique/아이템은 직접 fixture로 지급하지 않았으며 핵심 전이는 실제 명령을 사용했다. First initialization adapter는 foreground Harness에서 최초 자동 reset 요청만 생략하고 뒤의 실제 normal restart를 검증한다.
+
+Actual item/상점/보관/light ON-OFF/탄창 분리/loose 회수/장전/두 발 소비20→18/재장전/실물 및 currency loot/발전기 submit/두 보스·보고·access를 확인했다. Fresh restart의 ON광원1799.660→stopped1426.242/OFF/started_at None/active_light None, 일반 native identity/tree/state와 active weapon 불변·after strict preservation·quest/credits/storage/접근 보존이 성공했다. 비밀 없는 evidence는 `work/phase7c/fresh-evidence/full-hvjdlzmj/`다.
+
+### 안전성 / 남은 경계
+
+개발 DB SHA256 `B1318296F505B9B7522FCBDEDFF7642A06CF055E9DE72802198C70E6B8A7F700`, size733184, mtime_ns1790080153765082800은 모든 run 전후 동일했다. 성공 fixture cleanup·실패 owned process 종료를 확인했다. Fresh validation DB를 실제 장기 플레이 DB로 자동 채택하지 않는다.
+
+Definition ID·legacy mapping·state format·schema·migration entitlement가 그대로여서 Phase7B corpus 전체는 반복하지 않았다. OS IME는 Phase7B Windows/Chrome 사용자 확인을 유지하며 새 검증으로 표현하지 않는다. PostgreSQL/multi-server·실제 모바일 device matrix·의존성 보안 triage·legacy cleanup은 별도 작업이다. 기존 Full fixture reliability 이력과 support solo/party 역할·최소 레벨 보스 준비 한계는 남긴다. 미해결 production P0/P1/P2 없음; 최종 exact-head CI 뒤 **ITEM SYSTEM V1 READY TO CLOSE WITH NOTES**를 판단한다.
+
 ## PR #36 문서 마감·병합 준비 (2026-10-07)
 
 최신 원격 확인에서 main은 `52fa4d5813dffcfd6fed08013c69001e62a9b0d0`, PR HEAD는 `9ad163dc4d0502337c160c3000ec6e6dfb88b74e`이며 main 포함·tree clean·MERGEABLE/CLEAN·review thread0개다. 사용자가 병합과 소스 브랜치 삭제를 요청했다.
@@ -825,7 +892,7 @@ game과 격리 서버의 정적 파일을 수집하고 실제 DOM의 JS `?v=hq-s
 
 ### 3-3. 솔로 보스와 임무 보상
 
-첫 보스는 **Lv.4 이상, 획득 가능한 T1 무기·방호복, 체력·정신력 회복, 충분한 붕대**를 준비한다. 이는 수동 확인 준비 조건이며 실제 build별 소요·회복·탄약 경제의 최종 평가와 조정은 Phase 7C다.
+첫 보스는 **Lv.4 이상, 획득 가능한 T1 무기·방호복, 체력·정신력 회복, 충분한 붕대**를 준비한다. 이는 수동 확인 준비 조건이며 실제 build별 소요·회복·탄약 경제의 평가와 최소 조정 결과는 [Phase 7C 분석](phase7c-balance-analysis.md)을 따른다.
 Lv.4에 필요한 누적 경험치는 240입니다. 부족하면 사냥과 휴식을 반복합니다.
 비전투 상태로 귀환하면 옥상입니다. 의무실의 치료·휴식으로 회복하고 승강기 1층→중앙홀→부두에서 장비를 준비합니다.
 

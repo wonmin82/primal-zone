@@ -82,7 +82,7 @@ for identity, price in {
     "mag_762_standard": 50, "mag_762_extended": 70,
 }.items():
     ITEMS[identity].update(value=price, resale_unit_value=price // 2)
-for identity, purchase, resale, quantity in (("ammo_9", 2, 1, 12), ("ammo_556", 3, 1, 20), ("ammo_762", 4, 2, 8)):
+for identity, purchase, resale, quantity in (("ammo_9", 2, 1, 12), ("ammo_556", 2, 1, 20), ("ammo_762", 4, 2, 8)):
     ITEMS[identity].update(value=purchase, purchase_unit_value=purchase, resale_unit_value=resale, purchase_quantity=quantity)
 
 # 일반 물품은 이동 가능하고 임무 핵심 물품은 정의에서 명시적으로 차단한다.

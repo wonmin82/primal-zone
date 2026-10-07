@@ -3,6 +3,8 @@
 사냥하고 장비를 모으며, 잊힌 섬을 탐험하는 한국어 웹 MUD.
 사냥·장비·성장을 우선하고, 모든 주요 임무를 혼자 진행할 수 있도록 만든다.
 
+Item System V1의 Phase 1~6과 Phase 7A/B는 main에 병합됐다. Phase 7C의 밸런스·fresh 운영 경로 구현과 검증은 완료했으며 [PR #37](https://github.com/wonmin82/primal-zone/pull/37)은 OPEN 상태다. 현재 판정은 **ITEM SYSTEM V1 READY TO CLOSE WITH NOTES**이며, 최종 완료는 PR 병합과 새 main의 exact-head CI 성공 후 별도로 기록한다. SQLite + single Evennia server를 지원하며 PostgreSQL/multi-server와 legacy 정리는 별도 후속 작업이다. [최종 콘텐츠](docs/final-content.md), [밸런스 분석](docs/phase7c-balance-analysis.md), [fresh 검증](docs/phase7c-fresh-operational-validation.md), [마감 상태·제한 사항](docs/CODEX_TASK_STATE.md)을 참고한다. 최종 PR HEAD의 CI는 해당 PR Validation에서 확인한다.
+
 ## 현재 구현
 
 - 브라우저 가입·접속, 한글 이름과 명령어, 같은 방에서의 채팅

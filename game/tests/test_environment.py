@@ -284,6 +284,8 @@ class EnvironmentTests(WorldCommandTest):
     def test_blocked_exit_never_queries_environment_or_hidden_target(self):
         self.char1.location = self.rooms["marsh"]
         before = deepcopy(self.char1.profile())
+        # 관찰 계약과 무관한 pre-command 자연회복의 실제 10초 경계를 고정한다.
+        self.enterContext(patch("typeclasses.explorers.time", return_value=before["recovery"]["updated_at"]))
         with patch(
             "world.environment_state.snapshot_for",
             side_effect=AssertionError("blocked environment read"),
