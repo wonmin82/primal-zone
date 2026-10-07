@@ -39,7 +39,7 @@ def require_offline():
         raise ValueError("Evennia PID 파일이 남아 있습니다. 서버와 Portal 정지를 확인하세요.")
     from evennia.server.sessionhandler import SESSIONS
 
-    if SESSIONS.count():
+    if SESSIONS.get_sessions(include_unloggedin=True):
         raise ValueError("온라인 세션이 존재합니다. maintenance migration을 거절합니다.")
 
 

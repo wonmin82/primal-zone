@@ -1,6 +1,8 @@
 """격리 legacy world 변환과 cutover 후 native runtime 회귀."""
 
 from copy import deepcopy
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from time import time
 from unittest.mock import Mock, patch
 
@@ -19,6 +21,23 @@ from world.item_migration.workflow import migration_context
 from world.loot_entities.models import CurrencyLoot, LootClaim
 
 from tests.base import GameCommandTest
+
+
+class MigrationOfflineGuardTests(GameCommandTest):
+    def test_real_session_handler_checks_logged_in_and_unlogged_sessions(self):
+        from evennia.server.sessionhandler import SESSIONS
+        from world.item_migration.workflow import require_offline
+
+        with TemporaryDirectory() as directory, override_settings(
+                ITEM_MIGRATION_TEST_OVERRIDE=False, ITEM_MAINTENANCE=True, GAME_DIR=directory):
+            (Path(directory) / "server").mkdir()
+            with patch.object(SESSIONS, "get_sessions", return_value=[]) as sessions:
+                require_offline()
+                sessions.assert_called_once_with(include_unloggedin=True)
+            with patch.object(SESSIONS, "get_sessions", return_value=[Mock()]) as sessions:
+                with self.assertRaisesRegex(ValueError, "온라인 세션"):
+                    require_offline()
+                sessions.assert_called_once_with(include_unloggedin=True)
 
 
 class ItemMigrationTests(GameCommandTest):
