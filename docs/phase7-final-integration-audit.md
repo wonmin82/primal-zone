@@ -16,9 +16,9 @@ Phase 1~6 기능 구현은 PR #34에서 완료됐다. Phase 7은 현재 계약�
 | Legacy DB | explicit maintenance migration tooling을 통한 호환 |
 | PostgreSQL | [향후 infrastructure](postgresql-transition.md), Phase 7 exit criterion 아님 |
 
-## 현재 병합 전 상태
+## 현재 최종 완료 상태
 
-Phase 1~6과 Phase 7A/B는 main에 병합됐고, Phase 7C 구현·검증은 완료했으며 [PR #37](https://github.com/wonmin82/primal-zone/pull/37)은 OPEN 상태다. 지원 topology 내 미해결 production P0/P1/P2는 없다. 현재 판정은 **ITEM SYSTEM V1 READY TO CLOSE WITH NOTES**이며 V1 최종 완료 선언은 병합과 새 main exact-head CI 이후다. 아래 Phase 7A/B 절은 각 단계 당시의 historical 검증 기록이다.
+Phase 1~7C와 test-only CI 안정화를 main에 병합했다. 최종 판정은 **ITEM SYSTEM V1 COMPLETE**다. 지원 topology 내 production P0/P1/P2는 없다. PR #37 최초 merged-main CI의 timing fixture 실패를 숨기지 않고 별도 PR #38로 안정화했으며, 새 main exact-head push test·smoke 성공을 확인했다. 실제 SHA·CI·실패 이력은 [최종 작업 상태](CODEX_TASK_STATE.md)를 따른다. 아래 Phase 7A/B와 Phase 7C의 병합 전 판정은 historical 검증 기록이다.
 
 ## Phase 7A
 
@@ -133,25 +133,30 @@ Balance & Fresh Native Operational Closeout. 현재 수치 동결 → 실제 규
 - [x] complete gameplay smoke
 - [x] restart/relogin
 - [x] Phase 7C implementation / validation closeout (기능·balance·fresh 검증 완료)
-- [ ] Item System V1 final closeout (PR #37 병합·새 main exact-head CI 이후)
+- [x] Item System V1 final closeout (PR #37·test-only 안정화 병합과 post-fix main exact-head CI 성공)
 
 Quick106.426/102.496/98.289초 각각 성공, production Full695.863초 성공. Corpse29.305/respawn48.288/protection123.332초 관찰, 두 Boss/보고와 실제 normal restart/relogin/native preservation을 확인했다. Fresh511.030초에서 schema-only runtime/Explorer 없음 → first Server runtime1/ledger0 → ordinary account/starter → 실제 두 임무·보스·보고·Credential → restart/relogin final runtime1/ledger0이 성공했다. Fresh의 최초 foreground launcher reset 요청만 private adapter로 생략하고 뒤의 정상 restart를 실제 실행했다. 준비금900칩으로 grind만 단축하며 핵심 보상·XP·임무 전이는 bypass하지 않았다. Fresh는 migration command를 사용하지 않았다.
 
 기존 개발 DB fingerprint 전후 동일·성공 fixture cleanup·실패 owned process 정지를 확인했다. Definition ID/schema/state/mapping/entitlement 변경이 없어 Phase7B corpus 전체는 재실행하지 않는다. Fresh validation DB를 실제 장기 플레이 DB로 자동 채택하지 않는다. pure207개/2.760초·integration582개/447.581초(runner457.456초), 전체463.298초/exit0·failure0/error0 PASS. 이전 수치 기대 실패·테스트 회복 경계 간헐성과 여섯 fresh 보정 실패는 playtest에 보존한다.
 
-Final judgment: **ITEM SYSTEM V1 READY TO CLOSE WITH NOTES** (local 기능·밸런스·fresh 검증 완료; 최신 PR HEAD의 CI 최종 결과는 PR Validation에 별도 기록). Exact PR HEAD의 CI/run과 review 상태는 [PR #37](https://github.com/wonmin82/primal-zone/pull/37) Validation에서 확인한다. 지원 topology 내 production P0/P1/P2 없음. Simulation latency/order 근사·Full fixture 과거 reliability·최소레벨 solo role 준비·실제 mobile device matrix·의존성 security triage·IME 상세 trace 한계는 notes다. PostgreSQL/multi-server와 Post-V1 legacy adapter/field/archive cleanup은 별도 작업이며 Phase7 완료 조건이 아니다.
+병합 전 historical judgment: **ITEM SYSTEM V1 READY TO CLOSE WITH NOTES** (local 기능·밸런스·fresh 검증 완료; 최신 PR HEAD의 CI 최종 결과는 PR Validation에 별도 기록). Exact PR HEAD의 CI/run과 review 상태는 [PR #37](https://github.com/wonmin82/primal-zone/pull/37) Validation에서 확인한다. 지원 topology 내 production P0/P1/P2 없음. Simulation latency/order 근사·Full fixture 과거 reliability·최소레벨 solo role 준비·실제 mobile device matrix·의존성 security triage·IME 상세 trace 한계는 notes다. PostgreSQL/multi-server와 Post-V1 legacy adapter/field/archive cleanup은 별도 작업이며 Phase7 완료 조건이 아니다.
 
 ## PR #37 병합 후 최종 마감 계획
 
-이번 문서 점검에서는 PR을 병합하거나 소스 브랜치를 삭제하지 않는다. 사용자의 명시적 병합 요청 이후 다음 결과를 확인한다.
+아래는 기존 병합 후 계획의 실제 결과다. 최초 실패 → 원인 분류 → test-only 안정화 → 새 main CI 성공 순서를 보존한다.
 
-- [ ] 새 main HEAD와 PR #37 merge commit·양쪽 parent 확인
-- [ ] 새 main exact-head push CI의 test·smoke SUCCESS 확인
-- [ ] 소스 브랜치 삭제 요청과 병합 반영 확인 후 cleanup
-- [ ] Item System 관련 open PR 없음과 main 보호 설정 확인
-- [ ] 작은 docs-only closeout PR에서 README·CODEX_TASK_STATE·이 audit에 merge SHA·main SHA·CI run·cleanup 결과 기록
+- [x] PR #37 merged / merge commit·parents·source main 포함 확인
+- [x] 첫 merged-main exact-head push CI37645428065 실행 (test FAILURE / smoke SUCCESS)
+- [x] 명령 거절 검증과 무관한 회복10초 경계에 의한 fixture 실패 분류 / production regression 관찰되지 않음
+- [x] Test-only 안정화 PR #38 merged / 전체 assertion 유지 / production 변경 없음
+- [x] Post-fix main `0a8a777f4ca20c784db68888c1fa2025f94a7613` exact-head push CI37650374850 확인
+- [x] Test SUCCESS / check·pure207개·integration582개 PASS
+- [x] Smoke SUCCESS / Quick52.302초 PASS
+- [x] Production P0/P1/P2 = 0
+- [x] 기능 관련 open PR 없음·main protected 확인 (post-fix main 점검 시 open PR0개)
+- [x] Final documentation closeout / README·CODEX_TASK_STATE·이 audit의 현재 상태를 COMPLETE로 반영
 
-위 확인이 모두 성공한 뒤에만 상태를 `ITEM SYSTEM V1 COMPLETE`로 전환한다. 이는 병합 후 작업이며 현재 PR의 병합 전 상태를 완료로 선언하지 않는다.
+최종 판정: **ITEM SYSTEM V1 COMPLETE**. 이 docs-only PR의 CI·merge와 그 뒤 최종 main push CI는 별도 gate로 확인한다. 사용자 승인된 세 source branch의 삭제는 그 성공 뒤에만 실행하며, main 포함·worktree·최종 open PR0개·보호 설정·remote/local cleanup 실제 결과는 최종 문서 PR Validation에 기록한다. 첫 실패 run을 재실행해 우연히 성공시키거나 historical 실패를 성공으로 덮어쓰지 않았다.
 
 ## Deferred Infrastructure
 
