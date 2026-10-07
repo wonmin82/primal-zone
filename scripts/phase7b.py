@@ -131,7 +131,7 @@ def corpus(harness, kind):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=("serve", "serve-reports", "multiplayer", "loot", "items", "valid", "warning", "invalid"))
+    parser.add_argument("mode", choices=("serve", "serve-reports", "multiplayer", "loot", "items", "offline-guard", "valid", "warning", "invalid"))
     parser.add_argument("--keep-fixture", action="store_true", help="수동 조사 중 성공 fixture를 유지한다.")
     args = parser.parse_args()
     original = fingerprint(ROOT / "game/server/evennia.db3")
@@ -150,6 +150,10 @@ if __name__ == "__main__":
             asyncio.run(run(harness))
         elif args.mode == "items":
             from phase7b_items import run
+
+            asyncio.run(run(harness))
+        elif args.mode == "offline-guard":
+            from phase7b_offline_guard import run
 
             asyncio.run(run(harness))
         else:

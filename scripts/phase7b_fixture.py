@@ -266,11 +266,18 @@ def alter_corpus(action):
     return inspect()
 
 
+def offline_check():
+    from world.item_migration.workflow import require_offline
+
+    require_offline()
+    return {"offline": True}
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=("inspect", "live", "boss", "loot", "reports", "items", "valid", "warning", "invalid", "repair-invalid", "corrupt", "restore"))
+    parser.add_argument("action", choices=("inspect", "offline-check", "live", "boss", "loot", "reports", "items", "valid", "warning", "invalid", "repair-invalid", "corrupt", "restore"))
     args = parser.parse_args()
     initialize()
-    result = (inspect() if args.action == "inspect" else prepare_live() if args.action == "live" else prepare_boss() if args.action == "boss" else prepare_loot() if args.action == "loot" else prepare_reports() if args.action == "reports" else prepare_items() if args.action == "items" else
+    result = (inspect() if args.action == "inspect" else offline_check() if args.action == "offline-check" else prepare_live() if args.action == "live" else prepare_boss() if args.action == "boss" else prepare_loot() if args.action == "loot" else prepare_reports() if args.action == "reports" else prepare_items() if args.action == "items" else
               build_corpus(args.action) if args.action in ("valid", "warning", "invalid") else alter_corpus(args.action))
     print(json.dumps(result, ensure_ascii=False, default=str))

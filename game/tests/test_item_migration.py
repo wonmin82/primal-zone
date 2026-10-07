@@ -24,20 +24,135 @@ from tests.base import GameCommandTest
 
 
 class MigrationOfflineGuardTests(GameCommandTest):
-    def test_real_session_handler_checks_logged_in_and_unlogged_sessions(self):
-        from evennia.server.sessionhandler import SESSIONS
+    def setUp(self):
+        super().setUp()
+        self.directory = self.enterContext(TemporaryDirectory())
+        self.enterContext(override_settings(
+            ITEM_MIGRATION_TEST_OVERRIDE=False, ITEM_MAINTENANCE=True, GAME_DIR=self.directory))
+        (Path(self.directory) / "server").mkdir()
+
+    def probe(self, portal=False, server=False, **extra):
+        import json
+        return Mock(stdout=json.dumps(dict(portal=portal, server=server, proof="amp", **extra)))
+
+    def test_stopped_cross_process_status_uses_current_python_settings_and_directory(self):
+        import os
+        import sys
+
+        from django.conf import settings
         from world.item_migration.workflow import require_offline
 
-        with TemporaryDirectory() as directory, override_settings(
-                ITEM_MIGRATION_TEST_OVERRIDE=False, ITEM_MAINTENANCE=True, GAME_DIR=directory):
-            (Path(directory) / "server").mkdir()
-            with patch.object(SESSIONS, "get_sessions", return_value=[]) as sessions:
-                require_offline()
-                sessions.assert_called_once_with(include_unloggedin=True)
-            with patch.object(SESSIONS, "get_sessions", return_value=[Mock()]) as sessions:
-                with self.assertRaisesRegex(ValueError, "온라인 세션"):
+        with patch("world.item_migration.workflow.subprocess.run", return_value=self.probe()) as run:
+            require_offline()
+        args, kwargs = run.call_args
+        self.assertEqual(args[0], [sys.executable, "-m", "world.item_migration.runtime_status"])
+        self.assertEqual(kwargs["cwd"], self.directory)
+        self.assertEqual(kwargs["env"], dict(os.environ, DJANGO_SETTINGS_MODULE=settings.SETTINGS_MODULE))
+        self.assertEqual(kwargs["timeout"], 30)
+        self.assertTrue(kwargs["check"])
+
+    def test_running_portal_or_server_rejects_apply_and_cutover_before_mutation(self):
+        from world.item_migration.workflow import require_offline
+
+        before = (list(ItemEntity.objects.values()), list(ItemMigrationLedger.objects.values()),
+                  list(ItemRuntime.objects.values()), list(ItemSequence.objects.values()))
+        for portal, server in ((True, True), (True, False), (False, True)):
+            with self.subTest(portal=portal, server=server), patch(
+                    "world.item_migration.workflow.subprocess.run", return_value=self.probe(portal, server)):
+                for action in (require_offline, item_migration.apply, item_migration.cutover):
+                    with self.assertRaisesRegex(ValueError, "실행 중"):
+                        action()
+        self.assertEqual(before, (list(ItemEntity.objects.values()), list(ItemMigrationLedger.objects.values()),
+                                 list(ItemRuntime.objects.values()), list(ItemSequence.objects.values())))
+
+    def test_unknown_malformed_and_orphan_process_status_fail_closed(self):
+        from world.item_migration.workflow import require_offline
+
+        for response in ("", "unexpected", "{}", "[]", '{"portal":false}',
+                         '{"portal":false,"server":0,"proof":"amp"}',
+                         '{"portal":false,"server":false,"proof":"unknown"}',
+                         self.probe(error="Evennia Server process가 실행 중입니다.").stdout):
+            with self.subTest(response=response), patch(
+                    "world.item_migration.workflow.subprocess.run", return_value=Mock(stdout=response)):
+                with self.assertRaisesRegex(ValueError, "offline 확인 실패"):
                     require_offline()
-                sessions.assert_called_once_with(include_unloggedin=True)
+
+    def test_probe_timeout_launch_failure_and_nonzero_exit_fail_closed(self):
+        import subprocess
+
+        from world.item_migration.workflow import require_offline
+
+        for failure in (OSError("launch"), subprocess.TimeoutExpired("status", 30),
+                        subprocess.CalledProcessError(1, "status")):
+            with self.subTest(failure=failure), patch(
+                    "world.item_migration.workflow.subprocess.run", side_effect=failure):
+                with self.assertRaisesRegex(ValueError, "offline 확인 실패"):
+                    require_offline()
+
+    def test_pid_is_only_an_additional_safety_guard(self):
+        from world.item_migration.workflow import require_offline
+
+        (Path(self.directory) / "server/server.pid").write_text("123", encoding="utf-8")
+        with patch("world.item_migration.workflow.subprocess.run", return_value=self.probe()) as run:
+            with self.assertRaisesRegex(ValueError, "PID"):
+                require_offline()
+            run.assert_called_once()
+
+    def test_process_inventory_rejects_orphan_server_and_preserves_unknown_as_failure(self):
+        from world.item_migration.runtime_status import runtime_processes
+
+        with patch("world.item_migration.runtime_status.os.name", "nt"), patch(
+                "world.item_migration.runtime_status.subprocess.run") as run:
+            run.return_value.stdout = '[{"CommandLine":"python --python=C:/evennia/server/server.py"}]'
+            self.assertEqual(len(runtime_processes()), 1)
+            run.return_value.stdout = '[{"CommandLine":"python -m world.item_migration.runtime_status"}]'
+            self.assertEqual(runtime_processes(), [])
+            run.return_value.stdout = '[{"CommandLine":null}]'
+            with self.assertRaisesRegex(ValueError, "확인할 수 없습니다"):
+                runtime_processes()
+            run.return_value.stdout = '[]'
+            with self.assertRaisesRegex(ValueError, "확인할 수 없습니다"):
+                runtime_processes()
+
+    def test_file_database_cannot_use_test_override(self):
+        from django.db import connection
+        from world.item_migration.workflow import require_offline
+
+        with override_settings(ITEM_MIGRATION_TEST_OVERRIDE=True), patch.dict(
+                connection.settings_dict, NAME="corpus.sqlite3"):
+            with self.assertRaisesRegex(ValueError, "in-memory"):
+                require_offline()
+
+    def test_only_explicit_connection_refusal_is_a_stopped_candidate(self):
+        from twisted.internet.error import ConnectionRefusedError, TimeoutError
+        from twisted.python.failure import Failure
+        from world.item_migration.runtime_status import failed_status
+
+        self.assertEqual(failed_status(Failure(ConnectionRefusedError())),
+                         {"portal": False, "server": False, "proof": "connection-refused"})
+        for error in (TimeoutError(), RuntimeError("bad AMP protocol")):
+            self.assertIn("error", failed_status(Failure(error)))
+
+    def test_connected_probe_without_amp_reply_stops_its_own_reactor(self):
+        import json
+
+        from world.item_migration import runtime_status
+
+        with patch("evennia.server.evennia_launcher.init_game_directory"), patch(
+                "evennia.server.evennia_launcher.SETTINGS_DOTPATH"), patch(
+                "evennia.server.evennia_launcher.AMP_CONNECT_TIMEOUT"), patch(
+                "twisted.internet.reactor") as reactor, patch(
+                "world.item_migration.runtime_status.runtime_processes") as processes, patch(
+                "builtins.print") as printed:
+            def timeout():
+                args = reactor.callLater.call_args.args
+                self.assertEqual(args[0], 12)
+                args[1](args[2])
+            reactor.run.side_effect = timeout
+            runtime_status.main()
+            self.assertIn("timeout", json.loads(printed.call_args.args[0])["error"])
+            reactor.stop.assert_called_once()
+            processes.assert_not_called()
 
 
 class ItemMigrationTests(GameCommandTest):
