@@ -104,13 +104,14 @@ def corpus(harness, kind):
         assert fixture(harness, "inspect") == applied, "미승인 warning cutover 변경"
         command(harness, "cutover", accept=True)
     final = fixture(harness, "inspect")
-    (harness.run_dir / "corpus-after.json").write_text(json.dumps(final, ensure_ascii=False, default=str), encoding="utf-8")
     preserved = before["players"]["보존검증"]["native"]["items"]
     preserved_ids = {row["id"] for row in preserved}
     assert [row for row in final["players"]["보존검증"]["native"]["items"]
             if row["id"] in preserved_ids] == preserved, "기존 native Entity 변경"
     assert final["runtime"][0]["version"] == (0 if kind == "invalid" else 1)
     if kind == "invalid":
+        (harness.run_dir / "corpus-invalid-failure.json").write_text(
+            json.dumps(final, ensure_ascii=False, default=str), encoding="utf-8")
         assert applied["ledger"] and len(applied["ledger"]) == len(applied["sources"]) - 1
         failed = applied["players"]["검증라"]
         assert failed["native"]["items"] == []
@@ -124,6 +125,10 @@ def corpus(harness, kind):
         command(harness, "verify")
         command(harness, "cutover")
         final = fixture(harness, "inspect")
+    after_path = harness.run_dir / "corpus-after.json"
+    after_path.write_text(json.dumps(final, ensure_ascii=False, default=str), encoding="utf-8")
+    assert json.loads(after_path.read_text(encoding="utf-8")) == fixture(harness, "inspect"), "최종 evidence 불일치"
+    assert final["runtime"][0]["version"] == 1, "최종 cutover evidence 누락"
     print(json.dumps({"corpus": kind, "PASS": True, "sources": len(final["sources"]),
                       "ledger": len(final["ledger"]), "sequence": final["sequence"],
                       "runtime": final["runtime"], "run": str(harness.run_dir)}, ensure_ascii=False), flush=True)
