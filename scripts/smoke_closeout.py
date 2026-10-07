@@ -251,7 +251,8 @@ class Closeout:
         else:
             await route(player, (('남', 'support_3f_e1'), ('서', 'support_3f_c'),
                                 ('서', 'support_3f_w1'), ('북', 'armor_shop')))
-            await player.act('미끄럼방지탐사화 구매', lambda s: count_item(s, 'non_slip_boots') == 1)
+            boots = count_item(player.state, 'non_slip_boots')
+            await player.act('미끄럼방지탐사화 구매', lambda s: count_item(s, 'non_slip_boots') == boots + 1)
             await player.act('미끄럼방지탐사화 착용', lambda s: s['equipment']['feet'] == '미끄럼방지탐사화')
         if count_item(player.state, 'expedition_tag') and not player.state['equipment']['neck']:
             await player.act('탐사인식표 착용', lambda s: s['equipment']['neck'] == '탐사인식표')

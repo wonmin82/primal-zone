@@ -10,7 +10,7 @@ import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import TestCase
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from server.conf.smoke_support import QUICK_TIMING, require_smoke, smoke_timings
 
@@ -21,6 +21,7 @@ sys.path.insert(0, str(PROJECT))
 sys.path.insert(0, str(PROJECT / "scripts"))
 from scripts import dev, smoke_harness  # noqa: E402
 from scripts.smoke_closeout import (  # noqa: E402
+    Closeout,
     assert_shutdown_items,
     assert_startup_items,
     stop_for_restart,
@@ -270,6 +271,26 @@ class SmokeContractsTests(TestCase):
 
 
 class SmokeRestartTests(TestCase):
+    def test_full_boss_purchase_accepts_boots_previously_obtained_by_drop(self):
+        class PurchaseObserved(Exception):
+            pass
+
+        player = SimpleNamespace(state={"inventory": [
+            {"id": "folding_shield", "count": 1}, {"id": "non_slip_boots", "count": 1}]})
+
+        async def act(command, predicate):
+            if command == "미끄럼방지탐사화 구매":
+                player.state["inventory"][1]["count"] += 1
+                self.assertTrue(predicate(player.state), "기존 drop 1개 + 정상 구매 1개를 허용해야 한다")
+                raise PurchaseObserved
+
+        player.act = act
+        closeout = Closeout(SimpleNamespace(players=(player, None, None)))
+        with patch.object(closeout, "floor", new_callable=AsyncMock), patch(
+            "scripts.smoke_closeout.route", new_callable=AsyncMock
+        ), self.assertRaises(PurchaseObserved):
+            asyncio.run(closeout.prepare_boss())
+
     def test_restart_reuses_directory_database_and_ports_without_fixture_reset(self):
         harness = smoke_harness.Harness("full")
         harness.run_dir = Path("same-isolated-db")
