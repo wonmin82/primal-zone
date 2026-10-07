@@ -2,6 +2,27 @@
 
 이 문서는 각 작업 시점의 historical validation record를 포함한다. 과거 미실행·미구현 기록은 당시 사실이며 현재 구현은 [architecture](architecture.md), [final-content](final-content.md), [최신 작업 상태](CODEX_TASK_STATE.md)를 따른다.
 
+## PR #36 — Offline Guard / Corpus Evidence Review Fix (2026-10-07)
+
+시작 HEAD `6fe5541201a4303b591f080c524a9bcaa028301e`, 기존 Phase 7B branch/PR만 수정한다. 아래 실행은 저장소 `.venv` Python 환경을 사용했다. 기존 PID + process-local SESSIONS 검사는 Windows의 다른 Evennia process 정지를 증명하지 못한 P1 검증 한계였다. 현재 구현은 같은 환경의 launcher AMP structured status와 orphan process 보조 검사로 fail closed한다. IME 사용자 수동 확인은 유지하며 자동 재검증하지 않았다.
+
+| 새 실행 / 관찰 | 실제 결과 |
+| --- | --- |
+| `scripts/dev.py test tests.test_item_migration.MigrationOfflineGuardTests --parallel 2 --reverse` | 초기 guard7개/2.652초(runner15.535초) 성공. 이후 connection refusal/timeout 구분 회귀1개 추가 |
+| `scripts/dev.py test tests.test_item_migration tests.test_legacy_corpus --parallel 2 --reverse` | 37개/45.479초(runner56.457초) 성공. source rollback/sequence/ledger/retry 기존 회귀 유지 |
+| `scripts/phase7b.py offline-guard`, #1 `full-z61ijgzb` | 실제 running apply/cutover 거절·DB snapshot 불변 성공. 정상 stop 후 기본 AMP connect2초가 timeout되어 offline acceptance 실패. 실패 DB/로그 보존·owned process cleanup·개발 DB 불변 |
+| 동일 actual guard #2 `full-c0t7e6c6` | AMP RUNNING과 apply/cutover 거절 성공. 정상 stop 뒤 `TimeoutError`를 명시적으로 확인. 이 오류를 offline으로 허용하지 않고 보존 |
+| 동일 actual guard #3 `full-0awmg6e5` | probe connect만10초/child30초로 제한 후69.828초 성공. PID 파일 없음, AMP Portal/Server RUNNING, apply exit1(5.403초), cutover exit1(6.398초), 전체 source/legacy·ledger·sequence·runtime 불변. Normal stop의 owned exit0·명시적 connection refused·process 정지·같은 settings guard 통과·read-only 확인. 성공 fixture cleanup/evidence export 완료 |
+| `scripts/dev.py test tests.test_item_migration.MigrationOfflineGuardTests tests.test_legacy_corpus --parallel 2 --reverse` | 최종 guard9개+corpus4개, 총13개/42.412초(runner56.984초) 성공. AMP 응답 없는 child 자체 종료 회귀 포함 |
+| 최종 probe actual guard #4 `full-v88bfgea` | connect10초/AMP reply12초/outer30초의 최종 코드로71.831초 성공. PID 없음·AMP 두 process RUNNING·apply exit1(7.171초)/cutover exit1(6.846초)·DB snapshot 불변·정상 stop/guard 통과/read-only·owned cleanup·개발 DB 불변 |
+| 첫 review `scripts/dev.py test --parallel 2` | Pure204개/2.821초·integration581개/509.610초 case 모두 OK. Concurrent targeted runner와 Windows clone 임시 파일 정리 충돌로 teardown `default_1.sqlite3` FileNotFoundError, 전체 exit1/outer527.108초. 성공 실행으로 처리하지 않고 로그 보존. Test runner를 순차 실행하여 재검증 |
+| 최종 review `scripts/dev.py check` / `scripts/dev.py test --parallel 2` | Check 성공. 순차 runner의 pure204개/2.724초·integration582개/470.025초(runner481.454초, setup8.185초/teardown0.001초), outer486.823초/exit0·failure0/error0. 앞선 teardown 실패는 위에 보존 |
+| `scripts/phase7b.py valid` | `full-9kankv09`: CLI 전체·apply2/read-only/corruption guard·cutover 성공. Post-cutover actual9개/73.100초 성공. Source11/ledger11/sequence55/runtime1 |
+| `scripts/phase7b.py warning` | `full-1p_hwaom`: 예상 recovery warning·미승인 cutover 거절/state 불변·승인 cutover 성공. Source11/ledger11/sequence55/runtime1 |
+| `scripts/phase7b.py invalid` | `full-sfk13ydz`: initial safe failure→unknown만 제거→failed source retry→verify/cutover 성공. Failure 파일 runtime0/ledger10/sequence46, final after 파일 runtime1/ledger11/sequence55. 파일 전체와 마지막 inspect 일치. 세 corpus coordinator 합580.991초이며 각 실행 결과를 합산 test count로 사용하지 않음 |
+
+Invalid after 파일이 repair 전에 저장되던 P3는 초기 실패 evidence와 최종 after evidence를 분리해 수정한다. 파일 전체와 최종 inspect equality/runtime1을 coordinator가 실제 run에서 검사한다. 아래 기존 Phase 7B 성공·실패 기록은 소급 변경하지 않는다. 세 actual CLI는 성공 fixture를 정리하고 evidence만 export했다. 최종 full/check는 위에 새 실행으로 기록했으며 exact-head CI는 마감 결과에 구분한다. Local Full은 common Harness/gameplay/smoke 코드가 그대로여서 기존628.071초를 재사용하며 새 실행으로 표현하지 않는다. 실행 코드 HEAD `12fe5a63d6b04e0bae71004e84c7e01db7115f39`의 [CI37610891382](https://github.com/wonmin82/primal-zone/actions/runs/37610891382)는 check·pure204개/1.139초·integration582개/317.248초(runner323.997초)·Quick52.696초 성공이다. CI head SHA가 해당 코드 HEAD와 같음을 확인했다. 이후 문서만 마감하며 그 최종 HEAD의 정확한 CI는 PR Validation/최종 보고에 별도로 기록한다. 이전 코드 HEAD 성공을 최종 문서 HEAD로 대신하지 않는다.
+
 ## Phase 7B 통합·legacy 호환성 검증 (2026-10-07)
 
 Base `52fa4d5813dffcfd6fed08013c69001e62a9b0d0`, branch `codex/phase7b-integration-legacy-validation`. [실제 Chrome/독립 session 관찰 표](phase7b-integration-validation.md)와 [Canonical corpus 구성·재현](phase7-legacy-migration-corpus.md)을 연결한다. 아래는 이번에 실행한 결과이며 이전 Phase 수치와 합산하지 않는다.

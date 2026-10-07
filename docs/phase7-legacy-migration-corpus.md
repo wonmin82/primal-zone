@@ -2,6 +2,12 @@
 
 이 corpus는 `TEST / LEGACY CORPUS`다. 실제 플레이·운영 데이터가 아니며 production migration rehearsal로 취급하지 않는다. SQLite + single Evennia server의 구버전 호환 경로를 재현한다. PostgreSQL row-lock·multi-server race 검증은 포함하지 않는다.
 
+## PR #36 review fix: offline guard와 최종 evidence
+
+Windows의 PID 부재와 CLI-local session singleton은 offline 증명이 아니다. 현재 guard는 [cross-process offline 계약](item-migration.md#명령과-의미)을 사용한다. `python scripts/phase7b.py offline-guard`는 격리 native DB의 실제 Portal/Server를 시작하여 별도 apply/cutover가 running guard에서 실패하고 item/ledger/sequence/runtime/legacy snapshot이 불변인지 검사한다. 정상 Evennia stop 뒤 같은 settings의 guard가 통과해야 한다. Test override를 사용하지 않는다. 첫 성공 실행 `full-0awmg6e5`는69.828초이며 PID 파일 없는 Windows에서 두 process RUNNING을 AMP로 확인했다. Final bounded probe 재실행 `full-v88bfgea`도71.831초 성공했고, same-settings normal stop 뒤 acceptance·DB 불변·owned cleanup을 재확인했다.
+
+`corpus-after.json`은 항상 해당 coordinator run의 마지막 successful cutover snapshot이다. Invalid의 초기 안전 실패(runtime0, 해당 source 미완료)는 `corpus-invalid-failure.json`으로 별도 보존한다. Unknown 항목 제거→repair/retry→verify→cutover 뒤 runtime1 결과를 after 파일에 쓰고, 파일 전체와 최종 inspect의 runtime/ledger/sequence/sources/players equality를 검사한다. Binary DB를 Git에 넣지 않는다. 이전 invalid 성공 로그와 당시 잘못된 after 파일은 historical evidence이며 새 파일의 의미로 소급 바꾸지 않는다.
+
 ## 생성과 실행
 
 저장소 루트의 기존 Python 환경에서 다음을 실행한다. 각 명령이 별도 작업 디렉터리·SQLite·fixture account·owned Portal/Server를 만들고 종료한다. 개발 DB는 읽기 fingerprint 외에 사용하지 않는다.
@@ -10,6 +16,7 @@
 .\.venv\Scripts\python.exe -X utf8 scripts/phase7b.py valid
 .\.venv\Scripts\python.exe -X utf8 scripts/phase7b.py warning
 .\.venv\Scripts\python.exe -X utf8 scripts/phase7b.py invalid
+.\.venv\Scripts\python.exe -X utf8 scripts/phase7b.py offline-guard
 ```
 
 `scripts/phase7b_fixture.py`가 historical state를 코드로 구성하며 `game/tests/test_legacy_corpus.py`가 같은 builder의 의미를 regression으로 보존한다. 생성된 binary DB는 Git에 넣지 않는다. ObjectDB identity와 UUID는 새 DB마다 달라지므로 expected result는 identity 관계·수량·mapping·policy로 비교한다. 광원과 보호 기한에는 해당 실행의 관찰 시각을 사용한다.
@@ -71,3 +78,10 @@ Valid cutover 뒤 실제 Portal/Server와 네 독립 WebSocket session에서 로
 처음 실제 file DB apply에서 `ServerSessionHandler.count` AttributeError가 재현됐다. 정식 `get_sessions(include_unloggedin=True)` API로 수정하고 anonymous session을 포함한 offline guard regression을 추가했다. Ledger/cutover/transaction 구조는 변경하지 않았다.
 
 초기 fixture 준비 실패와 잘못된 expected snapshot도 [playtest](playtest.md)에 보존한다. 위 성공은 그 실패를 삭제하거나 성공으로 바꾼 결과가 아니다. 이번 작업에서 실제 개발 DB migration이나 PostgreSQL 실행, balance tuning은 하지 않았다.
+
+## PR #36 review fix 재실행 결과
+
+- Valid `full-9kankv09`: 모든 실제 CLI 계약과 source11/ledger11/sequence55/runtime1 성공. Cutover 후 네 session의 기존9개 native gameplay·archived item blob 불변은73.100초 성공이다.
+- Warning `full-1p_hwaom`: 기존 recovery warning, 승인 없는 cutover 거절/state 불변과 accept-warnings 성공. 최종 runtime1이다.
+- Invalid `full-sfk13ydz`: unknown source initial safe failure와 다른10 source 보존·실패 source 부분 row 없음, repair/retry/verify/cutover 성공. `corpus-invalid-failure.json`은 runtime0/ledger10/sequence46, `corpus-after.json`은 runtime1/ledger11/sequence55와 실패 player의 최종 native9개다. Coordinator가 저장 파일 전체와 마지막 inspect를 실제 비교했다.
+- 세 DB는 재생성 가능하므로 cleanup했고 `work/phase7b/evidence/<run-id>/`에 비밀 없는 JSON/CLI log만 남긴다. 실제 개발 DB는 불변이며 test override·PostgreSQL·production migration을 사용하지 않았다.

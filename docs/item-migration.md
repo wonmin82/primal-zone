@@ -4,7 +4,7 @@
 
 [Canonical Legacy Migration Corpus](phase7-legacy-migration-corpus.md)의 코드 builder와 격리 file SQLite에서 valid/warning/invalid CLI를 실행했다. Dry-run/verify 파일 불변, source atomic apply, 재실행 row/sequence/ledger 불변, unknown source 정상화 후 retry, 수량 손상 verify/cutover 거절, warning 미승인/승인 경계를 확인했다. Valid cutover 뒤 네 실제 session의 native gameplay와 archived item blob 불변도 확인했다. 상세 fixture·명령·실행 디렉터리·실패 이력은 corpus 문서와 playtest를 따른다.
 
-실제 file DB의 offline guard에서 발견한 잘못된 Evennia session API는 `get_sessions(include_unloggedin=True)`로 수정했다. 인증 전 session도 있으면 offline migration을 거절한다. Migration ledger·source transaction·global cutover 계약은 그대로다. 이 결과는 실제 production DB migration이나 PostgreSQL concurrency 검증을 의미하지 않는다.
+초기 file DB 검증에서 `SESSIONS.count()` AttributeError를 정식 API로 보정했지만, PR #36 리뷰에서 management-command process의 session singleton이 다른 Server process의 상태를 증명하지 못함을 확인했다. 현재 guard는 아래 cross-process offline 계약을 사용하며 그 이전 검증은 historical record다. Migration ledger·source transaction·global cutover 계약은 그대로이며 실제 production DB migration이나 PostgreSQL concurrency 검증을 의미하지 않는다.
 
 ## 현재 용도: legacy compatibility
 
@@ -73,7 +73,13 @@ claimed radio_tower는 outpost_supply_pass/ridge_predator_mark, claimed deep_jun
 - verify: read-only source 완료/digest/native snapshot, 독립 legacy/native 수량·equipment/storage·claim 권리·currency/shares·full migration magazine·광원 상태 대조와 전체 model full_clean/unique scope/active reference/entitlement를 검사한다. 오류가 있으면 cutover할 수 없다.
 - cutover: source 완료와 verify error=0을 확인하고 marker만 설정한다. warning이 있으면 운영자가 보고서를 검토한 후 `--cutover --accept-warnings`로 명시적으로 수락한다. 데이터 재생성은 없다.
 
-apply/cutover는 `ITEM_MAINTENANCE=True`, server/Portal PID 파일 없음, 온라인 세션 없음이 필요하다. `ITEM_MIGRATION_TEST_OVERRIDE=True`는 격리 SQLite in-memory DB에서만 허용한다. 운영 설정에 test audit/override를 사용하지 않는다.
+apply/cutover는 `ITEM_MAINTENANCE=True`만으로 허용되지 않는다. 실제 Portal과 Server가 모두 정지된 상태를 cross-process로 확인해야 한다. 현재 Python·GAME_DIR·environment·DJANGO settings를 그대로 사용하는 별도 process에서 Evennia 6.1 launcher의 AMP status API를 조회한다. CLI-local `SESSIONS`는 다른 process의 session 상태가 아니므로 offline 판정에 사용하지 않는다.
+
+Windows launcher는 PID 파일을 만들지 않을 수 있다. Unix PID 검사는 보조 방어선이며 PID 없음은 정지 증명이 아니다. Portal-only·Server-only·둘 다 실행 중이면 거절한다. Status timeout·launcher 실행 실패·잘못되거나 알 수 없는 응답도 fail closed로 거절한다. Upstream `evennia status`는 모든 AMP errback을 NOT RUNNING으로 출력하므로 그 문자열만 신뢰하지 않는다. 명시적인 connection refusal과 timeout/프로토콜 오류를 구분하며, 정지 후보도 Windows CIM/Unix process 목록에서 orphan Evennia가 없음을 확인한다. 목록을 읽을 수 없거나 Python command line이 불명확하면 차단하고, 다른 world의 실행 중 Evennia도 보수적으로 차단한다.
+
+Read-only status probe의 연결 제한은10초, AMP 응답 deadline은12초, 전체 child 제한은30초다. 연결 후 응답이 없는 경우도 probe 자체의 reactor를 종료해 Windows venv launcher의 child를 남기지 않는다. Windows에서 upstream 기본2초가 실제 연결 거절 통지보다 먼저 끝난 실패를 보존하며 gameplay timer/settings는 바꾸지 않았다. Windows actual owned Portal/Server가 PID 파일 없이 실행 중일 때 별도 apply/cutover 거절 및 DB snapshot 불변, 정상 종료 후 같은 settings의 guard 통과를 확인했다. 재현 명령은 `python scripts/phase7b.py offline-guard`다.
+
+`ITEM_MIGRATION_TEST_OVERRIDE=True`는 SQLite의 실제 in-memory DB에서만 허용한다. Canonical file SQLite CLI는 override를 사용하지 않는다. 운영 설정에 test audit/override를 사용하지 않는다.
 
 ## 운영 순서
 
