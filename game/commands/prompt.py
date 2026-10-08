@@ -11,7 +11,8 @@ class PromptLifecycle:
         begin = getattr(self.caller, "begin_command_output", None)
         if not begin:
             return super().at_pre_cmd()
-        if getattr(self, "equipment_change", False) or getattr(self, "read_only", False):
+        if (getattr(self, "equipment_change", False) or getattr(self, "read_only", False)
+                or getattr(self, "is_exit", False)):
             begin(reconcile=False)
         else:
             begin()
