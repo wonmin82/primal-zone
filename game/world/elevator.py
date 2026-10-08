@@ -89,7 +89,7 @@ def board(player):
     with world_change():
         stop = stop_for_room(player.zone)
         if stop is None:
-            raise rules.RuleError("승강기는 지원동 중앙 복도와 옥상에서 이용할 수 있습니다.")
+            raise rules.RuleError("승강기는 본부 1층 로비·2~5층 중앙 복도와 옥상에서 이용할 수 있습니다.")
         rules.require_peace(player.profile())
         room = elevator_room()
         moved = set_stop(room, stop)

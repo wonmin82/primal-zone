@@ -28,7 +28,7 @@ class ElevatorTests(WorldCommandTest):
         self.lift = self.rooms[ELEVATOR_ROOM]
         self.assertEqual(self.lift.db.current_stop, ELEVATOR_DEFAULT_STOP)
         for player in (self.char1, self.char2):
-            player.location = self.rooms["support_1f_c"]
+            player.location = self.rooms["hq_concourse"]
             player.push_state = Mock()
         for module in ("enemies", "explorers", "loot"):
             self.enterContext(patch(f"typeclasses.{module}.delay"))
@@ -54,13 +54,13 @@ class ElevatorTests(WorldCommandTest):
             self.char1.execute_cmd(" 승강기 ")
 
     def test_unknown_scope_and_closed_directions_preserve_location_and_state(self):
-        self.char1.location = self.rooms["support_1f_w1"]
+        self.char1.location = self.rooms["support_2f_w1"]
         before = deepcopy(self.char1.profile())
         for command in ["승강기", *[stop["label"] for stop in ELEVATOR_STOPS.values()]]:
             with patch.object(self.char1, "msg") as output:
                 self.char1.execute_cmd(command)
             self.assertIn("명령을 확인하세요.", str(output.call_args_list))
-            self.assertEqual(self.char1.zone, "support_1f_w1")
+            self.assertEqual(self.char1.zone, "support_2f_w1")
         self.assertEqual(self.char1.profile(), before)
         self.assertEqual(self.lift.db.current_stop, "1f")
         for data in ELEVATOR_STOPS.values():
@@ -116,8 +116,8 @@ class ElevatorTests(WorldCommandTest):
         self.assertEqual(third.location, self.lift)
         self.char2.execute_cmd("1층")
         third.execute_cmd("내려")
-        self.assertEqual(third.zone, "support_1f_c")
-        self.assertEqual(self.char2.zone, "support_1f_c")
+        self.assertEqual(third.zone, "hq_concourse")
+        self.assertEqual(self.char2.zone, "hq_concourse")
 
     def test_bootstrap_and_reload_preserve_shared_floor_room_ids_and_occupants(self):
         self.char1.execute_cmd("승강기")
@@ -166,7 +166,7 @@ class ElevatorTests(WorldCommandTest):
             self.char1.execute_cmd("승강기")
             output.assert_not_called()
         self.assertEqual(self.lift.db.current_stop, "3f")
-        self.assertEqual(self.char1.zone, "support_1f_c")
+        self.assertEqual(self.char1.zone, "hq_concourse")
         self.assertEqual(self.char1.profile(), before)
         with patch.object(self.char2, "msg") as output:
             with self.assertRaises(RuntimeError), world_change():
@@ -176,7 +176,7 @@ class ElevatorTests(WorldCommandTest):
         self.assertEqual(self.lift.db.current_stop, "3f")
         self.char1.change(lambda profile: profile.update(combat_target=999))
         self.char1.execute_cmd("승강기")
-        self.assertEqual(self.char1.zone, "support_1f_c")
+        self.assertEqual(self.char1.zone, "hq_concourse")
         self.assertEqual(self.lift.db.current_stop, "3f")
 
     def test_text_web_state_map_and_all_passenger_pushes_share_controls(self):
@@ -188,9 +188,9 @@ class ElevatorTests(WorldCommandTest):
             self.assertEqual(state["elevator"]["actions"], [{"label": "승강기", "command": "승강기"}])
             self.assertIn("승강기로 호출", str(self.char1.location.return_appearance(self.char1)))
             json.dumps(state)
-        self.char1.location = self.rooms["support_1f_w1"]
+        self.char1.location = self.rooms["support_2f_w1"]
         self.assertIsNone(multiplayer_state(self.char1)["elevator"])
-        self.char1.location = self.rooms["support_1f_c"]
+        self.char1.location = self.rooms["hq_concourse"]
         self.char1.execute_cmd("승강기")
         self.char2.execute_cmd("승강기")
         self.char1.execute_cmd("2층")
@@ -218,6 +218,6 @@ class ElevatorTests(WorldCommandTest):
         with patch.object(self.char1, "msg") as output:
             self.char1.execute_cmd("지도")
             text = str(output.call_args_list)
-            self.assertIn("지원동 승강기", text)
-            self.assertIn("지원동 3층 중앙 복도", text)
-            self.assertIn("지원동 옥상", text)
+            self.assertIn("본부 승강기", text)
+            self.assertIn("본부 3층 중앙 복도", text)
+            self.assertIn("본부 옥상", text)

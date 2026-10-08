@@ -49,50 +49,24 @@ class HeadquartersRulesTests(TestCase):
         del targets["instructor"]
         self.assertTrue(any("instructor: 본부 서비스" in issue for issue in errors(targets)))
 
-    def test_hub_layout_and_prepared_rooms_are_valid(self):
-        self.assertEqual(len(HQ_ROOMS), 41)
+    def test_five_floor_counts_and_layout(self):
+        self.assertEqual(len(HQ_ROOMS), 46)
         self.assertEqual(errors(content_targets()), [])
-        self.assertEqual(ROOMS["staging_room"]["exits"], {"남": "hq_concourse"})
         self.assertEqual(ROOMS["hq_concourse"]["exits"], {
-            "북": "staging_room", "서": "dock", "남": "support_1f_c",
-        })
-        self.assertEqual(ROOMS["support_1f_c"]["exits"], {
-            "서": "support_1f_w1", "동": "support_1f_e1", "북": "hq_concourse",
-        })
-        self.assertEqual(ROOMS["support_1f_c"]["blocked_exits"], {"남": "남쪽 출입문은 현재 폐쇄되어 있다."})
-        self.assertEqual(ROOMS["dock"]["exits"], {"북": "grass", "동": "hq_concourse"})
-        self.assertEqual(ROOMS["supply_shop"]["name"], "1F 보급품 상점")
-        self.assertEqual(ROOMS["support_roof"]["exits"], ROOF_SIDES)
-        for zone, room in HQ_ROOMS.items():
-            self.assertTrue(room["safe"])
-            self.assertEqual(room["enemies"], [])
-            if zone == "infirmary":
-                self.assertEqual(room["hints"], [{"target": "doctor", "action": "진료"},
-                                                  {"target": "infirmary_bed", "action": "휴식"}])
-            elif zone == "salvage_office":
-                self.assertEqual(room["hints"], [{"target": "salvage_officer", "action": "환율"}])
-            elif zone in ("outpost_equipment", "outpost_weapon"):
-                self.assertEqual(room["hints"], [{"target": zone + "_shopkeeper", "action": "상품"}])
-            elif zone in ("supply_shop", "weapon_shop", "armor_shop"):
-                self.assertEqual(room["hints"], [{"target": zone.replace("_shop", "_shopkeeper"), "action": "상품"}])
-            else:
-                self.assertFalse(room.get("hints"))
-
-    def test_each_floor_has_five_corridors_and_facilities_have_single_returns(self):
-        for floor in (1, 2, 3):
-            row = [f"support_{floor}f_{position}" for position in ("w2", "w1", "c", "e1", "e2")]
-            self.assertEqual(len([zone for zone in HQ_ROOMS if zone.startswith(f"support_{floor}f_")]), 5)
+            "북": "staging_room", "서": "dock", "동": "hq_admin_office", "남": "hq_lounge"})
+        for floor, positions in ((2, ("w1", "c", "e1")), (3, ("w1", "c", "e1")),
+                                 (4, ("w1", "c", "e1")), (5, ("w2", "w1", "c", "e1", "e2"))):
+            row = [f"support_{floor}f_{position}" for position in positions]
+            self.assertEqual(sum(zone.startswith(f"support_{floor}f_") for zone in HQ_ROOMS), len(row))
             for left, right in zip(row, row[1:]):
                 self.assertEqual(ROOMS[left]["exits"]["동"], right)
                 self.assertEqual(ROOMS[right]["exits"]["서"], left)
-        for facility, corridor in (
-            ("salvage_office", "support_1f_w2"), ("storage_room", "support_1f_w1"),
-            ("supply_shop", "support_1f_e1"), ("infirmary", "support_2f_w1"),
-            ("training_room", "support_2f_e1"), ("armor_shop", "support_3f_w1"),
-            ("weapon_shop", "support_3f_e1"),
-        ):
-            self.assertEqual(ROOMS[corridor]["exits"]["북"], facility)
-            self.assertEqual(ROOMS[facility]["exits"], {"남": corridor})
+        for room in HQ_ROOMS.values():
+            self.assertTrue(room["safe"])
+            self.assertEqual(room["enemies"], [])
+        self.assertNotIn("support_1f_c", HQ_ROOMS)
+        self.assertEqual(ROOMS["infirmary"]["exits"], {"남": "support_3f_c"})
+        self.assertEqual(ROOMS["training_room"]["exits"], {"남": "support_4f_w1"})
 
     def test_roof_star_is_safe_outdoor_and_has_no_services_or_progression(self):
         suffixes = ("n", "ne", "e", "se", "s", "sw", "w", "nw")
@@ -151,39 +125,39 @@ class HeadquartersRulesTests(TestCase):
                 count += 1
                 self.assertNotIn(direction, room["exits"])
                 self.assertEqual(blocked_exit_message(zone, direction), message)
-        self.assertEqual(count, 15)
+        self.assertEqual(count, 10)
         for direction in ("남", "s", " S "):
-            self.assertEqual(blocked_exit_message("support_1f_c", direction), "남쪽 출입문은 현재 폐쇄되어 있다.")
-        self.assertIsNone(blocked_exit_message("support_1f_c", "북"))
+            self.assertEqual(blocked_exit_message("support_5f_c", direction), "남쪽 출입문은 현재 폐쇄되어 있다.")
+        self.assertIsNone(blocked_exit_message("support_5f_c", "동"))
         self.assertIsNone(blocked_exit_message("unknown", "북"))
-        self.assertIsNone(blocked_exit_message("support_1f_c", "남 모두"))
+        self.assertIsNone(blocked_exit_message("support_5f_c", "남 모두"))
         self.assertEqual(ROOMS, before)
 
     def test_invalid_destination_and_non_opposite_return_are_detected(self):
         with patch.dict(ROOMS["hq_concourse"]["exits"], 남="missing_room"):
             self.assertTrue(any("대상 Room이 없습니다" in issue for issue in errors(content_targets())))
-        with patch.dict(ROOMS["storage_room"]["exits"], 남="support_1f_w2"):
+        with patch.dict(ROOMS["storage_room"]["exits"], 남="support_2f_e1"):
             self.assertTrue(any("되돌아오는 출구" in issue for issue in errors(content_targets())))
-        with patch.dict(ROOMS["support_1f_c"], exits={"서": "support_1f_w1", "동": "support_1f_e1", "남": "hq_concourse"}):
+        with patch.dict(ROOMS["hq_lounge"], exits={"남": "hq_concourse"}):
             self.assertTrue(any("hq_concourse:남: 되돌아오는 출구" in issue for issue in errors(content_targets())))
 
     def test_blocked_direction_conflicts_and_invalid_messages_are_detected(self):
-        with patch.dict(ROOMS["support_1f_c"]["exits"], 남="staging_room"):
+        with patch.dict(ROOMS["support_5f_c"]["exits"], 남="staging_room"):
             self.assertTrue(any("실제 출구와 폐쇄 출입구가 겹칩니다" in issue for issue in errors(content_targets())))
         for message in (None, "", "   ", 1, {}):
-            with self.subTest(message=message), patch.dict(ROOMS["support_1f_c"]["blocked_exits"], 남=message):
+            with self.subTest(message=message), patch.dict(ROOMS["support_5f_c"]["blocked_exits"], 남=message):
                 self.assertTrue(any("폐쇄 출입구 문구" in issue for issue in errors(content_targets())))
-        with patch.dict(ROOMS["support_1f_c"], blocked_exits=[]):
+        with patch.dict(ROOMS["support_5f_c"], blocked_exits=[]):
             self.assertTrue(any("blocked_exits는" in issue for issue in errors(content_targets())))
-        with patch.dict(ROOMS["support_1f_c"]["blocked_exits"], 위="출입 제한 구역이다."):
+        with patch.dict(ROOMS["support_5f_c"]["blocked_exits"], 위="출입 제한 구역이다."):
             self.assertTrue(any("폐쇄 출입구 방향" in issue for issue in errors(content_targets())))
 
     def test_extra_staging_exit_wrong_facility_and_duplicate_membership_are_detected(self):
         with patch.dict(ROOMS["staging_room"]["exits"], 동="dock"):
             self.assertTrue(any("staging_room" in issue for issue in headquarters_errors()))
-        with patch.dict(ROOMS["support_1f_e2"]["exits"], 북="storage_room"):
+        with patch.dict(ROOMS["support_5f_c"]["exits"], 북="storage_room"):
             self.assertTrue(any("시설 Room은 지정 복도" in issue for issue in headquarters_errors()))
-        with patch.dict(REGIONS["headquarters"], rooms=(*REGIONS["headquarters"]["rooms"], "support_1f_c")):
+        with patch.dict(REGIONS["headquarters"], rooms=(*REGIONS["headquarters"]["rooms"], "support_5f_c")):
             issues = errors(content_targets())
             self.assertTrue(any("Room ID가 중복" in issue for issue in issues))
             self.assertTrue(any("정확히 하나의 Region" in issue for issue in issues))

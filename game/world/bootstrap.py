@@ -68,21 +68,28 @@ def _build_world():
             enemy.attributes.remove("suppression")
             if enemy.db.suppressions is None or not enemy.db.combatants:
                 enemy.db.suppressions = {}
-    # 이전 본부 배치의 두 관리 출구를 새 방향으로 재사용한다. 다른 stale 객체는 보존한다.
-    for zone, old_direction, new_direction, target in (
-        ("hq_concourse", "동", "남", "support_1f_c"),
-        ("support_1f_c", "남", "북", "hq_concourse"),
-    ):
-        old_identity, new_identity = f"{zone}:{old_direction}", f"{zone}:{new_direction}"
-        for existing in search_tag(old_identity, category=EXIT_CATEGORY):
-            if existing.location == rooms[zone] and existing.destination == rooms[target]:
-                if search_tag(new_identity, category=EXIT_CATEGORY):
-                    existing.delete()
-                else:
-                    existing.tags.remove(old_identity, category=EXIT_CATEGORY)
-                    existing.tags.add(new_identity, category=EXIT_CATEGORY)
-        if not search_tag(old_identity, category=EXIT_CATEGORY):
-            Tag.objects.filter(db_key=old_identity, db_category=EXIT_CATEGORY).delete()
+    # 폐지 복도는 archive로 남겨 FK·방문 기록을 보존한다. 일반 콘텐츠는 대체 공간으로 옮긴다.
+    from world.content.headquarters import RETIRED_ROOMS
+    from world.content.headquarters import ROOMS as HQ_ROOMS
+
+    for zone, destination in RETIRED_ROOMS.items():
+        for retired in search_tag(zone, category=CATEGORY):
+            for obj in list(retired.contents):
+                if not obj.destination:
+                    obj.location = rooms[destination]
+            retired.db.retired_to = destination
+            retired.tags.remove(zone, category=CATEGORY)
+            retired.tags.add(zone, category="primal_retired_room")
+        if not search_tag(zone, category=CATEGORY):
+            Tag.objects.filter(db_key=zone, db_category=CATEGORY).delete()
+    # 정의에서 폐지된 본부 관리 출구만 정리한다. 사용자 생성 출구·객체는 보존한다.
+    managed_zones = set(RETIRED_ROOMS) | set(HQ_ROOMS)
+    expected_exits = {f"{zone}:{direction}" for zone, data in ROOMS.items() for direction in data["exits"]}
+    for tag in list(Tag.objects.filter(db_category=EXIT_CATEGORY)):
+        if tag.db_key.split(":", 1)[0] in managed_zones and tag.db_key not in expected_exits:
+            for existing in search_tag(tag.db_key, category=EXIT_CATEGORY):
+                existing.delete()
+            tag.delete()
     for zone_id, data in ROOMS.items():
         room = rooms[zone_id]
         # 명시적으로 폐쇄된 방향의 기존 관리 출구만 제거한다. 일반 stale 객체는 보존한다.

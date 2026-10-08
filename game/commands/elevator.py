@@ -26,11 +26,22 @@ class Disembark(GameCommand):
         elevator.disembark(self.caller)
 
 
+class Stairs(GameCommand):
+    key = "계단"
+    input_style = "prefix"
+
+    def run(self):
+        from world.stairs import move
+
+        move(self.caller, self.args.strip())
+
+
 class ElevatorLandingCmdSet(CmdSet):
     key = "ElevatorLanding"
 
     def at_cmdset_creation(self):
         self.add(BoardElevator())
+        self.add(Stairs())
 
 
 class ElevatorInsideCmdSet(CmdSet):

@@ -14,9 +14,9 @@ from world.test_headquarters import content_targets
 class ElevatorRulesTests(TestCase):
     def test_stop_contract_room_and_content_integrity(self):
         self.assertEqual(ELEVATOR_DEFAULT_STOP, "1f")
-        self.assertEqual(set(ELEVATOR_STOPS), {"1f", "2f", "3f", "roof"})
+        self.assertEqual(set(ELEVATOR_STOPS), {"1f", "2f", "3f", "4f", "5f", "roof"})
         self.assertEqual({stop["room"] for stop in ELEVATOR_STOPS.values()}, {
-            "support_1f_c", "support_2f_c", "support_3f_c", "support_roof",
+            "hq_concourse", "support_2f_c", "support_3f_c", "support_4f_c", "support_5f_c", "support_roof",
         })
         self.assertIn(ELEVATOR_ROOM, REGIONS["headquarters"]["rooms"])
         room = ROOMS[ELEVATOR_ROOM]
@@ -35,7 +35,7 @@ class ElevatorRulesTests(TestCase):
             self.assertEqual([a["command"] for a in inside["actions"]], [s["label"] for s in before.values()] + ["내려"])
         for invalid in (None, "", "2층", "missing", 1, [], {}):
             self.assertEqual(normalized_stop(invalid), ELEVATOR_DEFAULT_STOP)
-        self.assertIsNone(controls("support_1f_w1"))
+        self.assertIsNone(controls("support_2f_w1"))
         self.assertEqual(ELEVATOR_STOPS, before)
 
     def test_transport_reaches_all_rooms_without_fake_cardinal_edges(self):
@@ -63,7 +63,7 @@ class ElevatorRulesTests(TestCase):
             self.assertTrue(any("Region" in issue for issue in elevator_errors()))
         with patch.dict(ROOMS[ELEVATOR_ROOM]["exits"], 북="support_2f_c"):
             self.assertTrue(any("방향 출구" in issue for issue in elevator_errors()))
-        with patch.dict(ROOMS["support_1f_c"]["exits"], 남=ELEVATOR_ROOM):
+        with patch.dict(ROOMS["support_5f_c"]["exits"], 남=ELEVATOR_ROOM):
             issues = errors(content_targets())
             self.assertTrue(any("가짜 방향" in issue for issue in issues))
             self.assertTrue(any("폐쇄 출입구가 겹칩니다" in issue for issue in issues))

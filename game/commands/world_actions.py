@@ -9,7 +9,7 @@ from commands.base import GameCommand
 class Return(GameCommand):
     category = "이동·탐사"
     usage = "귀환"
-    summary = "비전투 상태에서 지원동 옥상으로 돌아갑니다."
+    summary = "비전투 상태에서 본부 옥상으로 돌아갑니다."
     key = "귀환"
     aliases = ["home"]
 

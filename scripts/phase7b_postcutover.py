@@ -5,7 +5,7 @@ import json
 from time import monotonic
 
 from phase7b import fixture
-from smoke import Client, count_item, route
+from smoke import Client, count_item, route, travel_to
 
 
 async def run(harness):
@@ -34,8 +34,7 @@ async def run(harness):
         assert count_item(b.state, "outpost_supply_pass") == 1
         record("native login/inventory/equipment", accounts=4, legacy_mapping=True)
         for player in (a, b):
-            await route(player, (("남", "hq_concourse"), ("남", "support_1f_c"),
-                                 ("서", "support_1f_w1"), ("북", "storage_room")))
+            await travel_to(player, 'storage_room')
         old = count_item(a.state, "bandage")
         await a.act("보관상자에 붕대 넣어", lambda s: count_item(s, "bandage") == old - 1)
         other = count_item(b.state, "bandage")
@@ -52,7 +51,7 @@ async def run(harness):
         await a.act("탐사용손전등 확인")
         await a.act("탐사용손전등 꺼")
         record("migrated light", on_inspect_off=True)
-        await route(b, (("남", "support_1f_w1"), ("서", "support_1f_w2"), ("북", "salvage_office")))
+        await travel_to(b, 'salvage_office')
         await b.expect_text("능선포식자표식 소각", "해당 행동")
         old = count_item(b.state, "outpost_supply_pass")
         await b.expect_text("전초 보급구역 출입증 소각", "소각 확정")
@@ -60,22 +59,22 @@ async def run(harness):
         assert count_item(b.state, "outpost_supply_pass") == old
         reward_before = (b.state["xp"], b.state["credits"], count_item(b.state, "bandage"), count_item(b.state, "ridge_predator_mark"))
         await b.act("전초 보급구역 출입증 소각 확정", lambda s: count_item(s, "outpost_supply_pass") == 0)
-        await route(b, (("남", "support_1f_w2"), ("동", "support_1f_w1"), ("동", "support_1f_c")))
+        await travel_to(b, 'hq_concourse')
         await b.act("승강기", lambda s: s["zone"] == "support_elevator")
-        await b.act("3층", lambda s: s["zone"] == "support_3f_c")
-        await route(b, (("서", "support_3f_w1"), ("서", "support_3f_w2")))
+        await b.act("5층", lambda s: s["zone"] == "support_5f_c")
+        await travel_to(b, 'support_5f_w2')
         await b.expect_text("북", "출입증")
-        assert b.state["zone"] == "support_3f_w2"
+        assert b.state["zone"] == "support_5f_w2"
         await b.act("귀환", lambda s: s["zone"] == "support_roof")
         await b.act("승강기", lambda s: s["zone"] == "support_elevator")
-        await b.act("1층", lambda s: s["zone"] == "support_1f_c")
-        await route(b, (("북", "hq_concourse"), ("서", "dock")))
+        await b.act("1층", lambda s: s["zone"] == "hq_concourse")
+        await travel_to(b, 'dock')
         await b.act("윤대장 대화", lambda s: count_item(s, "outpost_supply_pass") == 1)
         assert reward_before == (b.state["xp"], b.state["credits"], count_item(b.state, "bandage"), count_item(b.state, "ridge_predator_mark"))
-        await route(b, (("동", "hq_concourse"), ("남", "support_1f_c")))
+        await travel_to(b, 'hq_concourse')
         await b.act("승강기", lambda s: s["zone"] == "support_elevator")
-        await b.act("3층", lambda s: s["zone"] == "support_3f_c")
-        await route(b, (("서", "support_3f_w1"), ("서", "support_3f_w2"), ("북", "outpost_equipment")))
+        await b.act("5층", lambda s: s["zone"] == "support_5f_c")
+        await travel_to(b, 'outpost_equipment')
         await b.expect_text("능선포식자표식 판매", "매매할 수 없는")
         await b.act("소지품")
         assert count_item(b.state, "ridge_predator_mark") == 1
@@ -88,8 +87,7 @@ async def run(harness):
                identity_sequence_state_preserved=True)
         record("credential", first_no_mutation=True, burn_blocks_entry=True, reissue_no_repeat_rewards=True, entry_restored=True)
         # Shop source/sink는 archived inventory를 갱신하지 않는다.
-        await route(b, (("남", "support_3f_w2"), ("동", "support_3f_w1"), ("동", "support_3f_c"),
-                        ("동", "support_3f_e1"), ("북", "weapon_shop")))
+        await travel_to(b, 'weapon_shop')
         credits = b.state["credits"]
         await b.act("경비카빈 구매", lambda s: count_item(s, "guard_carbine") == 1)
         assert b.state["credits"] == credits - 200
@@ -102,8 +100,7 @@ async def run(harness):
         await b.expect_text("5.56mm 표준탄창 판매", "잔탄 20발")
         await b.act("경비카빈 판매", lambda s: count_item(s, "guard_carbine") == 0)
         record("shop/firearm", package=200, included_rounds=20, loaded_sell_rejected=True, residual_resale=True)
-        await route(a, (("남", "support_1f_w1"), ("동", "support_1f_c"),
-                        ("북", "hq_concourse"), ("서", "dock")))
+        await travel_to(a, 'dock')
         recipient_credits = fixture(harness, "inspect")["players"][b.name]["profile"]["credits"]
         await a.act("2칩 가져")
         await a.act("시체에서 경비카빈 가져", lambda s: count_item(s, "guard_carbine") == 1)

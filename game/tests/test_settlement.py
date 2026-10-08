@@ -159,7 +159,7 @@ class SettlementWorldTests(SettlementFixture, WorldCommandTest):
             self.assertEqual(state["resources"], {"scrap": {"name": "회수부품", "count": 0}})
         self.assertEqual([action["command"] for action in next(obj["actions"] for obj in multiplayer_state(self.char1)["interactables"] if obj["name"] == self.officer.key)],
                          ["자원 정산관 환율"])
-        self.char1.location = self.rooms["support_1f_w2"]
+        self.char1.location = self.rooms["support_2f_e1"]
         self.assertNotIn("정산관", self.command("북 보기"))
 
     def test_bootstrap_identity_aliases_and_all_existing_data_are_preserved(self):
@@ -186,15 +186,15 @@ class SettlementWorldTests(SettlementFixture, WorldCommandTest):
 
     def test_scrap_settlement_credits_purchase_end_to_end_and_generator_resource(self):
         self.prepare(scrap=6, credits=0)
-        self.char1.location = self.rooms["support_1f_c"]
-        for raw in ("서", "서", "북"):
+        self.char1.location = self.rooms["support_2f_c"]
+        for raw in ("동", "북"):
             self.command(raw)
         self.assertEqual(self.char1.zone, "salvage_office")
         self.assertIn(f"{SALVAGE_CREDIT_RATE}칩", self.command("정산관 환율"))
         self.command("회수부품 6개 교환")
         self.assertNotIn("scrap", self.char1.profile()["inventory"])
         self.assertEqual(self.char1.profile()["credits"], 6 * SALVAGE_CREDIT_RATE)
-        for raw in ("남", "동", "동", "승강기", "3층", "동", "북"):
+        for raw in ("남", "서", "승강기", "5층", "동", "북"):
             self.command(raw)
         self.assertEqual(self.char1.zone, "weapon_shop")
         shop = self.command("상품")
@@ -203,7 +203,7 @@ class SettlementWorldTests(SettlementFixture, WorldCommandTest):
         self.command("절단마체테 구매")
         self.assertEqual(self.char1.profile()["credits"], 6 * SALVAGE_CREDIT_RATE - ITEMS["cutting_machete"]["value"])
         self.assertEqual(self.char1.profile()["inventory"]["cutting_machete"], 1)
-        for raw in ("남", "서", "승강기", "1층", "북", "서"):
+        for raw in ("남", "서", "승강기", "1층", "서"):
             self.command(raw)
         self.command("윤대장 대화")
         self.char1.change(lambda p: rules.add_item(p, "generator_repair_part", 3))

@@ -11,6 +11,7 @@ from world.currency import currency_names, format_currency
 from world.loot_assets import asset_name, asset_text
 from world.loot_service import source_entries
 from world.multiplayer import object_by_id
+from world.stairs import controls as stair_controls
 from world.targets import labels, room_objects
 
 
@@ -111,6 +112,7 @@ def multiplayer_state(player, now=None):
     invited, invitation = invitation_for(player, now)
     return {
         "elevator": elevator_snapshot(player.location),
+        "stairs": stair_controls(player.zone),
         "enemies": [
             {
                 "id": enemy.id,

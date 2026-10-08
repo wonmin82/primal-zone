@@ -50,7 +50,7 @@ class CommandShortcutsTests(WorldCommandTest):
         self.assertEqual(profile["inventory"]["cutting_machete"], 1)
         self.assertEqual(profile["equipment"]["weapon"], "cutting_machete")
         self.assertEqual(profile["credits"], 45)
-        self.run_raw("귀환, 승강기, 3층, 동, 북 해")
+        self.run_raw("귀환, 승강기, 5층, 동, 북 해")
         self.assertEqual(self.char1.zone, "weapon_shop")
 
     def test_dispatch_waits_for_engine_pre_and_post_hooks_without_sleep(self):
@@ -139,7 +139,7 @@ class CommandShortcutsTests(WorldCommandTest):
 
     def test_reserved_names_and_invalid_prospective_graph_do_not_replace_data(self):
         self.register("a", "b")
-        for name in ("상태", "공격", "해", "줄임말", "ㅂ", "look", "quit", "connect", "n", "2층", "emit",
+        for name in ("상태", "공격", "해", "줄임말", "ㅂ", "look", "quit", "connect", "n", "2층", "4층", "5층", "계단", "emit",
                      "북동", "남동", "남서", "북서", "ne", "se", "sw", "nw"):
             before = self.saved()
             self.run_raw(f"줄임말 추가 {name} 소지품")

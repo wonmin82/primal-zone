@@ -54,43 +54,37 @@ def headquarters_errors():
     """본부의 고정 방향 동선과 시설 위치를 검사한다. 승강기는 별도 이동이다."""
     expected = {
         "staging_room": {"남": "hq_concourse"},
-        "hq_concourse": {"북": "staging_room", "서": "dock", "남": "support_1f_c"},
+        "hq_concourse": {"북": "staging_room", "서": "dock", "동": "hq_admin_office", "남": "hq_lounge"},
+        "hq_admin_office": {"서": "hq_concourse"}, "hq_lounge": {"북": "hq_concourse"},
         "dock": {"북": "grass", "동": "hq_concourse"},
         "support_roof": dict(ROOF_SIDES),
     }
     for direction, zone in ROOF_SIDES.items():
         expected[zone] = {OPPOSITE_DIRECTIONS[direction]: "support_roof"}
-    positions = ("w2", "w1", "c", "e1", "e2")
     corridors = []
-    for floor in (1, 2, 3):
+    for floor in (2, 3, 4, 5):
+        positions = ("w2", "w1", "c", "e1", "e2") if floor == 5 else ("w1", "c", "e1")
         row = [f"support_{floor}f_{position}" for position in positions]
         corridors.extend(row)
         for index, zone in enumerate(row):
             expected[zone] = {}
             if index:
                 expected[zone]["서"] = row[index - 1]
-            if index < len(row) - 1:
+            if index + 1 < len(row):
                 expected[zone]["동"] = row[index + 1]
-    expected["support_1f_c"]["북"] = "hq_concourse"
     facilities = (
-        ("salvage_office", "support_1f_w2"),
-        ("storage_room", "support_1f_w1"),
-        ("supply_shop", "support_1f_e1"),
-        ("infirmary", "support_2f_w1"),
-        ("training_room", "support_2f_e1"),
-        ("armor_shop", "support_3f_w1"),
-        ("weapon_shop", "support_3f_e1"),
+        ("storage_room", "support_2f_w1", "북"), ("supply_shop", "support_2f_c", "북"),
+        ("salvage_office", "support_2f_e1", "북"),
+        ("medical_waiting", "support_3f_w1", "북"), ("infirmary", "support_3f_c", "북"),
+        ("recovery_room", "support_3f_e1", "북"),
+        ("training_room", "support_4f_w1", "북"), ("survival_training_room", "support_4f_w1", "남"),
+        ("training_office", "support_4f_c", "북"), ("tactics_room", "support_4f_c", "남"),
+        ("shooting_range", "support_4f_e1", "북"), ("medical_training_room", "support_4f_e1", "남"),
+        ("armor_shop", "support_5f_w1", "북"), ("weapon_shop", "support_5f_e1", "북"),
+        ("outpost_equipment", "support_5f_w2", "북"), ("outpost_weapon", "support_5f_e2", "북"),
+        ("reserved_equipment", "support_5f_w2", "남"), ("reserved_weapon", "support_5f_e2", "남"),
     )
-    for facility, corridor in facilities:
-        expected[facility] = {"남": corridor}
-        expected[corridor]["북"] = facility
-    for facility, corridor in (("tactics_room", "support_2f_w2"), ("training_office", "support_2f_c"), ("shooting_range", "support_2f_e2")):
-        expected[facility] = {"북": corridor}
-        expected[corridor]["남"] = facility
-    for facility, corridor, direction in (
-        ("outpost_equipment", "support_3f_w2", "북"), ("outpost_weapon", "support_3f_e2", "북"),
-        ("reserved_equipment", "support_3f_w2", "남"), ("reserved_weapon", "support_3f_e2", "남"),
-    ):
+    for facility, corridor, direction in facilities:
         expected[facility] = {OPPOSITE_DIRECTIONS[direction]: corridor}
         expected[corridor][direction] = facility
     issues = []
@@ -105,15 +99,15 @@ def headquarters_errors():
                 issues.append(f"{zone}: 옥상 검증 Room에는 {field}를 둘 수 없습니다.")
     for zone, exits in expected.items():
         if ROOMS.get(zone, {}).get("exits") != exits:
-            issues.append(f"{zone}: 본부 1단계 출구 배치가 올바르지 않습니다.")
+            issues.append(f"{zone}: 본부 5층 출구 배치가 올바르지 않습니다.")
     for zone in corridors:
         blocked = ROOMS.get(zone, {}).get("blocked_exits", {})
         if not isinstance(blocked, dict) or set(blocked) != {"북", "남"} - set(expected[zone]):
-            issues.append(f"{zone}: 지원동 폐쇄 출입구 배치가 올바르지 않습니다.")
-    for facility, corridor in facilities:
+            issues.append(f"{zone}: 본부 폐쇄 출입구 배치가 올바르지 않습니다.")
+    for facility, corridor, direction in facilities:
         incoming = [(zone, direction) for zone, room in ROOMS.items()
                     for direction, target in room["exits"].items() if target == facility]
-        if incoming != [(corridor, "북")]:
+        if incoming != [(corridor, direction)]:
             issues.append(f"{facility}: 시설 Room은 지정 복도에서만 연결되어야 합니다.")
     return issues
 
@@ -145,9 +139,9 @@ def elevator_errors():
             targets.append(target)
     if len(labels) != len(set(labels)):
         issues.append("승강기 층 표시명이 중복되었습니다.")
-    expected = {"support_1f_c", "support_2f_c", "support_3f_c", "support_roof"}
+    expected = {"hq_concourse", "support_2f_c", "support_3f_c", "support_4f_c", "support_5f_c", "support_roof"}
     if len(targets) != len(expected) or set(targets) != expected:
-        issues.append("승강기 정류 층은 세 중앙 복도와 옥상이어야 합니다.")
+        issues.append("승강기 정류 층은 1층 로비·2~5층 중앙 복도와 옥상이어야 합니다.")
     if any(ELEVATOR_ROOM in data["exits"].values() for data in ROOMS.values()):
         issues.append("승강기에 연결하는 가짜 방향 출구가 있습니다.")
     return issues

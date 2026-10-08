@@ -146,6 +146,29 @@ def count_item(state, item):
     return sum(entry["count"] for entry in state["inventory"] if entry["id"] == item)
 
 
+async def travel_to(player, target):
+    """현재 정의의 실제 방향·계단 명령으로 목적지까지 이동한다."""
+    from collections import deque
+
+    from world.content import ROOMS
+    from world.stairs import controls
+
+    pending = deque([(player.state["zone"], [])])
+    visited = set()
+    while pending:
+        zone, steps = pending.popleft()
+        if zone == target:
+            await route(player, steps)
+            return
+        if zone in visited:
+            continue
+        visited.add(zone)
+        edges = list(ROOMS[zone]["exits"].items()) + [
+            (a["command"], a["destination"]) for a in controls(zone)]
+        pending.extend((destination, steps + [(command, destination)]) for command, destination in edges)
+    raise AssertionError(f"실제 이동 경로 없음: {player.state['zone']} → {target}")
+
+
 async def route(player, steps):
     for command, zone in steps:
         await player.act(command, lambda state, zone=zone: state["zone"] == zone)
@@ -263,8 +286,8 @@ class Scenario:
             self.report("protection", "outsider blocked → allowed / 미회수 6칩 자유 획득")
             self.phase = "shop"
             await route(first, (("귀환", "support_roof"), ("승강기", "support_elevator")))
-            await first.act("3층", lambda state: state["zone"] == "support_3f_c")
-            await route(first, (("동", "support_3f_e1"),
+            await first.act("5층", lambda state: state["zone"] == "support_5f_c")
+            await route(first, (("동", "support_5f_e1"),
                                 ("북", "weapon_shop")))
             assert any(obj["name"] == "무기상" for obj in first.state["interactables"])
             await first.expect_text("무기상 상품", "55칩")
