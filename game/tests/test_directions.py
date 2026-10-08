@@ -74,7 +74,7 @@ class DirectionIntegrationTests(WorldCommandTest):
         self.char1.change(lambda p: p.update(visited=["support_roof", "support_roof_ne"]))
         with patch.dict(ROOMS["support_roof"], exits=dict(reversed(list(ROOMS["support_roof"]["exits"].items())))):
             output = "\n".join(map(str, self.raw("지도")))
-        hub = next(line for line in output.splitlines() if "지원동 옥상 ← 현재" in line)
+        hub = next(line for line in output.splitlines() if "본부 옥상 ← 현재" in line)
         positions = [hub.index(direction + ":") for direction in DIRECTION_ORDER]
         self.assertEqual(positions, sorted(positions))
         self.assertIn("북동: 북동쪽 설비 구역", hub)
@@ -98,22 +98,22 @@ class DirectionIntegrationTests(WorldCommandTest):
                 self.assertEqual(objects[0].aliases.all(), [DIRECTION_ALIASES[objects[0].key]])
 
     def test_map_merges_actual_and_blocked_directions_in_one_order(self):
-        self.char1.location = self.rooms["support_1f_e2"]
-        self.char1.change(lambda p: p.update(visited=["support_1f_e2", "support_1f_e1", "support_1f_w1"]))
+        self.char1.location = self.rooms["support_5f_c"]
+        self.char1.change(lambda p: p.update(visited=["support_5f_c", "support_5f_w1", "support_2f_w1"]))
         output = self.raw("지도")[-1]
         lines = output.splitlines()
-        east = next(line for line in lines if "지원동 1층 동쪽 끝 복도 ← 현재" in line)
-        west = next(line for line in lines if "지원동 1층 서쪽 복도 /" in line)
-        for line, expected in ((east, ["북", "남", "서"]), (west, ["북", "동", "남", "서"])):
+        east = next(line for line in lines if "본부 5층 중앙 복도 ← 현재" in line)
+        west = next(line for line in lines if "본부 2층 서쪽 복도 /" in line)
+        for line, expected in ((east, ["북", "동", "남", "서"]), (west, ["북", "동", "남"])):
             positions = [line.index(direction + ":") for direction in expected]
             self.assertEqual(positions, sorted(positions))
-        self.assertIn("서: 지원동 1층 동쪽 복도", east)
-        self.assertIn("북: 폐쇄, 남: 폐쇄", east)
+        self.assertIn("서: 본부 5층 서쪽 복도", east)
+        self.assertIn("북: 폐쇄, 동: 미탐사, 남: 폐쇄", east)
         self.assertIn("북: 미탐사", west)
         self.assertIn("남: 폐쇄", west)
         self.assertIn("[" + REGIONS["headquarters"]["name"] + "]", output)
         self.assertEqual([part["text"] for part in output.segments if part["role"] == "direction"],
-                         ["북", "동", "남", "서", "북", "동", "남", "서", "북", "남", "서"])
+                         ["북", "동", "남", "북", "동", "남", "서", "북", "동", "남", "서"])
 
     def test_map_preserves_special_exit_fallback_order_after_merged_directions(self):
         self.char1.change(lambda p: p.update(visited=["support_roof"]))

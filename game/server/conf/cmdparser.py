@@ -27,7 +27,7 @@ def _matches(raw_string, cmdset, caller, match_index=None, session=None, **kwarg
             return engine
         text = SHORTCUTS[text]
 
-    # 줄임말 설정만 명시적인 전치형이다. 채팅 내용·기존 후치형 명령은 그대로 둔다.
+    # 줄임말 설정·계단 조작은 명시적인 전치형이다. 채팅 내용·기존 후치형 명령은 그대로 둔다.
     prefix_parts = text.split(None, 1)
     prefix, remainder = prefix_parts[0], prefix_parts[1] if len(prefix_parts) > 1 else ""
     settings_commands = [cmd for cmd in game_commands

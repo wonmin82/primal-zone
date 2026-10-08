@@ -4,7 +4,7 @@ import json
 from time import monotonic
 
 from phase7b import fixture
-from smoke import Client, count_item, route
+from smoke import Client, count_item, route, travel_to
 
 
 async def run(harness):
@@ -46,8 +46,7 @@ async def run(harness):
         loaded = next(row for row in rows if row["parent"] == gun["id"])
         assert loaded["state"]["rounds"] == 9
         record("automatic reload", highest_rounds=9)
-        await route(player, (("남", "dock"), ("동", "hq_concourse"), ("남", "support_1f_c"),
-                              ("서", "support_1f_w1"), ("서", "support_1f_w2"), ("북", "salvage_office")))
+        await travel_to(player, "salvage_office")
         credits = player.state["credits"]
         ammo = count_item(player.state, "ammo_556")
         await player.act("경비카빈 해제")

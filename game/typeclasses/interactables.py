@@ -662,15 +662,15 @@ INTERACTABLES = {
 
 
 for skill, room, name in (
-    ("attack", "training_room", "전투교관"), ("defense", "training_room", "방호교관"),
-    ("heavy", "training_room", "타격교관"), ("heal", "infirmary", "의무교관"),
+    ("attack", "training_room", "전투교관"), ("defense", "survival_training_room", "방호교관"),
+    ("heavy", "training_room", "타격교관"), ("heal", "medical_training_room", "의무교관"),
     ("shooting", "shooting_range", "사격교관"), ("insight", "shooting_range", "정밀전술교관"),
-    ("suppress", "tactics_room", "전술교관"), ("breathing", "tactics_room", "정신훈련관"),
+    ("suppress", "tactics_room", "전술교관"), ("breathing", "survival_training_room", "정신훈련관"),
 ):
     INTERACTABLES["trainer_" + skill] = {"room": room, "typeclass": "SkillTrainer", "name": name, "aliases": [], "skill_id": skill}
 for attribute, room, name in (
     ("strength", "training_room", "근력교관"), ("agility", "shooting_range", "기동교관"),
-    ("constitution", "infirmary", "체력교관"), ("wisdom", "tactics_room", "분석교관"),
+    ("constitution", "survival_training_room", "체력교관"), ("wisdom", "tactics_room", "분석교관"),
 ):
     INTERACTABLES["trainer_" + attribute] = {"room": room, "typeclass": "AttributeTrainer", "name": name, "aliases": [], "attribute_id": attribute}
 

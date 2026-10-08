@@ -422,7 +422,7 @@ class Enemy(DistantPresenceMixin, DefaultObject):
                 target.leave_combat(now=now)
                 destination = get_room("infirmary")
                 rescue = (
-                    "탐사대가 지원동 의무실로 구조했습니다.\n"
+                    "탐사대가 본부 3층 의무실로 구조했습니다.\n"
                     + (f"{format_currency(lost)}을 잃었습니다.\n" if lost else "")
                     + f"응급 처치로 체력 {rules.DEFEAT_RECOVERY_HP}을 회복했습니다. 추가 회복이 필요합니다."
                 )

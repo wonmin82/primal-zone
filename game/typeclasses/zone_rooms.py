@@ -82,6 +82,11 @@ class ZoneRoom(DefaultRoom):
         from world.elevator import presentation as elevator_presentation
 
         lines.extend(elevator_presentation(self))
+        from world.stairs import controls as stair_controls
+
+        stairs = stair_controls(self.db.zone_id)
+        if stairs:
+            lines.append(ft.actions([action["command"] for action in stairs]))
         pool = room_objects(looker, self, observed_at)
         objects = [obj for obj in action_objects(self) if obj in pool]
         for name in dict.fromkeys(obj.key for obj in objects):

@@ -82,12 +82,12 @@ class ServiceRelocationTests(WorldCommandTest):
 
     def test_service_paths_reuse_cardinal_movement_and_elevator(self):
         self.char1.location = self.rooms["hq_concourse"]
-        for command in ("남", "서", "북"):
+        for command in ("계단 올라", "서", "북"):
             self.command(command)
         self.assertEqual(self.char1.zone, "storage_room")
         self.command("보관상자에 붕대 넣어")
         self.assertEqual(self.services["shared_container"].db.items, {"bandage": 1})
-        for command in ("남", "동", "승강기", "2층", "동", "북"):
+        for command in ("남", "동", "승강기", "4층", "서", "북"):
             self.command(command)
         self.assertEqual(self.char1.zone, "training_room")
         self.assertIn(INTERACTABLES["trainer_strength"]["dialogue"], self.command("근력교관 대화"))
@@ -131,9 +131,12 @@ class ServiceRelocationTests(WorldCommandTest):
         self.assertFalse(self.state()['training_available'])
 
     def test_training_visibility_agrees_with_commands_and_web(self):
+        # 시야/권한 실패의 전체 profile 불변 검사를 자연회복 시각과 분리한다.
+        self.enterContext(patch("typeclasses.explorers.time", return_value=100))
         instructor = search_tag('trainer_heavy', category='primal_interactable')[0]
         self.char1.location = self.rooms['support_roof']
         instructor.location = self.char1.location
+        self.char1.reconcile_recovery(emit_prompt=False)
         before = deepcopy(self.char1.profile())
         instructor.locks.add('view:false()')
         self.assertIsNone(instructor_for(self.char1))

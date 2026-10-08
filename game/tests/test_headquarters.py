@@ -33,31 +33,24 @@ class HeadquartersTests(GameCommandTest):
             self.enterContext(patch(f"typeclasses.{module}.delay"))
 
     def test_first_puppet_uses_staging_and_keeps_dock_as_home(self):
-        self.assertNotIn(self.char1.zone, ROOMS)
         with patch.object(DefaultCharacter, "at_post_puppet"):
             self.char1.at_post_puppet()
-        self.assertEqual(self.char1.location, self.rooms["staging_room"])
+        self.assertEqual(self.char1.zone, "staging_room")
         self.assertEqual(self.char1.home, self.rooms["dock"])
-        self.assertEqual(self.char1.profile()["visited"], ["staging_room"])
-        self.char1.execute_cmd("남")
-        self.assertEqual(self.char1.zone, "hq_concourse")
-        self.char1.execute_cmd("남")
-        self.assertEqual(self.char1.zone, "support_1f_c")
-        self.char1.execute_cmd("북")
-        self.assertEqual(self.char1.zone, "hq_concourse")
-        self.char1.execute_cmd("서")
-        self.assertEqual(self.char1.zone, "dock")
-        self.char1.execute_cmd("북")
-        self.assertEqual(self.char1.zone, "grass")
+        for command, target in (("남", "hq_concourse"), ("동", "hq_admin_office"),
+                                ("서", "hq_concourse"), ("남", "hq_lounge"),
+                                ("북", "hq_concourse"), ("서", "dock"), ("북", "grass")):
+            self.char1.execute_cmd(command)
+            self.assertEqual(self.char1.zone, target)
 
     def test_logout_and_reconnect_stage_preserving_progress(self):
-        self.char1.location = self.rooms["support_1f_c"]
+        self.char1.location = self.rooms["support_5f_c"]
         self.char1.change(lambda profile: profile.update(credits=77, storage={"bandage": 2}))
         before = deepcopy(self.char1.profile())
         with patch.object(self.char1.sessions, "count", return_value=0):
             self.char1.at_post_unpuppet(account=self.account, session=self.session)
         self.assertIsNone(self.char1.location)
-        self.assertEqual(self.char1.db.prelogout_location, self.rooms["support_1f_c"])
+        self.assertEqual(self.char1.db.prelogout_location, self.rooms["support_5f_c"])
         self.char1.at_pre_puppet(self.account, session=self.session)
         with patch.object(DefaultCharacter, "at_post_puppet"):
             self.char1.at_post_puppet()
@@ -95,14 +88,14 @@ class HeadquartersTests(GameCommandTest):
                 self.assertEqual(self.char1.location, self.rooms[zone])
                 self.assertEqual(self.char1.profile(), before)
                 self.assertNotIn(direction, {exit_obj.key for exit_obj in self.rooms[zone].exits})
-        self.char1.location = self.rooms["support_1f_c"]
+        self.char1.location = self.rooms["support_5f_c"]
         for command in ("s", "S", "ㄴ", "남 보기", "s 봐"):
             with self.subTest(command=command), patch.object(self.char1, "msg") as output:
                 self.char1.execute_cmd(command)
                 self.assertIn("남쪽 출입문은 현재 폐쇄되어 있다.", str(output.call_args_list))
-                self.assertEqual(self.char1.zone, "support_1f_c")
+                self.assertEqual(self.char1.zone, "support_5f_c")
         self.char1.execute_cmd("ㅅ")
-        self.assertEqual(self.char1.zone, "support_1f_w1")
+        self.assertEqual(self.char1.zone, "support_5f_w1")
 
     def test_bootstrap_reuses_rooms_exits_services_and_preserves_player(self):
         rooms = {zone: room.id for zone, room in self.rooms.items()}
@@ -127,9 +120,9 @@ class HeadquartersTests(GameCommandTest):
             self.assertEqual(len(search_tag(zone, category=CATEGORY)), 1)
 
     def test_preexisting_managed_closed_exit_cannot_traverse_or_reveal_then_is_removed(self):
-        source = self.rooms["support_1f_c"]
+        source = self.rooms["support_5f_c"]
         old = create_object(Exit, key="남", aliases=["s"], location=source, destination=self.rooms["infirmary"])
-        old.tags.add("support_1f_c:남", category=EXIT_CATEGORY)
+        old.tags.add("support_5f_c:남", category=EXIT_CATEGORY)
         identity = old.id
         self.char1.location = source
         with patch.object(self.rooms["infirmary"], "return_distant_appearance") as appearance:
@@ -140,84 +133,83 @@ class HeadquartersTests(GameCommandTest):
         build_world()
         build_world()
         self.assertFalse(ObjectDB.objects.filter(pk=identity).exists())
-        self.assertFalse(search_tag("support_1f_c:남", category=EXIT_CATEGORY))
-        self.assertEqual({obj.key for obj in source.exits}, {"서", "동", "북"})
+        self.assertFalse(search_tag("support_5f_c:남", category=EXIT_CATEGORY))
+        self.assertEqual({obj.key for obj in source.exits}, {"서", "동"})
 
-    def test_bootstrap_migrates_old_hub_directions_without_duplicate_exits(self):
-        identities = {}
-        for zone, current, old, alias in (
-            ("hq_concourse", "남", "동", "e"),
-            ("support_1f_c", "북", "남", "s"),
-        ):
-            exit_obj = search_tag(f"{zone}:{current}", category=EXIT_CATEGORY)[0]
-            identities[zone] = exit_obj.id
-            exit_obj.tags.remove(f"{zone}:{current}", category=EXIT_CATEGORY)
-            exit_obj.tags.add(f"{zone}:{old}", category=EXIT_CATEGORY)
-            exit_obj.key = old
-            exit_obj.aliases.clear()
-            exit_obj.aliases.add(alias)
-        self.char1.location = self.rooms["support_1f_c"]
-        before = deepcopy(self.char1.profile())
-        count = ObjectDB.objects.count()
+    def test_retired_corridors_preserve_objects_native_loot_and_history(self):
+        from typeclasses.loot import DroppedLoot
+        from typeclasses.zone_rooms import ZoneRoom
+        from world.content.headquarters import RETIRED_ROOMS
+        from world.item_entities import api
+        from world.item_entities.models import ItemEntity, ItemSequence
+
+        originals = {}
+        for zone, replacement in RETIRED_ROOMS.items():
+            old = create_object(ZoneRoom, key="이전 복도")
+            old.db.zone_id = zone
+            old.tags.add(zone, category=CATEGORY)
+            managed = create_object(Exit, key="북", location=old, destination=self.rooms["infirmary"])
+            managed.tags.add(f"{zone}:북", category=EXIT_CATEGORY)
+            custom = create_object(Exit, key="사용자 통로", location=old, destination=self.rooms["dock"])
+            loot = create_object(DroppedLoot, key="남은 물건", location=old)
+            item = api.create_item("bandage", quantity=2, location_kind="world_loot", owner_object=loot)
+            originals[zone] = (old, managed.id, custom.id, loot, item.pk, replacement)
+        old = originals["support_1f_c"][0]
+        self.char1.location = old
+        self.char1.home = old
+        self.char1.db.prelogout_location = old
+        self.char1.change(lambda p: p.update(visited=list(RETIRED_ROOMS), credits=77))
+        profile = deepcopy(self.char1.profile_snapshot())
+        snapshot = list(ItemEntity.objects.values())
+        sequence = ItemSequence.objects.get(pk=1).last_value
         for _ in range(2):
             build_world()
-            self.assertEqual(ObjectDB.objects.count(), count)
-            for zone, current, old in (("hq_concourse", "남", "동"), ("support_1f_c", "북", "남")):
-                exit_obj = search_tag(f"{zone}:{current}", category=EXIT_CATEGORY)[0]
-                self.assertEqual(exit_obj.id, identities[zone])
-                self.assertEqual(exit_obj.aliases.all(), [OPPOSITES[current]])
-                self.assertFalse(search_tag(f"{zone}:{old}", category=EXIT_CATEGORY))
-                self.assertEqual({obj.key for obj in self.rooms[zone].exits}, set(ROOMS[zone]["exits"]))
-        self.assertEqual(self.char1.location, self.rooms["support_1f_c"])
-        self.assertEqual(self.char1.profile(), before)
-        self.assertEqual(stale_definitions(), [])
-        self.char1.execute_cmd("북")
-        self.assertEqual(self.char1.zone, "hq_concourse")
-        self.char1.execute_cmd("남")
-        self.assertEqual(self.char1.zone, "support_1f_c")
-
-        # 새 출구와 옛 출구가 함께 남은 부분 갱신 상태에서도 새 출구만 보존한다.
-        old_ids = []
-        for zone, old, target in (("hq_concourse", "동", "support_1f_c"), ("support_1f_c", "남", "hq_concourse")):
-            old_exit = create_object(Exit, key=old, location=self.rooms[zone], destination=self.rooms[target])
-            old_exit.tags.add(f"{zone}:{old}", category=EXIT_CATEGORY)
-            old_ids.append(old_exit.id)
-        for _ in range(2):
-            build_world()
-            self.assertEqual(ObjectDB.objects.count(), count)
+            self.assertEqual(self.char1.zone, "hq_concourse")
+            self.assertEqual(self.char1.home, old)
+            self.assertEqual(self.char1.db.prelogout_location, old)
+            self.assertEqual(self.char1.profile_snapshot(), profile)
+            self.assertEqual(list(ItemEntity.objects.values()), snapshot)
+            self.assertEqual(ItemSequence.objects.get(pk=1).last_value, sequence)
+            for zone, (retired, exit_id, custom_id, loot, item_id, replacement) in originals.items():
+                self.assertTrue(ObjectDB.objects.filter(pk=retired.id).exists())
+                self.assertFalse(search_tag(zone, category=CATEGORY))
+                self.assertEqual(search_tag(zone, category="primal_retired_room")[0], retired)
+                self.assertFalse(ObjectDB.objects.filter(pk=exit_id).exists())
+                self.assertTrue(ObjectDB.objects.filter(pk=custom_id).exists())
+                loot.refresh_from_db()
+                self.assertEqual(loot.location, self.rooms[replacement])
+                self.assertEqual(ItemEntity.objects.get(pk=item_id).owner_object, loot)
             self.assertEqual(stale_definitions(), [])
-            self.assertFalse(ObjectDB.objects.filter(pk__in=old_ids).exists())
-            for zone, current in (("hq_concourse", "남"), ("support_1f_c", "북")):
-                self.assertEqual(search_tag(f"{zone}:{current}", category=EXIT_CATEGORY)[0].id, identities[zone])
 
-    def test_presentation_map_and_web_expose_only_current_rooms_and_real_controls(self):
-        self.char1.location = self.rooms["support_1f_c"]
-        local = self.char1.location.return_appearance(self.char1)
-        self.assertIn("북쪽 통로는 본부 중앙홀로 이어진다.", local)
-        self.assertIn("남쪽 출입문은 현재 폐쇄되어 있다.", local)
+    def test_npc_distribution_keeps_21_hq_npcs_and_13_training_roles(self):
+        expected = {
+            "training_room": {"trainer_attack", "trainer_heavy", "trainer_strength"},
+            "survival_training_room": {"trainer_defense", "trainer_constitution", "trainer_breathing"},
+            "training_office": {"instructor"}, "tactics_room": {"trainer_suppress", "trainer_wisdom"},
+            "shooting_range": {"trainer_shooting", "trainer_insight", "trainer_agility"},
+            "medical_training_room": {"trainer_heal"},
+        }
+        for zone, identities in expected.items():
+            self.assertEqual({key for key, definition in INTERACTABLES.items() if definition["room"] == zone}, identities)
+            for key in identities:
+                self.assertEqual(search_tag(key, category="primal_interactable")[0].location, self.rooms[zone])
+        npcs = [obj for room in [self.rooms[z] for z in HQ_ROOMS] + [self.rooms["dock"]]
+                for obj in action_objects(room) if obj.semantic_role == "npc"]
+        self.assertEqual(len(npcs), 21)
+
+    def test_room_map_and_web_state_use_current_layout_and_stairs(self):
+        from world.state import multiplayer_state
+        self.char1.location = self.rooms["hq_concourse"]
         self.char1.db.profile = {**self.char1.profile(), "visited": list(HQ_ROOMS)}
         with patch.object(self.char1, "msg") as output:
             self.char1.execute_cmd("지도")
-        map_text = str(output.call_args_list)
-        self.assertIn("[탐사대 본부]", map_text)
-        central_row = next(row for row in map_text.split("\\n") if "지원동 1층 중앙 복도 ← 현재" in row)
-        self.assertIn("북: 본부 중앙홀", central_row)
-        self.assertIn("남: 폐쇄", central_row)
-        self.assertNotIn("북: 폐쇄", central_row)
-        self.assertIn("지원동 옥상", map_text)
-        self.assertNotIn("특수장비점", map_text)
-        self.assertNotIn("공사 중", map_text)
-        with patch.object(self.char1, "msg") as output:
-            Explorer.push_state(self.char1)
-        state = output.call_args.kwargs["pz_state"][0][0]
-        self.assertEqual(state["exits"], ["북", "동", "서"])
-        self.assertEqual(state["region"], "headquarters")
-        self.assertEqual(state["interactables"], [])
-        self.assertEqual(state["hint"], "")
-        self.assertFalse(state["training_available"])
-        self.char1.location = self.rooms["hq_concourse"]
-        south = next(obj for obj in self.char1.location.exits if obj.key == "남")
-        self.assertIn("남쪽 출입문은 현재 폐쇄되어 있다.", south.return_appearance(self.char1))
+        text = str(output.call_args_list)
+        self.assertIn("본부 중앙 로비", text)
+        self.assertIn("본부 5층 중앙 복도", text)
+        self.assertNotIn("지원동 1층", text)
+        state = multiplayer_state(self.char1)
+        self.assertEqual(state["stairs"], [{"label": "계단 올라", "command": "계단 올라", "destination": "support_2f_c"}])
+        self.assertEqual(ROOMS["hq_concourse"]["exits"], {"북":"staging_room", "서":"dock", "동":"hq_admin_office", "남":"hq_lounge"})
 
     def test_dock_keeps_commander_without_support_services(self):
         self.char1.location = self.rooms["dock"]

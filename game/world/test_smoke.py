@@ -287,7 +287,7 @@ class SmokeRestartTests(TestCase):
         player.act = act
         closeout = Closeout(SimpleNamespace(players=(player, None, None)))
         with patch.object(closeout, "floor", new_callable=AsyncMock), patch(
-            "scripts.smoke_closeout.route", new_callable=AsyncMock
+            "scripts.smoke_closeout.travel_to", new_callable=AsyncMock
         ), self.assertRaises(PurchaseObserved):
             asyncio.run(closeout.prepare_boss())
 

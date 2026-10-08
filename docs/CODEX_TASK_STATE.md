@@ -1,3 +1,37 @@
+## PR #40 — 본부 개편 최종 문서 마감·병합 준비 (2026-10-08)
+
+- 구현과 리뷰 지적 네 건의 수정은 완료했다. 지상 5층·옥상·공용 승강기의 본부 46 Room(부두 제외), 기존 본부/부두 NPC 21명·4층 교관 12명/훈련관리관 1명, 각 층 중앙 전용 계단과 공용 승강기를 유지한다. [현재 배치와 운영 계약](headquarters-redesign.md)이 기준이며 커피숍·지하층·신규 NPC/서비스·밸런스 변경은 없다.
+- 출구의 관리 identity/명령 충돌은 읽기 전용 preflight로 변경 전에 거절하고 미관리 Exit와 영속 데이터를 보존한다. 계단·승강기는 실제 출발/도착 시점의 시야/권한을 통과한 관찰자에게 transaction 성공 후 한 번만 알리며 실패/rollback은 취소한다. 전역 계단 도움말과 중앙 전용 실행을 분리했고 4층 여섯 교육시설의 고정 설비 설명을 배치/출구와 일치시켰다.
+- 문서 마감 시작: base/main `763aac347fec8f8e921f0c7cfbd62391f383f978`, source `codex/hq-building-redesign`, PR HEAD `bee8438b304c8b0716acb62c2b944498b0ef3c1e`. OPEN/non-draft·MERGEABLE/CLEAN·ahead6/behind0·미해결 review thread0·필수 승인 수0·tree clean, 소스 브랜치는 현재 worktree 한 곳에서만 사용한다. 추가 main/source 변경이 없어 rebase나 과거 commit rewrite는 불필요하다.
+- 기준 HEAD의 [Game checks 37755907488](https://github.com/wonmin82/primal-zone/actions/runs/37755907488)는 check·test·smoke SUCCESS다. CI 순수206개/1.254초·통합600개/351.399초(runner358.750초)·Quick50.360초이며 실제 SHA 일치를 확인했다. 이전 local 관련69개/전체206·600개/Quick85.077초 성공은 아래 실행 기록을 재사용한다. 이번 변경은 문서만이므로 Python 전체·Quick/Full·브라우저·정적 수집을 반복하지 않는다.
+- README·architecture·progression·본부 개편·출력 예의 현재 Room/NPC/동선/기능과 코드 정의를 대조했다. Markdown23개/상대 링크·anchor247개/fence 오류0, 명령/경로·ID/시설 방향과 main 대비 서비스/회복/성장/출입 정책 보존·git diff --check PASS다. README의 회복 장소 이름을 현재 중앙 로비로 맞추고 현재 병합 준비 상태와 아래 historical 실행 기록을 분리했다. 과거 실패/검증 수치·당시 PR 생성 예정/미실행/병합 금지 기록은 소급 수정하지 않는다. [이번 문서 검증](playtest.md#pr-40-최종-문서-마감-2026-10-08)을 따른다.
+- 미해결 P0/P1/P2와 문서 blocker는 확인되지 않았다. 실제 OS IME·mobile device matrix·PostgreSQL/multi-server는 미실행 범위를 유지하며 이번 문서 변경의 검증으로 주장하지 않는다. 개발 DB의 SHA256·size·mtime_ns는 불변이고 실제 DB에 bootstrap/migration을 실행하지 않는다.
+- 병합 전 최종 준비 상태다. 사용자가 PR #40의 Merge Commit 병합과 해당 소스 브랜치 삭제를 승인했다. 새 문서 HEAD의 exact-head CI·보호 규칙/리뷰·최신 main 포함을 확인한 뒤 병합하고, 병합 main의 exact-head test/smoke 성공 이후에만 ancestry/추가 commit/다른 PR·worktree 사용을 확인해 원격/로컬 소스를 정리한다. 실제 최종 HEAD·merge commit·main CI·cleanup 결과는 [PR #40 Validation](https://github.com/wonmin82/primal-zone/pull/40)과 최종 보고에 기록하며 미리 MERGED로 선언하지 않는다.
+
+아래 본부 개편 구현·리뷰 및 Item System V1 기록은 각 작업 시점의 historical 실행 기록이다. 당시의 남은 gate·PR 생성 예정·병합 금지 표현은 현재 병합 요청을 제한하지 않는다.
+
+## PR #40 — 본부 개편 리뷰 수정 (2026-10-08)
+
+- 시작 main `763aac347fec8f8e921f0c7cfbd62391f383f978`, PR/source HEAD `7475eeeb356a17c5e97ff906d1793737e16459ff`, 기존 branch `codex/hq-building-redesign`에서 이어간다. Fetch 후 clean·OPEN/non-draft·MERGEABLE/CLEAN·review thread 0개를 확인했다. 아래 최초 개편의 검증 이력은 당시 기록으로 보존한다.
+- P1: 올바른 관리 identity만 재사용하고 이름만 같은 Exit를 편입하지 않는다. Fresh runtime 초기화·Room/NPC/이전 처리 전에 읽기 전용 preflight로 태그 중복/다중 태그/잘못된 위치와 활성·폐쇄 방향의 key/alias/방향 단축키 충돌을 거절한다. 충돌 시 미관리 객체·Room·NPC·플레이어·ItemEntity·runtime/sequence DB snapshot 불변을 검사했다. 기존 관리 Exit ID 갱신·신규 생성·반복 bootstrap·폐지 Room의 사용자 Exit 및 영속 데이터 보존을 유지한다.
+- P2: 계단·승강기의 출발/도착 시 실제 Room에서 `can_perceive`로 허용된 관찰자를 확보하고 `after_change` 이후 한 번씩 알린다. Move 실패·외부 transaction rollback은 알림을 폐기하며 출발 알림도 이동 후 위치 검사 때문에 누락되지 않는다. 실제 Explorer 관찰자와 view lock/poor visibility 회귀를 추가했다. 일반 방향 이동 계약은 유지한다.
+- P2: `HELP_ONLY_COMMANDS`로 계단 개별 도움말 metadata만 전역 조회한다. `계단 도움말`은 일반 Room에서도 가능하지만 이동 CmdSet은 중앙 공간에만 존재한다. 층 경계·잘못된 인자·후치형/줄임말·승강기·교관 기능의 관련 회귀를 실행했다.
+- P3: 4층 6시설의 고정 설비를 통합 훈련 분야와 실제 문 방향에 맞춰 보완했다. NPC 행동/대사·서비스·46 Room/21 NPC·가격·밸런스·schema·migration·JS는 변경하지 않는다.
+- 검증/시행착오: 최종 관련 reverse 69개/66.428초(runner76.030초) PASS, check PASS. 첫 병렬 runner 두 개를 동시에 실행해 Windows test clone 삭제가 충돌한 실행은 성공으로 계산하지 않는다. 후속 관련 실행에서 교관 시야 테스트가 정상 회복 10초 경계를 넘은 1FAIL은 해당 test의 시각만 고정하고 전체 profile assertion을 유지했다. 자세한 실패→보정→성공은 [이번 검증 기록](playtest.md#pr-40-본부-개편-리뷰-수정-2026-10-08)을 따른다.
+- 최종 전체: 순수 206개/2.734초·통합 600개/497.689초(runner508.209초), failure0/error0 PASS. Quick85.077초 PASS: 격리 실제 서버 fresh bootstrap·공유 전투/전리품·승강기/5층 거래·재로그인·cleanup 성공. 개발 DB SHA256 `b1318296f505b9b7522fcbdedff7642a06cf055e9de72802198c70e6b8a7f700`·size733184·mtime_ns1790080153765082800은 전후 동일하다. Markdown23개/상대 링크·anchor245개/fence 오류0·git diff --check PASS. JS/입력·combat/timing/Quest/Boss 동선은 바뀌지 않아 browser/IME/Full은 반복하지 않으며 이전 실행을 이번 변경의 근거로 대신하지 않는다. 이번 자동 회귀·Quick에서 미해결 P0/P1/P2는 발견되지 않았다. 남은 gate는 새 HEAD의 CI다. 최신 commit/HEAD·exact-head CI·PR 상태는 [PR #40 Validation](https://github.com/wonmin82/primal-zone/pull/40)에 기록한다. 새 PR·branch를 만들거나 병합하지 않는다.
+
+## 본부 빌딩 5층 개편 (2026-10-08)
+
+- 기준 main: `763aac347fec8f8e921f0c7cfbd62391f383f978`. Branch: `codex/hq-building-redesign`. 시작 상태 clean·open PR 0개. 아래 Item System V1 완료와 이전 검증은 historical record로 보존한다.
+- 현재 배치: 활성 본부 Room 46개·폐지 복도 9개·신규 Room 14개. 1층 로비/관리/휴게, 2층 보관/보급/정산, 3층 의료, 4층 교관 13명/교육시설 6곳, 5층 기존 장비/병기 시설 6곳, 기존 옥상 9개·승강기 1개. [배치와 호환 계약](headquarters-redesign.md)을 따른다.
+- 기존 NPC 21명·기술/특성 담당 ID·재분배·회복·가격/catalog·출입증 조건을 유지했다. 커피숍·새 NPC·지하층·새 gameplay 서비스·밸런스 변경은 없다.
+- 층별 중앙에서 인접 층 계단과 1~5층·옥상 승강기를 이용한다. 기존 공용 층/승객/자동 하차/수동 내려/transaction을 유지하며 계단은 승강기 상태를 변경하지 않는다. 텍스트·도움말·지도·Web control과 smoke/coordinator 동선을 갱신했다.
+- 데이터 보존: 폐지 Room을 archive로 남기고 관리 출구만 제거한다. 플레이어·전리품 owner 객체를 대체 공간으로 이동하며 home/prelogout/방문·Entity identity/sequence/tree/quantity/state를 유지한다. 반복 bootstrap·NPC/Exit 재사용을 통합 회귀로 검사한다. 실제 개발 DB에 bootstrap/migration을 실행하지 않는다.
+- 검증: check·JS syntax PASS. 계단/방향/서비스 21개와 원거리 관찰/줄임말 36개(reverse) PASS. 최종 전체 순수 206개/2.928초·통합 587개/482.501초(runner493.300초) PASS, 실패/오류 0이다. Full 599.024초 PASS: 두 임무/보스·최종 보고·실제 기술 훈련·shutdown 광원 정산·startup Entity 엄격 보존·재로그인을 확인했다. Quick 95.045초 PASS. Actual IAB 1280×900·390×844에서 새 동선/계단 입력·버튼/승강기/5층 구매/의료/훈련/재접속을 확인했다.
+- 발견/보정: 옛 ID·층수·교관 위치를 참조한 fixture, 새 계단의 전치형 선언 누락, Full 체질 배분의 옛 의료 동선을 보정했다. 연속 사냥 패배는 실제 침대 회복/재출정 단계를 추가해 검증하며 수치·fixture 변경은 없다. 실패→수정→성공 이력과 실제 실행 시간은 [playtest](playtest.md#본부-5층-개편-검증-2026-10-08)에 보존한다.
+- 개발 DB SHA256·size·mtime_ns는 Quick·실패 Full·브라우저·최종 Full 전후 동일하다. Markdown 23개 문서/상대 링크·anchor241개/fence 오류0, git diff --check PASS다. 최신 PR 번호·HEAD·exact-head CI는 생성하는 본부 개편 PR의 Validation에 기록한다. PR은 병합하지 않는다.
+- 현재 자동·브라우저·Quick/Full 검증에서 미해결 P0/P1/P2는 없다. 남은 gate는 생성할 PR latest HEAD CI 확인이다. Full fixture 보정 이력은 위 playtest에 보존한다. 실제 OS IME·mobile device matrix는 이번 입력 변경 범위 밖이며 과거 성공을 이번 실행으로 표현하지 않는다.
+
 ## Item System V1 — 최종 closeout (2026-10-08)
 
 - 최종 상태: **ITEM SYSTEM V1 COMPLETE**. Phase 1~6·7A·7B·7C 구현·검증과 병합을 마쳤다. 지원 topology는 SQLite + single Evennia server, fresh native ItemEntity와 검증된 explicit legacy compatibility다. Production P0=0/P1=0/P2=0이며 기존 notes는 아래 실행 기록과 Phase 7 audit에 보존한다.

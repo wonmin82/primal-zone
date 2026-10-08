@@ -33,7 +33,7 @@ Shopkeeper는 재고 owner가 아닌 source/sink 서비스다. `purchase_catalog
 | 장착 ItemEntity recovery modifier | hp_per_minute | mental_per_minute | 둘 다 유지 |
 | recovery_effects | hp_per_minute | mental_per_minute | 둘 다 유지 |
 
-Room/Item metadata는 누락 시 0이며 integrity가 유한한 0 이상의 수만 허용한다. 초기 장소는 의무실 6/2, 본부 중앙홀 2/2, 폐쇄된 관리동 2/1, 옥상 9개 Room 0/2다. 출정 대기실에는 보너스가 없다. 장비 회복은 native equipment snapshot의 장착 modifier를 집계한다. 생존모듈·재생모듈·정신안정모듈 등 실제 회복 장비가 존재한다. recovery_effects는 started_at/expires_at와 선택 회복률을 저장하며 시작·만료 시각으로 구간을 나눈다. 만료 시각까지의 기여를 반영한 뒤 expired effect를 제거한다. 활성 조건은 started_at <= now < expires_at이며 미래 효과만 필요하면 그 시작 시점 하나를 예약한다. 새 소비품·범용 buff API는 없다.
+Room/Item metadata는 누락 시 0이며 integrity가 유한한 0 이상의 수만 허용한다. 초기 장소는 의무실 6/2, 본부 중앙 로비 2/2, 폐쇄된 관리동 2/1, 옥상 9개 Room 0/2다. 출정 대기실에는 보너스가 없다. 장비 회복은 native equipment snapshot의 장착 modifier를 집계한다. 생존모듈·재생모듈·정신안정모듈 등 실제 회복 장비가 존재한다. recovery_effects는 started_at/expires_at와 선택 회복률을 저장하며 시작·만료 시각으로 구간을 나눈다. 만료 시각까지의 기여를 반영한 뒤 expired effect를 제거한다. 활성 조건은 started_at <= now < expires_at이며 미래 효과만 필요하면 그 시작 시점 하나를 예약한다. 새 소비품·범용 buff API는 없다.
 
 Explorer.change와 전투의 직접 저장 경계는 변경 전 accrue를 수행한다. 공통 이동 hook의 checkpoint_recovery는 이전 Room의 기여만 저장하고 state/prompt를 보내지 않는다. Exit·귀환·승강기·패배 이동이 같은 규칙을 쓴다. move_to의 world_change는 목적지 hook 거절도 실패로 rollback하고, 도착 state와 방 출력은 성공 후 실행한다. world_change의 profile/location rollback을 유지한다. 현재 자원은 주기 commit 또는 기존 명시적 회복/피해에서만 바뀐다. 접속 중 실제 회복할 자원이 있을 때 다음 경계 하나만 예약하며 full 또는 전투 중 HP만 부족하고 bonus가 없으면 예약하지 않는다.
 
@@ -98,13 +98,15 @@ currency_request는 기존 TargetSelector에서 금액만 읽는다. 20칩은 �
 
 ## 현재 본부 Room 구조
 
-`world/content/headquarters.py`는 출정 대기실·본부 중앙홀, 지원동 1~3층 복도와 시설·공용 승강기, 옥상 9곳과 전초·예약 시설을 포함해 Room 41개를 정의한다. 기존 `dock`과 탐사 구역 15곳은 유지한다. Region `headquarters`는 방문한 실제 Room을 기존 지도에 묶어 표시한다.
+본부는 지상 5층·옥상·공용 승강기 포함 활성 Room 46개다. 층별 수는 4/6/6/9/11/9 + 승강기1이다. 1층 로비는 북 대기실·서 부두·동 관리실·남 휴게실, 2층 보관/보급/정산, 3층 의료, 4층 교육시설6곳/교관13명, 5층 기본·전초·예약 시설6곳이다. 옥상 8방향 왕복은 유지한다. 전체 ID·NPC·출입 권한은 [본부 개편](headquarters-redesign.md)을 따른다.
 
-출정 대기실의 유일한 출구는 `남 → hq_concourse`다. 중앙홀은 `북 → staging_room`, `서 → dock`, `남 → support_1f_c`이며 부두의 `북 → grass`는 그대로다. 1층 중앙은 `북 → hq_concourse`, `서 → support_1f_w1`, `동 → support_1f_e1`이며 남쪽 출입구는 폐쇄되어 있다. 모든 정식 방향 출구는 반대 방향으로 복귀하며 별도 복귀 방향 예외는 없다. 각 층의 복도는 동서로 연결되고 기존 시설은 북쪽, 새 2층 훈련 시설 세 곳은 남쪽으로 진입하며 반대 방향으로 복귀한다. 층별 방향 그래프는 분리되어 있으며 2단계 승강기 명령으로 각 중앙 복도와 옥상을 오간다.
+`계단 올라`/`계단 내려`는 층별 중앙 공간에서만 인접 층에 이동한다. 승강기는 기존 단일 Room/current_stop을 보존하고 정류층만 1~5층·옥상으로 확장한다. 계단은 공용 승강기 위치를 바꾸지 않는다. 텍스트와 Web은 같은 서버 `stairs`/`elevator` 행동을 표시하며 방향도는 실제 방향 Exit만 사용한다.
 
-`blocked_exits`는 방향과 폐쇄 안내 문구만 저장하며 목적지·Exit 객체를 만들지 않는다. `world.navigation.blocked_exit_message()`가 기존 방향 alias로 조회하고, 미등록 명령 fallback에서 이동 입력을 처리한다. 보기 역시 목적지 조회 전에 같은 안내를 반환한다. 기존 관리 Exit가 폐쇄 방향에 남아 있으면 Exit 훅에서 이동·정찰을 차단하고 bootstrap이 해당 stable tag의 관리 Exit만 제거한다. 일반 stale 객체 감사 정책은 유지한다.
+Bootstrap은 기존 Room·서비스 ID를 재사용하며 폐지 복도9개의 관리 출구만 정리한다. 복도 객체를 `primal_retired_room` archive로 남겨 home/prelogout/FK·원래 방문 ID를 보존하고, 그 안의 플레이어·전리품 등 일반 객체는 지정된 대체 공간으로 이동한다. 전리품 owner 객체를 재생성하지 않아 Entity UUID·sequence·tree·LootClaim/CurrencyLootShare는 유지한다. 사용자 생성 출구·무관한 stale 객체는 삭제하지 않는다. 본부 콘텐츠 신규 Room14개를 추가하며 반복 bootstrap은 전환을 중복 수행하지 않는다.
 
-Room의 local/distant 표시 경로는 정적 설명 다음에 폐쇄 문구를 넣는다. 지도는 방문한 실제 Room의 방향 목록에 폐쇄 방향을 표시하며 1층 중앙은 `북: 본부 중앙홀`, `남: 폐쇄`다. 방향도·웹 이동 버튼·`pz_state.exits`는 실제 출구만 사용하며 1층 중앙은 북·동·서만 제공한다. 폐쇄 방향을 지도 노드나 동작 버튼으로 만들지 않는다. 기능 없는 시설에는 NPC·보관함·가짜 action hint를 추가하지 않는다.
+관리 Exit는 정확한 `primal_zone_exit` identity로만 재사용한다. Bootstrap의 읽기 전용 사전 검사는 미관리 방향/alias/단축어 충돌·폐쇄 방향 모순·중복 관리 identity·잘못된 Room/type을 변경 전에 거절한다. 이름 기반 편입은 없으며 충돌 시 runtime·Room·NPC·플레이어·Exit 상태가 불변이다. 정상 관리 객체의 ID를 유지해 정의의 목적지를 갱신한다. 운영 복구는 [출구 소유권과 충돌 처리](headquarters-redesign.md#관리-출구-소유권과-충돌-처리)를 따른다.
+
+계단/승강기의 presence는 출발/도착 시점의 해당 Room에서 시야·view lock을 통과한 관찰자 목록을 확보한 뒤 `after_change()`로 보낸다. Rollback은 알림도 취소한다. 전역 `HELP_ONLY_COMMANDS`는 도움말 metadata만 제공하며 실제 계단 CmdSet 등록 범위는 중앙 공간 전용이다.
 
 ## 8방향과 고정 compass
 
@@ -114,13 +116,17 @@ Room의 local/distant 표시 경로는 정적 설명 다음에 폐쇄 문구를 
 
 지도는 실제 출구와 폐쇄 출구의 방향을 먼저 합쳐 `ordered_directions()`로 한 번 정렬한다. 한 Room의 전체 표시가 canonical 시계방향 순서를 따르며 기타 특수 출구는 원래 입력 순서대로 뒤에 표시한다. 방문한 목적지 이름·미탐사·폐쇄·현재 위치와 semantic 방향 token은 유지한다.
 
-Web은 기존 `pz_state.exits`만 렌더링한다. 오른쪽 DOM은 SURROUNDINGS → PARTY → OBJECTIVE → TRAINING → EQUIPMENT & SUPPLIES이며 SURROUNDINGS 안에서는 compass → hint/context 순이다. 고정 3×3 grid의 중앙은 row 2/column 2이며 출구가 없는 방향은 버튼만 생략한다. 출구 개수와 주변 행동 수가 grid geometry와 panel 내 위치를 바꾸지 않는다. connector/has-direction 가변 행은 제거했고 기타 특수 출구 fallback은 유지한다. 기존 1150px grid·700px flex breakpoint를 따르며 서비스/action 선정 정책과 서버가 소유하는 텍스트 명령은 바꾸지 않는다.
+Web의 방향 버튼은 기존 `pz_state.exits`만 렌더링한다. 오른쪽 DOM은 SURROUNDINGS → PARTY → OBJECTIVE → TRAINING → EQUIPMENT & SUPPLIES이며 SURROUNDINGS 안에서는 compass → hint/context 순이다. 고정 3×3 grid의 중앙은 row 2/column 2이며 출구가 없는 방향은 버튼만 생략한다. 출구 개수와 주변 행동 수가 grid geometry와 panel 내 위치를 바꾸지 않는다. connector/has-direction 가변 행은 제거했고 기타 특수 출구 fallback은 유지한다. 기존 1150px grid·700px flex breakpoint를 따르며 서비스/action 선정 정책과 서버가 소유하는 텍스트 명령은 바꾸지 않는다.
 
 Telnet `exit_diagram()`은 30 display cells × 5줄의 canvas를 사용한다. `[현재]`는 0 기준 12열, 북/남 label과 fullwidth `｜`는 14열에서 시작한다. 없는 방향의 label/connector는 공백이며 대각선에는 `／`·`＼`, 가로축에는 ASCII `-`를 사용한다. 방향 semantic token을 배치한 뒤 terminal 색 변환을 적용한다. `world.text.display_width()`는 기존 east_asian_width W/F=2 정책을 `row()`와 공유하며 ANSI escape 길이를 계산하지 않는다. 실제 terminal/font의 fullwidth glyph 지원은 별도 클라이언트 조건이다.
 
-새 캐릭터는 기존 최초 puppet의 비월드 위치 fallback에서 출정 대기실로 배치되고 새 profile의 `visited`도 대기실에서 시작한다. 새 로그인/재로그인은 출정 대기실에 배치하고 방문을 포함한 진행 기록은 보존한다. 살아 있는 세션의 server reload는 기존 위치를 유지한다. Evennia fallback `home=dock`은 유지한다. 일반 귀환은 `support_roof`, 전투 패배는 `infirmary`로 명시적으로 이동한다. 상점은 지원동의 실제 Shopkeeper, 의료·휴식은 의무실의 실제 객체를 따른다. 보관·훈련 객체는 아래 3단계 배치를 따른다. bootstrap은 기존 stable tag로 Room/실제 Exit를 재사용·갱신하며 개인 기록을 초기화하지 않는다. 이전 본부 배치의 중앙홀 동쪽·1층 중앙 남쪽 관리 Exit는 같은 목적지를 유지하며 새 남쪽·북쪽 stable tag와 alias로 갱신한다. 이미 새 출구가 있다면 해당 옛 관리 Exit만 제거한다. integrity는 목적지·정반대 방향의 양방향 연결·폐쇄 문구/충돌·본부 고정 배치·시설의 유일 진입·Region membership을 검사한다.
+새 캐릭터는 최초 puppet의 비월드 위치 fallback에서 출정 대기실로 배치되고 새 profile의 `visited`도 대기실에서 시작한다. 새 로그인/재로그인은 출정 대기실에 배치하고 방문을 포함한 진행 기록은 보존한다. 살아 있는 세션의 server reload는 기존 위치를 유지한다. Evennia fallback `home=dock`은 유지한다. 일반 귀환은 `support_roof`, 전투 패배는 3층 `infirmary`로 이동한다. 상점은 2층 보급관과 5층 상인, 의료·휴식은 3층 의무실 객체, 보관은 2층 보관 객체, 훈련은 4층 교관을 따른다. Bootstrap은 stable tag로 기존 Room·Exit·NPC를 재사용하며 영속 기록을 초기화하지 않는다. Integrity는 목적지·역방향 왕복·폐쇄 문구/충돌·본부 고정 배치·시설의 유일 진입·Region membership을 검사한다.
 
-## 본부 2단계: 공용 승강기
+아래 본부 단계별 설명은 개편 전의 historical implementation record다. 당시 층수·출구·검증 결과를 현재 구조로 소급 수정하지 않는다. 현재 배치는 위 설명과 [본부 개편](headquarters-redesign.md)을 따른다.
+
+<a id="본부-2단계-공용-승강기"></a>
+
+## Historical 본부 2단계: 공용 승강기
 
 `support_elevator`는 safe·실내·인공광·적 없음의 실제 `ZoneRoom`이다. `exits={}`이며 승강기 호출/하차를 cardinal Exit로 만들지 않는다. 기존 중앙 복도의 폐쇄 방향도 유지한다. `world/content/elevator.py`의 `ELEVATOR_STOPS`가 안정적인 정류 층 ID(`1f`, `2f`, `3f`, `roof`)와 한국어 label·목적지 Room의 SSOT다. Command·표시·웹 상태·bootstrap·검사는 이를 재사용한다.
 
@@ -134,7 +140,9 @@ Room 본문은 기존 `world.text` semantic 조각으로 호출 방법 또는 �
 
 Integrity는 승강기 Room·headquarters 소속, default·정류 층 ID/label/목적지의 유효성·중복, 정확히 세 중앙 복도와 옥상인 정류 구성, 가짜 방향 출구 금지와 기존 HQ reverse/blocked 검증을 함께 수행한다. 귀환은 옥상에 도착한 뒤 이 승강기로 이동한다. 의료·패배 흐름은 아래 4단계를 따르며 회수 자원 정산은 아래 5단계, NPC 상점은 6단계를 따른다.
 
-## 본부 3단계: 보관·훈련 서비스 이전
+<a id="본부-3단계-보관훈련-서비스-이전"></a>
+
+## Historical 본부 3단계: 보관·훈련 서비스 이전
 
 `INTERACTABLES`의 기존 `shared_container`와 `personal_locker`는 `storage_room`에 배치한다. stable ID `instructor`는 기존 객체를 훈련관리관(`TrainingManager`)으로 갱신해 `training_office`로 이동한다. 의무실·훈련실의 기존 출입문을 유지하고 2층 서쪽 끝·중앙·동쪽 끝의 남쪽 문에 전술훈련실·훈련관리실·사격장을 추가한다. Room은 환경·출구만 담당하고 훈련은 실제 교관이 제공한다. 부두에는 윤대장과 탐사 출발 동선이 남는다.
 
@@ -142,7 +150,9 @@ Integrity는 승강기 Room·headquarters 소속, default·정류 층 ID/label/�
 
 bootstrap은 stable `primal_interactable` tag로 기존 객체를 찾아 DB ID를 유지한 채 위치·이름·alias 목록을 갱신한다. 다중 alias도 목록으로 전달해 각 이름을 보존한다. 공용 `db.items`와 각 탐사자의 `profile.storage`, 장비·성장·방문 기록에는 쓰지 않으며 profile migration도 없다. 반복 실행은 객체를 중복 생성하지 않는다. integrity는 세 서비스의 본부 배치를 검사하며 실제 사용 권한은 이 정적 배치 검사와 독립적이다.
 
-## 본부 4단계: 의료와 복귀·패배
+<a id="본부-4단계-의료와-복귀패배"></a>
+
+## Historical 본부 4단계: 의료와 복귀·패배
 
 신규 시작은 `staging_room`, 재접속은 출정 대기실, Evennia fallback `home`은 `dock`이다. `Return`은 비전투 중 `support_roof`로 실제 이동하고, 패배는 home과 무관하게 `infirmary`를 조회한다. 옥상과 의무실 이후 이동은 기존 공용 승강기·사방 출구를 사용한다.
 
@@ -158,7 +168,9 @@ bootstrap은 stable `primal_interactable` tag로 기존 객체를 찾아 DB ID�
 
 의료 동선과 회복 규칙은 통합/수동 검사와 Full의 실제 패배→의무실→Bed 회복 및 Doctor 진료로 확인한다. Quick smoke는 fixture 로그인과 공동 사냥 1회, 귀환→옥상→승강기 3층→무기상 구매·재접속을 확인한다. 공개 가입 rate limit은 그대로 유지하며 gameplay smoke와 분리한다. 시체/재생성/보호의 production 시간 의미는 Full Gameplay E2E가 맡는다.
 
-## 본부 5단계: 단일 화폐와 회수 자원 정산
+<a id="본부-5단계-단일-화폐와-회수-자원-정산"></a>
+
+## Historical 본부 5단계: 단일 화폐와 회수 자원 정산
 
 보급칩은 유일한 구매 currency, scrap은 일반 경제 resource다. Native inventory/storage의 ItemEntity 수량을 사용하며 `SALVAGE_CREDIT_RATE=10`으로 정산한다. 발전기는 별도 submit-only `generator_repair_part` 3개를 소비하므로 일반 scrap을 잃어 진행이 막히지 않는다. 수송차 cache는 미수리 상태에서만 부족분을 보충하고 수리 완료 후 지급하지 않는다.
 
@@ -170,7 +182,9 @@ bootstrap은 stable `primal_interactable` tag로 기존 객체를 찾아 DB ID�
 
 서버는 실제 visible/available NPC에서 환율 명령과 보유 scrap이 있을 때 대상 지정 모두 정산 명령을 만든다. 기존 interactable actions를 재사용하고 전체 ActionObject action을 개방하지 않는다. Room hint도 실제 target/action의 availability를 따른다. `pz_state.resources.scrap={name,count}`는 같은 profile snapshot의 소지품에서 파생하고 보급칩 wallet과 구분한다. 별도 balance를 저장하지 않으며 client는 payload와 완성된 command를 렌더링한다. zone ID·NPC 이름·환율·수량으로 action을 추론하지 않는다.
 
-## 본부 6단계: NPC 기반 상점
+<a id="본부-6단계-npc-기반-상점"></a>
+
+## Historical 본부 6단계: NPC 기반 상점
 
 `Shopkeeper(ActionObject)`는 실제 persistent NPC다. `supply_shopkeeper`(보급관/보급상인)는 `supply_shop`, `weapon_shopkeeper`(무기상/무기 상인)는 `weapon_shop`, `armor_shopkeeper`(방어구상/방어구 상인)는 `armor_shop`에 배치한다. `db.shop_id`의 supply/weapon/armor가 catalog identity이며 Room ID나 NPC 이름에서 추론하지 않는다. bootstrap은 stable tag로 같은 객체를 재사용하고 정의의 위치·alias·shop_id를 정규화한다. 재고 상태·profile migration은 없다.
 
@@ -204,7 +218,9 @@ DEFAULT는 구조적으로 행동을 지원하는 첫 대상을 선택한다. IN
 
 profile v10의 `attributes`는 기본 10과 추가 투자, `skills`는 여덟 Rank다. 남은 포인트·훈련은 레벨과 투자량에서 도출하며 가변 잔액을 저장하지 않는다. migration은 옛 기술을 R1로 환원하고 proficiency/guard를 제거한다. 특성은 canonical 순서로 +20·레벨 예산을 제한하고 기존 XP·장비·소지품·임무·월드 진행을 유지한다. 현재 버전의 잘못된 Rank도 저장 전에 같은 정규화를 거친다. read-only snapshot은 입력과 DB를 바꾸지 않는다.
 
-## NPC 소유 훈련과 지원동 시설
+<a id="npc-소유-훈련과-지원동-시설"></a>
+
+## Historical NPC 소유 훈련과 지원동 시설
 
 지원동 2층에 전술훈련실(`tactics_room`, 서쪽 끝 남), 훈련관리실(`training_office`, 중앙 남), 사격장(`shooting_range`, 동쪽 끝 남)을 추가한다. 기존 의무실과 훈련실 ID는 유지하며 본부는 37 Room이다. Room에는 성장 action을 두지 않는다.
 
@@ -387,7 +403,7 @@ Room `requires.message`는 이동 실패 안내, optional `requires.observe_mess
 
 `world.item_transfer_native`는 공통 Entity API/world_change를 사용해 사용자 버리기·give·personal/shared storage를 처리한다. operation policy를 유지하고 owner-changing transfer에는 root와 descendants의 transferable=true를 요구한다. 같은 owner 개인 보관은 ownership transfer가 아니므로 Boss unique는 개인 보관 가능, 공용 보관/give는 불가하다. 실패 시 row·profile·참조·회복과 Evennia 캐시를 rollback한다. legacy rules.move_item은 정상 gameplay SSOT가 아니다.
 
-공용 보관은 shared_storage/owner=Container인 ItemEntity, 개인 보관은 personal_storage/owner=Explorer인 ItemEntity다. PersonalLocker는 공간상의 서비스이며 아이템 owner가 아니다. 옛 Container.db.items/profile.storage는 archive이며 읽거나 쓰지 않는다. 두 객체는 지원동 1층 `storage_room`에 배치하며 bootstrap은 기존 DB 객체의 정적 이름·위치·alias만 동기화하고 contents를 초기화하지 않는다. 사용은 현재 Room의 실제 Container resolve를 따르며 Room ID gate를 두지 않는다. 기존 일회 조사 보급상자는 변경하지 않는다. 개인·공용 보관 용량과 nesting은 구현하지 않는다.
+공용 보관은 shared_storage/owner=Container인 ItemEntity, 개인 보관은 personal_storage/owner=Explorer인 ItemEntity다. PersonalLocker는 공간상의 서비스이며 아이템 owner가 아니다. 옛 Container.db.items/profile.storage는 archive이며 읽거나 쓰지 않는다. 두 객체는 본부 2층 `storage_room`에 배치하며 bootstrap은 기존 DB 객체의 정적 이름·위치·alias만 동기화하고 contents를 초기화하지 않는다. 사용은 현재 Room의 실제 Container resolve를 따르며 Room ID gate를 두지 않는다. 기존 일회 조사 보급상자는 변경하지 않는다. 개인·공용 보관 용량과 nesting은 구현하지 않는다.
 
 밀림 신호전지는 `transferable=False`다. 다른 곳에 옮긴 뒤 수위 표식을 다시 조사하는 복제를 막기 위해 버려·줘·공용/개인 넣어 모두 차단한다. 회수부품과 보스 trophy는 반복 획득하거나 진행 flag로 판정하는 일반 물품이며 이동 가능하다. 직접 버린 물건과 corpse decay는 같은 DroppedLoot 생성 helper를 쓴다. 직접 버린 entry만 예약/배정 없이 protection_until=0으로 생성하고 기존 corpse 권한은 보존한다.
 
@@ -486,7 +502,9 @@ Room `hints`는 stable INTERACTABLES ID/action 또는 일반 text를 참조한�
 Quick/Full의 client·단계·predicate 대기를 공유한다. 공개 register/610초 sleep·5회 반복 사냥을 제거하고 auth/party/combat/corpse/lifecycle/protection/respawn/shop/persistence 단계별 결과를 출력한다. 시체 배정/파티 회수 권한을 읽고 그대로 남겨 그 시체의 ground 전환과 outsider 회수를 검증한다. Full은 실제 관찰 시각의 허용 오차를 적용해 지나치게 빠른 production 만료를 탐지한다. 일반 플레이 SQLite의 hash·mtime·size는 실행 전후 비교할 뿐 migrate/fixture/cleanup 대상이 아니다. 프로필 schema나 production 게임 밸런스는 바꾸지 않는다.
 
 
-## 본부 7단계: 통합 closeout
+<a id="본부-7단계-통합-closeout"></a>
+
+## Historical 본부 7단계: 통합 closeout
 
 훈련·Doctor·Bed·정산관·Shopkeeper에서 같은 Room/safe/비전투/지각의 동일한 조건만 작은 `_service_available` helper로 통일했다. Shopkeeper는 유효한 shop_id도 요구한다. Container는 기존 실제 대상 resolve와 transfer 정책을 유지하며 전투 조건이 다른 일반 조사 객체와 억지로 공통화하지 않는다. `ActionObject.web_actions()` capability와 subclass override는 이미 서버 명령을 소유하므로 유지한다. Room hint의 진료/휴식/환율/상품 availability 분기는 현재 선언과 일반 action의 서로 다른 의미를 정확히 구분하고 있어 유지한다. 새로운 service/action framework는 없다.
 

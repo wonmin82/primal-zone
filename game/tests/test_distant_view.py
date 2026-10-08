@@ -153,7 +153,7 @@ class DistantViewTests(WorldCommandTest):
         self.assertFalse(any(s["role"] in ("item", "command") for s in output.segments))
 
     def test_npc_containers_and_anonymous_players_do_not_expose_contents(self):
-        self.char1.location = self.rooms["support_1f_w1"]
+        self.char1.location = self.rooms["support_2f_w1"]
         self.char2.location = self.rooms["storage_room"]
         self.char1.profile()  # 아래 spy 이전에 기본 캐릭터 상태만 준비한다.
         self.char1.change(lambda p: p["storage"].update(scrap=17))
@@ -186,7 +186,7 @@ class DistantViewTests(WorldCommandTest):
             self.assertNotIn(secret, output)
         self.assertEqual(box.db.items, {"bandage": 9, "water": 8})
         self.assertTrue(any(s["role"] == "object" for s in output.segments))
-        self.char1.location = self.rooms["support_2f_e1"]
+        self.char1.location = self.rooms["support_4f_w1"]
         output = self.command("북 봐")
         self.assertIn("타격교관", output)
         self.assertTrue(any(s["role"] == "npc" for s in output.segments))

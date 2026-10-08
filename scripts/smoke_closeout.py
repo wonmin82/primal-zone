@@ -5,7 +5,7 @@ import subprocess
 import sys
 from time import monotonic
 
-from smoke import count_item, route
+from smoke import count_item, route, travel_to
 from world.content import ITEMS
 from world.lighting import project_power
 
@@ -59,8 +59,8 @@ class Closeout:
 
     async def dock(self, player):
         await player.act("귀환", lambda s: s["zone"] == "support_roof")
-        await self.floor(player, "1층", "support_1f_c")
-        await route(player, (("북", "hq_concourse"), ("서", "dock")))
+        await self.floor(player, "1층", "hq_concourse")
+        await travel_to(player, 'dock')
 
     async def kill(self, enemy_name):
         player = self.first
@@ -86,26 +86,24 @@ class Closeout:
         self.scenario.phase = "hq-closeout"
         player = self.first
         await self.dock(player)
-        await route(player, (("동", "hq_concourse"), ("남", "support_1f_c"),
-                             ("서", "support_1f_w1"), ("북", "storage_room")))
+        await travel_to(player, 'storage_room')
         for name in ("보관상자", "개인 보관함"):
             before = count_item(player.state, "bandage")
             await player.act(name + "에 붕대 넣어", lambda s: count_item(s, "bandage") == before - 1)
             await player.act(name + "에서 붕대 꺼내", lambda s: count_item(s, "bandage") == before)
             await player.act(name + "에 붕대 넣어", lambda s: count_item(s, "bandage") == before - 1)
-        await route(player, (("남", "support_1f_w1"), ("서", "support_1f_w2"), ("북", "salvage_office")))
+        await travel_to(player, 'salvage_office')
         await player.expect_text("정산관 환율", "10칩")
         before = player.state["credits"]
         await player.act("정산관에게 회수부품 7개 교환", lambda s: s["credits"] == before + 70)
         assert count_item(player.state, "scrap") == 3
-        await route(player, (("남", "support_1f_w2"), ("동", "support_1f_w1"), ("동", "support_1f_c")))
-        await self.floor(player, "2층", "support_2f_c")
-        await route(player, (("동", "support_2f_e1"), ("북", "training_room")))
+        await travel_to(player, 'hq_concourse')
+        await self.floor(player, "4층", "support_4f_c")
+        await travel_to(player, 'training_room')
         assert player.state["training_available"]
         # Lv.1 has no earned upgrade. Training becomes available after real XP gains.
         await player.expect_text("강타 배워", "남은 기술 훈련")
-        await route(player, (("남", "support_2f_e1"), ("서", "support_2f_c"),
-                             ("서", "support_2f_w1"), ("북", "infirmary")))
+        await travel_to(player, 'infirmary')
         await player.act("의무관 진료", lambda s: s["hp"] == s["max_hp"])
         self.scenario.phase = "defeat"
         outsider = self.outsider
@@ -119,16 +117,16 @@ class Closeout:
         self.scenario.report("defeat", "actual enemy → infirmary / HP 1 / 최대 10칩 / Bed HP·정신력 full")
         self.scenario.phase = "hq-closeout"
         await player.act("귀환", lambda s: s["zone"] == "support_roof")
-        await self.floor(player, "1층", "support_1f_c")
-        await route(player, (("동", "support_1f_e1"), ("북", "supply_shop")))
+        await self.floor(player, "1층", "hq_concourse")
+        await travel_to(player, 'supply_shop')
         for command, item in (("붕대 구매", "bandage"), ("탐사용손전등 구매", "flashlight"), ("건전지 구매", "battery")):
             before = count_item(player.state, item)
             await player.act(command, lambda s, item=item, before=before: count_item(s, item) == before + 1)
         await player.expect_text("탐사용손전등에 건전지 넣어", "넣")
         await player.act("탐사용손전등 켜")
-        await route(player, (("남", "support_1f_e1"), ("서", "support_1f_c")))
-        await self.floor(player, "3층", "support_3f_c")
-        await route(player, (("서", "support_3f_w1"), ("북", "armor_shop")))
+        await travel_to(player, 'hq_concourse')
+        await self.floor(player, "5층", "support_5f_c")
+        await travel_to(player, 'armor_shop')
         await player.act("강화방호조끼 구매", lambda s: count_item(s, "reinforced_vest") == 1)
         # 격리 smoke fixture는 준비 단계에서 기본 손 무기를 명시 해제한다.
         assert player.state["equipment"]["hands"] is None
@@ -183,7 +181,15 @@ class Closeout:
         await route(player, (("동", "wreck"),))
         await self.kill('어린청소룡')
         await player.act('시체에서 모두 가져')
-        await route(player, (("서", "grass"), ("북", "trail"), ("북", "marsh")))
+        # 연속 출정의 누적 소모는 실제 의료 서비스로 회복한다. 수치·fixture를 바꾸지 않는다.
+        await player.act("귀환", lambda s: s["zone"] == "support_roof")
+        await self.floor(player, "3층", "support_3f_c")
+        await travel_to(player, 'infirmary')
+        if player.state['hp'] < player.state['max_hp'] or player.state['mental'] < player.state['max_mental']:
+            await player.act('침대 휴식', lambda s: s['hp'] == s['max_hp'] and s['mental'] == s['max_mental'])
+        self.scenario.report('expedition-recovery', '연속 사냥 후 실제 3층 침대 회복 / 전투 수치·fixture 변경 없음')
+        await self.dock(player)
+        await route(player, (("북", "grass"), ("북", "trail"), ("북", "marsh")))
         await self.kill('갈퀴사냥룡')
         await player.act('시체에서 모두 가져')
         await self.kill('고장난경비기')
@@ -229,9 +235,9 @@ class Closeout:
         await player.act("선발대 길잡이 대화", lambda s: s["quest"] == "깊은 밀림 조사를 마쳤습니다.")
         self.scenario.report("progression", "두 표식/신호전지/두 번째 gate/jungle apex/최종 보고 완료")
         await self.dock(player)
-        await route(player, (("동", "hq_concourse"), ("남", "support_1f_c")))
-        await self.floor(player, "2층", "support_2f_c")
-        await route(player, (("동", "support_2f_e1"), ("북", "training_room")))
+        await travel_to(player, 'hq_concourse')
+        await self.floor(player, "4층", "support_4f_c")
+        await travel_to(player, 'training_room')
         rank = next(skill["rank"] for skill in player.state["growth"]["skills"] if skill["id"] == "heavy")
         await player.act("타격교관에게 강타 배워", lambda s: any(skill["id"] == "heavy" and skill["rank"] == rank + 1 for skill in s["growth"]["skills"]))
         self.scenario.report("training", "Lv.1 훈련 없음 / 실제 임무 XP 이후 NPC Rank +1 / 무료")
@@ -239,30 +245,27 @@ class Closeout:
     async def prepare_boss(self, advanced=False):
         player = self.first
         await player.act('귀환', lambda s: s['zone'] == 'support_roof')
-        await self.floor(player, '3층', 'support_3f_c')
-        await route(player, (('동', 'support_3f_e1'), ('북', 'weapon_shop')))
+        await self.floor(player, '5층', 'support_5f_c')
+        await travel_to(player, 'weapon_shop')
         if not count_item(player.state, 'folding_shield'):
             await player.act('접이식방패 구매', lambda s: count_item(s, 'folding_shield') == 1)
             await player.act('접이식방패 착용', lambda s: '접이식방패' in s['equipment']['hands'])
         if advanced:
             # 첫 보고의 실제 출입증으로 열린 전초 병기고에서 T2를 구매한다.
-            await route(player, (('남', 'support_3f_e1'), ('동', 'support_3f_e2'),
-                                ('북', 'outpost_weapon')))
+            await travel_to(player, 'outpost_weapon')
             await player.act('정글장도 구매', lambda s: count_item(s, 'jungle_longblade') == 1)
             await player.act('절단마체테 해제', lambda s: '절단마체테' not in s['equipment']['hands'])
             await player.act('정글장도 무장', lambda s: '정글장도 [주무기]' in s['equipment']['hands'])
         if advanced:
             await player.act('귀환', lambda s: s['zone'] == 'support_roof')
-            await self.floor(player, '3층', 'support_3f_c')
-            await route(player, (('서', 'support_3f_w1'), ('서', 'support_3f_w2'),
-                                ('북', 'outpost_equipment')))
+            await self.floor(player, '5층', 'support_5f_c')
+            await travel_to(player, 'outpost_equipment')
             await player.act('강화방호조끼 벗어', lambda s: s['equipment']['body'] is None)
             await player.act('강화방호조끼 판매', lambda s: count_item(s, 'reinforced_vest') == 0)
             await player.act('전술방호복 구매', lambda s: count_item(s, 'tactical_protective_suit') == 1)
             await player.act('전술방호복 착용', lambda s: s['equipment']['body'] == '전술방호복')
         else:
-            await route(player, (('남', 'support_3f_e1'), ('서', 'support_3f_c'),
-                                ('서', 'support_3f_w1'), ('북', 'armor_shop')))
+            await travel_to(player, 'armor_shop')
             boots = count_item(player.state, 'non_slip_boots')
             await player.act('미끄럼방지탐사화 구매', lambda s: count_item(s, 'non_slip_boots') == boots + 1)
             await player.act('미끄럼방지탐사화 착용', lambda s: s['equipment']['feet'] == '미끄럼방지탐사화')
@@ -274,16 +277,16 @@ class Closeout:
         """현재 보유 장비를 유지하고 실제 상점·교관·침대로 다시 준비한다."""
         player = self.first
         await player.act('귀환', lambda s: s['zone'] == 'support_roof')
-        await self.floor(player, '1층', 'support_1f_c')
-        await route(player, (('동', 'support_1f_e1'), ('북', 'supply_shop')))
+        await self.floor(player, '1층', 'hq_concourse')
+        await travel_to(player, 'supply_shop')
         while count_item(player.state, 'bandage') < 8:
             before = count_item(player.state, 'bandage')
             assert player.state['credits'] >= ITEMS['bandage']['value'], (
                 'Full 보스 준비금 부족', player.state['credits'], before)
             await player.act('붕대 구매', lambda s: count_item(s, 'bandage') == before + 1)
-        await route(player, (('남', 'support_1f_e1'), ('서', 'support_1f_c')))
-        await self.floor(player, '2층', 'support_2f_c')
-        await route(player, (('동', 'support_2f_e1'), ('북', 'training_room')))
+        await travel_to(player, 'hq_concourse')
+        await self.floor(player, '4층', 'support_4f_c')
+        await travel_to(player, 'training_room')
         strength = next(attribute['allocated'] for attribute in player.state['growth']['attributes']
                         if attribute['id'] == 'strength')
         remaining = player.state['growth']['attribute_points']
@@ -295,8 +298,7 @@ class Closeout:
         while (rank := next(skill['rank'] for skill in player.state['growth']['skills'] if skill['id'] == 'heavy')) < target_rank:
             await player.act('타격교관에게 강타 배워', lambda s: any(
                 skill['id'] == 'heavy' and skill['rank'] == rank + 1 for skill in s['growth']['skills']))
-        await route(player, (('남', 'support_2f_e1'), ('서', 'support_2f_c'),
-                            ('서', 'support_2f_w1'), ('북', 'infirmary')))
+        await travel_to(player, 'survival_training_room')
         remaining = player.state['growth']['attribute_points']
         if remaining:
             constitution = next(a['allocated'] for a in player.state['growth']['attributes']
@@ -308,6 +310,7 @@ class Closeout:
         self.scenario.report('boss-preparation',
                              f"{'T2' if advanced else 'T1'} 실제 구매/장착·교관 배분·강타 훈련 / "
                              f"Lv.{player.state['level']} HP {player.state['max_hp']}")
+        await travel_to(player, 'infirmary')
         await player.act('침대 휴식', lambda s: s['hp'] == s['max_hp'] and s['mental'] == s['max_mental'])
 
     async def restart(self):
@@ -378,7 +381,7 @@ class Closeout:
         assert not after["stale"] and all(not e["combatants"] and not e["claim"] for e in after["enemies"].values())
         assert player.state["party"]["id"] == self.second.state["party"]["id"]
         # 이미 만료한 시체는 ground로, 남은 시체는 실제 callback으로 재예약되어야 한다.
-        await route(player, (("남", "hq_concourse"), ("남", "support_1f_c")))
+        await travel_to(player, 'hq_concourse')
         await self.floor(player, "3층", "support_3f_c")
         old_entries = [entry for loot in before["loot"].values() for entry in loot["entries"]]
         pending_corpses = {identity for identity, loot in before["loot"].items() if loot["corpse"]}

@@ -99,7 +99,7 @@ class MedicalCommandsTests(WorldCommandTest):
         self.bed.location = self.rooms["support_roof"]
         for action in ("진료", "휴식"):
             self.assertIn("이용할 대상을 찾지", self.command(action))
-        self.assertEqual({obj["name"] for obj in multiplayer_state(self.char1)["interactables"]}, {"의무교관", "체력교관"})
+        self.assertEqual({obj["name"] for obj in multiplayer_state(self.char1)["interactables"]}, set())
         self.assertEqual(render(context_for(self.char1)), "")
 
     def test_services_follow_actual_object_to_safe_room_and_reject_unsafe(self):
@@ -130,7 +130,7 @@ class MedicalCommandsTests(WorldCommandTest):
         appearance = str(self.char1.location.return_appearance(self.char1))
         self.assertIn("의무관", appearance)
         self.assertIn("침대", appearance)
-        self.char1.location = self.rooms["support_2f_w1"]
+        self.char1.location = self.rooms["support_3f_c"]
         distant = self.command("북 보기")
         self.assertNotIn("의무관 진료", distant)
         self.assertNotIn("침대 휴식", distant)
@@ -147,18 +147,18 @@ class MedicalCommandsTests(WorldCommandTest):
         self.command("귀환")
         self.assertEqual(self.char1.zone, "support_roof")
         self.assertEqual(self.char1.home, self.rooms["dock"])
-        for raw in ("승강기", "2층", "서", "북"):
+        for raw in ("승강기", "3층", "북"):
             self.command(raw)
         self.assertEqual(self.char1.zone, "infirmary")
         self.char1.change(lambda p: p.update(hp=1))
         self.command("휴식")
         self.assertEqual(self.char1.profile()["hp"], 60)
-        for raw in ("남", "동", "승강기", "1층", "동", "북"):
+        for raw in ("남", "승강기", "2층", "북"):
             self.command(raw)
         self.assertEqual(self.char1.zone, "supply_shop")
         self.command("붕대 구매")
         self.assertEqual(self.char1.profile()["inventory"]["bandage"], 4)
-        for raw in ("남", "서", "북", "서", "북"):
+        for raw in ("남", "승강기", "1층", "서", "북"):
             self.command(raw)
         self.assertEqual(self.char1.zone, "grass")
         self.char1.change(lambda p: p.update(combat_target=999))

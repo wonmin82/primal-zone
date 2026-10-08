@@ -152,7 +152,7 @@ class ShopTests(WorldCommandTest):
             self.assertEqual(render(context_for(self.char1)), seller.key + " 상품")
             self.assertIn("1개를 받아", self.command(actions[1]["command"]))
         for zone, expected in (("storage_room", {"보기"}), ("training_room", {"힘 +1 배분"}),
-                               ("infirmary", {"진료", "휴식", "체질 +1 배분"}), ("salvage_office", {"환율", "보기"}),
+                               ("infirmary", {"진료", "휴식"}), ("survival_training_room", {"체질 +1 배분"}), ("salvage_office", {"환율", "보기"}),
                                ("dock", {"대화"}), ("office", {"조사"}), ("generator", {"수리"})):
             self.char1.location = self.rooms[zone]
             self.assertEqual({a["label"] for obj in multiplayer_state(self.char1)["interactables"] for a in obj["actions"]}, expected)
@@ -162,12 +162,12 @@ class ShopTests(WorldCommandTest):
 
     def test_roof_elevator_weapon_purchase_and_smoke_return_route(self):
         self.char1.location = self.rooms["support_roof"]
-        for raw in ("승강기", "3층", "동", "북"):
+        for raw in ("승강기", "5층", "동", "북"):
             self.command(raw)
         self.assertEqual(self.char1.zone, "weapon_shop")
         self.command("절단마체테 구매")
         self.assertEqual(self.char1.profile()["inventory"]["cutting_machete"], 1)
-        for raw in ("남", "서", "승강기", "1층", "북", "서", "북", "북", "동"):
+        for raw in ("남", "서", "승강기", "1층", "서", "북", "북", "동"):
             self.command(raw)
         self.assertEqual(self.char1.zone, "office")
         self.assertEqual(self.char1.home, self.rooms["dock"])

@@ -167,6 +167,7 @@
       el.disabled = !enemy.can_attack;
       return el;
     });
+    for (const action of state.stairs || []) actions.push(button(action.label, action.command));
     if (state.elevator) {
       if (state.elevator.inside) {
         const floor = document.createElement("p");

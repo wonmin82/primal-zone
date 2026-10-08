@@ -26,11 +26,25 @@ class Disembark(GameCommand):
         elevator.disembark(self.caller)
 
 
+class Stairs(GameCommand):
+    key = "계단"
+    input_style = "prefix"
+    summary = ("본부 각 층의 중앙 공간에서 바로 위층 또는 아래층으로 이동합니다. "
+               "1층에서는 내려갈 수 없고 옥상에서는 더 올라갈 수 없습니다.")
+    usage = "계단 올라 · 계단 내려"
+
+    def run(self):
+        from world.stairs import move
+
+        move(self.caller, self.args.strip())
+
+
 class ElevatorLandingCmdSet(CmdSet):
     key = "ElevatorLanding"
 
     def at_cmdset_creation(self):
         self.add(BoardElevator())
+        self.add(Stairs())
 
 
 class ElevatorInsideCmdSet(CmdSet):

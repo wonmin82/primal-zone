@@ -11,7 +11,7 @@ import subprocess
 import sys
 from time import monotonic
 
-from smoke import AUTH_TIMEOUT, STATE_TIMEOUT, Client, Scenario, count_item, route
+from smoke import AUTH_TIMEOUT, STATE_TIMEOUT, Client, Scenario, count_item, route, travel_to
 from smoke_closeout import Closeout, stop_for_restart
 from smoke_harness import ROOT, Harness, fingerprint
 from websockets.asyncio.client import connect
@@ -116,22 +116,22 @@ class FreshScenario(Scenario):
             for player in self.players:
                 for command in ("소지품", "장비", "상태"):
                     await player.act(command)
-                await route(player, (("남", "hq_concourse"), ("서", "dock")))
+                await travel_to(player, 'dock')
             await first.act("윤대장 대화", lambda s: "정비기록" in s["quest"])
             await first.act(second.name + " 파티초대", lambda s: s["party"] is not None)
             await second.until(lambda s: s["invitation"] is not None)
             await second.act("파티수락", lambda s: s["party"] is not None)
             await route(second, (("북", "grass"),))
             await first.act("귀환", lambda s: s["zone"] == "support_roof")
-            await closeout.floor(first, "1층", "support_1f_c")
-            await route(first, (("서", "support_1f_w1"), ("북", "storage_room")))
+            await closeout.floor(first, "1층", "hq_concourse")
+            await travel_to(first, 'storage_room')
             for name in ("개인 보관함", "보관상자"):
                 before = count_item(first.state, "bandage")
                 await first.act(name + "에 붕대 넣어", lambda s: count_item(s, "bandage") == before - 1)
                 await first.act(name + "에서 붕대 꺼내", lambda s: count_item(s, "bandage") == before)
                 await first.act(name + "에 붕대 넣어", lambda s: count_item(s, "bandage") == before - 1)
             self.report("fresh-storage", "정상 personal/shared 입출고 / 각 1개를 남겨 restart 보존 검사")
-            await route(first, (("남", "support_1f_w1"), ("동", "support_1f_c"), ("동", "support_1f_e1"), ("북", "supply_shop")))
+            await travel_to(first, 'supply_shop')
             await first.expect_text("상품", "35칩")
             for command, item in (("탐사용손전등 구매", "flashlight"), ("건전지 구매", "battery")):
                 before = count_item(first.state, item)
@@ -141,14 +141,15 @@ class FreshScenario(Scenario):
             await first.act("탐사용손전등 꺼")
             await first.act("탐사용손전등 켜")
             self.report("fresh-light", "실제 구매·battery 삽입·ON/OFF/ON")
-            await route(first, (("남", "support_1f_e1"), ("서", "support_1f_c")))
-            await closeout.floor(first, "2층", "support_2f_c")
-            await route(first, (("서", "support_2f_w1"), ("북", "infirmary")))
+            await travel_to(first, 'hq_concourse')
+            await closeout.floor(first, "4층", "support_4f_c")
+            await travel_to(first, 'survival_training_room')
             await first.act("체질 4 배분", lambda s: s["max_hp"] == 76)
+            await travel_to(first, 'infirmary')
             await first.act("침대 휴식", lambda s: s["hp"] == s["max_hp"])
             await first.act("귀환", lambda s: s["zone"] == "support_roof")
-            await closeout.floor(first, "3층", "support_3f_c")
-            await route(first, (("동", "support_3f_e1"), ("북", "weapon_shop")))
+            await closeout.floor(first, "5층", "support_5f_c")
+            await travel_to(first, 'weapon_shop')
             await first.act("탐사용 벌목도 해제", lambda s: s["equipment"]["hands"] is None)
             for name, identity in (("경비카빈", "guard_carbine"), ("카빈표준", "mag_556_standard"), ("카빈탄", "ammo_556"), ("절단마체테", "cutting_machete")):
                 await first.act(name + " 구매", lambda s, identity=identity: count_item(s, identity) > 0)
@@ -179,8 +180,8 @@ class FreshScenario(Scenario):
             await first.act("절단마체테 무장", lambda s: "절단마체테" in s["equipment"]["hands"])
             self.report("fresh-firearm", "탄창 분리·loose 회수·채움·장전·실제 발사·재장전 / corpse currency 회수")
             await first.act("귀환", lambda s: s["zone"] == "support_roof")
-            await closeout.floor(first, "3층", "support_3f_c")
-            await route(first, (("서", "support_3f_w1"), ("북", "armor_shop")))
+            await closeout.floor(first, "5층", "support_5f_c")
+            await travel_to(first, 'armor_shop')
             await first.act("강화방호조끼 구매", lambda s: count_item(s, "reinforced_vest") == 1)
             await first.act("탐사대 작업복 벗어", lambda s: s["equipment"]["body"] is None)
             await first.act("강화방호조끼 착용", lambda s: s["equipment"]["body"] == "강화방호조끼")
