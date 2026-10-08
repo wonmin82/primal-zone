@@ -6,7 +6,7 @@ from evennia.commands.default.general import CmdLook
 from world import presentation as view
 from world import rules
 from world import text as ft
-from world.content import REGIONS, ROOMS, ordered_directions
+from world.content import REGIONS, ROOMS
 
 from commands.base import GameCommand
 
@@ -132,6 +132,20 @@ class Look(CmdLook):
         self.caller.push_state(observed_at=observed_at)
 
 
+class Exits(GameCommand):
+    category = "이동·탐사"
+    usage = "출구"
+    summary = "실제 출구와 목적지의 공개 가능한 이름, 현재 이동 제한을 조회합니다. 전투 중에도 사용할 수 있습니다."
+    key = "출구"
+    aliases = ["exits"]
+    read_only = True
+
+    def func(self):
+        from world.exit_presentation import exits_sheet
+
+        self.caller.msg(exits_sheet(self.caller, time()))
+
+
 class Weather(GameCommand):
     category = "이동·탐사"
     usage = "날씨 · 환경"
@@ -220,7 +234,7 @@ class Map(GameCommand):
     aliases = ["map"]
 
     def run(self):
-        visited = set(self.caller.profile()["visited"])
+        visited = set(self.caller.profile_snapshot()["visited"])
         lines = ["방문한 장소만 표시됩니다.", ""]
         for region in REGIONS.values():
             region_rooms = [key for key in region["rooms"] if key in visited]
@@ -230,21 +244,15 @@ class Map(GameCommand):
             for key in region_rooms:
                 room = ROOMS[key]
                 mark = " ← 현재" if self.caller.zone == key else ""
-                directions = ordered_directions([*room["exits"], *room.get("blocked_exits", {})])
+                from world.bootstrap import get_room
+                from world.exit_presentation import exit_entries
+
+                actual_room = get_room(key)
+                entries = exit_entries(self.caller, actual_room, reveal_observed=False) if actual_room else []
                 exits = ft.join(
-                    [
-                        ft.text(
-                            ft.token("direction", direction),
-                            ": ",
-                            "폐쇄" if direction not in room["exits"] else (
-                                ROOMS[room["exits"][direction]]["name"]
-                                if room["exits"][direction] in visited else "미탐사"
-                            ),
-                        )
-                        for direction in directions
-                    ],
-                    ", ",
-                )
+                    [ft.text(ft.token("direction", entry["name"]), ": ",
+                             entry["destination_name"] if entry["exists"] else "폐쇄")
+                     for entry in entries], ", ")
                 lines.append(ft.text(room["name"], mark, " / ", exits))
         self.caller.msg(ft.sheet("탐사 지도", *lines))
 

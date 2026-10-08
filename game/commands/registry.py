@@ -3,6 +3,7 @@
 from commands.base import UnknownCommand
 from commands.character import (
     Abilities,
+    Exits,
     Experience,
     GlobalShortcuts,
     Help,
@@ -80,6 +81,7 @@ COMMANDS = [
     PartyKick,
     PartyTransfer,
     Look,
+    Exits,
     Weather,
     Help,
     GlobalShortcuts,

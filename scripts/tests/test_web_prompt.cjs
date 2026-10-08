@@ -58,9 +58,9 @@ function client() {
     setTimeout:() => 1, clearTimeout:() => {},
   });
   const receive = (kind, payload) => socket.fire("message", {data:JSON.stringify([kind,[payload],{}])});
-  const state = segments => receive("pz_state", {
+  const state = (segments, exit_details = []) => receive("pz_state", {
     resource_prompt:{kind:"prompt",segments}, currency:{formatted:"20칩",name:"보급칩"},
-    exits:[], enemies:[], corpses:[], ground_loot:[], interactables:[], inventory:[],
+    exits:exit_details.filter(e => e.exists).map(e => e.name), exit_details, enemies:[], corpses:[], ground_loot:[], interactables:[], inventory:[],
     growth:{attributes:[],skills:[],attribute_points:0,skill_points:0},
   });
   const prompt = segments => receive("pz_log", {kind:"prompt",segments});
@@ -136,4 +136,22 @@ test("채팅/실패/Account/입력 대기 응답도 literal command span이며 �
     assert.equal(c.log.lastElementChild.children.at(-1).tagName, "span");
   }
   assert.equal(c.log.children.some(e=>e.classList.contains("command")), false);
+});
+
+
+test("실제 출구 상태로 중앙 기호·제한 버튼·층 명령을 표시하며 기호는 보내지 않음", () => {
+  const c = client();
+  const entry = (name, can_move = true) => ({name, exists:true, can_move, status:can_move ? "이동 가능" : "전투 중 이동 불가", destination_name:"미탐사", reason:""});
+  c.state(full, [entry("위"), entry("아래", false), entry("나가기")]);
+  let [grid, label, buttons] = c.byId("exits").children;
+  assert.equal(grid.firstElementChild.textContent, "X");
+  assert.equal(grid.firstElementChild.firstElementChild.className, "semantic-warning");
+  assert.equal(label.textContent, "출구");
+  assert.deepEqual(buttons.children.map(b => [b.textContent, b.disabled, b.dataset.command]), [["위",false,"위"],["아래",true,"아래"],["나가기",false,"나가기"]]);
+  c.state(full, ["1층","2층","3층","4층","5층","옥상"].map(n => entry(n)));
+  [grid, label, buttons] = c.byId("exits").children;
+  assert.equal(grid.firstElementChild.textContent, "o");
+  assert.equal(buttons.children.length, 6);
+  c.click(buttons.children[4].dataset.command);
+  assert.deepEqual(c.socket.sent.at(-1), ["text",["5층"],{}]);
 });

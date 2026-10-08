@@ -68,7 +68,7 @@ class GameplayIntegrationTests(WorldCommandTest):
                 state = message.call_args.kwargs["pz_state"][0][0]
                 self.assertEqual(state["exits"], ordered_directions(definition["exits"]))
                 self.assertIn(
-                    exit_diagram(definition["exits"]),
+                    exit_diagram(state["exit_details"]),
                     self.rooms[zone].return_appearance(self.char1),
                 )
 
@@ -77,16 +77,16 @@ class GameplayIntegrationTests(WorldCommandTest):
 
         for exits in ([], ["북"], ["남"], ["동"], ["서"], ["서", "동"], ["북", "남", "동", "서"]):
             diagram = exit_diagram(exits)
-            lines = diagram.split("\n")
-            self.assertEqual([ft.display_width(line) for line in lines], [30] * 5)
-            self.assertEqual(ft.display_width(lines[2].split("[현재]")[0]), 12)
-            for direction in ("북", "남", "동", "서"):
-                self.assertEqual(direction in diagram, direction in exits)
-            self.assertEqual(diagram.count("｜"), len(set(exits) & {"북", "남"}))
-            self.assertEqual(diagram.count("-"), 7 * len(set(exits) & {"동", "서"}))
+            canvas = [line[:3] for line in diagram.splitlines()[:3]]
+            self.assertEqual([ft.display_width(line) for line in canvas], [3] * 3)
+            self.assertEqual(canvas[1][1], "o")
+            self.assertEqual("".join(canvas).count("|"), len(set(exits) & {"북", "남"}))
+            self.assertEqual("".join(canvas).count("-"), len(set(exits) & {"동", "서"}))
         diagram = exit_diagram(["위", "북동"])
-        self.assertEqual(diagram.split("\n")[-1], "기타 출구: 위")
-        self.assertIn("북동", diagram.split("\n")[0])
+        self.assertEqual(diagram.splitlines()[0], "../")
+        self.assertEqual(diagram.splitlines()[1][:3], ".^.")
+        self.assertIn("갈 수 있는 곳은 북동, 위이다.", diagram)
+        self.assertNotIn("기타 출구:", diagram)
 
     def test_movement_immediately_emits_new_exits_and_appearance(self):
         with patch.object(self.char1, "push_state", wraps=lambda: Explorer.push_state(self.char1)):

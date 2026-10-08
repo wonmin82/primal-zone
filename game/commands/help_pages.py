@@ -7,7 +7,7 @@ from commands.aliases import INFORMATION_SHORTCUTS, SHORTCUTS
 
 # 표시 순서, 접근 query, 대표 명령을 함께 관리한다. 전체 소속은 class.category다.
 HELP_CATEGORIES = {
-    "이동·탐사": {"query": "이동", "examples": ("보기", "지도", "임무")},
+    "이동·탐사": {"query": "이동", "examples": ("보기", "출구", "지도", "임무")},
     "전투·회복": {"query": "전투", "examples": ("공격", "강타", "사격", "치료", "도망")},
     "아이템·보급": {"query": "아이템", "examples": ("소지품", "장비", "가져", "상품")},
     "성장": {"query": "성장", "examples": ("상태", "능력", "경험치", "기술")},

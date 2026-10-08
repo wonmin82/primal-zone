@@ -2,42 +2,11 @@ from time import time
 
 from evennia.objects.objects import DefaultRoom
 from world import text as ft
-from world.content import DIRECTIONS, ROOMS
+from world.content import ROOMS
+from world.exit_presentation import exit_diagram, exit_entries
 
 from typeclasses.enemies import room_enemies
 from typeclasses.loot import room_loot
-
-
-def exit_diagram(exits):
-    """30 display cells × 5줄 canvas. 색은 배치 후 terminal 변환에서 적용한다."""
-    rows = [[] for _ in range(5)]
-    rows[2].append((12, "[현재]"))
-    for direction, data in DIRECTIONS.items():
-        if direction not in exits:
-            continue
-        if "row" not in data:
-            continue
-        row, column = data["row"], data["column"]
-        center = 3 + column * 12
-        rows[row * 2].append((center - ft.display_width(direction) // 2, ft.token("direction", direction)))
-        if row == 1:
-            rows[2].append((5 if column == 0 else 19, "-------"))
-        else:
-            glyph = "｜" if column == 1 else "＼" if row == column else "／"
-            rows[1 if row == 0 else 3].append((14 + (column - 1) * 6, glyph))
-    lines = []
-    for pieces in rows:
-        parts, cursor = [], 0
-        for start, piece in sorted(pieces):
-            parts.extend([" " * (start - cursor), piece])
-            cursor = start + ft.display_width(piece)
-        lines.append(ft.text(*parts, " " * (30 - cursor)))
-    other = [direction for direction in exits if "row" not in DIRECTIONS.get(direction, {})]
-    if other:
-        lines.append(
-            ft.text("기타 출구: ", ft.join([ft.token("direction", d) for d in other], " · "))
-        )
-    return ft.join(lines)
 
 
 class ZoneRoom(DefaultRoom):
@@ -68,7 +37,7 @@ class ZoneRoom(DefaultRoom):
         lines = [
             room["desc"], *room.get("blocked_exits", {}).values(),
             "", ft.token("muted", description(environment)), "",
-            exit_diagram(room["exits"]), "",
+            exit_diagram(exit_entries(looker, self, observed_at)), "",
         ]
         pool = room_objects(looker, self, observed_at)
         objects = [obj for obj in action_objects(self) if obj in pool]

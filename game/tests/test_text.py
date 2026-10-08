@@ -50,7 +50,7 @@ class SemanticTextTests(WorldCommandTest):
         for zone, room in self.rooms.items():
             self.char1.location = room
             output = room.return_appearance(self.char1)
-            self.assertEqual(set(tokens(output, "direction")), set(ROOMS[zone]["exits"]))
+            self.assertEqual({name for name in tokens(output, "direction") + tokens(output, "warning") if name in ROOMS[zone]["exits"]}, set(ROOMS[zone]["exits"]))
             self.assertEqual(tokens(output, "hostile"), [e.key for e in room_enemies(room)])
             for obj in action_objects(room):
                 self.assertIn(obj.key, tokens(output, obj.semantic_role))

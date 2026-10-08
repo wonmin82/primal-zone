@@ -49,7 +49,7 @@ class VocabularyTests(TestCase):
 
     def test_global_shortcuts_follow_direction_ssot_and_canonical_inventory(self):
         self.assertEqual(len(DIRECTION_SHORTCUTS), 8)
-        self.assertEqual(len(set(data["shortcut"] for data in DIRECTIONS.values())), 8)
+        self.assertEqual(len(set(data["shortcut"] for data in DIRECTIONS.values() if "shortcut" in data)), 8)
         self.assertEqual({key: SHORTCUTS[key] for key in DIRECTION_SHORTCUTS}, DIRECTION_SHORTCUTS)
         self.assertEqual(SHORTCUTS["소"], "소지품")
         self.assertNotIn("가", SHORTCUTS)

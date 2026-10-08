@@ -13,7 +13,6 @@ from world.content import (
     SHOP_CATALOGS,
     find_id,
 )
-from world.content.headquarters import ROOF_ROOMS
 from world.navigation import entry_block
 from world.quests import QUESTS, current_hint
 
@@ -338,7 +337,7 @@ class RuleTests(TestCase):
             rules.claim_quest(profile)
         self.assertEqual(profile, before)
 
-    def test_direction_graph_keeps_upper_floors_roof_and_elevator_separate(self):
+    def test_actual_exit_graph_connects_all_hq_floors_and_regions(self):
         visited, pending = set(), ["dock"]
         while pending:
             key = pending.pop()
@@ -348,12 +347,7 @@ class RuleTests(TestCase):
             for target in ROOMS[key]["exits"].values():
                 self.assertIn(target, ROOMS)
                 pending.append(target)
-        prepared = {zone for zone in ROOMS if zone.startswith(("support_2f_", "support_3f_", "support_4f_", "support_5f_"))}
-        prepared.update({"storage_room", "supply_shop", "salvage_office", "medical_waiting", "infirmary", "recovery_room", "training_room", "survival_training_room", "training_office", "tactics_room", "shooting_range", "medical_training_room", "armor_shop", "weapon_shop", "support_elevator"})
-        prepared.update(ROOF_ROOMS)
-        prepared.update({"outpost_equipment", "outpost_weapon", "reserved_equipment", "reserved_weapon"})
-        self.assertEqual(len(prepared), 42)
-        self.assertEqual(visited, set(ROOMS) - prepared)
+        self.assertEqual(visited, set(ROOMS))
 
     def test_prepared_solo_player_can_beat_boss_across_rng_seeds(self):
         for seed in range(20):

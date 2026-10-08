@@ -115,13 +115,16 @@ class DirectionIntegrationTests(WorldCommandTest):
         self.assertEqual([part["text"] for part in output.segments if part["role"] == "direction"],
                          ["북", "동", "남", "북", "동", "남", "서", "북", "동", "남", "서", "계단", "승강기"])
 
-    def test_map_preserves_special_exit_fallback_order_after_merged_directions(self):
+    def test_map_keeps_actual_special_exit_definition_order(self):
+        from evennia import create_object
+        from typeclasses.exits import Exit
+
         self.char1.change(lambda p: p.update(visited=["support_roof"]))
-        with patch.dict(ROOMS["support_roof"], exits={"계단": "dock", "서": "dock", "문": "dock"},
-                        blocked_exits={"남": "폐쇄", "북": "폐쇄"}):
-            output = self.raw("지도")[-1]
+        create_object(Exit, key="문", location=self.rooms["support_roof"], destination=self.rooms["dock"])
+        output = self.raw("지도")[-1]
         self.assertEqual([part["text"] for part in output.segments if part["role"] == "direction"],
-                         ["북", "남", "서", "계단", "문"])
+                         [*PLANAR_DIRECTIONS, "계단", "승강기", "문"])
+        self.assertIn("문: 미탐사", output)
 
     def test_static_integrity_rejects_any_roof_interactable_definition(self):
         self.assertEqual(errors(INTERACTABLES), [])
@@ -132,21 +135,17 @@ class DirectionIntegrationTests(WorldCommandTest):
                                     for issue in issues))
         self.assertEqual(errors(INTERACTABLES), [])
 
-    def test_text_canvas_and_axis_remain_fixed_for_exit_combinations(self):
-        for directions in ([], ["북"], ["남"], ["동", "서"], ["북동"], ["남서"],
-                           ["북", "남", "동", "서"], list(PLANAR_DIRECTIONS)):
+    def test_ascii_canvas_survives_terminal_semantic_conversion(self):
+        from evennia.utils.ansi import parse_ansi
+
+        for directions in ([], ["북"], ["동", "서"], ["북동"], list(PLANAR_DIRECTIONS),
+                           ["위"], ["아래"], ["위", "아래", "나가기"]):
             with self.subTest(directions=directions):
                 output = exit_diagram(directions)
-                lines = output.split("\n")
-                self.assertEqual(len(lines), 5)
-                self.assertEqual([ft.display_width(line) for line in lines], [30] * 5)
-                self.assertEqual(ft.display_width(lines[2].split("[현재]")[0]), 12)
-                self.assertEqual({part["text"] for part in output.segments if part["role"] == "direction"}, set(directions))
-                for direction, row in (("북", 1), ("남", 3)):
-                    if direction in directions:
-                        self.assertEqual(ft.display_width(lines[row].split("｜")[0]), 14)
+                self.assertEqual(parse_ansi(output.ansi(), strip_ansi=True), str(output))
+                self.assertTrue(all(ft.display_width(line[:3]) == 3 for line in output.splitlines()[:3]))
 
-    def test_text_special_exit_remains_in_fallback(self):
+    def test_text_special_exit_is_in_integrated_sentence(self):
         output = exit_diagram(["북동", "계단"])
-        self.assertEqual([part["text"] for part in output.segments if part["role"] == "direction"], ["북동", "계단"])
-        self.assertIn("기타 출구: 계단", output)
+        self.assertIn("갈 수 있는 곳은 북동, 계단이다.", output)
+        self.assertNotIn("기타 출구", output)
