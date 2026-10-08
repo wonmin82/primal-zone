@@ -64,7 +64,7 @@ v7 historical 입력의 `치료 → 진료`, `heal → 응급처치`는 당시 �
 
 `줄임말` 관리만 명시적인 prefix 문법을 사용한다. `줄임말 도움말`은 기존 후치 도움말로 해석한다. 개인 정의 조회는 `profile_snapshot()`을 사용하며 parser 호출만으로 migration write·save·state push를 하지 않는다. 게임 명령이 없는 인증 cmdset은 기존 default parser를 그대로 사용한다.
 
-이름은 공백 없는 1~20자이며 한글 완성형·자모·영문·숫자·`_`를 허용한다. 영문은 casefold해 저장/조회하므로 `Gear`와 `gear`는 같은 이름이다. 콤마·공백·`=`·관리 prefix 등 문법 문자는 금지한다. 기존 command key/alias, 잠긴 엔진 command, 시스템 SHORTCUTS, 현재 merged cmdset 및 콘텐츠의 모든 정적 방향·승강기 명령은 등록할 수 없다. 엔진이 생략을 허용하는 `@` 등 prefix를 제거한 이름도 예약한다. 미래 동적 cmdset에서 같은 이름의 실제 명령이 생기면 실제 명령이 우선한다.
+이름은 공백 없는 1~20자이며 한글 완성형·자모·영문·숫자·`_`를 허용한다. 영문은 casefold해 저장/조회하므로 `Gear`와 `gear`는 같은 이름이다. 콤마·공백·`=`·관리 prefix 등 문법 문자는 금지한다. 기존 command key/alias, 잠긴 엔진 command, 시스템 SHORTCUTS, 현재 merged cmdset 및 콘텐츠의 모든 실제 Exit 이름·영문 방향 별칭은 등록할 수 없다. 엔진이 생략을 허용하는 `@` 등 prefix를 제거한 이름도 예약한다. 미래 동적 cmdset에서 같은 이름의 실제 명령이 생기면 실제 명령이 우선한다.
 
 게임이 제공하는 글로벌 **단축어**와 캐릭터가 만드는 개인 **줄임말**을 구분한다. 방향 초성은 `world/content/directions.py`의 `DIRECTION_SHORTCUTS`, 정보 초성은 `commands/aliases.py`의 `INFORMATION_SHORTCUTS`이며 합성한 `SHORTCUTS`를 parser와 `단축어` 출력이 공유한다. 방향 8개는 `ㅂ/ㅂㄷ/ㄷ/ㄴㄷ/ㄴ/ㄴㅅ/ㅅ/ㅂㅅ`, 정보는 `상/능/기/장/소`다. 옛 `가`는 글로벌/예약 목록에서 제거되어 새 개인 이름으로 등록할 수 있다. `치료/힐/heal`은 `FUTURE_RESERVED_COMMAND_NAMES`에 있어 개인 이름으로도 사용할 수 없다.
 

@@ -1,3 +1,70 @@
+<a id="계단승강기와-출구-인터페이스-통합-2026-10-09"></a>
+
+## 계단·승강기와 출구 인터페이스 통합 (2026-10-09)
+
+기준 main `52d5abb9be43a49bb76bd233a1f0561821b346b3`, branch `codex/room-exits-interface`에서 Phase A → B를 하나의 PR로 진행한다. Phase A commit은 `4462927a5aaad6aef2c5f35d6abafaf2420e2c75`다. 아래 PR #40/Item System 실행 기록과 과거 이동 명령은 당시의 historical record이며 현재 구조는 [본부 개편](headquarters-redesign.md)과 [architecture](architecture.md#수직-방향과-공통-출구-표시)를 따른다.
+
+### Phase A와 중간 점검
+
+계단 Room 6개를 추가해 본부 52 Room/전체 67 Room을 구성했다. 기존 46 Room ID·승강기 객체·NPC21명·서비스/가격/회복/임무·Entity/권리 계약은 유지한다. 층별 중앙의 계단/승강기와 계단실 위/아래/나가기, 승강기 내부 여섯 층을 실제 Exit로 연결했다. 공용 현재 층·전용 이동 서비스/동적 CmdSet은 제거하고 과거 current_stop Attribute를 읽거나 쓰지 않는다. 모든 Exit는 추가 인자를 거절하며 실제 이동은 같은 atomic 경로에서 방문/권한/전투/commit 알림을 처리한다.
+
+직접 영향 검사: `world.test_elevator world.test_directions world.test_headquarters` 17개/0.499초 PASS. 초기 통합64개에서 옛 Exit/alias/중앙 이동 기대값의 2FAIL/3ERROR를 확인한 뒤 관련48개/116.016초(runner129.073초) PASS. 후속52개 실행에서 빈 Enter의 회복 정산 1FAIL은 NoInput의 기존 정산을 유지하도록 보정했다. 최종 `tests.test_stairs tests.test_prompt tests.test_command_shortcuts --parallel 2 --reverse` 43개/37.674초(runner48.949초) PASS. 잘못된 실제 Exit/줄임말/묶음을 정상 회복 경계100→160에서 실행해 전체 profile 불변을 확인한 추가1개/6.010초(runner16.690초)도 PASS다. Bootstrap/교관/의료/상점·observer/rollback·영속 데이터 테스트를 유지했고 수직 alias 충돌/잘못된 managed typeclass/반복 실행을 보강했다. 초기 순수 명령의 PYTHONPATH 누락은 `PYTHONPATH=game`으로 고쳤다. 실행별 수를 합산하지 않는다.
+
+중간 리뷰에서 실제 Room/Exit 연결·객체 identity·추가 인자·권한·알림 경계를 확인하고 Phase A를 commit한 뒤 같은 branch에서 B를 진행했다. 기존 5줄 formatter는 A에서도 수직 Exit 때문에 좌표 오류가 발생하지 않도록 유지했고 B에서 교체했다.
+
+### Phase B와 실패 보정
+
+`world.exit_presentation`은 실제 Exit·정적 폐쇄·이동 제한·방문/관찰/lock에 따른 목적지 이름을 읽기 전용으로 계산한다. Room 나침반·통합 문구·출구/exits·지도·웹 상태가 이 정보를 사용한다. 미공개 목적지는 이름/ID를 숨기며 원거리 appearance/lifecycle hook을 실행하지 않는다. 회복 경계에서도 DB 전체 rows/profile과 위치·방문·재화·Entity/sequence/runtime 불변을 검사했다. ASCII 3×3 `o/^/v/X`, 수직 제한 전체 warning, 이름 사이 줄바꿈과 ANSI 정렬·출구 정렬·static/credential/quest/combat 우선순위를 검사한다.
+
+순수 diagram3개/0.003초 PASS. 관련 통합 첫5개에서 assertion 이전 fixture 설정이 호출한 push_state Mock 1FAIL은 조회 직전에 reset해 실제 읽기 전용 검사를 분리했다. 후속58개 실행의 옛 제한 방향 semantic 기대 1FAIL과 잘못된 module 이름1ERROR는 실제 direction/warning 정책과 `tests.test_access`로 보정했다. text/access/shop 관련30개/42.986초(runner57.574초) PASS다. 전체 최초 실행은 순수206개에서 옛 고립 상층 graph/8방향 shortcut 기대1FAIL/1ERROR로 중단했고 해당 순수48개/0.609초를 보정 후 통과했다.
+
+다음 전체는 순수206개/3.905초 PASS, 통합602개/738.173초에서 실패13건이었다. 이전 5줄 canvas, 제한을 무시한 콘텐츠 기반 나침반 기대, 전체 Room61개 기대와 JS fixture의 exit_details 누락이었다. 상태 불변/권한 assertion을 완화하지 않고 새 계약으로 보정했다. 실패 범위4개/21.341초(runner36.644초)와 `node --test scripts/tests/test_web_prompt.cjs` 10개 PASS다. JS 회귀는 수직 제한 X의 warning·disabled 버튼·실제 층 이름 전송을 검사하며 prompt/history 경계를 유지한다.
+
+### 최종 자동 검사
+
+명령은 저장소 루트의 `.venv\Scripts\python.exe`로 실행했다. 모든 실패 로그는 ignored `work/exit-interface/`에 보존한다. 아래 수치는 최종 변경 코드의 실제 local 결과다.
+
+| 명령 | 결과 |
+| --- | --- |
+| `scripts/dev.py check` | PASS |
+| `scripts/dev.py test --parallel 2` | 순수 206개/3.745초·통합 602개/751.631초, 통합 runner767.581초 PASS, failure0/error0 |
+| `node --check game/web/static/webclient/js/primal.js` | PASS |
+| `node --test scripts/tests/test_web_prompt.cjs` | 10개 PASS |
+| `scripts/dev.py smoke` | Quick110.350초 PASS |
+| `scripts/dev.py smoke-full` | 재검증 Full749.938초 PASS |
+
+Quick는 실제 서버 fresh bootstrap·공동 전투/loot/partial currency·거래·새 승강기 Exit·재로그인/cleanup을 통과했다. 관찰 corpse8.851초/respawn12.908초/protection19.853초이며 기존 Quick 설정10/12/20초는 변경하지 않았다.
+
+Full 첫 실행은 corpse→ground28.497초가 30초 assertion의 하한28.5초를 약2.6ms 벗어나 중단했다. death_seen은 서버 생성시각이 아닌 양쪽 보상 확인 후 client의 시체 관찰시각이므로 관찰 지연 경계 이력으로 기록한다. Production lifecycle defect는 확인되지 않았으며 설정/허용 오차/전투 수치/fixture를 바꾸지 않았다. 실패 DB/로그는 보존하고 owned process를 종료했다. 전체 검사 종료 후 동일 production/smoke 코드 재실행에서 corpse29.051초/respawn43.929초/protection119.044초(설정30/45/120초)로 통과했다. P3 환경/관찰 타이밍 이력을 성공으로 소급 변경하지 않는다.
+
+Full 재검증은 본부 보관/정산/훈련/의료/상점·패배·두 임무와 보스·최종 보고, 실제 Portal/Server 정상 restart/relogin을 확인했다. Shutdown에서 ON 광원 power1800.000→1371.583 정산/OFF/active_light None, 일반 item/tree/주무기 불변을 확인했다. Startup 이후 UUID/quantity/sequence/tree/state 엄격 보존과 profile/party/world·corpse/respawn callback을 확인한다. 공용 elevator state 비교는 제거된 runtime 계약에 맞춰 없앴으며 다른 보관/전리품/시설/clock 검사는 유지한다.
+
+### 실제 브라우저
+
+격리 Full 설정/SQLite·fixture account·owned Portal/Server와 격리 collectstatic을 사용했다. IAB desktop 실제 viewport1280×720에서 다음을 수행했다. 도구의 viewport390×844 설정은 새 탭/reload 뒤에도 적용되지 않았다. 대신 같은 격리 서버의 ignored 검증 wrapper iframe 안에서 실제 게임 페이지 CSS viewport390×844/scrollWidth375를 확인했다. 실제 responsive 렌더와 WebSocket 명령이며 게임 DOM/state를 주입하지 않았다. 실제 모바일 기기 검증과 구분한다.
+
+| 시작/실행 | 관찰 | 판정 |
+| --- | --- | --- |
+| 대기실 → 남 → 계단 → 위 → 나가기 | 1층 계단^·2층 계단X·2층 중앙 도착, 실제 버튼/연속 입력 정상 | PASS |
+| 5층 계단 → 위 | 옥상 계단v, 아래/나가기만 표시 | PASS |
+| 계단실에서 출구 / exits | 현재 Room 유지, 세 출구의 목적지/상태 표 출력 | PASS |
+| A/B 승강기 동시 입장 → A5층 | A만 5층 중앙, B는 승강기와 여섯 목적지 유지 | PASS |
+| B2층 선택 | B만 2층 중앙, A는 5층 유지 | PASS |
+| 5층 서쪽 끝 복도 | 북 출입증 필요/남 시설 폐쇄 disabled, 목적지 미탐사, 동만 실행 가능 | PASS |
+| reload 후 fixture 재로그인 | 기존 로그인 정책의 출정 대기실·native 장비 보존, 실제 출구 재이용 | PASS |
+| 390px frame → 4층 계단 → 위/나가기/승강기 | 실제 5층 이동·여섯 층 버튼·긴 문구 접근, 페이지 가로 넘침 없음 | PASS |
+| 다른 실제 관찰자와 같은 계단실 이동 | 실제 출발/도착 알림 표시, 중복 없이 관찰됨 | PASS |
+
+화면 증거는 ignored `phase-a-browser.png`·`phase-b-desktop.png`·`phase-b-narrow.png`다. 콘솔 warn/error는 없었다. 검증 전용 탭/서버는 종료했다. 실제 OS IME·모바일 기기·수동 Telnet 터미널은 미실행이며 ANSI 자동 변환 검사를 실제 터미널 검증으로 표현하지 않는다. 입력/composition 처리 자체는 변경하지 않는다.
+
+### 안전성 / 리뷰 / CI
+
+개발 DB SHA256 `b1318296f505b9b7522fcbdedff7642a06cf055e9de72802198c70e6b8a7f700`·size733184·mtime_ns1790080153765082800은 Quick·실패 Full·성공 Full·browser 전후 동일하다. 실제 개발 DB에 bootstrap/migration을 실행하지 않았다. 현재 content52/전체67 Room·문서 Room ID42개·콘텐츠 오류0을 DB 없이 대조했다. 문서 helper 첫 실행은 보존용 retired ID를 active ID로만 검사해 실패했으므로 허용된 archive ID와 구분한 뒤 통과했다. 최종 Markdown23개 문서/상대 링크·anchor253개/fence 오류0, git diff --check PASS다.
+
+자체 리뷰에서 실제 Exit 이동의 공통 transaction/권한/관찰 경계·일반/수직/특수 인자 거부·readonly 목적지 비노출·identity/미관리 충돌·웹 명령 이름 일치를 확인했다. 미해결 P0/P1/P2는 확인되지 않았다. 새 기능/밸런스/schema/의존성/임무 보상·PostgreSQL/multi-server 변경은 없다. 최신 PR 번호/HEAD와 exact-head CI는 이 작업의 단일 PR Validation에 기록한다. PR을 자동 병합하거나 branch를 삭제하지 않는다.
+
+아래 문서는 이전 작업 시점의 historical validation record다. 당시의 명령·구조·실패/미실행 사실은 소급 수정하지 않는다.
+
 <a id="pr-40-최종-문서-마감-2026-10-08"></a>
 
 ## PR #40 — 최종 문서 마감·병합 준비 (2026-10-08)

@@ -1,3 +1,16 @@
+## 계단·승강기와 출구 인터페이스 통합 (2026-10-09)
+
+- 기준 main `52d5abb9be43a49bb76bd233a1f0561821b346b3`, branch `codex/room-exits-interface`. Phase A commit `4462927a5aaad6aef2c5f35d6abafaf2420e2c75` 이후 같은 branch에서 Phase B를 구현했으며 하나의 PR로 제출한다. 이전 PR #40은 main에 병합된 기준선이다.
+- Phase A 완료: 계단 Room6개 추가·본부52개/전체67개, 실제 계단/수직/나가기·승강기 여섯 층 Exit. 기존 승강기 identity/NPC21명/평면 동선/서비스/밸런스/Entity·권리 보존. 공용 현재 층과 전용 Command/서비스/CmdSet 제거, 과거 current_stop Attribute는 runtime이 접근하지 않는다. 모든 Exit 추가 인자 거부·후치형 보기·방문/권한/전투/atomic/commit observer 알림을 공통 경로에서 처리한다.
+- Phase B 완료: `world.exit_presentation`의 실제 Exit·제한/폐쇄·목적지 공개 정보로 3×3 ASCII `o/^/v/X`·통합 출구 문장·읽기 전용 출구/exits·지도·웹 버튼을 구성한다. 수직 제한은 전체 warning, 숨긴 목적지 이름/ID는 미공개다. 구형 전용 웹 이동 payload/panel은 제거했다.
+- 직접 영향/관련 회귀와 중간 자체 리뷰를 통과했다. 최종 local check PASS, 순수206개/3.745초·통합602개/751.631초(runner767.581초) PASS, JS syntax/10개 prompt+출구 회귀 PASS다. 초기 fixture/모듈 이름/옛 graph/canvas/wire payload 기대 실패는 보정 후 재검증했다. 전체 profile/DB/권한 assertion은 유지했다.
+- Quick110.350초 PASS. Full 첫 실행은 client 관찰 기준 corpse28.497초로 하한28.5초를 벗어나 중단했고 실패 DB/로그를 보존했다. 타이머/오차/수치/fixture 변경 없이 재실행 Full749.938초 PASS: production30/45/120초, 두 임무/보스·정상 restart/relogin·shutdown 광원 정산·startup native 엄격 보존. 공통 이동/smoke 경로 변경으로 이번 코드에서 새로 실행했으며 과거 성공을 대신 사용하지 않았다.
+- 실제 IAB desktop1280×720에서 계단·공용 승강기의 두 승객 독립 이동·제한 버튼/목적지·출구 표·재로그인을 확인했다. viewport 도구 제한을 우회한 same-origin 검증 iframe의 실제 CSS390×844/scrollWidth375에서 새 출구 버튼/긴 문구·가로 넘침 없음을 확인했다. 실제 모바일 기기/OS IME/수동 Telnet은 미실행이며 별도 결과로 구분한다.
+- 개발 DB SHA256 `b1318296f505b9b7522fcbdedff7642a06cf055e9de72802198c70e6b8a7f700`·size733184·mtime_ns1790080153765082800 불변. 모든 서버/smoke/browser는 격리 DB·owned process를 사용하고 종료했다. 문서/명령/Room ID와 콘텐츠 무결성을 읽기 전용으로 확인했다. Markdown23개/상대 링크·anchor253개/fence 오류0와 git diff --check PASS다. [실패→보정→최종 검증](playtest.md#계단승강기와-출구-인터페이스-통합-2026-10-09)을 따른다.
+- 미해결 P0/P1/P2는 확인되지 않았다. P3 Full 관찰 타이밍 경계 이력은 유지한다. 최종 PR latest HEAD CI는 PR Validation에 기록한다. PR은 사용자 리뷰를 위해 OPEN으로 제출하며 자동 병합/branch 삭제를 하지 않는다.
+
+아래 PR #40과 Item System 기록은 각 시점의 historical 실행 기록이다. 당시의 구조/계단 명령/공용 층 설명과 병합 준비 상태는 현재 runtime 안내가 아니다.
+
 ## PR #40 — 본부 개편 최종 문서 마감·병합 준비 (2026-10-08)
 
 - 구현과 리뷰 지적 네 건의 수정은 완료했다. 지상 5층·옥상·공용 승강기의 본부 46 Room(부두 제외), 기존 본부/부두 NPC 21명·4층 교관 12명/훈련관리관 1명, 각 층 중앙 전용 계단과 공용 승강기를 유지한다. [현재 배치와 운영 계약](headquarters-redesign.md)이 기준이며 커피숍·지하층·신규 NPC/서비스·밸런스 변경은 없다.
