@@ -1,3 +1,15 @@
+<a id="pr-40-최종-문서-마감-2026-10-08"></a>
+
+## PR #40 — 최종 문서 마감·병합 준비 (2026-10-08)
+
+검증 재사용 기준은 `bee8438b304c8b0716acb62c2b944498b0ef3c1e`, base/main `763aac347fec8f8e921f0c7cfbd62391f383f978`이다. 구현·리뷰 수정 후 추가 코드/설정/의존성 변경 없이 문서만 정리한다. 현재 층별 배치·Room/NPC ID·출구/중앙 이동·서비스/가격/회복·데이터 보존과 네 리뷰 수정 계약을 코드와 대조했다. 아래 실패→수정→성공 이력은 당시 실행 기록으로 보존한다.
+
+해당 HEAD의 [CI 37755907488](https://github.com/wonmin82/primal-zone/actions/runs/37755907488)는 check·test·smoke SUCCESS, 순수206개/1.254초·통합600개/351.399초(runner358.750초)·Quick50.360초다. 아래 관련69개·local 전체206/600개·Quick85.077초는 이전 실행의 근거이며 이번 문서 작업에서 새로 실행한 결과가 아니다. 최초 Full599.024초·desktop/narrow와 리뷰 후 observer/rollback 회귀의 범위도 구분한다.
+
+이번 local 검사는 `.venv\Scripts\python.exe work/hq-redesign/docs_audit.py`의 Markdown23개/상대 링크·anchor247개/fence 오류0, `closeout_contract_audit.py`의 현재 Room/NPC ID·시설 방향/층별 수·명령/파일 경로와 main 대비 ID/서비스/회복/성장/출입 정책 읽기 전용 대조, `git diff --check`가 모두 PASS다. 두 helper는 ignored work에 두며 DB를 로드하거나 bootstrap하지 않는다. Baseline 대조 helper의 최초 실행은 원본 상대 import에 package namespace가 없어 실패했다. 원본 방향·승강기 데이터와 import를 제외한 순수 콘텐츠 AST로 대조하도록 helper만 보정한 뒤 성공했다. 코드/문서 계약 실패는 아니었다. 기존 개발 DB SHA256 `b1318296f505b9b7522fcbdedff7642a06cf055e9de72802198c70e6b8a7f700`·size733184·mtime_ns1790080153765082800 불변을 확인했다. 문서만 바뀌므로 Python test/check·Quick/Full·브라우저/IME·collectstatic은 반복하지 않는다.
+
+새 문서 HEAD의 PR exact-head CI와 병합 후 main push CI는 각각 실제 SHA로 확인한다. Merge Commit 부모 관계와 소스 ancestry를 확인하고 main test/smoke 성공 뒤에만 원격/로컬 소스를 삭제한다. 실제 원격 결과는 [PR #40 Validation](https://github.com/wonmin82/primal-zone/pull/40)에 기록한다. 아직 실행하지 않은 병합/main CI/cleanup을 선행 성공으로 기록하지 않는다.
+
 <a id="pr-40-본부-개편-리뷰-수정-2026-10-08"></a>
 
 ## PR #40 — 본부 개편 리뷰 수정 (2026-10-08)

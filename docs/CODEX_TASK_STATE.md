@@ -1,3 +1,15 @@
+## PR #40 — 본부 개편 최종 문서 마감·병합 준비 (2026-10-08)
+
+- 구현과 리뷰 지적 네 건의 수정은 완료했다. 지상 5층·옥상·공용 승강기의 본부 46 Room(부두 제외), 기존 본부/부두 NPC 21명·4층 교관 12명/훈련관리관 1명, 각 층 중앙 전용 계단과 공용 승강기를 유지한다. [현재 배치와 운영 계약](headquarters-redesign.md)이 기준이며 커피숍·지하층·신규 NPC/서비스·밸런스 변경은 없다.
+- 출구의 관리 identity/명령 충돌은 읽기 전용 preflight로 변경 전에 거절하고 미관리 Exit와 영속 데이터를 보존한다. 계단·승강기는 실제 출발/도착 시점의 시야/권한을 통과한 관찰자에게 transaction 성공 후 한 번만 알리며 실패/rollback은 취소한다. 전역 계단 도움말과 중앙 전용 실행을 분리했고 4층 여섯 교육시설의 고정 설비 설명을 배치/출구와 일치시켰다.
+- 문서 마감 시작: base/main `763aac347fec8f8e921f0c7cfbd62391f383f978`, source `codex/hq-building-redesign`, PR HEAD `bee8438b304c8b0716acb62c2b944498b0ef3c1e`. OPEN/non-draft·MERGEABLE/CLEAN·ahead6/behind0·미해결 review thread0·필수 승인 수0·tree clean, 소스 브랜치는 현재 worktree 한 곳에서만 사용한다. 추가 main/source 변경이 없어 rebase나 과거 commit rewrite는 불필요하다.
+- 기준 HEAD의 [Game checks 37755907488](https://github.com/wonmin82/primal-zone/actions/runs/37755907488)는 check·test·smoke SUCCESS다. CI 순수206개/1.254초·통합600개/351.399초(runner358.750초)·Quick50.360초이며 실제 SHA 일치를 확인했다. 이전 local 관련69개/전체206·600개/Quick85.077초 성공은 아래 실행 기록을 재사용한다. 이번 변경은 문서만이므로 Python 전체·Quick/Full·브라우저·정적 수집을 반복하지 않는다.
+- README·architecture·progression·본부 개편·출력 예의 현재 Room/NPC/동선/기능과 코드 정의를 대조했다. Markdown23개/상대 링크·anchor247개/fence 오류0, 명령/경로·ID/시설 방향과 main 대비 서비스/회복/성장/출입 정책 보존·git diff --check PASS다. README의 회복 장소 이름을 현재 중앙 로비로 맞추고 현재 병합 준비 상태와 아래 historical 실행 기록을 분리했다. 과거 실패/검증 수치·당시 PR 생성 예정/미실행/병합 금지 기록은 소급 수정하지 않는다. [이번 문서 검증](playtest.md#pr-40-최종-문서-마감-2026-10-08)을 따른다.
+- 미해결 P0/P1/P2와 문서 blocker는 확인되지 않았다. 실제 OS IME·mobile device matrix·PostgreSQL/multi-server는 미실행 범위를 유지하며 이번 문서 변경의 검증으로 주장하지 않는다. 개발 DB의 SHA256·size·mtime_ns는 불변이고 실제 DB에 bootstrap/migration을 실행하지 않는다.
+- 병합 전 최종 준비 상태다. 사용자가 PR #40의 Merge Commit 병합과 해당 소스 브랜치 삭제를 승인했다. 새 문서 HEAD의 exact-head CI·보호 규칙/리뷰·최신 main 포함을 확인한 뒤 병합하고, 병합 main의 exact-head test/smoke 성공 이후에만 ancestry/추가 commit/다른 PR·worktree 사용을 확인해 원격/로컬 소스를 정리한다. 실제 최종 HEAD·merge commit·main CI·cleanup 결과는 [PR #40 Validation](https://github.com/wonmin82/primal-zone/pull/40)과 최종 보고에 기록하며 미리 MERGED로 선언하지 않는다.
+
+아래 본부 개편 구현·리뷰 및 Item System V1 기록은 각 작업 시점의 historical 실행 기록이다. 당시의 남은 gate·PR 생성 예정·병합 금지 표현은 현재 병합 요청을 제한하지 않는다.
+
 ## PR #40 — 본부 개편 리뷰 수정 (2026-10-08)
 
 - 시작 main `763aac347fec8f8e921f0c7cfbd62391f383f978`, PR/source HEAD `7475eeeb356a17c5e97ff906d1793737e16459ff`, 기존 branch `codex/hq-building-redesign`에서 이어간다. Fetch 후 clean·OPEN/non-draft·MERGEABLE/CLEAN·review thread 0개를 확인했다. 아래 최초 개편의 검증 이력은 당시 기록으로 보존한다.
