@@ -3,7 +3,7 @@
 from evennia import create_object, search_tag
 from evennia.typeclasses.tags import Tag
 
-from world.content import DIRECTION_ALIASES, ENEMIES, ROOMS, spawn_id_for
+from world.content import DIRECTION_ALIASES, DIRECTION_SHORTCUTS, ENEMIES, ROOMS, spawn_id_for
 from world.content.elevator import ELEVATOR_ROOM
 from world.elevator import normalized_stop
 from world.multiplayer import world_change
@@ -19,10 +19,52 @@ def get_room(zone_id):
 def build_world():
     from world.item_runtime import initialize_fresh, maintenance
 
-    if not maintenance.get():
-        initialize_fresh()
     with world_change():
+        validate_managed_exits()
+        if not maintenance.get():
+            initialize_fresh()
         return _build_world()
+
+
+def validate_managed_exits():
+    """변경 전에 소유권·명령 충돌을 검사한다. 이름만 같은 Exit를 편입하지 않는다."""
+    from evennia.objects.models import ObjectDB
+    from evennia.objects.objects import DefaultExit
+
+    from world.content.headquarters import RETIRED_ROOMS
+    from world.content.headquarters import ROOMS as HQ_ROOMS
+
+    rooms = {zone: get_room(zone) for zone in ROOMS}
+    expected = {f"{zone}:{direction}" for zone, data in ROOMS.items() for direction in data["exits"]}
+    cleanup_zones = set(RETIRED_ROOMS) | set(HQ_ROOMS)
+    identities = {}
+    removed = set()
+    for obj in ObjectDB.objects.filter(db_tags__db_category=EXIT_CATEGORY).distinct():
+        tags = obj.tags.get(category=EXIT_CATEGORY, return_list=True)
+        identity = tags[0] if len(tags) == 1 else None
+        zone, _, direction = (identity or "").partition(":")
+        origin = rooms.get(zone) if zone in ROOMS else next(iter(search_tag(zone, category=CATEGORY)), None)
+        if (len(tags) != 1 or not isinstance(obj, DefaultExit) or
+                (zone in ROOMS or zone in RETIRED_ROOMS) and (obj.location != origin or obj.key != direction)):
+            raise ValueError(f"관리 Exit 태그/위치 충돌: tags={tags}, Exit #{obj.id}, Room={obj.location}, 목적지={obj.destination}")
+        if identity in identities:
+            raise ValueError(f"관리 Exit identity 중복: {identity}, Exit #{identities[identity].id}/#{obj.id}, 목적지={obj.destination}")
+        identities[identity] = obj
+        if identity not in expected and (zone in cleanup_zones or direction in ROOMS.get(zone, {}).get("blocked_exits", {})):
+            removed.add(obj.id)
+    for zone, data in ROOMS.items():
+        room = rooms[zone]
+        if room is None:
+            continue
+        for direction in (*data["exits"], *data.get("blocked_exits", {})):
+            names = {direction.casefold(), DIRECTION_ALIASES.get(direction, direction).casefold()}
+            names.update(shortcut for shortcut, target in DIRECTION_SHORTCUTS.items() if target == direction)
+            managed = identities.get(f"{zone}:{direction}")
+            for obj in room.exits:
+                if obj.id in removed or obj == managed:
+                    continue
+                if names & {name.strip().casefold() for name in (obj.key, *obj.aliases.all())}:
+                    raise ValueError(f"Exit 명령 충돌: Room {zone}, 방향 {direction}, Exit #{obj.id}, 기존 목적지={obj.destination}")
 
 
 def _build_world():
@@ -99,8 +141,6 @@ def _build_world():
         for direction, target in data["exits"].items():
             identity = f"{zone_id}:{direction}"
             existing = next(iter(search_tag(identity, category=EXIT_CATEGORY)), None)
-            if not existing:
-                existing = next((obj for obj in room.exits if obj.key == direction), None)
             if not existing:
                 existing = create_object(
                     "typeclasses.exits.Exit",
