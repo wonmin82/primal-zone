@@ -69,7 +69,7 @@
     const grid = document.createElement("div"), center = document.createElement("span");
     grid.className = "direction-grid";
     center.className = "direction-center";
-    center.textContent = "[현재]";
+
     grid.append(center);
     const positions = new Map([
       ["북", "north"], ["북동", "northeast"], ["동", "east"], ["남동", "southeast"],
@@ -77,9 +77,15 @@
     ]);
     const other = document.createElement("div");
     other.className = "other-exits";
-    for (const direction of exits) {
-      const el = button(direction, direction), position = positions.get(direction);
-      el.replaceChildren(semantic("direction", direction));
+    const vertical = exits.filter((exit) => exit.exists && ["위", "아래"].includes(exit.name));
+    const up = vertical.some((exit) => exit.name === "위"), down = vertical.some((exit) => exit.name === "아래");
+    center.replaceChildren(semantic(vertical.length ? (vertical.every((exit) => exit.can_move) ? "direction" : "warning") : "object", up && down ? "X" : up ? "^" : down ? "v" : "o"));
+    for (const exit of exits) {
+      const direction = exit.name, el = button(direction, direction), position = positions.get(direction);
+      el.replaceChildren(semantic(exit.can_move ? "direction" : "warning", direction));
+      el.disabled = !exit.can_move;
+      el.title = `${exit.destination_name} · ${exit.status}${exit.reason ? " · " + exit.reason : ""}`;
+      el.setAttribute("aria-label", `${direction} · ${exit.status}`);
       if (position) {
         el.className = "direction-" + position;
         grid.append(el);
@@ -88,7 +94,7 @@
     const children = [grid];
     if (other.childElementCount) {
       const label = document.createElement("p");
-      label.textContent = "기타 출구";
+      label.textContent = "출구";
       children.push(label, other);
     }
     byId("exits").replaceChildren(...children);
@@ -160,22 +166,13 @@
     byId("mental").max = state.max_mental; byId("mental").value = state.mental;
     byId("xp").max = state.xp_next - state.xp_floor;
     byId("xp").value = state.level >= state.max_level ? byId("xp").max : state.xp - state.xp_floor;
-    renderExits(state.exits);
+    renderExits(state.exit_details);
     const actions = state.enemies.map((enemy) => {
       const el = button(enemy.label + " " + enemy.hp + "/" + enemy.max_hp + (enemy.can_attack ? " 사냥" : " · 다른 그룹 교전 중"), enemy.attack_command);
       el.replaceChildren(semantic("hostile", enemy.label), " " + enemy.hp + "/" + enemy.max_hp + (enemy.can_attack ? " 사냥" : " · 다른 그룹 교전 중"));
       el.disabled = !enemy.can_attack;
       return el;
     });
-    for (const action of state.stairs || []) actions.push(button(action.label, action.command));
-    if (state.elevator) {
-      if (state.elevator.inside) {
-        const floor = document.createElement("p");
-        floor.replaceChildren("현재 위치: ", semantic("object", state.elevator.current_floor));
-        actions.push(floor);
-      }
-      for (const action of state.elevator.actions) actions.push(button(action.label, action.command));
-    }
     if (state.corpses.length > 1) {
       const all = button("모든 시체의 전리품 회수", "모든 시체에서 모두 가져");
       all.disabled = !state.corpses.some((source) => source.loot.some((item) => item.can_take));

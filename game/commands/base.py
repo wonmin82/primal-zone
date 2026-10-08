@@ -28,10 +28,11 @@ class GameCommand(Command):
 
 class UnknownCommand(Command):
     key = CMD_NOMATCH
+    read_only = True
 
     def at_pre_cmd(self):
         if hasattr(self.caller, "begin_command_output"):
-            self.caller.begin_command_output()
+            self.caller.begin_command_output(reconcile=not self.read_only)
 
     def at_post_cmd(self):
         if hasattr(self.caller, "end_command_output"):
@@ -55,6 +56,7 @@ class UnknownCommand(Command):
 
 class NoInput(UnknownCommand):
     key = CMD_NOINPUT
+    read_only = False
 
     def at_pre_cmd(self):
         self.waiting_depth = getattr(self.caller.ndb, "command_output_depth", 0) or 0

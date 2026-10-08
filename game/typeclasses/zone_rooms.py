@@ -2,54 +2,14 @@ from time import time
 
 from evennia.objects.objects import DefaultRoom
 from world import text as ft
-from world.content import DIRECTIONS, ROOMS
+from world.content import ROOMS
+from world.exit_presentation import exit_diagram, exit_entries
 
 from typeclasses.enemies import room_enemies
 from typeclasses.loot import room_loot
 
 
-def exit_diagram(exits):
-    """30 display cells × 5줄 canvas. 색은 배치 후 terminal 변환에서 적용한다."""
-    rows = [[] for _ in range(5)]
-    rows[2].append((12, "[현재]"))
-    for direction, data in DIRECTIONS.items():
-        if direction not in exits:
-            continue
-        row, column = data["row"], data["column"]
-        center = 3 + column * 12
-        rows[row * 2].append((center - ft.display_width(direction) // 2, ft.token("direction", direction)))
-        if row == 1:
-            rows[2].append((5 if column == 0 else 19, "-------"))
-        else:
-            glyph = "｜" if column == 1 else "＼" if row == column else "／"
-            rows[1 if row == 0 else 3].append((14 + (column - 1) * 6, glyph))
-    lines = []
-    for pieces in rows:
-        parts, cursor = [], 0
-        for start, piece in sorted(pieces):
-            parts.extend([" " * (start - cursor), piece])
-            cursor = start + ft.display_width(piece)
-        lines.append(ft.text(*parts, " " * (30 - cursor)))
-    other = [direction for direction in exits if direction not in DIRECTIONS]
-    if other:
-        lines.append(
-            ft.text("기타 출구: ", ft.join([ft.token("direction", d) for d in other], " · "))
-        )
-    return ft.join(lines)
-
-
 class ZoneRoom(DefaultRoom):
-    def at_cmdset_get(self, **kwargs):
-        super().at_cmdset_get(**kwargs)
-        from commands.elevator import ElevatorInsideCmdSet, ElevatorLandingCmdSet
-        from world.content.elevator import ELEVATOR_ROOM
-        from world.elevator import stop_for_room
-
-        cmdset = (ElevatorInsideCmdSet if self.db.zone_id == ELEVATOR_ROOM else
-                  ElevatorLandingCmdSet if stop_for_room(self.db.zone_id) else None)
-        if cmdset and not self.cmdset.has_cmdset(cmdset.key, must_be_default=True):
-            self.cmdset.add_default(cmdset, persistent=False)
-
     def return_distant_appearance(self, context):
         from world.distant_presentation import distant_appearance
 
@@ -77,16 +37,8 @@ class ZoneRoom(DefaultRoom):
         lines = [
             room["desc"], *room.get("blocked_exits", {}).values(),
             "", ft.token("muted", description(environment)), "",
-            exit_diagram(room["exits"]), "",
+            exit_diagram(exit_entries(looker, self, observed_at)), "",
         ]
-        from world.elevator import presentation as elevator_presentation
-
-        lines.extend(elevator_presentation(self))
-        from world.stairs import controls as stair_controls
-
-        stairs = stair_controls(self.db.zone_id)
-        if stairs:
-            lines.append(ft.actions([action["command"] for action in stairs]))
         pool = room_objects(looker, self, observed_at)
         objects = [obj for obj in action_objects(self) if obj in pool]
         for name in dict.fromkeys(obj.key for obj in objects):

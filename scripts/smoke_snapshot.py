@@ -19,7 +19,7 @@ def snapshot():
     from typeclasses.enemies import Enemy
     from typeclasses.explorers import Explorer
     from typeclasses.loot import Corpse, DroppedLoot
-    from world.bootstrap import get_room, stale_definitions
+    from world.bootstrap import stale_definitions
     from world.environment_state import lifecycle_script
     from world.item_entities import api
     from world.loot_service import source_entries
@@ -44,7 +44,6 @@ def snapshot():
                                   "active_light": player.db.active_light_item_id,
                                   "items": owned_items(player)}
                     for player in Explorer.objects.all() if player.key != "admin"},
-        "elevator": get_room("support_elevator").db.current_stop,
         "box": owned_items(search_tag("shared_container", category="primal_interactable")[0]),
         "facilities": deserialize(script.db.facilities),
         "clock": deserialize(script.db.environment)["clock"],

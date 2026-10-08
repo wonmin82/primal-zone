@@ -4,8 +4,6 @@ from evennia import create_object, search_tag
 from evennia.typeclasses.tags import Tag
 
 from world.content import DIRECTION_ALIASES, DIRECTION_SHORTCUTS, ENEMIES, ROOMS, spawn_id_for
-from world.content.elevator import ELEVATOR_ROOM
-from world.elevator import normalized_stop
 from world.multiplayer import world_change
 
 CATEGORY = "primal_zone_room"
@@ -44,7 +42,7 @@ def validate_managed_exits():
         identity = tags[0] if len(tags) == 1 else None
         zone, _, direction = (identity or "").partition(":")
         origin = rooms.get(zone) if zone in ROOMS else next(iter(search_tag(zone, category=CATEGORY)), None)
-        if (len(tags) != 1 or not isinstance(obj, DefaultExit) or
+        if (len(tags) != 1 or not isinstance(obj, DefaultExit) or not obj.is_typeclass("typeclasses.exits.Exit", exact=True) or
                 (zone in ROOMS or zone in RETIRED_ROOMS) and (obj.location != origin or obj.key != direction)):
             raise ValueError(f"관리 Exit 태그/위치 충돌: tags={tags}, Exit #{obj.id}, Room={obj.location}, 목적지={obj.destination}")
         if identity in identities:
@@ -77,10 +75,6 @@ def _build_world():
         room.key = data["name"]
         room.db.zone_id = zone_id
         room.db.desc = data["desc"]
-        if zone_id == ELEVATOR_ROOM:
-            current = room.db.current_stop
-            if current != normalized_stop(current):
-                room.db.current_stop = normalized_stop(current)
         rooms[zone_id] = room
         for enemy_id in data["enemies"]:
             spawn_id = spawn_id_for(zone_id, enemy_id)

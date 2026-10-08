@@ -377,7 +377,7 @@ class Closeout:
             for key in ("hp", "mental"):
                 assert after["players"][name]["profile"][key] >= saved["profile"][key]
         assert before["box"] == after["box"] and before["facilities"] == after["facilities"]
-        assert before["clock"] == after["clock"] and before["elevator"] == after["elevator"] == "3f"
+        assert before["clock"] == after["clock"]
         assert not after["stale"] and all(not e["combatants"] and not e["claim"] for e in after["enemies"].values())
         assert player.state["party"]["id"] == self.second.state["party"]["id"]
         # 이미 만료한 시체는 ground로, 남은 시체는 실제 callback으로 재예약되어야 한다.

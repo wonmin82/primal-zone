@@ -3,6 +3,12 @@
 from evennia.commands.cmdparser import cmdparser as default_parser
 
 
+def _default_matches(*args, **kwargs):
+    # 엔진이 Exit 명령임을 확정한 뒤 hook/정산 전에 거절한다. 사용자 typeclass도 동일하다.
+    return [match for match in default_parser(*args, **kwargs)
+            if not (getattr(match[2], "is_exit", False) and match[1].strip())]
+
+
 def cmdparser(raw_string, cmdset, caller, match_index=None, session=None, **kwargs):
     from commands.prompt import with_prompt
 
@@ -16,25 +22,25 @@ def _matches(raw_string, cmdset, caller, match_index=None, session=None, **kwarg
         return []
     game_commands = [cmd for cmd in cmdset if getattr(cmd, "input_style", None)]
     if not game_commands:
-        return default_parser(raw_string, cmdset, caller, match_index, session, **kwargs)
+        return _default_matches(raw_string, cmdset, caller, match_index, session, **kwargs)
 
     from commands.aliases import SHORTCUTS
 
     if text in SHORTCUTS:
-        original = default_parser(text, cmdset, caller, match_index, session, **kwargs)
+        original = _default_matches(text, cmdset, caller, match_index, session, **kwargs)
         engine = [match for match in original if not getattr(match[2], "input_style", None)]
         if engine:
             return engine
         text = SHORTCUTS[text]
 
-    # 줄임말 설정·계단 조작은 명시적인 전치형이다. 채팅 내용·기존 후치형 명령은 그대로 둔다.
+    # 줄임말 설정은 명시적인 전치형이다. 채팅 내용·기존 후치형 명령은 그대로 둔다.
     prefix_parts = text.split(None, 1)
     prefix, remainder = prefix_parts[0], prefix_parts[1] if len(prefix_parts) > 1 else ""
     settings_commands = [cmd for cmd in game_commands
                          if cmd.input_style == "prefix" and prefix.lower() in (cmd.key, *cmd.aliases)]
     help_names = {name for cmd in game_commands if cmd.key == "도움말" for name in (cmd.key, *cmd.aliases)}
     if settings_commands and remainder not in help_names:
-        engine = [match for match in default_parser(text, cmdset, caller, match_index, session, **kwargs)
+        engine = [match for match in _default_matches(text, cmdset, caller, match_index, session, **kwargs)
                   if not getattr(match[2], "input_style", None)]
         if engine:
             return engine
@@ -59,7 +65,7 @@ def _matches(raw_string, cmdset, caller, match_index=None, session=None, **kwarg
     if not quoted and not any(cmd.input_style == "chat" for cmd in candidates):
         engine_matches = [
             match
-            for match in default_parser(text, cmdset, caller, match_index, session, **kwargs)
+            for match in _default_matches(text, cmdset, caller, match_index, session, **kwargs)
             if not getattr(match[2], "input_style", None)
         ]
         if engine_matches:

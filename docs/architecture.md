@@ -98,29 +98,25 @@ currency_request는 기존 TargetSelector에서 금액만 읽는다. 20칩은 �
 
 ## 현재 본부 Room 구조
 
-본부는 지상 5층·옥상·공용 승강기 포함 활성 Room 46개다. 층별 수는 4/6/6/9/11/9 + 승강기1이다. 1층 로비는 북 대기실·서 부두·동 관리실·남 휴게실, 2층 보관/보급/정산, 3층 의료, 4층 교육시설6곳/교관13명, 5층 기본·전초·예약 시설6곳이다. 옥상 8방향 왕복은 유지한다. 전체 ID·NPC·출입 권한은 [본부 개편](headquarters-redesign.md)을 따른다.
+본부는 지상 5층·옥상·공용 승강기와 층별 계단실을 포함한 활성 Room 52개다. 기존 46개와 Room/NPC stable ID·평면 동선·상점·출입 권한·의료/훈련/회복 계약은 유지한다. 새 계단실 여섯 개에는 서비스·적·회복 보너스가 없다. 전체 층별 구성은 [본부 개편](headquarters-redesign.md)을 따른다.
 
-`계단 올라`/`계단 내려`는 층별 중앙 공간에서만 인접 층에 이동한다. 승강기는 기존 단일 Room/current_stop을 보존하고 정류층만 1~5층·옥상으로 확장한다. 계단은 공용 승강기 위치를 바꾸지 않는다. 텍스트와 Web은 같은 서버 `stairs`/`elevator` 행동을 표시하며 방향도는 실제 방향 Exit만 사용한다.
+중앙의 `계단`은 실제 계단실 Exit이고 `위`/`아래`는 인접 층 계단실, `나가기`는 해당 층 중앙이다. 중앙의 `승강기`는 기존 단일 Room, 내부 여섯 층 Exit는 해당 중앙 공간으로 연결된다. 전용 계단/승강기 Command·서비스·동적 CmdSet·공용 current_stop 의존성은 제거했다. 과거 current_stop Attribute는 읽거나 쓰거나 삭제하지 않는다. 각 승객의 이동은 다른 승객의 위치/목적지에 영향을 주지 않는다.
 
-Bootstrap은 기존 Room·서비스 ID를 재사용하며 폐지 복도9개의 관리 출구만 정리한다. 복도 객체를 `primal_retired_room` archive로 남겨 home/prelogout/FK·원래 방문 ID를 보존하고, 그 안의 플레이어·전리품 등 일반 객체는 지정된 대체 공간으로 이동한다. 전리품 owner 객체를 재생성하지 않아 Entity UUID·sequence·tree·LootClaim/CurrencyLootShare는 유지한다. 사용자 생성 출구·무관한 stale 객체는 삭제하지 않는다. 본부 콘텐츠 신규 Room14개를 추가하며 반복 bootstrap은 전환을 중복 수행하지 않는다.
+모든 실제 Exit는 엔진 매칭 결과의 `is_exit` 표식을 확인하는 공통 parser 경계에서 추가 인자를 거절한다. 프로젝트용·미관리 DefaultExit·다른 Exit typeclass에 동일하게 적용하며 Command hook/회복 정산 전에 공통 오류 경로로 처리한다. 프로젝트 전용 인자 검사와 라이브러리 monkeypatch는 없다. 후치형 `북 보기`/`북 봐`·개인 줄임말·묶음/영문 방향은 기존 parser를 따른다. Unknown·묶음 준비·이동 전 prompt는 상태를 정산하지 않고 실제 leaf 동작과 `move_to()`의 transaction 안에서 정산한다. 빈 입력의 기존 회복 경계 처리는 유지한다. Explorer의 실제 Exit 이동(`traverse`)은 출발/도착 방에 있을 때 관찰자를 확보하고 가장 바깥 transaction commit 뒤 한 번씩 알린다. Rollback은 DB/cache와 알림을 함께 복구/폐기한다.
 
-관리 Exit는 정확한 `primal_zone_exit` identity로만 재사용한다. Bootstrap의 읽기 전용 사전 검사는 미관리 방향/alias/단축어 충돌·폐쇄 방향 모순·중복 관리 identity·잘못된 Room/type을 변경 전에 거절한다. 이름 기반 편입은 없으며 충돌 시 runtime·Room·NPC·플레이어·Exit 상태가 불변이다. 정상 관리 객체의 ID를 유지해 정의의 목적지를 갱신한다. 운영 복구는 [출구 소유권과 충돌 처리](headquarters-redesign.md#관리-출구-소유권과-충돌-처리)를 따른다.
+Bootstrap은 stable tag로 기존 Room·Exit·NPC를 재사용한다. 읽기 전용 preflight는 미관리 방향/alias/단축어 충돌·폐쇄 방향 모순·중복 관리 identity·잘못된 Room/type을 변경 전에 거절한다. 정의가 소유한 목적지는 기존 관리 객체 ID를 유지해 갱신한다. 폐지 복도9개는 archive와 home/prelogout/FK·방문 ID를 보존하고 contents만 대체 공간으로 이동한다. Entity UUID·sequence·tree·LootClaim/CurrencyLootShare 및 미관리 Exit를 보존한다. 운영 확인은 [출구 소유권](headquarters-redesign.md#관리-출구-소유권과-충돌-처리)을 따른다.
 
-계단/승강기의 presence는 출발/도착 시점의 해당 Room에서 시야·view lock을 통과한 관찰자 목록을 확보한 뒤 `after_change()`로 보낸다. Rollback은 알림도 취소한다. 전역 `HELP_ONLY_COMMANDS`는 도움말 metadata만 제공하며 실제 계단 CmdSet 등록 범위는 중앙 공간 전용이다.
+## 수직 방향과 공통 출구 표시
 
-## 8방향과 고정 compass
+`world/content/directions.py`는 평면8방향의 row/column을 유지하며 위/아래는 alias `u`/`d`·opposite만 정의한다. `DIRECTION_ORDER`는 북·북동·동·남동·남·남서·서·북서·위·아래이고 특수 출구는 정의 순서를 뒤에 유지한다. 옥상 중앙의 평면8방향과 주변9개 Room, NPC/서비스 금지 및 본부 고정 복도/시설/폐쇄 검사는 유지한다.
 
-`world/content/directions.py`의 `DIRECTIONS`가 canonical 한국어 방향, 영문 alias, opposite, 3×3 좌표를 소유한다. `DIRECTION_ORDER`는 북부터 시계방향인 북·북동·동·남동·남·남서·서·북서다. alias/reverse mapping은 같은 정의에서 파생하며 `items.py`는 방향을 소유하지 않는다. 기존 `world.content.OPPOSITES` import는 `DIRECTION_ALIASES`와 동일한 객체를 export하는 호환 경로만 유지한다. bootstrap의 실제 Evennia Exit alias, blocked 방향 조회, integrity, 지도·Web 출구 순서와 개인 줄임말 예약 이름이 이 정의를 사용한다. 별도 대각선 command는 없다. 방향 보기의 selector·gate·원거리 지각 정책과 묶음 dispatch는 기존 경로다.
+`world/exit_presentation.py`의 `exit_entries()`는 실제 Exit에서 정렬·접근 제한·읽기 전용 목적지 이름 공개를 한 번 계산한다. 방 화면·`출구`·웹 상태·지도는 같은 결과를 사용한다. 실제 출구 존재와 현재 이동 가능, 정의만 있는 정적 폐쇄를 구분한다. 상태는 정적 폐쇄 → 시설/출입증/임무 → Exit cmd/traverse 권한 → 전투 → 이동 가능 순이다. cmd 권한은 엔진이 생성하는 Exit Command의 access()로 판정하고 CmdSet을 저장하지 않는다. 목적지 이름 공개는 이동 가능 여부와 분리한다. 목적지 view 권한이 허용하는 방문한 장소는 출입증 상실·임무/Exit 이동 제한 뒤에도 이름을 유지한다. 미방문 장소는 접근·cmd/traverse·can_observe_through 조건을 통과할 때만 이름을 공개한다. Exit view 제한은 출구 자체를 숨긴다. 조회는 관찰 hook/lifecycle을 실행하지 않는다. 지도는 방문 장소만 표시하고 미방문 목적지를 계속 숨긴다.
 
-옥상 중앙 `support_roof`는 `support_roof_n/ne/e/se/s/sw/w/nw`로 나가는 여덟 Exit를 갖는다. `ROOF_SIDES`의 stable Room ID는 사용자 입력용 방향 alias에서 파생하지 않고 명시적으로 고정한다. 각 주변 Room의 유일한 Exit는 정확한 opposite로 중앙에 돌아오며 서로 연결하지 않는다. 옥상 9개 Room은 headquarters·safe·적 없음·outdoor/natural인 navigation/UI 회귀 기준 공간이다. `headquarters_errors()`는 비어 있지 않은 `hints`·`requires`·`quest`·`items`·`rewards`를 금지하고, 전체 `errors(interactables)`는 중앙과 주변 모두의 NPC/interactable/service 배치를 금지한다. 환경·시설 조명 등 다른 schema 필드를 일반적으로 금지하지 않는다. 승강기의 옥상 정류장은 여전히 중앙 하나이며 `support_elevator.exits={}`와 일반 Exit의 승강기 직접 연결 금지는 유지한다. integrity와 반복 bootstrap/실제 이동 검사가 이를 검증한다.
+`exit_diagram()`은 3행×3열 ASCII canvas이며 중앙은 `o / ^ / v / X`다. 실제 평면 Exit를 `| - / \`로, 없는 셀을 `.`로 표시한다. 위/아래 하나라도 제한되면 수직 중앙 전체를 warning, 모두 가능하면 direction, 수직 없음의 o는 object role이다. 문구는 중앙 행 오른쪽 공백 두 칸에서 시작하고 이름 사이에서만 줄바꿈한다. `world.text.display_width`와 semantic role을 사용한 뒤 ANSI/웹 색 변환을 적용한다.
 
-지도는 실제 출구와 폐쇄 출구의 방향을 먼저 합쳐 `ordered_directions()`로 한 번 정렬한다. 한 Room의 전체 표시가 canonical 시계방향 순서를 따르며 기타 특수 출구는 원래 입력 순서대로 뒤에 표시한다. 방문한 목적지 이름·미탐사·폐쇄·현재 위치와 semantic 방향 token은 유지한다.
+`pz_state.exits`는 실제 출구 이름 목록, `exit_details`는 공개 가능한 이름/목적지·상태·사유·가능 여부다. 웹은 평면 3×3 및 수직/특수/층 Exit 버튼을 실제 명령으로 실행한다. 전용 stairs/elevator payload는 없다. 기존 1150px/700px 반응형·한글 입력은 유지한다. `출구`는 read_only prompt와 독립 func로 전투 중에도 profile·방문·아이템·재화·Room/Exit를 변경하지 않는다.
 
-Web의 방향 버튼은 기존 `pz_state.exits`만 렌더링한다. 오른쪽 DOM은 SURROUNDINGS → PARTY → OBJECTIVE → TRAINING → EQUIPMENT & SUPPLIES이며 SURROUNDINGS 안에서는 compass → hint/context 순이다. 고정 3×3 grid의 중앙은 row 2/column 2이며 출구가 없는 방향은 버튼만 생략한다. 출구 개수와 주변 행동 수가 grid geometry와 panel 내 위치를 바꾸지 않는다. connector/has-direction 가변 행은 제거했고 기타 특수 출구 fallback은 유지한다. 기존 1150px grid·700px flex breakpoint를 따르며 서비스/action 선정 정책과 서버가 소유하는 텍스트 명령은 바꾸지 않는다.
-
-Telnet `exit_diagram()`은 30 display cells × 5줄의 canvas를 사용한다. `[현재]`는 0 기준 12열, 북/남 label과 fullwidth `｜`는 14열에서 시작한다. 없는 방향의 label/connector는 공백이며 대각선에는 `／`·`＼`, 가로축에는 ASCII `-`를 사용한다. 방향 semantic token을 배치한 뒤 terminal 색 변환을 적용한다. `world.text.display_width()`는 기존 east_asian_width W/F=2 정책을 `row()`와 공유하며 ANSI escape 길이를 계산하지 않는다. 실제 terminal/font의 fullwidth glyph 지원은 별도 클라이언트 조건이다.
-
-새 캐릭터는 최초 puppet의 비월드 위치 fallback에서 출정 대기실로 배치되고 새 profile의 `visited`도 대기실에서 시작한다. 새 로그인/재로그인은 출정 대기실에 배치하고 방문을 포함한 진행 기록은 보존한다. 살아 있는 세션의 server reload는 기존 위치를 유지한다. Evennia fallback `home=dock`은 유지한다. 일반 귀환은 `support_roof`, 전투 패배는 3층 `infirmary`로 이동한다. 상점은 2층 보급관과 5층 상인, 의료·휴식은 3층 의무실 객체, 보관은 2층 보관 객체, 훈련은 4층 교관을 따른다. Bootstrap은 stable tag로 기존 Room·Exit·NPC를 재사용하며 영속 기록을 초기화하지 않는다. Integrity는 목적지·역방향 왕복·폐쇄 문구/충돌·본부 고정 배치·시설의 유일 진입·Region membership을 검사한다.
+새 로그인은 출정 대기실, 귀환은 옥상, 패배는 3층 의무실이다. 살아 있는 세션의 reload는 기존 위치를 유지한다. 의무실/상점/훈련/보관·퀘스트 및 영속 기록의 계약을 바꾸지 않는다.
 
 아래 본부 단계별 설명은 개편 전의 historical implementation record다. 당시 층수·출구·검증 결과를 현재 구조로 소급 수정하지 않는다. 현재 배치는 위 설명과 [본부 개편](headquarters-redesign.md)을 따른다.
 
@@ -336,7 +332,7 @@ profile version은 10이며 `rules.migrate_profile()`은 과거 성장·임무·
 
 ### 현재 위치 방향 표시
 
-`ROOMS[zone]["exits"]`를 서버 이동·`pz_state.exits`·Room 텍스트 방향도의 공통 출처로 사용한다. `ZoneRoom`의 formatter는 실제 사방 출구와 연결선만 순수 문자로 출력한다. 웹 SURROUNDINGS는 CSS Grid에 같은 방향을 배치하고 기존 `data-command` 버튼으로 방향 텍스트를 전송한다. 중앙 `[현재]`는 비대화형 표시이며 기타 출구는 별도 목록으로 표시한다. 이동 후 기존 appearance/state 전송으로 즉시 갱신하고 출구 배열이 같은 주기 전송에서는 버튼을 유지한다. 일반 로그의 `textContent` 출력과 서버 이동 제한은 변경하지 않는다.
+실제 Exit 목록과 제한·목적지 공개 판정은 [공통 출구 표시](#수직-방향과-공통-출구-표시)를 따른다. Room 텍스트는 3행×3열 나침반과 통합 문구, 웹 SURROUNDINGS는 평면 3×3 버튼과 실제 수직/특수 출구 버튼을 표시한다. 중앙 `o/^/v/X`는 비대화형 기호이고 이동 버튼은 실제 Exit 이름만 전송한다. 전용 계단·승강기 패널이나 공용 층 상태는 없다.
 
 ## 텍스트와 의미별 색상
 

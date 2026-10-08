@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from world import rules
 from world.content import REGIONS, ROOMS
-from world.content.directions import DIRECTION_ORDER, OPPOSITE_DIRECTIONS
+from world.content.directions import OPPOSITE_DIRECTIONS, PLANAR_DIRECTIONS
 from world.content.headquarters import ROOF_ROOMS, ROOF_SIDES
 from world.content.headquarters import ROOMS as HQ_ROOMS
 from world.content.integrity import errors, headquarters_errors
@@ -50,10 +50,10 @@ class HeadquartersRulesTests(TestCase):
         self.assertTrue(any("instructor: 본부 서비스" in issue for issue in errors(targets)))
 
     def test_five_floor_counts_and_layout(self):
-        self.assertEqual(len(HQ_ROOMS), 46)
+        self.assertEqual(len(HQ_ROOMS), 52)
         self.assertEqual(errors(content_targets()), [])
         self.assertEqual(ROOMS["hq_concourse"]["exits"], {
-            "북": "staging_room", "서": "dock", "동": "hq_admin_office", "남": "hq_lounge"})
+            "북": "staging_room", "서": "dock", "동": "hq_admin_office", "남": "hq_lounge", "계단": "hq_stairs_1f", "승강기": "support_elevator"})
         for floor, positions in ((2, ("w1", "c", "e1")), (3, ("w1", "c", "e1")),
                                  (4, ("w1", "c", "e1")), (5, ("w2", "w1", "c", "e1", "e2"))):
             row = [f"support_{floor}f_{position}" for position in positions]
@@ -71,11 +71,11 @@ class HeadquartersRulesTests(TestCase):
     def test_roof_star_is_safe_outdoor_and_has_no_services_or_progression(self):
         suffixes = ("n", "ne", "e", "se", "s", "sw", "w", "nw")
         expected = {"support_roof_" + suffix for suffix in suffixes}
-        self.assertEqual(ROOMS["support_roof"]["exits"],
+        self.assertEqual({k: v for k, v in ROOMS["support_roof"]["exits"].items() if k in PLANAR_DIRECTIONS},
                          dict(zip(("북", "북동", "동", "남동", "남", "남서", "서", "북서"),
                                   ("support_roof_" + suffix for suffix in suffixes))))
         self.assertEqual(set(ROOF_SIDES.values()), expected)
-        self.assertEqual(set(ROOF_SIDES), set(DIRECTION_ORDER))
+        self.assertEqual(set(ROOF_SIDES), set(PLANAR_DIRECTIONS))
         self.assertEqual(ROOF_ROOMS, expected | {"support_roof"})
         for direction, zone in ROOF_SIDES.items():
             self.assertEqual(ROOMS[zone]["exits"], {OPPOSITE_DIRECTIONS[direction]: "support_roof"})
@@ -149,7 +149,7 @@ class HeadquartersRulesTests(TestCase):
                 self.assertTrue(any("폐쇄 출입구 문구" in issue for issue in errors(content_targets())))
         with patch.dict(ROOMS["support_5f_c"], blocked_exits=[]):
             self.assertTrue(any("blocked_exits는" in issue for issue in errors(content_targets())))
-        with patch.dict(ROOMS["support_5f_c"]["blocked_exits"], 위="출입 제한 구역이다."):
+        with patch.dict(ROOMS["support_5f_c"]["blocked_exits"], 미지="출입 제한 구역이다."):
             self.assertTrue(any("폐쇄 출입구 방향" in issue for issue in errors(content_targets())))
 
     def test_extra_staging_exit_wrong_facility_and_duplicate_membership_are_detected(self):

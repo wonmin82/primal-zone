@@ -12,7 +12,8 @@ from typeclasses.exits import Exit
 from typeclasses.explorers import Explorer
 from typeclasses.interactables import INTERACTABLES, action_objects, instructor_for
 from world.bootstrap import CATEGORY, EXIT_CATEGORY, build_world, stale_definitions
-from world.content import OPPOSITES, ROOMS
+from world.content import ROOMS
+from world.content.directions import DIRECTION_ALIASES
 from world.content.headquarters import ROOMS as HQ_ROOMS
 
 from tests.base import GameCommandTest
@@ -65,7 +66,7 @@ class HeadquartersTests(GameCommandTest):
     def test_real_graph_directions_and_aliases_traverse_to_exact_targets(self):
         for zone, definition in HQ_ROOMS.items():
             for direction, destination in definition["exits"].items():
-                for command in (direction, OPPOSITES[direction]):
+                for command in dict.fromkeys((direction, DIRECTION_ALIASES.get(direction, direction))):
                     with self.subTest(zone=zone, command=command):
                         self.char1.location = self.rooms[zone]
                         self.char1.execute_cmd(command)
@@ -134,7 +135,7 @@ class HeadquartersTests(GameCommandTest):
         build_world()
         self.assertFalse(ObjectDB.objects.filter(pk=identity).exists())
         self.assertFalse(search_tag("support_5f_c:남", category=EXIT_CATEGORY))
-        self.assertEqual({obj.key for obj in source.exits}, {"서", "동"})
+        self.assertEqual({obj.key for obj in source.exits}, {"서", "동", "계단", "승강기"})
 
     def test_retired_corridors_preserve_objects_native_loot_and_history(self):
         from typeclasses.loot import DroppedLoot
@@ -208,8 +209,9 @@ class HeadquartersTests(GameCommandTest):
         self.assertIn("본부 5층 중앙 복도", text)
         self.assertNotIn("지원동 1층", text)
         state = multiplayer_state(self.char1)
-        self.assertEqual(state["stairs"], [{"label": "계단 올라", "command": "계단 올라", "destination": "support_2f_c"}])
-        self.assertEqual(ROOMS["hq_concourse"]["exits"], {"북":"staging_room", "서":"dock", "동":"hq_admin_office", "남":"hq_lounge"})
+        self.assertNotIn("stairs", state)
+        self.assertIn("계단", {obj.key for obj in self.char1.location.exits})
+        self.assertEqual(ROOMS["hq_concourse"]["exits"], {"북":"staging_room", "서":"dock", "동":"hq_admin_office", "남":"hq_lounge", "계단":"hq_stairs_1f", "승강기":"support_elevator"})
 
     def test_dock_keeps_commander_without_support_services(self):
         self.char1.location = self.rooms["dock"]

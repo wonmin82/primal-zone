@@ -82,7 +82,7 @@ class ServiceRelocationTests(WorldCommandTest):
 
     def test_service_paths_reuse_cardinal_movement_and_elevator(self):
         self.char1.location = self.rooms["hq_concourse"]
-        for command in ("계단 올라", "서", "북"):
+        for command in ("계단", "위", "나가기", "서", "북"):
             self.command(command)
         self.assertEqual(self.char1.zone, "storage_room")
         self.command("보관상자에 붕대 넣어")

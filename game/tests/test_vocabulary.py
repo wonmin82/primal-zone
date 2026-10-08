@@ -121,7 +121,7 @@ class VocabularyTests(WorldCommandTest):
         self.assertIn("묶음 실행", self.raw("입력 도움말"))
         self.assertIn("'도움말' 대상을 찾을 수 없습니다", self.raw("도움말 공격"))
         page = shortcut_page()
-        self.assertEqual(set(tokens(page, "direction")), set(DIRECTIONS))
+        self.assertEqual(set(tokens(page, "direction")), set(DIRECTION_SHORTCUTS.values()))
         for source, target in SHORTCUTS.items():
             self.assertIn(source, tokens(page, "command"))
             self.assertIn(target, tokens(page, "direction" if source in DIRECTION_SHORTCUTS else "command"))

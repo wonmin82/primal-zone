@@ -10,6 +10,7 @@ from world.content.directions import (
     DIRECTION_ORDER,
     DIRECTIONS,
     OPPOSITE_DIRECTIONS,
+    PLANAR_DIRECTIONS,
     ordered_directions,
 )
 from world.navigation import blocked_exit_message
@@ -17,17 +18,17 @@ from world.navigation import blocked_exit_message
 
 class DirectionTests(TestCase):
     def test_eight_direction_invariants(self):
-        self.assertEqual(DIRECTION_ORDER, ("북", "북동", "동", "남동", "남", "남서", "서", "북서"))
+        self.assertEqual(DIRECTION_ORDER, ("북", "북동", "동", "남동", "남", "남서", "서", "북서", "위", "아래"))
         self.assertEqual(set(DIRECTIONS), set(DIRECTION_ORDER))
-        self.assertEqual(set(DIRECTION_ALIASES.values()), {"n", "ne", "e", "se", "s", "sw", "w", "nw"})
+        self.assertEqual(set(DIRECTION_ALIASES.values()), {"n", "ne", "e", "se", "s", "sw", "w", "nw", "u", "d"})
         self.assertEqual(tuple(DIRECTION_ALIASES[key] for key in DIRECTION_ORDER),
-                         ("n", "ne", "e", "se", "s", "sw", "w", "nw"))
+                         ("n", "ne", "e", "se", "s", "sw", "w", "nw", "u", "d"))
         self.assertEqual(tuple(OPPOSITE_DIRECTIONS[key] for key in DIRECTION_ORDER),
-                         ("남", "남서", "서", "북서", "북", "북동", "동", "남동"))
-        self.assertEqual(tuple((DIRECTIONS[key]["row"], DIRECTIONS[key]["column"]) for key in DIRECTION_ORDER),
+                         ("남", "남서", "서", "북서", "북", "북동", "동", "남동", "아래", "위"))
+        self.assertEqual(tuple((DIRECTIONS[key]["row"], DIRECTIONS[key]["column"]) for key in PLANAR_DIRECTIONS),
                          ((0, 1), (0, 2), (1, 2), (2, 2), (2, 1), (2, 0), (1, 0), (0, 0)))
-        self.assertEqual(len(set((d["row"], d["column"]) for d in DIRECTIONS.values())), 8)
-        self.assertNotIn((1, 1), {(d["row"], d["column"]) for d in DIRECTIONS.values()})
+        self.assertEqual(len(set((d["row"], d["column"]) for key in PLANAR_DIRECTIONS for d in [DIRECTIONS[key]])), 8)
+        self.assertNotIn((1, 1), {(d["row"], d["column"]) for key in PLANAR_DIRECTIONS for d in [DIRECTIONS[key]]})
         self.assertIs(OPPOSITES, DIRECTION_ALIASES)
         for direction in DIRECTION_ORDER:
             opposite = OPPOSITE_DIRECTIONS[direction]

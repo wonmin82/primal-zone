@@ -11,7 +11,7 @@ from typeclasses.zone_rooms import exit_diagram
 from world import text as ft
 from world.bootstrap import EXIT_CATEGORY, build_world, stale_definitions
 from world.content import REGIONS, ROOMS
-from world.content.directions import DIRECTION_ALIASES, DIRECTION_ORDER, OPPOSITE_DIRECTIONS
+from world.content.directions import DIRECTION_ALIASES, OPPOSITE_DIRECTIONS, PLANAR_DIRECTIONS
 from world.content.headquarters import ROOF_ROOMS, ROOF_SIDES
 from world.content.integrity import errors
 
@@ -38,7 +38,7 @@ class DirectionIntegrationTests(WorldCommandTest):
         return [call.args[0] for call in output.call_args_list if call.args]
 
     def test_actual_eight_directions_and_english_alias_round_trips(self):
-        for direction in DIRECTION_ORDER:
+        for direction in PLANAR_DIRECTIONS:
             reverse = OPPOSITE_DIRECTIONS[direction]
             for outward, inward in ((direction, reverse), (DIRECTION_ALIASES[direction], DIRECTION_ALIASES[reverse])):
                 self.raw(outward)
@@ -61,7 +61,7 @@ class DirectionIntegrationTests(WorldCommandTest):
         self.assertIn("support_roof_ne", self.char1.profile_snapshot()["visited"])
 
     def test_web_exits_follow_clockwise_hub_and_single_reverse(self):
-        for zone, expected in (("support_roof", list(DIRECTION_ORDER)), ("support_roof_ne", ["남서"])):
+        for zone, expected in (("support_roof", [*PLANAR_DIRECTIONS, "계단", "승강기"]), ("support_roof_ne", ["남서"])):
             self.char1.location = self.rooms[zone]
             with patch.object(self.char1, "msg") as output:
                 Explorer.push_state(self.char1)
@@ -75,7 +75,7 @@ class DirectionIntegrationTests(WorldCommandTest):
         with patch.dict(ROOMS["support_roof"], exits=dict(reversed(list(ROOMS["support_roof"]["exits"].items())))):
             output = "\n".join(map(str, self.raw("지도")))
         hub = next(line for line in output.splitlines() if "본부 옥상 ← 현재" in line)
-        positions = [hub.index(direction + ":") for direction in DIRECTION_ORDER]
+        positions = [hub.index(direction + ":") for direction in PLANAR_DIRECTIONS]
         self.assertEqual(positions, sorted(positions))
         self.assertIn("북동: 북동쪽 설비 구역", hub)
         self.assertIn("남서: 미탐사", hub)
@@ -95,7 +95,7 @@ class DirectionIntegrationTests(WorldCommandTest):
             for identity, db_id in identities.items():
                 objects = search_tag(identity, category=EXIT_CATEGORY)
                 self.assertEqual([obj.id for obj in objects], [db_id])
-                self.assertEqual(objects[0].aliases.all(), [DIRECTION_ALIASES[objects[0].key]])
+                self.assertEqual(objects[0].aliases.all(), ([DIRECTION_ALIASES[objects[0].key]] if objects[0].key in DIRECTION_ALIASES else []))
 
     def test_map_merges_actual_and_blocked_directions_in_one_order(self):
         self.char1.location = self.rooms["support_5f_c"]
@@ -113,15 +113,18 @@ class DirectionIntegrationTests(WorldCommandTest):
         self.assertIn("남: 폐쇄", west)
         self.assertIn("[" + REGIONS["headquarters"]["name"] + "]", output)
         self.assertEqual([part["text"] for part in output.segments if part["role"] == "direction"],
-                         ["북", "동", "남", "북", "동", "남", "서", "북", "동", "남", "서"])
+                         ["북", "동", "남", "북", "동", "남", "서", "북", "동", "남", "서", "계단", "승강기"])
 
-    def test_map_preserves_special_exit_fallback_order_after_merged_directions(self):
+    def test_map_keeps_actual_special_exit_definition_order(self):
+        from evennia import create_object
+        from typeclasses.exits import Exit
+
         self.char1.change(lambda p: p.update(visited=["support_roof"]))
-        with patch.dict(ROOMS["support_roof"], exits={"계단": "dock", "서": "dock", "문": "dock"},
-                        blocked_exits={"남": "폐쇄", "북": "폐쇄"}):
-            output = self.raw("지도")[-1]
+        create_object(Exit, key="문", location=self.rooms["support_roof"], destination=self.rooms["dock"])
+        output = self.raw("지도")[-1]
         self.assertEqual([part["text"] for part in output.segments if part["role"] == "direction"],
-                         ["북", "남", "서", "계단", "문"])
+                         [*PLANAR_DIRECTIONS, "계단", "승강기", "문"])
+        self.assertIn("문: 미탐사", output)
 
     def test_static_integrity_rejects_any_roof_interactable_definition(self):
         self.assertEqual(errors(INTERACTABLES), [])
@@ -132,21 +135,17 @@ class DirectionIntegrationTests(WorldCommandTest):
                                     for issue in issues))
         self.assertEqual(errors(INTERACTABLES), [])
 
-    def test_text_canvas_and_axis_remain_fixed_for_exit_combinations(self):
-        for directions in ([], ["북"], ["남"], ["동", "서"], ["북동"], ["남서"],
-                           ["북", "남", "동", "서"], list(DIRECTION_ORDER)):
+    def test_ascii_canvas_survives_terminal_semantic_conversion(self):
+        from evennia.utils.ansi import parse_ansi
+
+        for directions in ([], ["북"], ["동", "서"], ["북동"], list(PLANAR_DIRECTIONS),
+                           ["위"], ["아래"], ["위", "아래", "나가기"]):
             with self.subTest(directions=directions):
                 output = exit_diagram(directions)
-                lines = output.split("\n")
-                self.assertEqual(len(lines), 5)
-                self.assertEqual([ft.display_width(line) for line in lines], [30] * 5)
-                self.assertEqual(ft.display_width(lines[2].split("[현재]")[0]), 12)
-                self.assertEqual({part["text"] for part in output.segments if part["role"] == "direction"}, set(directions))
-                for direction, row in (("북", 1), ("남", 3)):
-                    if direction in directions:
-                        self.assertEqual(ft.display_width(lines[row].split("｜")[0]), 14)
+                self.assertEqual(parse_ansi(output.ansi(), strip_ansi=True), str(output))
+                self.assertTrue(all(ft.display_width(line[:3]) == 3 for line in output.splitlines()[:3]))
 
-    def test_text_special_exit_remains_in_fallback(self):
+    def test_text_special_exit_is_in_integrated_sentence(self):
         output = exit_diagram(["북동", "계단"])
-        self.assertEqual([part["text"] for part in output.segments if part["role"] == "direction"], ["북동", "계단"])
-        self.assertIn("기타 출구: 계단", output)
+        self.assertIn("갈 수 있는 곳은 북동, 계단이다.", output)
+        self.assertNotIn("기타 출구", output)

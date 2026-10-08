@@ -1,3 +1,36 @@
+## PR #41 — 문서 Closeout·최종 검증 완료 (2026-10-09)
+
+- 기획안 v1.5 FINAL의 Phase A/B와 리뷰 P2-1/P2-2/P3-1 구현·검증을 완료했다. 본부52 Room·계단6개·기존 승강기 identity·독립 승객 이동, 공통 Exit 인자 경계·cmd/traverse·방문/관찰 공개 정책이 현재 계약이다. 상세 구조는 [본부 개편](headquarters-redesign.md), 기술 정책은 architecture를 따른다.
+- 리뷰 수정 HEAD `e2d2ca4f275cae90e79d2de317128579892f5e46`의 [Game checks 37811678991](https://github.com/wonmin82/primal-zone/actions/runs/37811678991)은 check/test/smoke SUCCESS다. CI 순수206개/1.179초·통합606개/372.269초·Quick51.634초 PASS. 이후 closeout은 문서만 변경하며 최종 문서 HEAD의 CI는 [PR #41 Validation](https://github.com/wonmin82/primal-zone/pull/41)에 기록한다.
+- README·architecture·본부 설계·줄임말·출력 예·진행·playtest를 실제 코드/테스트와 대조했다. 줄임말의 default parser 설명과 최신 검증 링크를 정리하고 아래 실패/보정/성공 이력은 보존했다. 문서 링크·앵커·fence·Room/명령/경로·git diff --check를 검사한다.
+- 확인된 미해결 P0/P1/P2는 없다. 실제 OS IME·모바일 기기·수동 Telnet과 리뷰 이후 Full/브라우저 재실행 제한은 기존 검증 기록에 구분되어 있다. 새 기능·밸런스·DB 변경 없이 구현 및 문서 검증을 마감했다.
+- 병합 전 상태에서 병합 SHA·post-merge CI를 미리 기록하지 않는다. 실제 병합 결과와 main exact-head CI·소스 브랜치 정리는 PR 및 최종 보고에 남긴다.
+
+아래는 각 실행 시점의 historical 기록이다. 당시 OPEN 유지·병합 미실행 방침과 검증 수치는 그 시점의 결과이며 현재 구현 정책을 다시 정의하지 않는다.
+
+## PR #41 — 최종 출구 리뷰 수정 (2026-10-09)
+
+- 시작 HEAD `c4ae058265137d164f5e88e1506df7b7fc4af4f8`, base main `52d5abb9be43a49bb76bd233a1f0561821b346b3`, branch `codex/room-exits-interface`. 같은 PR의 P2-1/P2-2/P3-1을 수정하며 새 branch/PR을 만들지 않는다.
+- 방문 정보와 현재 이동 권한을 분리하고 명시적 view 보호를 유지했다. 생성된 Exit Command의 cmd access와 traverse·진입·전투 제한을 표시한다. 모든 typeclass의 Exit 인자는 is_exit 표식의 공통 parser 경계에서 hook 전에 거절하고 프로젝트 전용 중복 검사를 제거했다.
+- 재현 실패와 fixture 캐시 보정 후 관련96개/75.985초 PASS, check PASS, JS syntax/웹10개 PASS, Quick92.423초 PASS다. 최종 전체 회귀: 순수206개/2.899초·통합606개/546.110초(runner557.102초), failure0/error0 PASS.
+- DB fingerprint는 기존 SHA256/size733184/mtime_ns1790080153765082800과 같다. Room52/NPC21명·Bootstrap/identity·밸런스/schema·영속 데이터는 변경하지 않는다. 새 검증은 모두 격리 DB를 사용했다.
+- Full/실제 브라우저/OS IME/mobile/Telnet은 이번 변경 범위를 평가해 반복하지 않았다. 기존 실행 근거와 새 서버 payload/명령 회귀를 구분하며 [재현→보정→검증 기록](playtest.md#pr-41-exit-review-2026-10-09)을 따른다. 최신 exact-head CI는 PR #41 Validation에 기록한다. PR은 OPEN으로 유지하고 자동 병합/branch 삭제를 하지 않는다.
+
+아래 통합 개편 기록은 리뷰 수정 전 상태의 historical 기록이다. 현재 공개/권한/인자 정책은 이 섹션과 architecture/headquarters-redesign을 따른다.
+
+## 계단·승강기와 출구 인터페이스 통합 (2026-10-09)
+
+- 기준 main `52d5abb9be43a49bb76bd233a1f0561821b346b3`, branch `codex/room-exits-interface`. Phase A commit `4462927a5aaad6aef2c5f35d6abafaf2420e2c75` 이후 같은 branch에서 Phase B를 구현했으며 하나의 PR로 제출한다. 이전 PR #40은 main에 병합된 기준선이다.
+- Phase A 완료: 계단 Room6개 추가·본부52개/전체67개, 실제 계단/수직/나가기·승강기 여섯 층 Exit. 기존 승강기 identity/NPC21명/평면 동선/서비스/밸런스/Entity·권리 보존. 공용 현재 층과 전용 Command/서비스/CmdSet 제거, 과거 current_stop Attribute는 runtime이 접근하지 않는다. 모든 Exit 추가 인자 거부·후치형 보기·방문/권한/전투/atomic/commit observer 알림을 공통 경로에서 처리한다.
+- Phase B 완료: `world.exit_presentation`의 실제 Exit·제한/폐쇄·목적지 공개 정보로 3×3 ASCII `o/^/v/X`·통합 출구 문장·읽기 전용 출구/exits·지도·웹 버튼을 구성한다. 수직 제한은 전체 warning, 숨긴 목적지 이름/ID는 미공개다. 구형 전용 웹 이동 payload/panel은 제거했다.
+- 직접 영향/관련 회귀와 중간 자체 리뷰를 통과했다. 최종 local check PASS, 순수206개/3.745초·통합602개/751.631초(runner767.581초) PASS, JS syntax/10개 prompt+출구 회귀 PASS다. 초기 fixture/모듈 이름/옛 graph/canvas/wire payload 기대 실패는 보정 후 재검증했다. 전체 profile/DB/권한 assertion은 유지했다.
+- Quick110.350초 PASS. Full 첫 실행은 client 관찰 기준 corpse28.497초로 하한28.5초를 벗어나 중단했고 실패 DB/로그를 보존했다. 타이머/오차/수치/fixture 변경 없이 재실행 Full749.938초 PASS: production30/45/120초, 두 임무/보스·정상 restart/relogin·shutdown 광원 정산·startup native 엄격 보존. 공통 이동/smoke 경로 변경으로 이번 코드에서 새로 실행했으며 과거 성공을 대신 사용하지 않았다.
+- 실제 IAB desktop1280×720에서 계단·공용 승강기의 두 승객 독립 이동·제한 버튼/목적지·출구 표·재로그인을 확인했다. viewport 도구 제한을 우회한 same-origin 검증 iframe의 실제 CSS390×844/scrollWidth375에서 새 출구 버튼/긴 문구·가로 넘침 없음을 확인했다. 실제 모바일 기기/OS IME/수동 Telnet은 미실행이며 별도 결과로 구분한다.
+- 개발 DB SHA256 `b1318296f505b9b7522fcbdedff7642a06cf055e9de72802198c70e6b8a7f700`·size733184·mtime_ns1790080153765082800 불변. 모든 서버/smoke/browser는 격리 DB·owned process를 사용하고 종료했다. 문서/명령/Room ID와 콘텐츠 무결성을 읽기 전용으로 확인했다. Markdown23개/상대 링크·anchor253개/fence 오류0와 git diff --check PASS다. [실패→보정→최종 검증](playtest.md#계단승강기와-출구-인터페이스-통합-2026-10-09)을 따른다.
+- 미해결 P0/P1/P2는 확인되지 않았다. P3 Full 관찰 타이밍 경계 이력은 유지한다. 최종 PR latest HEAD CI는 PR Validation에 기록한다. PR은 사용자 리뷰를 위해 OPEN으로 제출하며 자동 병합/branch 삭제를 하지 않는다.
+
+아래 PR #40과 Item System 기록은 각 시점의 historical 실행 기록이다. 당시의 구조/계단 명령/공용 층 설명과 병합 준비 상태는 현재 runtime 안내가 아니다.
+
 ## PR #40 — 본부 개편 최종 문서 마감·병합 준비 (2026-10-08)
 
 - 구현과 리뷰 지적 네 건의 수정은 완료했다. 지상 5층·옥상·공용 승강기의 본부 46 Room(부두 제외), 기존 본부/부두 NPC 21명·4층 교관 12명/훈련관리관 1명, 각 층 중앙 전용 계단과 공용 승강기를 유지한다. [현재 배치와 운영 계약](headquarters-redesign.md)이 기준이며 커피숍·지하층·신규 NPC/서비스·밸런스 변경은 없다.

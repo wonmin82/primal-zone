@@ -16,7 +16,6 @@ from world.content import (
     REGIONS,
     ROOM_REGION,
     ROOMS,
-    ordered_directions,
 )
 from world.content.economy import CURRENCY
 from world.currency import format_currency
@@ -310,8 +309,11 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
 
         inventory = eq.inventory_rows(profile)
         instructor = instructor_for(self, observed_at=observed_at)
+        from world.exit_presentation import exit_entries
+
         from typeclasses.interactables import growth_controls
 
+        exits = exit_entries(self, observed_at=observed_at)
         payload = {
             "growth": rules.growth_state(profile),
             "training_controls": growth_controls(self, observed_at),
@@ -338,7 +340,8 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             "inventory": inventory,
             "equipment": eq.equipment_rows(profile),
             "equipment_labels": eq.SLOT_LABELS,
-            "exits": ordered_directions(room.get("exits", {})),
+            "exits": [entry["name"] for entry in exits if entry["exists"]],
+            "exit_details": exits,
             "hint": room_hint(observation),
             **multiplayer_state(self, now=observed_at),
             "player_round": profile["player_round"],
@@ -413,7 +416,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
     def announce_move_from(self, destination, msg=None, mapping=None, move_type="move", **kwargs):
         if msg is not None:
             return super().announce_move_from(destination, msg, mapping, move_type, **kwargs)
-        if move_type in ("elevator", "stairs"):
+        if move_type == "traverse":
             from world.multiplayer import after_change
 
             after_change(self._presence_delivery(self.location, " 이곳을 떠났다."))
@@ -423,7 +426,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
     def announce_move_to(self, source_location, msg=None, mapping=None, move_type="move", **kwargs):
         if msg is not None:
             return super().announce_move_to(source_location, msg, mapping, move_type, **kwargs)
-        if move_type in ("elevator", "stairs"):
+        if move_type == "traverse":
             from world.multiplayer import after_change
 
             after_change(self._presence_delivery(self.location, " 이곳에 도착했다."))

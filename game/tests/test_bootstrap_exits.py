@@ -102,3 +102,17 @@ class BootstrapExitTests(WorldCommandTest):
         before = self.snapshot()
         validate_managed_exits()
         self.assertEqual(self.snapshot(), before)
+
+    def test_vertical_alias_collision_and_wrong_managed_type_are_rejected(self):
+        from evennia.objects.objects import DefaultExit
+
+        custom = create_object(Exit, key="사유 계단", aliases=["u"],
+                               location=self.rooms["hq_stairs_1f"], destination=self.rooms["dock"])
+        self.assert_conflict_preserves_database(rf"hq_stairs_1f.*위.*#{custom.id}")
+        custom.delete()
+        managed = search_tag("hq_stairs_1f:위", category=EXIT_CATEGORY)[0]
+        managed.delete()
+        wrong = create_object(DefaultExit, key="위", location=self.rooms["hq_stairs_1f"],
+                              destination=self.rooms["hq_stairs_2f"])
+        wrong.tags.add("hq_stairs_1f:위", category=EXIT_CATEGORY)
+        self.assert_conflict_preserves_database("태그/위치 충돌")
