@@ -102,7 +102,7 @@ currency_request는 기존 TargetSelector에서 금액만 읽는다. 20칩은 �
 
 중앙의 `계단`은 실제 계단실 Exit이고 `위`/`아래`는 인접 층 계단실, `나가기`는 해당 층 중앙이다. 중앙의 `승강기`는 기존 단일 Room, 내부 여섯 층 Exit는 해당 중앙 공간으로 연결된다. 전용 계단/승강기 Command·서비스·동적 CmdSet·공용 current_stop 의존성은 제거했다. 과거 current_stop Attribute는 읽거나 쓰거나 삭제하지 않는다. 각 승객의 이동은 다른 승객의 위치/목적지에 영향을 주지 않는다.
 
-모든 실제 Exit는 공통 `ExactExitCommand`와 엔진의 인자 없는 match로 추가 인자를 거절한다. 후치형 `북 보기`/`북 봐`·개인 줄임말·묶음/영문 방향은 기존 parser를 따른다. Unknown·묶음 준비·이동 전 prompt는 상태를 정산하지 않고 실제 leaf 동작과 `move_to()`의 transaction 안에서 정산한다. 빈 입력의 기존 회복 경계 처리는 유지한다. Explorer의 실제 Exit 이동(`traverse`)은 출발/도착 방에 있을 때 관찰자를 확보하고 가장 바깥 transaction commit 뒤 한 번씩 알린다. Rollback은 DB/cache와 알림을 함께 복구/폐기한다.
+모든 실제 Exit는 엔진 매칭 결과의 `is_exit` 표식을 확인하는 공통 parser 경계에서 추가 인자를 거절한다. 프로젝트용·미관리 DefaultExit·다른 Exit typeclass에 동일하게 적용하며 Command hook/회복 정산 전에 공통 오류 경로로 처리한다. 프로젝트 전용 인자 검사와 라이브러리 monkeypatch는 없다. 후치형 `북 보기`/`북 봐`·개인 줄임말·묶음/영문 방향은 기존 parser를 따른다. Unknown·묶음 준비·이동 전 prompt는 상태를 정산하지 않고 실제 leaf 동작과 `move_to()`의 transaction 안에서 정산한다. 빈 입력의 기존 회복 경계 처리는 유지한다. Explorer의 실제 Exit 이동(`traverse`)은 출발/도착 방에 있을 때 관찰자를 확보하고 가장 바깥 transaction commit 뒤 한 번씩 알린다. Rollback은 DB/cache와 알림을 함께 복구/폐기한다.
 
 Bootstrap은 stable tag로 기존 Room·Exit·NPC를 재사용한다. 읽기 전용 preflight는 미관리 방향/alias/단축어 충돌·폐쇄 방향 모순·중복 관리 identity·잘못된 Room/type을 변경 전에 거절한다. 정의가 소유한 목적지는 기존 관리 객체 ID를 유지해 갱신한다. 폐지 복도9개는 archive와 home/prelogout/FK·방문 ID를 보존하고 contents만 대체 공간으로 이동한다. Entity UUID·sequence·tree·LootClaim/CurrencyLootShare 및 미관리 Exit를 보존한다. 운영 확인은 [출구 소유권](headquarters-redesign.md#관리-출구-소유권과-충돌-처리)을 따른다.
 
@@ -110,7 +110,7 @@ Bootstrap은 stable tag로 기존 Room·Exit·NPC를 재사용한다. 읽기 전
 
 `world/content/directions.py`는 평면8방향의 row/column을 유지하며 위/아래는 alias `u`/`d`·opposite만 정의한다. `DIRECTION_ORDER`는 북·북동·동·남동·남·남서·서·북서·위·아래이고 특수 출구는 정의 순서를 뒤에 유지한다. 옥상 중앙의 평면8방향과 주변9개 Room, NPC/서비스 금지 및 본부 고정 복도/시설/폐쇄 검사는 유지한다.
 
-`world/exit_presentation.py`의 `exit_entries()`는 실제 Exit에서 정렬·접근 제한·읽기 전용 목적지 이름 공개를 한 번 계산한다. 방 화면·`출구`·웹 상태·지도는 같은 결과를 사용한다. 실제 출구 존재와 현재 이동 가능, 정의만 있는 정적 폐쇄를 구분한다. 상태는 정적 폐쇄 → 시설/출입증/임무 → 전투 → 이동 가능 순이다. 잠긴 목적지 이름은 방문 여부와 무관하게 숨기고, 허용된 방문 또는 기존 관찰 가능 장소만 이름을 공개한다. 조회는 관찰 hook/lifecycle을 실행하지 않는다. 지도는 방문 장소만 표시하고 미방문 목적지를 계속 숨긴다.
+`world/exit_presentation.py`의 `exit_entries()`는 실제 Exit에서 정렬·접근 제한·읽기 전용 목적지 이름 공개를 한 번 계산한다. 방 화면·`출구`·웹 상태·지도는 같은 결과를 사용한다. 실제 출구 존재와 현재 이동 가능, 정의만 있는 정적 폐쇄를 구분한다. 상태는 정적 폐쇄 → 시설/출입증/임무 → Exit cmd/traverse 권한 → 전투 → 이동 가능 순이다. cmd 권한은 엔진이 생성하는 Exit Command의 access()로 판정하고 CmdSet을 저장하지 않는다. 목적지 이름 공개는 이동 가능 여부와 분리한다. 목적지 view 권한이 허용하는 방문한 장소는 출입증 상실·임무/Exit 이동 제한 뒤에도 이름을 유지한다. 미방문 장소는 접근·cmd/traverse·can_observe_through 조건을 통과할 때만 이름을 공개한다. Exit view 제한은 출구 자체를 숨긴다. 조회는 관찰 hook/lifecycle을 실행하지 않는다. 지도는 방문 장소만 표시하고 미방문 목적지를 계속 숨긴다.
 
 `exit_diagram()`은 3행×3열 ASCII canvas이며 중앙은 `o / ^ / v / X`다. 실제 평면 Exit를 `| - / \`로, 없는 셀을 `.`로 표시한다. 위/아래 하나라도 제한되면 수직 중앙 전체를 warning, 모두 가능하면 direction, 수직 없음의 o는 object role이다. 문구는 중앙 행 오른쪽 공백 두 칸에서 시작하고 이름 사이에서만 줄바꿈한다. `world.text.display_width`와 semantic role을 사용한 뒤 ANSI/웹 색 변환을 적용한다.
 

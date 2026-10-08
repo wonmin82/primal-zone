@@ -1,3 +1,13 @@
+## PR #41 — 최종 출구 리뷰 수정 (2026-10-09)
+
+- 시작 HEAD `c4ae058265137d164f5e88e1506df7b7fc4af4f8`, base main `52d5abb9be43a49bb76bd233a1f0561821b346b3`, branch `codex/room-exits-interface`. 같은 PR의 P2-1/P2-2/P3-1을 수정하며 새 branch/PR을 만들지 않는다.
+- 방문 정보와 현재 이동 권한을 분리하고 명시적 view 보호를 유지했다. 생성된 Exit Command의 cmd access와 traverse·진입·전투 제한을 표시한다. 모든 typeclass의 Exit 인자는 is_exit 표식의 공통 parser 경계에서 hook 전에 거절하고 프로젝트 전용 중복 검사를 제거했다.
+- 재현 실패와 fixture 캐시 보정 후 관련96개/75.985초 PASS, check PASS, JS syntax/웹10개 PASS, Quick92.423초 PASS다. 최종 전체 회귀: 순수206개/2.899초·통합606개/546.110초(runner557.102초), failure0/error0 PASS.
+- DB fingerprint는 기존 SHA256/size733184/mtime_ns1790080153765082800과 같다. Room52/NPC21명·Bootstrap/identity·밸런스/schema·영속 데이터는 변경하지 않는다. 새 검증은 모두 격리 DB를 사용했다.
+- Full/실제 브라우저/OS IME/mobile/Telnet은 이번 변경 범위를 평가해 반복하지 않았다. 기존 실행 근거와 새 서버 payload/명령 회귀를 구분하며 [재현→보정→검증 기록](playtest.md#pr-41-exit-review-2026-10-09)을 따른다. 최신 exact-head CI는 PR #41 Validation에 기록한다. PR은 OPEN으로 유지하고 자동 병합/branch 삭제를 하지 않는다.
+
+아래 통합 개편 기록은 리뷰 수정 전 상태의 historical 기록이다. 현재 공개/권한/인자 정책은 이 섹션과 architecture/headquarters-redesign을 따른다.
+
 ## 계단·승강기와 출구 인터페이스 통합 (2026-10-09)
 
 - 기준 main `52d5abb9be43a49bb76bd233a1f0561821b346b3`, branch `codex/room-exits-interface`. Phase A commit `4462927a5aaad6aef2c5f35d6abafaf2420e2c75` 이후 같은 branch에서 Phase B를 구현했으며 하나의 PR로 제출한다. 이전 PR #40은 main에 병합된 기준선이다.

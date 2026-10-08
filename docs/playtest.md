@@ -1,3 +1,22 @@
+<a id="pr-41-exit-review-2026-10-09"></a>
+
+## PR #41 — 출구 공개·권한·인자 경계 리뷰 수정 (2026-10-09)
+
+기준 HEAD `c4ae058265137d164f5e88e1506df7b7fc4af4f8`, branch `codex/room-exits-interface`, base main `52d5abb9be43a49bb76bd233a1f0561821b346b3`에서 같은 PR을 수정했다. 아래 통합 개편 결과는 리뷰 수정 이전의 historical record다. 현재 공개/권한/인자 계약은 architecture와 headquarters-redesign을 따른다.
+
+- P2-1: 방문한 이름과 현재 이동 권한을 분리했다. 목적지 view 권한이 허용하면 출입증 상실·임무/Exit 제한 뒤에도 알려진 이름을 유지한다. 미방문 목적지는 접근·cmd/traverse·can_observe_through를 통과해야 공개하며 Exit view 제한은 출구를 숨긴다. 실제 전초 출입 후 출입증 제거·지도/출구 조회와 임무 gate·명시적 view lock·관찰 hook 미호출·DB 전체 rows 불변을 검사했다.
+- P2-2: 엔진과 같은 생성된 Exit Command의 access()로 cmd 권한을 읽고 traverse·시설/출입증/임무·전투 우선순위를 유지했다. cmd:false 및 traverse:false에서 실제 명령 거절·DB 불변·웹 exit_details can_move=False·수직 X warning을 검사했다. 읽기 전용 조회는 CmdSet을 저장하지 않는다.
+- P3-1: Evennia 기본 DefaultExit는 기존 arg_regex로 이미 인자를 거절했다. 인자를 허용하도록 확장한 Exit는 거부 경계가 없었으므로 parser의 엔진 매칭 결과 is_exit 표식으로 hook/회복 정산 전에 거절했다. 프로젝트 전용 ExactExitCommand 검사는 제거했고, 모든 Exit prompt는 정산을 실제 이동 transaction에 맡긴다. 미관리 프로젝트 Exit·직접 DefaultExit·permissive custom Exit의 이름/영문 alias·개인/묶음·한글 단축어, 정상 인자 없는 이동과 후치형 보기/채팅을 검사한다. custom at_pre_cmd의 DB mutation도 잘못된 인자에서는 실행되지 않음을 확인했다. 객체/typeclass를 변환하거나 라이브러리를 수정하지 않았다.
+
+재현4개/10.088초는 실패7건(subtest 포함)이었다. 방문한 전초 이름의 미탐사, cmd 제한의 이동 가능 표시, custom Exit의 잘못된 인자와 북 보기 실제 이동을 확인했다. 수정 후 첫 targeted9개/12.999초는 같은 fixture의 lock 조합 변경 뒤 이전 합성 CmdSet을 재사용해 정상 이동1건이 실패했다. fixture의 생성 CmdSet과 합성 cache 갱신을 명시한 뒤 관련96개/75.985초(runner85.631초)가 통과했다. 전체 profile/DB·권한 assertion은 유지했다. 최초 check의 새 테스트 import 정렬1건도 수정한 뒤 check PASS다.
+
+- 최종 local 전체 회귀: 순수206개/2.899초·통합606개/546.110초(runner557.102초), failure0/error0 PASS.
+- `scripts/dev.py check`: PASS. `node --check game/web/static/webclient/js/primal.js`: PASS. `node --test scripts/tests/test_web_prompt.cjs`: 10개 PASS(239.271ms). JS는 변경하지 않았으며 현재 can_move payload와 기존 disabled/semantic/실제 명령 전송 경로를 함께 검사했다.
+- 이번 코드의 `scripts/dev.py smoke`: Quick92.423초 PASS. 실제 공동 전투·partial currency/protection·새 승강기 Exit·상점·재로그인/cleanup, corpse9.106초/respawn11.002초/protection19.150초를 확인했다. 기존 타이머를 변경하지 않았다.
+- Full smoke·브라우저·OS IME·실제 모바일 기기·수동 Telnet은 이번 리뷰 수정에서 재실행하지 않았다. lifecycle/timer/harness·월드 구조·UI/JS·입력 composition은 변경하지 않았고 새 권한/공개/인자 경계는 직접 회귀·전체 테스트·Quick로 검증했다. 아래 기존 Full749.938초 및 desktop/390px iframe 결과는 원래 실행 기준의 historical 근거이며 새 권한 사례의 실제 브라우저 성공으로 대신하지 않는다.
+- 개발 DB SHA256 `b1318296f505b9b7522fcbdedff7642a06cf055e9de72802198c70e6b8a7f700`·size733184·mtime_ns1790080153765082800 불변. 테스트는 in-memory/격리 DB, Quick는 독립 SQLite·owned process를 사용하고 종료했다. Room52·NPC21명·Entity/권리·방문 데이터·밸런스/schema/Bootstrap을 변경하지 않았다.
+- 최종 Markdown23개/상대 링크·앵커254개/fence 오류0 및 git diff --check PASS다. 최신 PR HEAD CI는 PR Validation에 기록한다. GitHub review thread는 시작 시0건이었다. 자동 병합/branch 삭제는 하지 않는다.
+
 <a id="계단승강기와-출구-인터페이스-통합-2026-10-09"></a>
 
 ## 계단·승강기와 출구 인터페이스 통합 (2026-10-09)
