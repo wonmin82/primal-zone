@@ -7,13 +7,25 @@ for allowing Characters to traverse the exit to its destination.
 
 """
 
-from evennia.objects.objects import DefaultExit
+from evennia.objects.objects import DefaultExit, ExitCommand
 from world import text as ft
 from world.content import ROOMS
 from world.distant_presentation import DistantViewContext, direction_phrase
 from world.navigation import blocked_exit_message, entry_block
 
 from .objects import ObjectParent
+
+
+class ExactExitCommand(ExitCommand):
+    """모든 출구의 공통 인자 경계. 보기 계열은 별도 명령으로 파싱된다."""
+
+    read_only = True  # 회복 정산은 성공할 이동의 world_change 안에서 수행한다.
+
+    def func(self):
+        if self.args.strip():
+            self.caller.msg(ft.token("error", "출구 이름만 입력하세요."))
+            return
+        return super().func()
 
 
 class Exit(ObjectParent, DefaultExit):
@@ -28,6 +40,7 @@ class Exit(ObjectParent, DefaultExit):
     """
 
     blocks_distant_view = True
+    exit_command = ExactExitCommand
 
     def at_traverse(self, traversing_object, target_location, **kwargs):
         message = blocked_exit_message(self.location.db.zone_id, self.key)

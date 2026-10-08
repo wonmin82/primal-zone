@@ -502,3 +502,31 @@ ROOMS = {
         "light_profile": "artificial",
     },
 }
+
+
+# 구조 정의에만 사용하는 순서. 런타임 이동·표시는 아래 실제 Exit를 읽는다.
+HQ_LANDINGS = (
+    ("1층", "hq_concourse", "hq_stairs_1f"),
+    ("2층", "support_2f_c", "hq_stairs_2f"),
+    ("3층", "support_3f_c", "hq_stairs_3f"),
+    ("4층", "support_4f_c", "hq_stairs_4f"),
+    ("5층", "support_5f_c", "hq_stairs_5f"),
+    ("옥상", "support_roof", "hq_stairs_roof"),
+)
+ELEVATOR_ROOM = "support_elevator"
+ROOMS[ELEVATOR_ROOM]["exits"] = {label: landing for label, landing, _ in HQ_LANDINGS}
+for index, (label, landing, stairs) in enumerate(HQ_LANDINGS):
+    exits = {}
+    if index + 1 < len(HQ_LANDINGS):
+        exits["위"] = HQ_LANDINGS[index + 1][2]
+    if index:
+        exits["아래"] = HQ_LANDINGS[index - 1][2]
+    exits["나가기"] = landing
+    ROOMS[stairs] = {
+        "name": f"본부 {label} 계단",
+        "desc": (f"본부 {label}의 계단참이다. 콘크리트 계단 가장자리에 금속 난간이 이어지고 "
+                 f"층 표지가 벽에 붙어 있다. 문 너머는 {ROOMS[landing]['name']}이다."),
+        "exits": exits, "safe": True, "enemies": [],
+        "exposure": "indoor", "light_profile": "artificial",
+    }
+    ROOMS[landing]["exits"].update({"계단": stairs, "승강기": ELEVATOR_ROOM})

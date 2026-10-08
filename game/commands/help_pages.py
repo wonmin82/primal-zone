@@ -2,7 +2,6 @@
 
 from world import text as ft
 from world.content.directions import DIRECTION_ALIASES, DIRECTION_ORDER, DIRECTION_SHORTCUTS
-from world.content.elevator import ELEVATOR_STOPS
 
 from commands.aliases import INFORMATION_SHORTCUTS, SHORTCUTS
 
@@ -41,8 +40,8 @@ def category_page(category, commands):
         lines.extend(["", ft.join([ft.token("direction", value) for value in DIRECTION_ORDER], " · "),
                       ft.join([ft.token("direction", alias) for alias in DIRECTION_ALIASES.values()], " · "),
                       commands_text(DIRECTION_SHORTCUTS),
-                      "", commands_text(["계단 올라", "계단 내려", "승강기", *[stop["label"] for stop in ELEVATOR_STOPS.values()], "내려"]),
-                      "계단은 중앙 공간에서 인접 층으로 이동합니다. 승강기 층을 선택하면 도착 후 바로 내립니다. 다른 승객은 승강기에 남습니다."])
+                      "", commands_text(["계단", "위", "아래", "나가기", "승강기", "1층", "2층", "3층", "4층", "5층", "옥상"]),
+                      "실제 출구 이름만 입력해 이동합니다. 계단실은 위·아래·나가기, 승강기 안은 층별 출구로 연결됩니다."])
     elif category == "전투·회복":
         lines.extend(["", "치료는 정신력을, 붕대 사용은 소지한 붕대 하나를 사용합니다. 방어는 패시브 기술입니다.",
                       "진료는 의무관에게 받습니다. 휴식은 의무실 침대에서 이용합니다."])

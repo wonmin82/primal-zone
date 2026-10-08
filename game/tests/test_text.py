@@ -46,8 +46,6 @@ class SemanticTextTests(WorldCommandTest):
             self.enterContext(patch(f"typeclasses.{module}.delay"))
 
     def test_room_roles_come_from_objects_and_real_exits(self):
-        from world.elevator import snapshot as elevator_snapshot
-        from world.stairs import controls as stair_controls
 
         for zone, room in self.rooms.items():
             self.char1.location = room
@@ -58,15 +56,8 @@ class SemanticTextTests(WorldCommandTest):
                 self.assertIn(obj.key, tokens(output, obj.semantic_role))
             self.assertIn(ROOMS[zone]["desc"], tokens(output, "text"))
             self.assertNotIn("사냥 대상:", output)
-            transport = elevator_snapshot(room)
-            stairs = stair_controls(zone)
-            if stairs or (transport and transport["inside"]):
-                self.assertIn("가능한 행동", output)
-            else:
-                self.assertNotIn("가능한 행동", output)
-            self.assertEqual(tokens(output, "command"),
-                             ([action["command"] for action in transport["actions"]] if transport else [])
-                               + [action["command"] for action in stairs])
+            self.assertNotIn("가능한 행동", output)
+            self.assertEqual(tokens(output, "command"), [])
 
     def test_target_appearance_actions_and_spaced_lookup(self):
         for room in self.rooms.values():

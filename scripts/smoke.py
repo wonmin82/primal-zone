@@ -151,7 +151,6 @@ async def travel_to(player, target):
     from collections import deque
 
     from world.content import ROOMS
-    from world.stairs import controls
 
     pending = deque([(player.state["zone"], [])])
     visited = set()
@@ -163,8 +162,7 @@ async def travel_to(player, target):
         if zone in visited:
             continue
         visited.add(zone)
-        edges = list(ROOMS[zone]["exits"].items()) + [
-            (a["command"], a["destination"]) for a in controls(zone)]
+        edges = list(ROOMS[zone]["exits"].items())
         pending.extend((destination, steps + [(command, destination)]) for command, destination in edges)
     raise AssertionError(f"실제 이동 경로 없음: {player.state['zone']} → {target}")
 

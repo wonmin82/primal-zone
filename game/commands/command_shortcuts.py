@@ -28,13 +28,12 @@ def reserved_names(cmdset):
 
     from commands.aliases import SHORTCUTS
     from commands.default_cmdsets import UnloggedinCmdSet
-    from commands.elevator import ElevatorInsideCmdSet, ElevatorLandingCmdSet
     from commands.registry import COMMANDS
     from commands.vocabulary import FUTURE_RESERVED_COMMAND_NAMES
 
     names = set(SHORTCUTS) | set(FUTURE_RESERVED_COMMAND_NAMES)
     names.update(data["name"] for data in SKILLS.values())
-    for commands in (cmdset, UnloggedinCmdSet(), ElevatorInsideCmdSet(), ElevatorLandingCmdSet()):
+    for commands in (cmdset, UnloggedinCmdSet()):
         names.update(commands.get_all_cmd_keys_and_aliases())
     for cls in COMMANDS:
         names.update((cls.key, *cls.aliases))
@@ -48,6 +47,7 @@ def reserved_names(cmdset):
 
 
 class Sequence(Command):
+    read_only = True  # 각 leaf 명령이 자기 동작의 정산/transaction을 담당한다.
     key = "해"
     input_style = "target"
     help_category = "원시구역"

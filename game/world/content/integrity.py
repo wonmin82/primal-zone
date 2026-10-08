@@ -14,10 +14,9 @@ from world.content import (
 )
 from world.content.directions import OPPOSITE_DIRECTIONS
 from world.content.economy import SALVAGE_CREDIT_RATE
-from world.content.elevator import ELEVATOR_DEFAULT_STOP, ELEVATOR_ROOM, ELEVATOR_STOPS
 from world.content.environment import EXPOSURES, LIGHT_PROFILES, WEATHER_ZONES, WEATHERS
 from world.content.facilities import FACILITIES
-from world.content.headquarters import ROOF_ROOMS, ROOF_SIDES
+from world.content.headquarters import ELEVATOR_ROOM, HQ_LANDINGS, ROOF_ROOMS, ROOF_SIDES
 from world.item_entities.policy import definition_errors
 from world.quests import QUESTS
 
@@ -51,7 +50,7 @@ def recovery_errors(identity, definition, field):
 
 
 def headquarters_errors():
-    """본부의 고정 방향 동선과 시설 위치를 검사한다. 승강기는 별도 이동이다."""
+    """본부 평면 동선·시설·수직 이동을 검사한다."""
     expected = {
         "staging_room": {"남": "hq_concourse"},
         "hq_concourse": {"북": "staging_room", "서": "dock", "동": "hq_admin_office", "남": "hq_lounge"},
@@ -87,6 +86,13 @@ def headquarters_errors():
     for facility, corridor, direction in facilities:
         expected[facility] = {OPPOSITE_DIRECTIONS[direction]: corridor}
         expected[corridor][direction] = facility
+    for index, (_, landing, stairs) in enumerate(HQ_LANDINGS):
+        expected[landing].update({"계단": stairs, "승강기": ELEVATOR_ROOM})
+        expected[stairs] = {"나가기": landing}
+        if index + 1 < len(HQ_LANDINGS):
+            expected[stairs]["위"] = HQ_LANDINGS[index + 1][2]
+        if index:
+            expected[stairs]["아래"] = HQ_LANDINGS[index - 1][2]
     issues = []
     for zone in ROOF_ROOMS:
         room = ROOMS.get(zone, {})
@@ -113,37 +119,23 @@ def headquarters_errors():
 
 
 def elevator_errors():
-    issues = []
-    room = ROOMS.get(ELEVATOR_ROOM)
-    if room is None:
-        issues.append("승강기 Room이 없습니다.")
-    elif room.get("exits") != {}:
-        issues.append("승강기 Room에는 방향 출구를 만들 수 없습니다.")
-    if ELEVATOR_ROOM not in REGIONS.get("headquarters", {}).get("rooms", ()):
+    issues, region = [], REGIONS.get("headquarters", {}).get("rooms", ())
+    if ROOMS.get(ELEVATOR_ROOM, {}).get("exits") != {label: landing for label, landing, _ in HQ_LANDINGS}:
+        issues.append("승강기 Room은 여섯 층별 실제 출구만 가져야 합니다.")
+    if ELEVATOR_ROOM not in region:
         issues.append("승강기 Room은 headquarters Region에 속해야 합니다.")
-    if ELEVATOR_DEFAULT_STOP not in ELEVATOR_STOPS:
-        issues.append("승강기 기본 정류 층이 없습니다.")
-    targets, labels = [], []
-    for key, stop in ELEVATOR_STOPS.items():
-        if not isinstance(key, str) or not key.strip() or not isinstance(stop, dict):
-            issues.append("승강기 정류 층 ID/정의가 유효하지 않습니다.")
-            continue
-        label, target = stop.get("label"), stop.get("room")
-        if not isinstance(label, str) or not label.strip():
-            issues.append(f"{key}: 승강기 층 표시명이 유효하지 않습니다.")
-        else:
-            labels.append(label)
-        if not isinstance(target, str) or target not in ROOMS:
-            issues.append(f"{key}: 승강기 대상 Room이 없습니다.")
-        if isinstance(target, str):
-            targets.append(target)
-    if len(labels) != len(set(labels)):
-        issues.append("승강기 층 표시명이 중복되었습니다.")
-    expected = {"hq_concourse", "support_2f_c", "support_3f_c", "support_4f_c", "support_5f_c", "support_roof"}
-    if len(targets) != len(expected) or set(targets) != expected:
-        issues.append("승강기 정류 층은 1층 로비·2~5층 중앙 복도와 옥상이어야 합니다.")
-    if any(ELEVATOR_ROOM in data["exits"].values() for data in ROOMS.values()):
-        issues.append("승강기에 연결하는 가짜 방향 출구가 있습니다.")
+    for _, landing, stairs in HQ_LANDINGS:
+        if ROOMS.get(landing, {}).get("exits", {}).get("승강기") != ELEVATOR_ROOM:
+            issues.append(f"{landing}: 승강기 진입 출구가 올바르지 않습니다.")
+        room = ROOMS.get(stairs, {})
+        if (stairs not in region or not room.get("safe") or room.get("enemies") != []
+                or room.get("exposure") != "indoor" or room.get("light_profile") != "artificial"
+                or room.get("recovery") or room.get("hints")):
+            issues.append(f"{stairs}: 안전한 실내 계단 Room이며 추가 서비스/회복이 없어야 합니다.")
+    incoming = {(zone, direction) for zone, room in ROOMS.items() for direction, target in room["exits"].items()
+                if target == ELEVATOR_ROOM}
+    if incoming != {(landing, "승강기") for _, landing, _ in HQ_LANDINGS}:
+        issues.append("승강기 진입은 여섯 중앙 공간의 실제 승강기 출구만 허용합니다.")
     return issues
 
 

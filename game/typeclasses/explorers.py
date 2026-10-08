@@ -413,7 +413,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
     def announce_move_from(self, destination, msg=None, mapping=None, move_type="move", **kwargs):
         if msg is not None:
             return super().announce_move_from(destination, msg, mapping, move_type, **kwargs)
-        if move_type in ("elevator", "stairs"):
+        if move_type == "traverse":
             from world.multiplayer import after_change
 
             after_change(self._presence_delivery(self.location, " 이곳을 떠났다."))
@@ -423,7 +423,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
     def announce_move_to(self, source_location, msg=None, mapping=None, move_type="move", **kwargs):
         if msg is not None:
             return super().announce_move_to(source_location, msg, mapping, move_type, **kwargs)
-        if move_type in ("elevator", "stairs"):
+        if move_type == "traverse":
             from world.multiplayer import after_change
 
             after_change(self._presence_delivery(self.location, " 이곳에 도착했다."))

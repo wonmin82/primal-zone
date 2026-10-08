@@ -167,15 +167,6 @@
       el.disabled = !enemy.can_attack;
       return el;
     });
-    for (const action of state.stairs || []) actions.push(button(action.label, action.command));
-    if (state.elevator) {
-      if (state.elevator.inside) {
-        const floor = document.createElement("p");
-        floor.replaceChildren("현재 위치: ", semantic("object", state.elevator.current_floor));
-        actions.push(floor);
-      }
-      for (const action of state.elevator.actions) actions.push(button(action.label, action.command));
-    }
     if (state.corpses.length > 1) {
       const all = button("모든 시체의 전리품 회수", "모든 시체에서 모두 가져");
       all.disabled = !state.corpses.some((source) => source.loot.some((item) => item.can_take));
