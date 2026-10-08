@@ -36,6 +36,9 @@ def exit_entries(viewer, room=None, observed_at=None, *, reveal_observed=True):
         reason = blocked.get(name) or (entry_message(viewer, destination) if destination else "목적지가 없습니다.")
         entry_allowed = reason is None
         traversable = obj.access(viewer, "traverse")
+        # Evennia parser와 같은 생성된 명령의 access()를 사용한다. CmdSet은 저장하지 않는다.
+        command_allowed = any(command.access(viewer, "cmd") for command in obj.create_exit_cmdset(obj)
+                              if getattr(command, "is_exit", False))
         target_data = ROOMS.get(destination.db.zone_id, {}) if destination else {}
         if reason:
             access = target_data.get("access", {})
@@ -43,18 +46,19 @@ def exit_entries(viewer, room=None, observed_at=None, *, reveal_observed=True):
                       "출입증 필요" if access.get("credential") else "임무 조건 미충족")
             if destination is None:
                 status = "시설 폐쇄"
-        elif not traversable:
+        elif not command_allowed or not traversable:
             status, reason = "시설 폐쇄", "출구를 이용할 수 없습니다."
         elif profile.get("combat_target"):
             status, reason = "전투 중 이동 불가", "전투 중에는 이동할 수 없습니다."
         else:
             status = "이동 가능"
         disclosed = False
-        if destination and entry_allowed and traversable and destination.access(viewer, "view"):
+        if destination and destination.access(viewer, "view"):
             visited = destination.db.zone_id in profile.get("visited", ())
-            observation = DistantViewContext(viewer, room, destination, obj, name, observed_at=now)
-            through = getattr(obj, "can_observe_through", lambda context: False)(observation)
-            disclosed = visited or (reveal_observed and through)
+            disclosed = visited
+            if not visited and reveal_observed and entry_allowed and command_allowed and traversable:
+                observation = DistantViewContext(viewer, room, destination, obj, name, observed_at=now)
+                disclosed = getattr(obj, "can_observe_through", lambda context: False)(observation)
         entries.append(dict(name=name, exists=True, can_move=status == "이동 가능", status=status,
                             reason=reason or "", destination_name=(target_data.get("name", destination.key)
                             if disclosed else "미탐사")))

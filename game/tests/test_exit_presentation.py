@@ -80,6 +80,8 @@ class ExitPresentationTests(WorldCommandTest):
         obj = next(obj for obj in source.exits if obj.key == "위")
         target = obj.destination
         with patch.object(target, "return_distant_appearance") as hook:
+            with patch.object(obj, "can_observe_through", return_value=False):
+                self.assertEqual(exit_entries(self.char1)[0]["destination_name"], "미탐사")
             self.assertEqual(exit_entries(self.char1)[0]["destination_name"], target.key)
             self.assertEqual(exit_entries(self.char1, reveal_observed=False)[0]["destination_name"], "미탐사")
             self.char1.change(lambda p: p.update(visited=[target.db.zone_id]))
@@ -89,7 +91,7 @@ class ExitPresentationTests(WorldCommandTest):
             target.locks.add("view:all()")
             obj.locks.add("traverse:false()")
             entry = exit_entries(self.char1)[0]
-            self.assertEqual(entry["destination_name"], "미탐사")
+            self.assertEqual(entry["destination_name"], target.key)
             self.assertFalse(entry["can_move"])
             obj.locks.add("view:false()")
             self.assertNotIn("위", [entry["name"] for entry in exit_entries(self.char1)])
@@ -98,7 +100,7 @@ class ExitPresentationTests(WorldCommandTest):
         self.char1.change(lambda p: p.update(visited=["outpost_equipment", "reserved_equipment"]))
         entries = exit_entries(self.char1)
         self.assertEqual([entry["destination_name"] for entry in entries if entry["name"] in ("북", "남")],
-                         ["미탐사", "미탐사"])
+                         [self.rooms["outpost_equipment"].key, self.rooms["reserved_equipment"].key])
 
     def test_actual_objects_override_definition_and_special_order_stays_stable(self):
         extra = create_object(Exit, key="사유 문", location=self.char1.location, destination=self.rooms["dock"])
@@ -125,3 +127,67 @@ class ExitPresentationTests(WorldCommandTest):
         self.assertNotIn("elevator", state)
         self.assertNotIn("stairs", state)
         self.assertIn("출구", self.output("출구 도움말"))
+
+    def test_visited_name_survives_credential_loss_and_quest_gate_without_query_writes(self):
+        from world.credential_service import grant_credential
+
+        self.char1.location = self.rooms["support_5f_w2"]
+        credential = grant_credential(self.char1, "outpost_supply_pass")
+        self.char1.execute_cmd("북")
+        self.assertIn("outpost_equipment", self.char1.profile_snapshot()["visited"])
+        self.char1.execute_cmd("남")
+        credential.delete()
+        before = self.snapshot()
+        entry = next(entry for entry in exit_entries(self.char1) if entry["name"] == "북")
+        self.assertEqual(entry["destination_name"], self.rooms["outpost_equipment"].key)
+        self.assertEqual(entry["status"], "출입증 필요")
+        self.assertIn(self.rooms["outpost_equipment"].key, self.output("출구"))
+        self.assertIn("북: " + self.rooms["outpost_equipment"].key, self.output("지도"))
+        self.assertEqual(self.snapshot(), before)
+
+        zone, name, target = next((zone, name, target) for zone, data in ROOMS.items()
+                                 for name, target in data["exits"].items() if ROOMS[target].get("requires"))
+        self.char1.location = self.rooms[zone]
+        self.char1.change(lambda p: p.update(visited=[zone, target]))
+        before = self.snapshot()
+        entry = next(entry for entry in exit_entries(self.char1) if entry["name"] == name)
+        self.assertEqual(entry["destination_name"], self.rooms[target].key)
+        self.assertEqual(entry["status"], "임무 조건 미충족")
+        self.assertIn(name + ": " + self.rooms[target].key, self.output("지도"))
+        self.output("출구")
+        self.assertEqual(self.snapshot(), before)
+
+    def test_exit_command_permissions_match_dispatch_and_vertical_web_restrictions(self):
+        from evennia.commands import cmdhandler
+
+        obj = next(obj for obj in self.char1.location.exits if obj.key == "위")
+        self.char1.change(lambda p: p.update(visited=[obj.destination.db.zone_id]))
+        for lock in ("cmd:false();traverse:all()", "cmd:all();traverse:false()"):
+            for combat in (None, 123):
+                with self.subTest(lock=lock, combat=combat):
+                    self.char1.change(lambda p: p.update(combat_target=combat))
+                    obj.locks.add(lock)
+                    obj.at_cmdset_get(force_init=True)
+                    # 한 fixture에서 lock 조합을 바꾸므로 이전 합성 CmdSet을 재사용하지 않는다.
+                    cmdhandler._CMDSET_MERGE_CACHE.clear()
+                    before = self.snapshot()
+                    entry = next(entry for entry in exit_entries(self.char1) if entry["name"] == "위")
+                    self.assertEqual(entry["status"], "시설 폐쇄")
+                    self.assertFalse(entry["can_move"])
+                    self.assertEqual(entry["destination_name"], obj.destination.key)
+                    self.char1.execute_cmd("위")
+                    self.assertEqual(self.char1.zone, "hq_stairs_4f")
+                    self.assertEqual(self.snapshot(), before)
+                    with patch.object(self.char1, "msg") as output:
+                        Explorer.push_state(self.char1, observed_at=100)
+                    state = output.call_args.kwargs["pz_state"][0][0]
+                    self.assertFalse(next(e for e in state["exit_details"] if e["name"] == "위")["can_move"])
+                    diagram = exit_diagram(state["exit_details"])
+                    self.assertEqual(next(p["role"] for p in diagram.segments if p["text"] == "X"), "warning")
+        obj.locks.add("cmd:all();traverse:all()")
+        obj.at_cmdset_get(force_init=True)
+        cmdhandler._CMDSET_MERGE_CACHE.clear()
+        self.char1.change(lambda p: p.update(combat_target=None))
+        self.assertTrue(next(e for e in exit_entries(self.char1) if e["name"] == "위")["can_move"])
+        self.char1.execute_cmd("위")
+        self.assertEqual(self.char1.zone, "hq_stairs_5f")
