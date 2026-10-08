@@ -1,3 +1,29 @@
+<a id="pr-40-본부-개편-리뷰-수정-2026-10-08"></a>
+
+## PR #40 — 본부 개편 리뷰 수정 (2026-10-08)
+
+기준 main `763aac347fec8f8e921f0c7cfbd62391f383f978`, 수정 시작 HEAD `7475eeeb356a17c5e97ff906d1793737e16459ff`. 기존 `codex/hq-building-redesign`과 [PR #40](https://github.com/wonmin82/primal-zone/pull/40)만 수정한다. 아래 최초 개편 및 과거 Phase 결과는 소급 수정하지 않는다.
+
+### 직접 영향과 관련 회귀
+
+관리 Exit는 정확한 identity와 원래 Room/key를 검사해 객체 ID를 유지한다. 이름만 같은 사용자 Exit는 편입하지 않으며 활성/blocked 방향의 key·영문 alias·방향 단축키 충돌을 변경 전에 거절한다. 새 `tests.test_bootstrap_exits`는 정상 재사용/신규 생성/반복 실행·충돌 원인 보고·미관리 속성 보존·DB 전체 snapshot 불변·관리 identity 중복/다중 태그/잘못된 Room을 검사한다. 기존 `tests.test_headquarters`의 폐지 9 Room·사용자 Exit·home/prelogout/방문·Entity UUID/sequence/quantity/tree/state 보존 회귀를 유지했다. Fresh DB의 실제 bootstrap은 최종 Quick에서도 확인한다.
+
+`tests.test_stairs`의 실제 출발/도착 Explorer 관찰자를 통해 커밋 전 알림 0회 → 성공 후 각각 1회를 확인한다. `at_post_move` 실패와 이동 뒤 강제 outer rollback에서는 알림 0회·위치/profile 불변이다. View lock과 poor visibility는 존재를 노출하지 않으며 승강기 출발/도착 알림도 각각 1회다. 일반 Room의 `계단 도움말`과 이동 거절을 함께 검사하고 기존 중앙층/층 경계/잘못된 인자 회귀를 유지한다. 4층 설명은 고정 시설만 보완했으며 NPC 행동은 presence에 맡긴다.
+
+| 실제 명령 / 실행 | 결과 |
+| --- | --- |
+| `scripts/dev.py test tests.test_bootstrap_exits tests.test_headquarters --parallel 2 --reverse` | 당시 직접 영향 18개/75.757초, runner89.355초 PASS |
+| 같은 시간 별도 stairs/elevator/shortcuts runner | 39개 assertion은 통과했으나 clone `default_1.sqlite3` teardown FileNotFoundError로 exit1. 두 runner를 동시에 실행한 작업 절차 문제로, 이후 integration runner는 순차 실행했다. 성공으로 계산하지 않는다. |
+| 관련 stairs/elevator/shortcuts/growth/hq_services reverse | 61개/58.530초 중 기존 교관 시야 profile 불변 검사 1FAIL. `recovery.updated_at`1791449989.8050654→1791449990.0221205 / boundary1791449980→1791449990으로 정상 10초 경계를 넘었다. 해당 test만 관찰 시각을 고정하고 전체 profile assertion과 production recovery를 유지했다. |
+| `scripts/dev.py test tests.test_bootstrap_exits tests.test_stairs tests.test_elevator tests.test_command_shortcuts tests.test_growth tests.test_hq_services --parallel 2 --reverse` | 최종 관련 69개/66.428초, runner76.030초 PASS·failure0/error0. 방향 단축키 충돌 회귀도 포함한다. |
+| `scripts/dev.py check` | 최종 코드 PASS |
+
+명령은 저장소 루트의 `.venv\Scripts\python.exe`로 실행했다. 실행별 수는 합산하지 않는다. 첫 check의 새 함수 내부 import 간격 I001은 정리 후 통과했다. 로그는 ignored `work/hq-redesign/review-*.log`에 보존한다.
+
+### 최종 검증과 범위
+
+`scripts/dev.py test --parallel 2`: 순수206개/2.734초·통합600개/497.689초(runner508.209초), failure0/error0·exit0 PASS. `scripts/dev.py smoke`: Quick85.077초 PASS. 격리 실제 Portal/Server의 fresh bootstrap·party/combat·loot/partial currency·protection·승강기/5층 shop·relogin/prompt·process 종료/임시 DB cleanup이 성공했다. 관찰 corpse9.517초/respawn11.387초/protection22.681초, 기존 설정10/12/20초는 변경하지 않았다. 개발 DB SHA256 `b1318296f505b9b7522fcbdedff7642a06cf055e9de72802198c70e6b8a7f700`·size733184·mtime_ns1790080153765082800 전후 동일이다. Markdown23개 문서/상대 링크·anchor245개/fence 오류0, `git diff --check` PASS. 새 문서 anchor와 마지막 빈 줄을 정리한 뒤 통과했다. Bootstrap/공유 이동 코드가 바뀌어 전체 자동 회귀와 격리 실제 서버 Quick를 새로 실행한다. JS·Web input/layout·combat/loot timers·Quest/Boss progression·smoke 동선은 변경하지 않아 브라우저/OS IME/Full은 반복하지 않는다. 최초 개편 Full 599.024초와 실제 desktop/narrow 결과는 아래 historical record로 남기며 이번 변경 코드의 검증 결과로 대신하지 않는다. 새 observer/rollback 회귀와 최종 Quick가 변경 경계를 검사한다. 새 PR·병합·개발 DB 초기화는 하지 않는다.
+
 # 원시구역 테스트 안내
 
 이 문서는 각 작업 시점의 historical validation record를 포함한다. 과거 미실행·미구현 기록은 당시 사실이며 현재 구현은 [architecture](architecture.md), [final-content](final-content.md), [최신 작업 상태](CODEX_TASK_STATE.md)를 따른다.

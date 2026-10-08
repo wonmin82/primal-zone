@@ -1,3 +1,13 @@
+## PR #40 — 본부 개편 리뷰 수정 (2026-10-08)
+
+- 시작 main `763aac347fec8f8e921f0c7cfbd62391f383f978`, PR/source HEAD `7475eeeb356a17c5e97ff906d1793737e16459ff`, 기존 branch `codex/hq-building-redesign`에서 이어간다. Fetch 후 clean·OPEN/non-draft·MERGEABLE/CLEAN·review thread 0개를 확인했다. 아래 최초 개편의 검증 이력은 당시 기록으로 보존한다.
+- P1: 올바른 관리 identity만 재사용하고 이름만 같은 Exit를 편입하지 않는다. Fresh runtime 초기화·Room/NPC/이전 처리 전에 읽기 전용 preflight로 태그 중복/다중 태그/잘못된 위치와 활성·폐쇄 방향의 key/alias/방향 단축키 충돌을 거절한다. 충돌 시 미관리 객체·Room·NPC·플레이어·ItemEntity·runtime/sequence DB snapshot 불변을 검사했다. 기존 관리 Exit ID 갱신·신규 생성·반복 bootstrap·폐지 Room의 사용자 Exit 및 영속 데이터 보존을 유지한다.
+- P2: 계단·승강기의 출발/도착 시 실제 Room에서 `can_perceive`로 허용된 관찰자를 확보하고 `after_change` 이후 한 번씩 알린다. Move 실패·외부 transaction rollback은 알림을 폐기하며 출발 알림도 이동 후 위치 검사 때문에 누락되지 않는다. 실제 Explorer 관찰자와 view lock/poor visibility 회귀를 추가했다. 일반 방향 이동 계약은 유지한다.
+- P2: `HELP_ONLY_COMMANDS`로 계단 개별 도움말 metadata만 전역 조회한다. `계단 도움말`은 일반 Room에서도 가능하지만 이동 CmdSet은 중앙 공간에만 존재한다. 층 경계·잘못된 인자·후치형/줄임말·승강기·교관 기능의 관련 회귀를 실행했다.
+- P3: 4층 6시설의 고정 설비를 통합 훈련 분야와 실제 문 방향에 맞춰 보완했다. NPC 행동/대사·서비스·46 Room/21 NPC·가격·밸런스·schema·migration·JS는 변경하지 않는다.
+- 검증/시행착오: 최종 관련 reverse 69개/66.428초(runner76.030초) PASS, check PASS. 첫 병렬 runner 두 개를 동시에 실행해 Windows test clone 삭제가 충돌한 실행은 성공으로 계산하지 않는다. 후속 관련 실행에서 교관 시야 테스트가 정상 회복 10초 경계를 넘은 1FAIL은 해당 test의 시각만 고정하고 전체 profile assertion을 유지했다. 자세한 실패→보정→성공은 [이번 검증 기록](playtest.md#pr-40-본부-개편-리뷰-수정-2026-10-08)을 따른다.
+- 최종 전체: 순수 206개/2.734초·통합 600개/497.689초(runner508.209초), failure0/error0 PASS. Quick85.077초 PASS: 격리 실제 서버 fresh bootstrap·공유 전투/전리품·승강기/5층 거래·재로그인·cleanup 성공. 개발 DB SHA256 `b1318296f505b9b7522fcbdedff7642a06cf055e9de72802198c70e6b8a7f700`·size733184·mtime_ns1790080153765082800은 전후 동일하다. Markdown23개/상대 링크·anchor245개/fence 오류0·git diff --check PASS. JS/입력·combat/timing/Quest/Boss 동선은 바뀌지 않아 browser/IME/Full은 반복하지 않으며 이전 실행을 이번 변경의 근거로 대신하지 않는다. 이번 자동 회귀·Quick에서 미해결 P0/P1/P2는 발견되지 않았다. 남은 gate는 새 HEAD의 CI다. 최신 commit/HEAD·exact-head CI·PR 상태는 [PR #40 Validation](https://github.com/wonmin82/primal-zone/pull/40)에 기록한다. 새 PR·branch를 만들거나 병합하지 않는다.
+
 ## 본부 빌딩 5층 개편 (2026-10-08)
 
 - 기준 main: `763aac347fec8f8e921f0c7cfbd62391f383f978`. Branch: `codex/hq-building-redesign`. 시작 상태 clean·open PR 0개. 아래 Item System V1 완료와 이전 검증은 historical record로 보존한다.

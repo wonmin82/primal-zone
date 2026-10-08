@@ -104,6 +104,10 @@ currency_request는 기존 TargetSelector에서 금액만 읽는다. 20칩은 �
 
 Bootstrap은 기존 Room·서비스 ID를 재사용하며 폐지 복도9개의 관리 출구만 정리한다. 복도 객체를 `primal_retired_room` archive로 남겨 home/prelogout/FK·원래 방문 ID를 보존하고, 그 안의 플레이어·전리품 등 일반 객체는 지정된 대체 공간으로 이동한다. 전리품 owner 객체를 재생성하지 않아 Entity UUID·sequence·tree·LootClaim/CurrencyLootShare는 유지한다. 사용자 생성 출구·무관한 stale 객체는 삭제하지 않는다. 본부 콘텐츠 신규 Room14개를 추가하며 반복 bootstrap은 전환을 중복 수행하지 않는다.
 
+관리 Exit는 정확한 `primal_zone_exit` identity로만 재사용한다. Bootstrap의 읽기 전용 사전 검사는 미관리 방향/alias/단축어 충돌·폐쇄 방향 모순·중복 관리 identity·잘못된 Room/type을 변경 전에 거절한다. 이름 기반 편입은 없으며 충돌 시 runtime·Room·NPC·플레이어·Exit 상태가 불변이다. 정상 관리 객체의 ID를 유지해 정의의 목적지를 갱신한다. 운영 복구는 [출구 소유권과 충돌 처리](headquarters-redesign.md#관리-출구-소유권과-충돌-처리)를 따른다.
+
+계단/승강기의 presence는 출발/도착 시점의 해당 Room에서 시야·view lock을 통과한 관찰자 목록을 확보한 뒤 `after_change()`로 보낸다. Rollback은 알림도 취소한다. 전역 `HELP_ONLY_COMMANDS`는 도움말 metadata만 제공하며 실제 계단 CmdSet 등록 범위는 중앙 공간 전용이다.
+
 ## 8방향과 고정 compass
 
 `world/content/directions.py`의 `DIRECTIONS`가 canonical 한국어 방향, 영문 alias, opposite, 3×3 좌표를 소유한다. `DIRECTION_ORDER`는 북부터 시계방향인 북·북동·동·남동·남·남서·서·북서다. alias/reverse mapping은 같은 정의에서 파생하며 `items.py`는 방향을 소유하지 않는다. 기존 `world.content.OPPOSITES` import는 `DIRECTION_ALIASES`와 동일한 객체를 export하는 호환 경로만 유지한다. bootstrap의 실제 Evennia Exit alias, blocked 방향 조회, integrity, 지도·Web 출구 순서와 개인 줄임말 예약 이름이 이 정의를 사용한다. 별도 대각선 command는 없다. 방향 보기의 selector·gate·원거리 지각 정책과 묶음 dispatch는 기존 경로다.
