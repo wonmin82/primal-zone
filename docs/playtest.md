@@ -1,3 +1,11 @@
+## PR #41 — 최종 문서 Closeout (2026-10-09)
+
+리뷰 수정 HEAD `e2d2ca4f275cae90e79d2de317128579892f5e46`에서 [Game checks 37811678991](https://github.com/wonmin82/primal-zone/actions/runs/37811678991), event=pull_request, check/test/smoke SUCCESS를 확인했다. 순수206개/1.179초·통합606개/372.269초·Quick51.634초 PASS다. 기존 local 전체 회귀와 리뷰 수정 후 Quick 결과는 아래 기록을 그대로 유지한다.
+
+문서 Closeout은 현재 구조·명령·공개/권한 정책을 코드와 대조하고 줄임말 문서의 엔진 매칭 후 공통 Exit 검사 설명 및 본부 설계의 최신 리뷰 검증 링크를 보완했다. Room/Exit identity·저장 데이터·코드·밸런스는 변경하지 않았다. 문서만 바뀌므로 local 전체 테스트·Full·브라우저·정적 파일 수집은 반복하지 않는다. 문서 링크/앵커/fence·콘텐츠/Room ID·파일 경로·git diff --check를 확인하고 최종 HEAD의 CI는 PR Validation에 기록한다. 병합 SHA·main CI·브랜치 정리는 실제 병합 뒤 최종 보고에 남긴다.
+
+아래 재현 실패·fixture 보정·기존 Full 관찰 경계 실패와 실제 브라우저 결과는 해당 실행 기준의 historical 기록이다.
+
 <a id="pr-41-exit-review-2026-10-09"></a>
 
 ## PR #41 — 출구 공개·권한·인자 경계 리뷰 수정 (2026-10-09)

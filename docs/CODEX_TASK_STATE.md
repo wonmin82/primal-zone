@@ -1,3 +1,13 @@
+## PR #41 — 문서 Closeout·최종 검증 완료 (2026-10-09)
+
+- 기획안 v1.5 FINAL의 Phase A/B와 리뷰 P2-1/P2-2/P3-1 구현·검증을 완료했다. 본부52 Room·계단6개·기존 승강기 identity·독립 승객 이동, 공통 Exit 인자 경계·cmd/traverse·방문/관찰 공개 정책이 현재 계약이다. 상세 구조는 [본부 개편](headquarters-redesign.md), 기술 정책은 architecture를 따른다.
+- 리뷰 수정 HEAD `e2d2ca4f275cae90e79d2de317128579892f5e46`의 [Game checks 37811678991](https://github.com/wonmin82/primal-zone/actions/runs/37811678991)은 check/test/smoke SUCCESS다. CI 순수206개/1.179초·통합606개/372.269초·Quick51.634초 PASS. 이후 closeout은 문서만 변경하며 최종 문서 HEAD의 CI는 [PR #41 Validation](https://github.com/wonmin82/primal-zone/pull/41)에 기록한다.
+- README·architecture·본부 설계·줄임말·출력 예·진행·playtest를 실제 코드/테스트와 대조했다. 줄임말의 default parser 설명과 최신 검증 링크를 정리하고 아래 실패/보정/성공 이력은 보존했다. 문서 링크·앵커·fence·Room/명령/경로·git diff --check를 검사한다.
+- 확인된 미해결 P0/P1/P2는 없다. 실제 OS IME·모바일 기기·수동 Telnet과 리뷰 이후 Full/브라우저 재실행 제한은 기존 검증 기록에 구분되어 있다. 새 기능·밸런스·DB 변경 없이 구현 및 문서 검증을 마감했다.
+- 병합 전 상태에서 병합 SHA·post-merge CI를 미리 기록하지 않는다. 실제 병합 결과와 main exact-head CI·소스 브랜치 정리는 PR 및 최종 보고에 남긴다.
+
+아래는 각 실행 시점의 historical 기록이다. 당시 OPEN 유지·병합 미실행 방침과 검증 수치는 그 시점의 결과이며 현재 구현 정책을 다시 정의하지 않는다.
+
 ## PR #41 — 최종 출구 리뷰 수정 (2026-10-09)
 
 - 시작 HEAD `c4ae058265137d164f5e88e1506df7b7fc4af4f8`, base main `52d5abb9be43a49bb76bd233a1f0561821b346b3`, branch `codex/room-exits-interface`. 같은 PR의 P2-1/P2-2/P3-1을 수정하며 새 branch/PR을 만들지 않는다.
