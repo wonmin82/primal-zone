@@ -1,3 +1,15 @@
+## 본부 빌딩 5층 개편 (2026-10-08)
+
+- 기준 main: `763aac347fec8f8e921f0c7cfbd62391f383f978`. Branch: `codex/hq-building-redesign`. 시작 상태 clean·open PR 0개. 아래 Item System V1 완료와 이전 검증은 historical record로 보존한다.
+- 현재 배치: 활성 본부 Room 46개·폐지 복도 9개·신규 Room 14개. 1층 로비/관리/휴게, 2층 보관/보급/정산, 3층 의료, 4층 교관 13명/교육시설 6곳, 5층 기존 장비/병기 시설 6곳, 기존 옥상 9개·승강기 1개. [배치와 호환 계약](headquarters-redesign.md)을 따른다.
+- 기존 NPC 21명·기술/특성 담당 ID·재분배·회복·가격/catalog·출입증 조건을 유지했다. 커피숍·새 NPC·지하층·새 gameplay 서비스·밸런스 변경은 없다.
+- 층별 중앙에서 인접 층 계단과 1~5층·옥상 승강기를 이용한다. 기존 공용 층/승객/자동 하차/수동 내려/transaction을 유지하며 계단은 승강기 상태를 변경하지 않는다. 텍스트·도움말·지도·Web control과 smoke/coordinator 동선을 갱신했다.
+- 데이터 보존: 폐지 Room을 archive로 남기고 관리 출구만 제거한다. 플레이어·전리품 owner 객체를 대체 공간으로 이동하며 home/prelogout/방문·Entity identity/sequence/tree/quantity/state를 유지한다. 반복 bootstrap·NPC/Exit 재사용을 통합 회귀로 검사한다. 실제 개발 DB에 bootstrap/migration을 실행하지 않는다.
+- 검증: check·JS syntax PASS. 계단/방향/서비스 21개와 원거리 관찰/줄임말 36개(reverse) PASS. 최종 전체 순수 206개/2.928초·통합 587개/482.501초(runner493.300초) PASS, 실패/오류 0이다. Full 599.024초 PASS: 두 임무/보스·최종 보고·실제 기술 훈련·shutdown 광원 정산·startup Entity 엄격 보존·재로그인을 확인했다. Quick 95.045초 PASS. Actual IAB 1280×900·390×844에서 새 동선/계단 입력·버튼/승강기/5층 구매/의료/훈련/재접속을 확인했다.
+- 발견/보정: 옛 ID·층수·교관 위치를 참조한 fixture, 새 계단의 전치형 선언 누락, Full 체질 배분의 옛 의료 동선을 보정했다. 연속 사냥 패배는 실제 침대 회복/재출정 단계를 추가해 검증하며 수치·fixture 변경은 없다. 실패→수정→성공 이력과 실제 실행 시간은 [playtest](playtest.md#본부-5층-개편-검증-2026-10-08)에 보존한다.
+- 개발 DB SHA256·size·mtime_ns는 Quick·실패 Full·브라우저·최종 Full 전후 동일하다. Markdown 23개 문서/상대 링크·anchor241개/fence 오류0, git diff --check PASS다. 최신 PR 번호·HEAD·exact-head CI는 생성하는 본부 개편 PR의 Validation에 기록한다. PR은 병합하지 않는다.
+- 현재 자동·브라우저·Quick/Full 검증에서 미해결 P0/P1/P2는 없다. 남은 gate는 생성할 PR latest HEAD CI 확인이다. Full fixture 보정 이력은 위 playtest에 보존한다. 실제 OS IME·mobile device matrix는 이번 입력 변경 범위 밖이며 과거 성공을 이번 실행으로 표현하지 않는다.
+
 ## Item System V1 — 최종 closeout (2026-10-08)
 
 - 최종 상태: **ITEM SYSTEM V1 COMPLETE**. Phase 1~6·7A·7B·7C 구현·검증과 병합을 마쳤다. 지원 topology는 SQLite + single Evennia server, fresh native ItemEntity와 검증된 explicit legacy compatibility다. Production P0=0/P1=0/P2=0이며 기존 notes는 아래 실행 기록과 Phase 7 audit에 보존한다.

@@ -2,6 +2,55 @@
 
 이 문서는 각 작업 시점의 historical validation record를 포함한다. 과거 미실행·미구현 기록은 당시 사실이며 현재 구현은 [architecture](architecture.md), [final-content](final-content.md), [최신 작업 상태](CODEX_TASK_STATE.md)를 따른다.
 
+
+## 본부 5층 개편 검증 (2026-10-08)
+
+기준 main `763aac347fec8f8e921f0c7cfbd62391f383f978`에서 `codex/hq-building-redesign`로 작업했다. 시작 worktree clean·open PR 0개를 확인했다. 현재 본부 배치/운영 경계는 [본부 개편](headquarters-redesign.md)을 따른다. 아래 Item System V1 및 과거 본부 검증은 당시의 historical record다.
+
+활성 Room 46개(4/6/6/9/11/9 + 공용 승강기 1), 기존 NPC 21명·교관 13명, 지상 5층·옥상 중앙의 인접 층 계단·여섯 승강기 정류장을 구현했다. 폐지 복도 9개의 Room 참조·방문 기록은 archive로 보존하고 플레이어·native 전리품 owner를 대체 공간으로 옮긴다. ItemEntity·권리·가격·회복·학습·출입증 정책은 유지한다.
+
+### 실패와 보정 이력
+
+- 첫 순수 본부 테스트 16개 중 1개가 새 5층 중앙을 없어야 할 옛 1층 중앙으로 잘못 지정해 실패했다. 기대 ID를 바로잡았다.
+- 첫 관련 통합 57개/104.796초에서 실패 1·오류 2가 발생했다. 이전 옥상 표시명·폐쇄 방향 순서와 `계단` 명령의 전치형 선언 누락을 확인했다. 이어진 32개/78.372초의 실패 4건에서 전치형 선언과 방향 기대값을 마무리했고 계단/방향/서비스 21개/25.871초(reverse)가 성공했다.
+- 전체 첫 실행은 순수 206개 중 기존 방향 그래프의 옛 상층 Room 31개 기대가 실패해 통합을 시작하지 않았다. 방향 Exit로 도달하지 않는 새 상층 42개를 검사하도록 갱신했다.
+- 다음 전체 실행은 순수 206개/2.587초 PASS, 통합 587개/494.845초에서 실패 8·오류 3이었다. 폐지 복도 ID·옛 상점/의료/정산 동선·옛 교관 위치·새 계단의 semantic command를 검사하던 fixture를 새 계약으로 갱신했다. 권한·개인 기록·전체 state 보존 assertion은 유지했다.
+- 해당 8개 module 109개/95.915초(reverse)에서 원거리 훈련실 관찰의 옛 복도 위치 1건이 남아 실패했다. 실제 4층 서쪽 복도에서 같은 NPC 존재/정보 비노출 검사를 하도록 고쳤다. 원거리 관찰/줄임말 36개/21.685초(reverse)는 PASS다. 줄임말 예약 이름은 새 `계단`·4층·5층도 검사한다.
+- Full 첫 실행은 본부 서비스·패배·production lifecycle을 통과한 뒤 보스 준비가 의무실에서 체질 배분을 시도해 timeout됐다. 해당 스크립트 동선을 생존훈련실 배분 → 의무실 휴식으로 고쳤다. 실패 로그/격리 DB를 보존했고 owned process는 종료됐다. 수치·타이머·권한을 완화하지 않았다.
+- Full 두 번째 실행은 연속 사냥의 마지막 고장난경비기에서 패배했다(XP236, 구조 후 HP1·정신력4). 이전 Phase 7의 Full reliability 이력과 같은 유형의 누적 자원 소모였다. 전투/가격/준비금/HP fixture를 바꾸지 않고 연속 출정 사이 실제 3층 침대 회복과 재출정 명령을 추가했다. 두 번째 실패 DB/로그도 보존했다. 세 번째 실행은 아래 최종 결과처럼 성공했다.
+
+### 최종 자동 검증
+
+- `.\.venv\Scripts\python.exe scripts/dev.py check`: PASS.
+- `.\.venv\Scripts\python.exe scripts/dev.py test --parallel 2`: PASS. 순수 206개/2.928초·통합 587개/482.501초, 통합 runner493.300초. 실패 0·오류 0. 실행별 테스트 수는 합산하지 않는다.
+- `node --check game/web/static/webclient/js/primal.js`: PASS.
+- 마지막 Full 전용 회복 동선 보강 후 `world.test_smoke` 15개/1.594초 PASS. 전체 회귀 성공 뒤 production/Python 테스트 코드 변경이 없고 Full 전용 smoke와 문서만 바뀌어 전체 suite는 반복하지 않았다.
+- `git diff --check`: PASS. Markdown 23개 문서의 상대 링크/anchor 241개·code fence 오류 0.
+- Quick `.\.venv\Scripts\python.exe scripts/dev.py smoke`: PASS, 95.045초. 실제 공동 전투/claim·부분 화폐 회수·outsider·5층 상점 가치/구매/판매·옥상 귀환·종료/재로그인을 확인했다. 관찰 corpse 9.024초/respawn 10.985초/protection 19.663초이며 기존 Quick 설정 10/12/20초는 바꾸지 않았다.
+- Full `.\.venv\Scripts\python.exe scripts/dev.py smoke-full`: PASS, 599.024초. 실제 corpse29.516초·respawn44.298초·protection122.911초(설정30/45/120초), 본부 서비스·두 임무/보스·최종 보고·기술 훈련·정상 Portal/Server restart/relogin을 통과했다. Shutdown의 ON 광원은 OFF/active_light None으로 정산됐고 power1800.000→1481.407은 project_power 허용 범위였다. 일반 ItemEntity·tree·주무기는 shutdown 중 불변, startup 후 UUID/quantity/sequence/tree/state는 엄격 보존됐다. Profile·파티·보관·시설·승강기·clock·전리품과 corpse/respawn callback도 보존했다.
+
+### 실제 브라우저
+
+격리 SQLite·owned Portal/Server·fixture 인증과 격리 `collectstatic`을 사용했다. IAB desktop 1280×900과 narrow 390×844에서 실제 WebSocket UI를 확인했다. 일반 개발 서버와 DB는 사용하지 않았다.
+
+| 시작/행동 | 관찰 결과 | 판정 |
+| --- | --- | --- |
+| 로그인·재접속 → 대기실 → 남 | 본부 중앙 로비와 북/동/남/서·계단/승강기 버튼 표시 | PASS |
+| 로비 → 동 → 서 → 남 → 북 | 새 관리실·휴게실 왕복, 기존 로비 복귀 | PASS |
+| 1층에서 연속 `계단 올라` | 2·3·4·5층 중앙과 옥상 이동, 경계별 실제 버튼 표시 | PASS |
+| 3층 중앙 → 북 | 의무관과 침대, 진료/휴식 조작 표시 | PASS |
+| 4층 중앙 → 남/북 | 전술교관·분석교관과 훈련관리관, 실제 훈련/재분배 control 표시 | PASS |
+| 5층 중앙 → 동·북 → 절단마체테 구매 | 기본 병기점·무기상, 3000→2945칩·아이템 1개 추가 | PASS |
+| 옥상 → 승강기 → 1층 | 여섯 층 버튼과 내려, 선택자 로비 자동 하차 | PASS |
+| narrow 로비에서 직접 `계단 올라` 입력·Enter | 버튼과 같은 2층 이동, 두 계단 control 접근 가능 | PASS |
+| desktop 2층 → 승강기 → 4층·북 | 4층 자동 하차 후 훈련관리실/재분배 버튼 표시 | PASS |
+
+범위: 변경된 이동 control·위치·시설 표현을 검사했다. 실제 OS 한글 IME는 이번 변경에서 재실행하지 않았다(입력/composition 코드 변경 없음). 기존 Phase 7B 사용자 수동 확인은 그 당시 기록으로 유지한다. 실제 mobile device 전체 matrix·PostgreSQL·multi-server·balance tuning은 이번 범위가 아니다.
+
+### 개발 DB 안전성
+
+일반 `game/server/evennia.db3`는 작업 전 SHA256 `b1318296f505b9b7522fcbdedff7642a06cf055e9de72802198c70e6b8a7f700`, size 733184, mtime_ns 1790080153765082800이다. Quick·실패 Full·브라우저와 최종 Full 종료 후 모두 동일했고 기존 DB에 bootstrap/migration을 실행하지 않았다. 성공 Full의 owned process 종료·임시 디렉터리 정리도 확인했다. 모든 fixture 인증정보·DB·로그는 소스에 포함하지 않는다.
+
 ## PR #37 병합 전 문서 점검 (2026-10-08)
 
 시작 main `393a8589adc33b3098028f9a33aab793a5fec38d`, PR HEAD `4157cba28353dfbbc3e7744850b89e2d2d0fd5e2`의 [CI37635605763](https://github.com/wonmin82/primal-zone/actions/runs/37635605763)는 test·smoke SUCCESS다. 인계 이후 새 commit 없이 OPEN/non-draft·MERGEABLE/CLEAN·ahead5/behind0·review thread0개를 확인했다.
