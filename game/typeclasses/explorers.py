@@ -413,33 +413,40 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
     def announce_move_from(self, destination, msg=None, mapping=None, move_type="move", **kwargs):
         if msg is not None:
             return super().announce_move_from(destination, msg, mapping, move_type, **kwargs)
-        if move_type == "elevator":
+        if move_type in ("elevator", "stairs"):
             from world.multiplayer import after_change
 
-            origin = self.location
-            after_change(lambda: self._announce_presence(origin, " 이곳을 떠났다."))
+            after_change(self._presence_delivery(self.location, " 이곳을 떠났다."))
         else:
             self._announce_presence(self.location, " 이곳을 떠났다.")
 
     def announce_move_to(self, source_location, msg=None, mapping=None, move_type="move", **kwargs):
         if msg is not None:
             return super().announce_move_to(source_location, msg, mapping, move_type, **kwargs)
-        if move_type == "elevator":
+        if move_type in ("elevator", "stairs"):
             from world.multiplayer import after_change
 
-            destination = self.location
-            after_change(lambda: self._announce_presence(destination, " 이곳에 도착했다."))
+            after_change(self._presence_delivery(self.location, " 이곳에 도착했다."))
         else:
             self._announce_presence(self.location, " 이곳에 도착했다.")
 
     def _announce_presence(self, room, sentence):
+        self._presence_delivery(room, sentence)()
+
+    def _presence_delivery(self, room, sentence):
+        """해당 Room에 있을 때 시야/권한을 검사하고 성공한 변경 이후 전달한다."""
         from world.observation import can_perceive, context_for
 
-        if room:
-            message = ft.text(ft.named("player", self.key, "이/가"), sentence)
-            for observer in room.contents:
-                if observer != self and observer.has_account and can_perceive(self, context_for(observer, room)):
+        observers = tuple(observer for observer in room.contents
+                          if observer != self and observer.has_account and can_perceive(self, context_for(observer, room))) if room else ()
+        message = ft.text(ft.named("player", self.key, "이/가"), sentence)
+
+        def deliver():
+            for observer in observers:
+                if observer.location == room and observer.has_account:
                     observer.msg(message, from_obj=self)
+
+        return deliver
 
     def at_pre_move(self, destination, move_type="move", **kwargs):
         profile = self.profile()

@@ -15,6 +15,7 @@ from commands.character import (
 )
 from commands.combat import Attack, Breathe, Flee, Heal, Heavy, Insight, Shooting, Suppress, Use
 from commands.command_shortcuts import Sequence, Shortcuts
+from commands.elevator import Stairs
 from commands.firearms import FillMagazine, LoadMagazine, Reload
 from commands.incinerator import Burn
 from commands.inventory import (
@@ -56,6 +57,9 @@ from commands.settlement import Exchange, Rate
 from commands.skills import Allocate, Learn, Retrain
 from commands.social import Say
 from commands.world_actions import Investigate, Repair, Rest, Return, Talk, Treat
+
+# 전역 도움말 metadata만 제공한다. 실제 실행 CmdSet은 해당 Room에서만 등록한다.
+HELP_ONLY_COMMANDS = [Stairs]
 
 COMMANDS = [
     Burn,

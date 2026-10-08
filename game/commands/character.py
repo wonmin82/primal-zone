@@ -179,9 +179,9 @@ class Help(GameCommand):
 
     def run(self):
         from commands.help_pages import help_page, root_page
-        from commands.registry import COMMANDS
+        from commands.registry import COMMANDS, HELP_ONLY_COMMANDS
 
-        commands = [cls for cls in COMMANDS if getattr(cls, "input_style", None)]
+        commands = [cls for cls in (*COMMANDS, *HELP_ONLY_COMMANDS) if getattr(cls, "input_style", None)]
         query = (getattr(self, "args", "") or "").strip()
         page = help_page(query, commands) if query else root_page()
         if page is None:

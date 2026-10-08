@@ -3,6 +3,7 @@
 from copy import deepcopy
 from unittest.mock import Mock, patch
 
+from evennia import create_object
 from typeclasses.explorers import Explorer
 from world.content.elevator import ELEVATOR_STOPS
 from world.state import multiplayer_state
@@ -72,3 +73,108 @@ class StairsTests(WorldCommandTest):
         self.assertEqual(self.char1.zone, "support_4f_c")
         self.char2.execute_cmd("내려")
         self.assertEqual(self.char2.zone, "support_5f_c")
+
+    def test_global_help_does_not_register_global_stair_execution(self):
+        from commands.elevator import Stairs
+        from commands.registry import COMMANDS
+
+        self.assertNotIn(Stairs, COMMANDS)
+        for zone in ("hq_concourse", "storage_room"):
+            self.char1.location = self.rooms[zone]
+            with patch.object(self.char1, "msg") as output:
+                self.char1.execute_cmd("계단 도움말")
+            text = str(output.call_args_list)
+            for token in ("계단", "중앙 공간", "바로 위층", "계단 올라", "계단 내려", "1층", "옥상"):
+                self.assertIn(token, text)
+            self.assertEqual(self.char1.zone, zone)
+        before = deepcopy(self.char1.profile_snapshot())
+        with patch.object(self.char1, "msg") as output:
+            self.char1.execute_cmd("계단 올라")
+        self.assertIn("명령을 확인", str(output.call_args_list))
+        self.assertEqual(self.char1.zone, "storage_room")
+        self.assertEqual(self.char1.profile_snapshot(), before)
+
+
+class StairPresenceTests(WorldCommandTest):
+    character_typeclass = Explorer
+
+    def setUp(self):
+        self.enterContext(patch("typeclasses.explorers.time", return_value=100))
+        super().setUp()
+        self.rooms = self.world_rooms()
+        self.origin = self.rooms["hq_concourse"]
+        self.destination = self.rooms["support_2f_c"]
+        self.char1.location = self.char2.location = self.origin
+        self.arrival = create_object(Explorer, key="도착방 관찰자", location=self.destination)
+        for observer in (self.char2, self.arrival):
+            self.enterContext(patch.object(observer.sessions, "count", return_value=1))
+            observer.msg = self.enterContext(patch.object(observer, "msg"))
+        for player in (self.char1, self.char2, self.arrival):
+            player.push_state = Mock()
+
+    def test_successful_stairs_defer_departure_and_arrival_exactly_once(self):
+        from world.multiplayer import world_change
+        from world.stairs import move
+
+        with world_change():
+            move(self.char1, "올라")
+            self.assertEqual(self.char1.location, self.destination)
+            self.char2.msg.assert_not_called()
+            self.arrival.msg.assert_not_called()
+        self.char2.msg.assert_called_once()
+        self.arrival.msg.assert_called_once()
+        self.assertIn("떠났다", self.char2.msg.call_args.args[0])
+        self.assertIn("도착했다", self.arrival.msg.call_args.args[0])
+
+    def test_post_move_failure_and_outer_rollback_emit_no_notifications(self):
+        from world.multiplayer import world_change
+        from world.stairs import move
+
+        before = deepcopy(self.char1.profile_snapshot())
+        original = self.char1.at_post_move
+
+        def fail(*args, **kwargs):
+            original(*args, **kwargs)
+            raise RuntimeError("post move failure")
+
+        with patch.object(self.char1, "at_post_move", side_effect=fail):
+            self.char1.execute_cmd("계단 올라")
+        self.assertEqual(self.char1.location, self.origin)
+        self.assertEqual(self.char1.profile_snapshot(), before)
+        with self.assertRaisesRegex(RuntimeError, "outer rollback"), world_change():
+            move(self.char1, "올라")
+            raise RuntimeError("outer rollback")
+        self.assertEqual(self.char1.location, self.origin)
+        self.assertEqual(self.char1.profile_snapshot(), before)
+        self.char2.msg.assert_not_called()
+        self.arrival.msg.assert_not_called()
+
+    def test_view_lock_and_poor_visibility_hide_presence(self):
+        from dataclasses import replace
+
+        from world.observation import context_for
+        from world.stairs import move
+
+        self.char1.locks.add("view:false()")
+        move(self.char1, "올라")
+        self.char2.msg.assert_not_called()
+        self.arrival.msg.assert_not_called()
+        self.char1.location = self.origin
+        self.char1.locks.add("view:all()")
+
+        def poor(*args, **kwargs):
+            context = context_for(*args, **kwargs)
+            return replace(context, snapshot=replace(context.snapshot, effective_visibility="poor"))
+
+        with patch("world.observation.context_for", side_effect=poor):
+            move(self.char1, "올라")
+        self.char2.msg.assert_not_called()
+        self.arrival.msg.assert_not_called()
+
+    def test_elevator_preserves_visible_departure_and_arrival(self):
+        self.arrival.location = self.rooms["support_elevator"]
+        self.char1.execute_cmd("승강기")
+        self.char2.msg.assert_called_once()
+        self.arrival.msg.assert_called_once()
+        self.assertIn("떠났다", self.char2.msg.call_args.args[0])
+        self.assertIn("도착했다", self.arrival.msg.call_args.args[0])
