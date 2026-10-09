@@ -5,12 +5,13 @@
 - Phase 2: 후치형 조회·등록·수정·해지, 원본 문자열·100개 제한·혼합 구형 값·bounded 출력·정규화 충돌·전체 삭제 fingerprint를 구현했다. 프로필 v11은 기존 v8/v10 정상 변환을 보존하고 안전한 리스트만 문자열로 옮긴다. 읽기 전용 조회는 저장하지 않는다.
 - Phase 3: 전체 사전 flatten과 참조 그래프를 순차 지연 확장으로 교체했다. 개인 정의는 한 번 snapshot하고 실제 CmdSet은 매 단계 합성한다. 잠긴 실제 명령도 개인 정의보다 우선하며 선택 Command만 cmdobj로 실행한다. 불변 조상 경로·depth5·실행10·최종합계1000·부분 실행·새 묶음 금지·동일 캐릭터 소유권·비동기 완료·프롬프트 정리를 검사한다.
 - 직접 입력 출처는 typed Invocation과 ContextVar로 유지한다. 내부 dispatcher 재진입도 전체 삭제 직접 입력 자격을 얻지 않는다. 별개 세션/일반 입력은 실행 컨텍스트를 상속하지 않는다.
-- 관련 통합 87개/76.168초 PASS 후 paging·출처 재진입을 보강했고, 실행/프롬프트 관련 72개/67.968초 PASS. 순수 마이그레이션/어휘/성장 40개/0.237초 PASS. 최종 코드 check PASS, 전체 순수213개/2.632초·통합651개/613.216초(runner623.737초), total864개·failure0/error0·teardown 포함 exit0 PASS. 최신 exact-head CI는 PR Validation에서 대조한다.
+- 관련 통합 87개/76.168초 PASS 후 paging·출처 재진입을 보강했고, 실행/프롬프트 관련 72개/67.968초 PASS. 순수 마이그레이션/어휘/성장 40개/0.237초 PASS. 다단어 추가 보강 전 check PASS, 전체 순수213개/2.632초·통합651개/613.216초(runner623.737초), total864개·failure0/error0·teardown 포함 exit0 PASS. 최신 exact-head CI는 PR Validation에서 대조한다.
 - 실제 격리 서버/WebSocket 26단계 PASS/114.739초: 캐릭터 격리·치환·스냅샷·부분 실행·Exit 이동·간접 전체 삭제 거절·재시작 pending 무효·재로그인 문자열 복원. 기존 Quick PASS/137.657초. 두 실행의 owned process 종료·성공 fixture 정리 완료. 이후 raw 제어문자·instance hook·custom Exit/관리 경계 보강은 직접 회귀·최종 전체 검사로 확인했다. 정상 입력·Harness·타이머가 동일한 해당 실제 서버 근거는 재사용한다.
 - Node 문법 PASS, 웹 프롬프트 10개 PASS. JS/정적 파일/웹 레이아웃은 변경하지 않았다. Full·브라우저·OS IME는 미실행이며 timer/balance/UI 변경이 없어 반복하지 않았다. 자동 입력을 실제 IME 확인으로 취급하지 않는다.
 - 플레이 DB SHA256 `b1318296f505b9b7522fcbdedff7642a06cf055e9de72802198c70e6b8a7f700`, 크기 733184: 격리 검증 전후 동일. 실제 플레이 DB는 이전/초기화하지 않았다.
 - 명세 경계: `look 도움 → @help look` 예시는 실제 엔진 `look` 우선 요구와 충돌한다. 실제 명령 우선 정책을 유지하고 충돌하지 않는 `장비 도움` 또는 직접 엔진 입력을 사용한다. 페이지 입력 가능 help는 내부에서 거절한다. 사용자 정의 helper의 별도 대기는 `shortcut_completion_guaranteed=False` 계약이 필요하다. 범용 Python 부수 작업 증명·엔진 merge cache 우회는 범위 밖이다.
 - 검증 운영 실패도 보존했다: Windows 병렬 suite 두 실행의 clone 파일 정리 충돌은 본문 PASS여도 exit1이므로 성공에서 제외하고 DB 검사를 직렬화해 최종 전체 run을 통과했다.
+- 추가 자체 리뷰: 첫 PR HEAD의 Game checks37932812711은 성공했지만 인자 없는 정확한 다단어 행동 별칭의 개인 fallback을 1FAIL로 재현했다. 실제 별칭 정확 일치도 권한 검사 전에 선택하도록 보강했고 관련106개/52.885초·check PASS 후 전체 순수213개/2.523초 PASS, 통합652개/580.477초 중 대각선 보기 fixture1FAIL을 확인했다. 차이는 정상 회복 10초 경계의 timestamp/boundary뿐이었다. 전체 profile assertion을 유지하고 관찰 시각만 고정한 뒤 관련117개/63.655초·check PASS를 확인했다. test-only 시각 고정 뒤 로컬 전체 검사는 반복하지 않고 최종 HEAD의 전체 test/smoke CI를 PR Validation에서 대조한다.
 - 현재 계약: [개인 줄임말](command-shortcuts.md). 이전 PR #41 및 V1 기록은 아래 historical 실행 기록으로 보존한다.
 
 ## PR #41 — 문서 Closeout·최종 검증 완료 (2026-10-09)

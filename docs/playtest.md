@@ -20,6 +20,10 @@
 
 12. 마지막 관련 suite 105개/54.450초에서 batch 차단 안내 기대 1FAIL을 확인했다. 후속 단독 실행에서 두 번째 batch fixture의 사후 `locks` 문자열 변경이 lockhandler를 갱신하지 않는다는 점도 확인했다. 생성자에 테스트 권한을 지정하고 실제 거절 안내를 검사한 뒤 해당 1개/4.406초 PASS다. 파일 로드·실행 전 차단과 위치 불변 assertion을 유지했고 최종 전체 회귀에 포함했다.
 
+13. 첫 PR HEAD `6ca95b2f1a48237398818d5188bea2664a8c943a`의 Game checks37932812711은 check/test/smoke SUCCESS(순수213개/1.276초·통합651개/419.500초)다. 대기 중 자체 리뷰에서 인자 없는 정확한 다단어 행동 별칭이 개인 fallback으로 선택되는 사례를 발견했다. 잠긴 `여러 단어`가 개인 `단어`의 채팅을 보내는 1FAIL/4.739초를 재현한 뒤 실제 다단어 별칭의 정확한 입력도 lock 검사 전 선택하도록 수정했다. 인자 없음/있음·묶음·잠긴 명령을 포함한 관련106개/52.885초(runner62.295초) PASS 후 최종 전체 회귀를 다시 수행했다. 다음 항목에서 실제 실패/보정 결과를 구분한다. 이전 HEAD CI를 추가 수정 HEAD의 성공으로 대체하지 않는다.
+
+14. 추가 전체 run의 대각선 보기 1FAIL은 184ms 사이 정상 10초 회복 경계를 넘은 fixture였다. 동작·방문·자원 회귀는 관측되지 않았고 생산 회복/관찰 코드는 바꾸지 않았다. 전체 profile 비교에서 필드를 제외하거나 sleep/retry를 넣지 않고 관찰 시각만 고정했다. fixture만 변경한 뒤 실패 영역 및 공통 parser 관련117개/63.655초를 통과했고 최종 HEAD의 GitHub 전체 검사 결과를 PR에 기록한다. 로컬 실패 run을 PASS로 소급 변경하지 않는다.
+
 ### 요구사항별 검증 근거
 
 | 영역 | 구현·회귀 근거 |
@@ -38,8 +42,9 @@
 
 ### 최종 검사
 
-- `scripts/dev.py check`: PASS.
-- `scripts/dev.py test --parallel 2`: 최종 코드 순수213개/2.632초·통합651개/613.216초(runner623.737초), total864개, failure0/error0, teardown 포함 exit0 PASS. 마지막 관련105개 중 batch fixture/안내 기대 실패1건은 해당 단독1개/4.406초를 통과한 뒤 이 전체 run에서 재검증했다.
+- `scripts/dev.py check`: 다단어 추가 수정 후에도 PASS.
+- 다단어 별칭 보강 후 전체 회귀: 순수213개/2.523초 PASS, 통합652개/580.477초(runner590.322초) 중 대각선 보기 fixture 1FAIL. 전체 성공으로 기록하지 않는다. 차이는 recovery.updated_at 1791551049.8376234→1791551050.0214572와 boundary 1791551040→1791551050뿐이었다. 정상 회복 경계와 무관한 관찰 불변 테스트의 시간을 기존 EnvironmentTests 패턴으로 고정하고 전체 profile assertion은 유지했다. fixture 수정 후 방향/파서/줄임말/프롬프트/Exit 관련117개/63.655초(runner73.598초)와 check PASS. test-only 시각 고정 뒤 로컬 전체 검사는 반복하지 않고 최종 HEAD의 GitHub 전체 검사로 대조한다.
+- `scripts/dev.py test --parallel 2`: 다단어 추가 보강 전 순수213개/2.632초·통합651개/613.216초(runner623.737초), total864개, failure0/error0, teardown 포함 exit0 PASS. 마지막 관련105개 중 batch fixture/안내 기대 실패1건은 해당 단독1개/4.406초를 통과한 뒤 이 전체 run에서 재검증했다.
 - `scripts/dev.py smoke`: Quick PASS/137.657초. 공유 전투·전리품·상점·실제 회복 경계·재로그인·prompt를 검증했다.
 - `scripts/shortcut_smoke.py`: 실제 격리 Portal/Server·WebSocket 26단계 PASS/114.739초. 재시작·재로그인 후 문자열 정의 유지 및 pending 무효를 확인했다.
 - `node --check game/web/static/webclient/js/primal.js`: PASS. `node --test scripts/tests/test_web_prompt.cjs`: 10 PASS/889.0218ms.
