@@ -17,6 +17,7 @@ from commands.shortcuts import (
     MAX_COMMANDS,
     MAX_DEPTH,
     MAX_EXPANDED_CHARACTERS,
+    BoundSegment,
     parse_definition,
     require_shortcut_store,
     shortcut_name,
@@ -29,7 +30,7 @@ _DISPATCH_ORIGIN = ContextVar("shortcut_dispatch_origin", default=None)
 
 @dataclass(frozen=True)
 class QueueItem:
-    command: str
+    command: str | BoundSegment
     shortcut_path: tuple[str, ...] = ()
     global_expanded: bool = False
 
@@ -69,10 +70,22 @@ def stop_execution(caller, session=None):
         execution.stop()
 
 
-def require_completed_command(command, caller, session):
+def require_completed_command(command, caller, session, *, multimatch=False):
     """6.1은 func의 Deferred를 await하지 않는다. pre/post Deferred만 완료 계약이 있다."""
     from evennia.commands.default.help import CmdHelp
 
+    if getattr(command, "shortcut_completion_guaranteed", True) is False:
+        raise rules.RuleError("추가 입력·완료를 보장하지 않는 명령은 묶음·줄임말 밖에서 실행하세요.")
+    if multimatch:
+        from evennia.commands.default import syscommands
+        from evennia.utils import utils
+
+        # 기본 핸들러는 후보를 보여주기만 한다. 후보 존재 자체로 Sequence를 실행하지 않는다.
+        # 임의 선택/추가 입력 핸들러는 새 Command의 최종 선택을 보장할 수 없으므로 실행 전 거절한다.
+        function = unwrap(command.func)
+        if (getattr(function, "__func__", function) is not syscommands.SystemMultimatch.func
+                or syscommands.at_search_result is not utils.at_search_result):
+            raise rules.RuleError("추가 선택·완료를 보장하지 않는 다중 명령 처리는 직접 실행하세요.")
     if isinstance(command, CmdHelp) and type(command).help_more:
         options = caller.account.db._saved_webclient_options if caller.account else None
         popup = (session and session.protocol_key in ("webclient/websocket", "webclient/ajax")
@@ -85,7 +98,6 @@ def require_completed_command(command, caller, session):
                     "deferLater", "callLater", "ensureDeferred", "puppet_object", "execute_cmd", "cmdhandler",
                     "batch_cmd_exec", "batch_code_exec"}
     if (isgeneratorfunction(function) or iscoroutinefunction(function)
-            or getattr(command, "shortcut_completion_guaranteed", True) is False
             or (code and unsafe_names.intersection(code.co_names))):
         raise rules.RuleError("추가 입력·완료를 보장하지 않는 명령은 묶음·줄임말 밖에서 실행하세요.")
     # 직접 Deferred를 반환하는 사용자 정의 동기 함수도 실행 전에 감지한다.
@@ -177,7 +189,7 @@ class Execution:
             raise rules.RuleError("줄임말의 순환 참조입니다. 남은 실행을 중단합니다.")
         if len(item.shortcut_path) >= MAX_DEPTH:
             raise rules.RuleError("줄임말 중첩은 5단계까지 가능합니다.")
-        commands = parse_definition(definition).bind(arguments)
+        commands = parse_definition(definition).bind_segments(arguments)
         path = (*item.shortcut_path, name)
         self.queue.extendleft(reversed(tuple(QueueItem(text, path) for text in commands)))
 
@@ -198,13 +210,14 @@ class Execution:
         try:
             while self.queue and self.valid():
                 item = self.queue.popleft()
+                text = item.command.render() if isinstance(item.command, BoundSegment) else item.command
                 _, providers, _, caller, _ = generate_cmdset_providers(self.caller, session=self.session)
-                cmdset = yield get_and_merge_cmdsets(caller, providers, "object", item.command)
+                cmdset = yield get_and_merge_cmdsets(caller, providers, "object", text)
                 if not self.valid():
                     break
                 if not cmdset:
                     raise rules.RuleError("현재 명령 집합을 확인할 수 없어 남은 실행을 중단합니다.")
-                selection = select_command(item.command, cmdset, caller, session=self.session,
+                selection = select_command(text, cmdset, caller, session=self.session,
                                            shortcuts=self.shortcuts, personal=not item.global_expanded,
                                            global_aliases=not item.global_expanded)
                 matches = selection.matches
@@ -236,7 +249,7 @@ class Execution:
 
                         command = copy(command)
                         command.matches = matches
-                require_completed_command(command, caller, self.session)
+                require_completed_command(command, caller, self.session, multimatch=len(matches) > 1)
                 if self.attempts >= MAX_COMMANDS:
                     raise rules.RuleError("명령 실행은 10개까지 가능합니다. 11번째부터 중단합니다.")
                 if self.characters + len(selection.text) > MAX_EXPANDED_CHARACTERS:

@@ -79,7 +79,7 @@ def select_command(raw_string, cmdset, caller, match_index=None, session=None, *
         # 인자형 전역 정의의 내부 기반. 실제·다른 전역·개인으로 재확장하지 않는다.
         from world.rules import RuleError
 
-        commands = parse_definition(ARGUMENT_SHORTCUTS[action]).bind(args)
+        commands = parse_definition(ARGUMENT_SHORTCUTS[action]).bind_segments(args)
         if len(commands) != 1:
             raise RuleError("인자형 전역 단축어는 하나의 실제 명령만 실행할 수 있습니다.")
         from commands.command_shortcuts import GlobalShortcut

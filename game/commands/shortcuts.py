@@ -15,6 +15,9 @@ MAX_NAME_CHARACTERS = 20
 MAX_SHORTCUTS = 100
 MAX_DEFINITION_CHARACTERS = 2000
 MAX_ARGUMENT_CHARACTERS = 2000
+# 중간 개인 호출은 2,000자 인자 + 20자 이름 + 구분 공백까지 허용한다.
+# 최종 명령 누적 1,000자 한도와 별개이며 파서에도 이보다 큰 치환값을 전달하지 않는다.
+MAX_INTERMEDIATE_CHARACTERS = MAX_ARGUMENT_CHARACTERS + MAX_NAME_CHARACTERS + 1
 DELETE_ALL_CONFIRM_TTL_SECONDS = 60
 _NAME = re.compile(r"[가-힣ㄱ-ㅎㅏ-ㅣ\u1100-\u11ff\ua960-\ua97f\ud7b0-\ud7ffA-Za-z0-9_]{1,20}\Z")
 _CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
@@ -58,12 +61,35 @@ class Variable:
 
 
 @dataclass(frozen=True)
+class BoundSegment:
+    tokens: tuple[str | Variable, ...]
+    values: tuple[str, ...]
+
+    def pieces(self):
+        for token in self.tokens:
+            yield self.values[0 if token.key == "*" else int(token.key)] if isinstance(token, Variable) else token
+
+    def render(self, maximum=MAX_INTERMEDIATE_CHARACTERS):
+        # 반복 문자열을 만들지 않고 길이만 합산한다. join 이전·축적 중 모두 검사한다.
+        expected = sum(len(piece) for piece in self.pieces())
+        if expected > maximum:
+            raise RuleError("줄임말 치환 문자열이 허용 크기를 초과했습니다. 남은 실행을 중단합니다.")
+        parts, size = [], 0
+        for piece in self.pieces():
+            size += len(piece)
+            if size > maximum:
+                raise RuleError("줄임말 치환 문자열이 허용 크기를 초과했습니다.")
+            parts.append(piece)
+        return "".join(parts).strip()
+
+
+@dataclass(frozen=True)
 class Definition:
     segments: tuple[tuple[str | Variable, ...], ...]
     positions: frozenset[int]
     all_arguments: bool
 
-    def bind(self, arguments):
+    def bind_segments(self, arguments):
         text = _input(arguments, MAX_ARGUMENT_CHARACTERS)
         args = text.split()
         required = max(self.positions, default=0)
@@ -71,11 +97,12 @@ class Definition:
             raise RuleError("줄임말 호출 인자가 부족합니다.")
         if not self.all_arguments and len(args) > required:
             raise RuleError("줄임말에서 사용하지 않는 추가 인자가 있습니다.")
-        values = {str(index): value for index, value in enumerate(args, 1)}
-        values["*"] = " ".join(args)
+        values = (" ".join(args), *args[:9])
         # 사용자 인자는 토큰으로 다시 분석하지 않는다. 경계도 다시 분할하지 않는다.
-        return tuple("".join(values[token.key] if isinstance(token, Variable) else token
-                             for token in segment).strip() for segment in self.segments)
+        return tuple(BoundSegment(segment, values) for segment in self.segments)
+
+    def bind(self, arguments):
+        return tuple(segment.render() for segment in self.bind_segments(arguments))
 
 
 def parse_definition(definition):

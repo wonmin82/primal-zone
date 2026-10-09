@@ -55,6 +55,129 @@ class CommandShortcutsTests(WorldCommandTest):
         self.run_raw("귀환, 승강기, 5층, 동, 북 해")
         self.assertEqual(self.char1.zone, "weapon_shop")
 
+    def test_large_variable_segments_stop_lazily_without_parser_amplification(self):
+        from commands.shortcuts import MAX_INTERMEDIATE_CHARACTERS
+        from server.conf.cmdparser import select_command
+
+        self.register("증폭", "$*" * 1000)
+        before = deepcopy(self.char1.profile_snapshot())
+        with patch("server.conf.cmdparser.select_command", wraps=select_command) as selected:
+            self.assertIn("허용 크기", self.run_raw("x" * 2000 + " 증폭"))
+        self.assertLessEqual(max(len(call.args[0]) for call in selected.call_args_list),
+                             MAX_INTERMEDIATE_CHARACTERS)
+        self.assertEqual(self.char1.profile_snapshot(), before)
+        self.register("부분", "귀환, $*$* 해")
+        self.assertIn("허용 크기", self.run_raw("x" * 2000 + " 부분"))
+        self.assertEqual(self.char1.zone, "support_roof")
+        self.assertIsNone(self.char1.ndb.shortcut_execution)
+
+    def test_nested_and_global_substitutions_share_bounded_rendering(self):
+        from commands.aliases import ARGUMENT_SHORTCUTS
+
+        self.register("말검", "$* 말")
+        self.register("중간", "$*$* 말검")
+        self.assertIn("허용 크기", self.run_raw("x" * 1100 + " 중간"))
+        self.assertIn("1,000", self.run_raw("x" * 1001 + " 말검"))
+        with patch.dict(ARGUMENT_SHORTCUTS, {"gsize": "$*" * 1000}):
+            self.assertIn("허용 크기", self.run_raw("x" * 2000 + " gsize"))
+        self.char1.change(lambda p: p.update(command_shortcuts={
+            **{f"a{i}": "$* a" + str(i+1) for i in range(4)}, "a4": "$* 말"}))
+        with patch.object(self.char2, "msg") as observer:
+            self.run_raw("짧은인자 a0")
+        self.assertIn("짧은인자", str(observer.call_args_list))
+
+    def ambiguity_cmdset(self, handler=None):
+        from commands.command_shortcuts import Sequence
+
+        calls = []
+        class Regular(Command):
+            key = "일반후보"
+            aliases = ("겹침",)
+            input_style = "target"
+            def func(self):
+                calls.append("regular")
+        class Bundle(Sequence):
+            key = "묶음후보"
+            aliases = ("겹침",)
+        commands = CmdSet(key="AmbiguityReview")
+        commands.priority = 100
+        commands.duplicates = True
+        commands.add(Regular(locks="cmd:all()"))
+        commands.add(Bundle(locks="cmd:all()"), allow_duplicates=True)
+        if handler:
+            commands.add(handler)
+        return commands, calls
+
+    def test_custom_multimatch_cannot_select_or_wait_inside_execution(self):
+        from evennia.commands.cmdhandler import CMD_MULTIMATCH
+
+        for progressive in (False, True):
+            called = []
+            handler = Command(key=CMD_MULTIMATCH, locks="cmd:all()")
+            def choose():
+                called.append(True)  # 안전 확인 없이 후보 실행을 시작할 수 있는 지점
+            def wait():
+                called.append(True)
+                yield "선택?"
+            handler.func = wait if progressive else choose
+            commands, calls = self.ambiguity_cmdset(handler)
+            self.char1.cmdset.add(commands)
+            self.char1.change(lambda p: p.update(command_shortcuts={"점검": "겹침, 귀환 해"}))
+            self.run_raw("점검")
+            self.assertEqual(called, [])
+            self.assertEqual(calls, [])
+            self.assertEqual(self.char1.zone, "dock")
+            self.assertIsNone(self.char1.ndb.shortcut_execution)
+            self.char1.cmdset.remove(commands.key)
+
+    def test_default_multimatch_only_lists_candidates_then_continues(self):
+        commands, calls = self.ambiguity_cmdset()
+        self.char1.cmdset.add(commands)
+        self.char1.change(lambda p: p.update(command_shortcuts={"점검": "겹침, 귀환 해"}))
+        output = self.run_raw("점검")
+        self.assertIn("겹침-1", output)
+        self.assertIn("겹침-2", output)
+        self.assertEqual(calls, [])
+        self.assertEqual(self.char1.zone, "support_roof")
+        self.char1.location = self.rooms["dock"]
+        self.run_raw("일반후보, 귀환 해")  # 최종 단일 일반 후보는 묶음 후보와 독립
+        self.assertEqual(calls, ["regular"])
+        self.char1.location = self.rooms["dock"]
+        self.char1.change(lambda p: p.update(command_shortcuts={"선택": "묶음후보, 귀환 해"}))
+        self.assertIn("새 묶음", self.run_raw("선택"))
+        self.assertEqual(self.char1.zone, "dock")
+
+    def test_dynamic_multimatch_appears_only_after_previous_command_finishes(self):
+        commands, calls = self.ambiguity_cmdset()
+        add = Command(key="후보추가", locks="cmd:all()")
+        add.func = lambda: self.char1.cmdset.add(commands)
+        setup = CmdSet(key="DynamicAmbiguityReview")
+        setup.add(add)
+        self.char1.cmdset.add(setup)
+        output = self.run_raw("후보추가, 겹침, 귀환 해")
+        self.assertIn("겹침-1", output)
+        self.assertIn("겹침-2", output)
+        self.assertEqual(calls, [])
+        self.assertEqual(self.char1.zone, "support_roof")
+
+    def test_async_helper_with_explicit_contract_is_rejected_before_side_effects(self):
+        work = []
+        gate = Deferred()
+        def helper():
+            work.append("started")
+            return gate
+        command = Command(key="도우미검사", locks="cmd:all()")
+        command.shortcut_completion_guaranteed = False
+        command.func = lambda: helper()
+        commands = CmdSet(key="AsyncHelperReview")
+        commands.add(command)
+        self.char1.cmdset.add(commands)
+        output = self.run_raw("도우미검사, 귀환 해")
+        self.assertIn("완료", output)
+        self.assertEqual(work, [])
+        self.assertFalse(gate.called)
+        self.assertEqual(self.char1.zone, "dock")
+
     def test_dispatch_waits_for_engine_pre_and_post_hooks_without_sleep(self):
         for hook in ("at_pre_cmd", "at_post_cmd"):
             gate = Deferred()

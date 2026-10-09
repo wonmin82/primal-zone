@@ -9,6 +9,26 @@ from world import rules
 
 
 class CommandShortcutRulesTests(TestCase):
+    def test_repeated_star_is_bounded_before_string_allocation(self):
+        import tracemalloc
+
+        definition = sc.parse_definition("$*" * 1000)
+        tracemalloc.start()
+        try:
+            with self.assertRaises(rules.RuleError):
+                definition.bind("x" * 2000)
+            self.assertLess(tracemalloc.get_traced_memory()[1], 131072)
+        finally:
+            tracemalloc.stop()
+
+    def test_segment_binding_is_lazy_and_has_a_remaining_budget(self):
+        segments = sc.parse_definition("상태, $*$* 해").bind_segments("x" * 2000)
+        self.assertEqual(segments[0].render(), "상태")
+        with self.assertRaises(rules.RuleError):
+            segments[1].render()
+        with self.assertRaises(rules.RuleError):
+            sc.parse_definition("$*").bind_segments("x" * 1001)[0].render(maximum=1000)
+
     def test_sequence_and_definition_keep_commas_in_chat(self):
         self.assertEqual(sc.parse_sequence("상태, 장비"), ["상태", "장비"])
         self.assertEqual(sc.parse_shortcut_definition("상태, 장비, 소지품 해"), ["상태", "장비", "소지품"])
