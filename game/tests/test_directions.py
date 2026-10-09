@@ -49,6 +49,8 @@ class DirectionIntegrationTests(WorldCommandTest):
 
     def test_diagonal_look_is_distant_read_only_and_accepts_aliases(self):
         before = self.char1.profile_snapshot()
+        # 관찰 효과와 무관한 정상 자연회복 경계가 전체 profile 비교에 섞이지 않게 한다.
+        self.enterContext(patch("typeclasses.explorers.time", return_value=before["recovery"]["updated_at"]))
         for command, destination in (("북동 보기", "support_roof_ne"), ("ne 보기", "support_roof_ne"),
                                      ("남서 봐", "support_roof_sw"), ("sw 봐", "support_roof_sw")):
             self.assertIn(ROOMS[destination]["name"], "\n".join(map(str, self.raw(command))))
