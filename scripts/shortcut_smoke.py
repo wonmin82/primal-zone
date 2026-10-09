@@ -23,9 +23,23 @@ async def scenario(harness, report):
         if expected not in output:
             raise AssertionError((raw, expected, output))
         report.append({"player": player.name, "command": raw, "expected": expected, "result": "PASS"})
+        if raw.endswith(" 도움말"):
+            report[-1]["output"] = output
 
     try:
         await asyncio.gather(*(player.open() for player in players))
+        for name in ("해", "줄임말", "해지", "단축어"):
+            await command(first, name + " 도움말", f"[{name}]")
+            output = report[-1]["output"]
+            titles = ("사용법", "예시", "실행 규칙", "제한", "관련 도움말")
+            assert [line for line in output.splitlines() if line in titles] == list(titles)
+            assert "\n\n\n" not in output
+        for name in ("공격", "보기", "상태"):
+            await command(first, name + " 도움말", "사용법:")
+        await command(first, "증폭 " + "$*" * 1000 + " 줄임말", "추가했습니다")
+        before = first.state["zone"]
+        await command(first, "x" * 2000 + " 증폭", "허용 크기")
+        assert first.state["zone"] == before
         await command(first, "장확 장비 줄임말", "추가했습니다")
         await command(first, "장확 줄임말", "장확 = 장비")
         await command(second, "장확 줄임말", "찾을 수 없습니다")
