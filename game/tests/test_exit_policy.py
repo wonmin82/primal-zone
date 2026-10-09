@@ -51,7 +51,7 @@ class ExitPolicyTests(WorldCommandTest):
                 obj = create_object(cls, key=name, aliases=[alias], location=self.origin,
                                     destination=self.rooms["hq_stairs_5f"])
                 self.assertEqual(obj.tags.all(), [])
-                self.char1.change(lambda p: p.update(hp=1, command_shortcuts={"실패": [name + " 잘못된인자"]}))
+                self.char1.change(lambda p: p.update(hp=1, command_shortcuts={"실패": name + " 잘못된인자"}))
                 before = self.snapshot()
                 with patch("typeclasses.explorers.time", return_value=160):
                     for raw in (name + " 잘못된인자", alias + " 잘못된인자", "실패",
@@ -87,3 +87,18 @@ class ExitPolicyTests(WorldCommandTest):
             self.char1.execute_cmd(raw)
             self.assertEqual(self.char1.location, self.origin, raw)
             self.assertFalse(self.char1.db.exit_hook_ran, raw)
+
+    def test_custom_exit_argument_matching_does_not_hide_postfix_personal_call(self):
+        from world import text as ft
+
+        obj = create_object(PermissiveExit, key="북", aliases=["n"], location=self.origin,
+                            destination=self.rooms["hq_stairs_5f"])
+        self.char1.execute_cmd("정찰 $1 보기, 상태 해 줄임말")
+        before = self.snapshot()
+        with patch.object(obj, "return_appearance", return_value=ft.text("개인 호출 관찰 결과")):
+            for raw in ("북 정찰", "n 정찰"):
+                with patch.object(self.char1, "msg") as output:
+                    self.char1.execute_cmd(raw)
+                self.assertIn("개인 호출 관찰 결과", str(output.call_args_list))
+                self.assertEqual(self.snapshot(), before)
+                self.assertFalse(self.char1.db.exit_hook_ran)

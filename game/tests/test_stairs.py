@@ -50,7 +50,7 @@ class StairsTests(WorldCommandTest):
             self.assertEqual(self.char1.zone, zone)
 
     def test_invalid_exit_and_failed_move_do_not_settle_recovery_boundary(self):
-        self.char1.change(lambda p: p.update(hp=1, command_shortcuts={"잘못": ["계단 올라"]}))
+        self.char1.change(lambda p: p.update(hp=1, command_shortcuts={"잘못": "계단 올라"}))
         before = deepcopy(self.char1.profile_snapshot())
         with patch("typeclasses.explorers.time", return_value=160):
             for command in ("계단 올라", "잘못", "계단 올라, 계단 내려 해"):
@@ -69,7 +69,7 @@ class StairsTests(WorldCommandTest):
             self.char1.execute_cmd(command)
             self.assertEqual(self.char1.zone, "dock")
             self.assertEqual(self.char1.profile_snapshot(), before)
-        self.char1.change(lambda p: p.update(command_shortcuts={"잘못": ["북 잘못된인자"]}))
+        self.char1.change(lambda p: p.update(command_shortcuts={"잘못": "북 잘못된인자"}))
         self.char1.execute_cmd("잘못")
         self.assertEqual(self.char1.zone, "dock")
         self.char1.execute_cmd("북 잘못된인자, 북 해")

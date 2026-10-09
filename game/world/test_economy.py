@@ -21,7 +21,7 @@ class EconomyRulesTests(TestCase):
         self.assertIn("[소지품] 127칩", presentation.inventory(profile))
         self.assertIn("비어 있다.", presentation.inventory(profile))
         self.assertNotIn("chip", ITEMS)
-        self.assertEqual(rules.PROFILE_VERSION, 10)
+        self.assertEqual(rules.PROFILE_VERSION, 11)
 
     def test_amount_and_common_selector_are_distinct(self):
         for raw, amount, index in (("칩", 1, None), ("20칩", 20, None),

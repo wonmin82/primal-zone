@@ -289,4 +289,4 @@ class GrowthReviewTests(WorldCommandTest):
             self.assertEqual(search_tag(enemy.db.spawn_id, category="primal_spawn")[0].id, enemy.id)
             self.assertEqual({obj.id for room in self.rooms.values() for obj in action_objects(room)}, old_ids)
             self.assertEqual(self.char1.profile(), before)
-            self.assertEqual(self.char1.profile()["version"], 10)
+            self.assertEqual(self.char1.profile()["version"], 11)

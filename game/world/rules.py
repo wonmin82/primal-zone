@@ -16,7 +16,7 @@ from world.progression import ATTRIBUTES, SKILLS
 from world.quests import progress_defaults
 
 MAX_LEVEL = pg.MAX_LEVEL
-PROFILE_VERSION = 10
+PROFILE_VERSION = 11
 DEFEAT_RECOVERY_HP = 1
 
 
@@ -538,14 +538,14 @@ def migrate_profile(profile):
         result["discoveries"] = dict(result.get("discoveries") or {})
         result["discoveries"]["supply_cache"] = bool(result.pop("cache_claimed", False))
     if version < 8:
-        from commands.vocabulary import migrate_shortcuts
+        from commands.vocabulary import migrate_safe_shortcuts, migrate_shortcuts
 
         skills = result.get("skills", {})
         if "heal" in skills:
             skills["firstaid"] = skills.pop("heal")
         if result.get("queued_action") == "heal":
             result["queued_action"] = "firstaid"
-        result["command_shortcuts"] = migrate_shortcuts(result.get("command_shortcuts", {}))
+        result["command_shortcuts"] = migrate_safe_shortcuts(result.get("command_shortcuts", {}), migrate_shortcuts)
     if version < PROFILE_VERSION:
         result.setdefault("storage", {})
         result.setdefault("light_sources", {})
@@ -565,9 +565,13 @@ def migrate_profile(profile):
         result["heal_target"] = None
         result.pop("guard_until", None)
         result.pop("proficiencies", None)
-        from commands.vocabulary import migrate_progression_shortcuts
+        from commands.vocabulary import migrate_progression_shortcuts, migrate_safe_shortcuts
 
-        result["command_shortcuts"] = migrate_progression_shortcuts(result.get("command_shortcuts", {}))
+        result["command_shortcuts"] = migrate_safe_shortcuts(result.get("command_shortcuts", {}), migrate_progression_shortcuts)
+    if version < 11:
+        from commands.vocabulary import migrate_string_shortcuts
+
+        result["command_shortcuts"] = migrate_string_shortcuts(result.get("command_shortcuts", {}))
     normalize_growth(result)
     recovery.clamp(result, stats(result))
     return result

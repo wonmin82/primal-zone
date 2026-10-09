@@ -331,7 +331,7 @@ class EquipmentEntityTests(GameCommandTest):
         saved = deserialize(self.char1.db.profile)
         self.assertNotIsInstance(saved, eq.EquipmentProfile)
         self.assertNotIn("equipment_context", saved)
-        self.assertEqual(saved["version"], 10)
+        self.assertEqual(saved["version"], 11)
 
     def test_web_payload_uses_instance_labels_and_active_snapshot(self):
         self.definition("weapon")

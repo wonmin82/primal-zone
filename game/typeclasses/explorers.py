@@ -220,11 +220,12 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             ):
                 self.reconcile_recovery(now, emit_prompt=False)
 
-    def end_command_output(self):
+    def end_command_output(self, *, emit_prompt=True):
         self.ndb.command_output_depth = max(0, (self.ndb.command_output_depth or 0) - 1)
         if not self.ndb.command_output_depth:
             self.cancel_pending_prompt()
-            self.push_prompt()
+            if emit_prompt:
+                self.push_prompt()
 
     def request_prompt(self):
         """같은 reactor 구간의 전투/이동 출력을 마친 뒤 한 번만 전송한다."""
@@ -387,6 +388,9 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             self.end_command_output()
 
     def at_post_unpuppet(self, account=None, session=None, **kwargs):
+        from commands.shortcut_execution import stop_execution
+
+        stop_execution(self, session)
         self.ndb.shortcut_delete_all_request = None
         if not self.sessions.count():
             self.cancel_pending_prompt()
@@ -404,6 +408,9 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             after_change(lambda: self.msg("광원의 전원이 다 되어 빛이 꺼졌다."))
 
     def at_server_shutdown(self):
+        from commands.shortcut_execution import stop_execution
+
+        stop_execution(self)
         self.cancel_pending_prompt()
         self.ndb.shortcut_delete_all_request = None
         self.reconcile_lights(time(), turn_off=True)

@@ -18,11 +18,11 @@ V7_GLOBAL_SHORTCUTS = {
 }
 
 
-def migrate_shortcuts(shortcuts):
+def migrate_shortcuts(shortcuts, occupied_names=()):
     """새 예약 이름은 보존하며 rename하고, 정확한 참조와 명령 위치만 변환한다."""
     from commands.shortcuts import MAX_NAME_CHARACTERS
 
-    occupied = set(shortcuts)
+    occupied = set(shortcuts) | set(occupied_names)
     renamed = {}
     for name in sorted(shortcuts):
         if name.casefold() not in NEW_RESERVED_NAMES:
@@ -31,7 +31,7 @@ def migrate_shortcuts(shortcuts):
         while True:
             suffix = "_개인" + (str(index) if index > 1 else "")
             candidate = name[:MAX_NAME_CHARACTERS - len(suffix)] + suffix
-            if candidate not in occupied:
+            if candidate.casefold() not in {key.casefold() for key in occupied}:
                 break
             index += 1
         renamed[name] = candidate
@@ -58,12 +58,12 @@ def migrate_shortcuts(shortcuts):
             for name, values in shortcuts.items()}
 
 
-def migrate_progression_shortcuts(shortcuts):
+def migrate_progression_shortcuts(shortcuts, occupied_names=()):
     """v10의 새 명령과 충돌하는 개인 정의를 보존하고 제거된 action만 변환한다."""
     from commands.shortcuts import MAX_NAME_CHARACTERS
 
     reserved = {"사격", "shooting", "간파", "insight", "견제", "suppress", "호흡", "breathing", "사용"}
-    occupied, renamed = set(shortcuts), {}
+    occupied, renamed = set(shortcuts) | set(occupied_names), {}
     for name in sorted(shortcuts):
         if name.casefold() not in reserved:
             continue
@@ -71,7 +71,7 @@ def migrate_progression_shortcuts(shortcuts):
         while True:
             suffix = "_개인" + (str(index) if index > 1 else "")
             candidate = name[:MAX_NAME_CHARACTERS - len(suffix)] + suffix
-            if candidate not in occupied:
+            if candidate.casefold() not in {key.casefold() for key in occupied}:
                 break
             index += 1
         occupied.add(candidate)
@@ -88,3 +88,65 @@ def migrate_progression_shortcuts(shortcuts):
         return value
 
     return {renamed.get(name, name): [command(value) for value in values] for name, values in shortcuts.items()}
+
+
+def migrate_safe_shortcuts(shortcuts, transform):
+    """v8/v10에는 정상 이름·명령 목록만 전달하며 비정상 항목을 원본으로 남긴다."""
+    from world.rules import RuleError
+
+    from commands.shortcuts import (
+        normalized_keys,
+        parse_definition,
+        parse_shortcut_definition,
+        shortcut_name,
+    )
+
+    if not isinstance(shortcuts, dict) or any(not isinstance(key, str) for key in shortcuts):
+        return shortcuts
+    safe, strings = {}, set()
+    for key, value in shortcuts.items():
+        try:
+            name = shortcut_name(key)
+            if len(normalized_keys(shortcuts, name)) != 1:
+                continue
+            if isinstance(value, str):
+                parse_definition(value)
+                values = parse_shortcut_definition(value)
+                strings.add(key)
+            else:
+                values = value
+            if not isinstance(values, list) or not values or any(not isinstance(v, str) for v in values):
+                continue
+            for command in values:
+                parse_definition(command)
+            safe[key] = values
+        except RuleError:
+            continue
+    changed = transform(safe, occupied_names=shortcuts)
+    preserved = {key: value for key, value in shortcuts.items() if key not in safe}
+    # transform의 rename 기준을 항목별로 반복하지 않는다. 참조 변환도 기존 함수를 따른다.
+    for (original_key, original_values), (key, value) in zip(safe.items(), changed.items(), strict=True):
+        if original_key in strings:
+            value = shortcuts[original_key] if value == original_values else value[0] if len(value) == 1 else ", ".join(value) + " 해"
+        preserved[key] = value
+    return preserved
+
+
+def migrate_string_shortcuts(shortcuts):
+    from world.rules import RuleError
+
+    from commands.shortcuts import normalized_keys, safe_legacy_definition, shortcut_name
+
+    if not isinstance(shortcuts, dict) or any(not isinstance(key, str) for key in shortcuts):
+        return shortcuts
+    result = dict(shortcuts)
+    for key, value in shortcuts.items():
+        try:
+            if len(normalized_keys(shortcuts, shortcut_name(key))) != 1:
+                continue
+        except RuleError:
+            continue
+        converted = safe_legacy_definition(value)
+        if converted is not None:
+            result[key] = converted
+    return result

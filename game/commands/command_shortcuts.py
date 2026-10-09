@@ -1,6 +1,5 @@
-"""개인 설정과 서버 dispatcher를 연결한다. gameplay 규칙을 직접 실행하지 않는다."""
+"""후치형 개인 설정과 순차 실행 진입점. 실제 명령은 실행기가 매 단계 선택한다."""
 
-from inspect import iscoroutinefunction, isgeneratorfunction
 from time import monotonic
 
 from evennia import Command
@@ -10,13 +9,18 @@ from world import text as ft
 
 from commands.base import GameCommand
 from commands.shortcuts import (
+    MAX_ARGUMENT_CHARACTERS,
+    MAX_DEFINITION_CHARACTERS,
+    MAX_SHORTCUTS,
+    _input,
     delete_all_request,
-    expand_shortcuts,
+    normalized_keys,
+    parse_definition,
     parse_sequence,
-    parse_shortcut_definition,
+    require_shortcut_store,
     shortcut_name,
+    stored_key,
     validate_delete_all,
-    validate_shortcut_graph,
 )
 
 
@@ -26,12 +30,12 @@ def reserved_names(cmdset):
     from world.content import DIRECTION_ALIASES, ROOMS
     from world.progression import SKILLS
 
-    from commands.aliases import SHORTCUTS
+    from commands.aliases import ARGUMENT_SHORTCUTS, SHORTCUTS
     from commands.default_cmdsets import UnloggedinCmdSet
     from commands.registry import COMMANDS
     from commands.vocabulary import FUTURE_RESERVED_COMMAND_NAMES
 
-    names = set(SHORTCUTS) | set(FUTURE_RESERVED_COMMAND_NAMES)
+    names = {"줄임말", "해지", "해", "전역"} | set(SHORTCUTS) | set(ARGUMENT_SHORTCUTS) | set(FUTURE_RESERVED_COMMAND_NAMES)
     names.update(data["name"] for data in SKILLS.values())
     for commands in (cmdset, UnloggedinCmdSet()):
         names.update(commands.get_all_cmd_keys_and_aliases())
@@ -46,132 +50,226 @@ def reserved_names(cmdset):
             for normalized in (name.casefold(), name.casefold().lstrip(settings.CMD_IGNORE_PREFIXES))}
 
 
+
 class Sequence(Command):
-    read_only = True  # 각 leaf 명령이 자기 동작의 정산/transaction을 담당한다.
+    read_only = True
     key = "해"
     input_style = "target"
     help_category = "원시구역"
     category = "편의"
     usage = "상태, 장비, 소지품 해"
-    summary = "두 명령 이상을 순서대로 실행합니다. 개별 명령 실패 뒤에도 계속하며 묶음은 transaction이 아닙니다."
+    summary = "현재 장소의 명령을 순서대로 선택합니다. 최대 10회·합계 1,000자이며, 구조 오류 뒤 남은 실행은 중단합니다. 이미 끝난 동작은 되돌리지 않습니다. 추가 입력 명령은 지원하지 않습니다."
 
-    def commands_to_expand(self):
-        return parse_sequence(self.args)
+    def initial_items(self):
+        from commands.shortcut_execution import QueueItem
+
+        _input(self.raw_string, MAX_DEFINITION_CHARACTERS)
+        return tuple(QueueItem(text) for text in parse_sequence(self.args))
 
     def func(self):
-        self.flat_commands = []
-        try:
-            if getattr(self, "primal_sequence_leaf", False):
-                raise rules.RuleError("묶음 실행 중 새로 생긴 줄임말·묶음은 다시 확장하지 않습니다.")
-            commands = expand_shortcuts(
-                self.commands_to_expand(),
-                self.caller.profile_snapshot().get("command_shortcuts", {}),
-                reserved_names(self.cmdset),
-            )
-            from server.conf.cmdparser import cmdparser
+        from commands.shortcut_execution import Execution, Invocation
 
-            for command in commands:
-                for match in cmdparser(command, self.cmdset, self.caller, session=self.session):
-                    # 6.1의 progressive func는 dispatcher Deferred보다 늦게 끝난다.
-                    if isgeneratorfunction(match[2].func) or iscoroutinefunction(match[2].func):
-                        raise rules.RuleError("추가 입력·대기를 사용하는 엔진 명령은 묶음 밖에서 실행하세요.")
-            self.flat_commands = commands
+        self.execution = None
+        try:
+            _input(self.raw_string, len(self.raw_string))  # 엔진이 trim하기 전 개행/제어문자도 거절한다.
+            origin = getattr(self, "shortcut_invocation", None)
+            if isinstance(origin, Invocation) and not origin.direct:
+                raise rules.RuleError("단일 세그먼트에서 새 묶음을 생성할 수 없습니다.")
+            self.execution = Execution.start(self.caller, self.session, self.initial_items())
+            self.shortcut_invocation = Invocation(self.execution)
+            self.execution.outputs.append(self)
         except rules.RuleError as error:
             self.caller.msg(ft.text(ft.token("error", str(error)), kind="error"))
 
     @inlineCallbacks
     def at_post_cmd(self):
-        # Evennia 6.1은 일반 func의 Deferred 반환은 기다리지 않지만 이 hook은 yield한다.
-        for command in self.flat_commands:
-            yield self.caller.execute_cmd(command, session=self.session, primal_sequence_leaf=True)
+        if self.execution:
+            yield self.execution.run()
 
 
 class PersonalShortcut(Sequence):
-    """정상 match가 없는 exact input에만 parser가 제공하는 내부 명령."""
-
     key = "__personal_shortcut"
 
-    def commands_to_expand(self):
-        return [self.args]
+    def initial_items(self):
+        from commands.shortcut_execution import QueueItem
+
+        parts = self.raw_string.rsplit(None, 1)
+        _input(parts[0] if len(parts) == 2 else "", MAX_ARGUMENT_CHARACTERS)
+        return (QueueItem(self.raw_string),)
+
+
+class GlobalShortcut(Sequence):
+    key = "__argument_global_shortcut"
+
+    def initial_items(self):
+        from commands.shortcut_execution import QueueItem
+
+        parts = self.raw_string.rsplit(None, 1)
+        _input(parts[0] if len(parts) == 2 else "", MAX_ARGUMENT_CHARACTERS)
+        return (QueueItem(self.global_command, global_expanded=True),)
 
 
 class Shortcuts(GameCommand):
+    read_only = True  # 조회/검증 실패 및 전체 삭제는 자연회복을 저장하지 않는다.
     key = "줄임말"
-    input_style = "prefix"
+    input_style = "target"
     category = "편의"
-    usage = (
-        "줄임말 · 줄임말 추가 이름 정의 · 줄임말 삭제 이름 · "
-        "줄임말 모두 삭제 · 줄임말 모두 삭제 확인"
+    usage = "줄임말 · 이름 줄임말 · 이름 정의 줄임말 · 전역 줄임말 · 모두 삭제 줄임말 · 모두 삭제 확인 줄임말"
+    summary = "원본 정의를 최대 100개 저장합니다. 이름은 1~20자, 정의는 2,000자입니다. $1~$9·$*·$$로 한 번 치환하며 행동 이름도 바꿀 수 있습니다. 중첩은 5단계, 순환은 실행 시 중단합니다. 내부 공백은 보존합니다. 전체 삭제는 각각 직접 입력해 60초 안에 확인하세요. 비활성 항목은 유효한 정의로 재등록합니다."
+    help_details = (
+        "예: 정찰 $1 보기, 상태 해 줄임말 → 북 정찰",
+        "예: 실행 $* 줄임말 → 상태 실행 / 이름 해지로 개별 삭제",
+        "$*는 인자가 필요하며 $$는 리터럴 $입니다. $* 없이 위치 변수는 $1부터 연속해야 합니다.",
+        "실제 명령·잠긴 명령·Exit·전역 단축어가 우선하며 각 단계의 현재 장소에서 명령을 선택합니다.",
+        "콤마 포함 정의는 직접 등록하세요. 치환으로 새 묶음을 만들 수 없습니다.",
+        "정의 오류 뒤에는 남은 실행을 중단하며 이미 완료한 동작은 되돌리지 않습니다.",
+        "같은 캐릭터는 순차 실행 하나만 가능합니다. 입력 대기·완료 불명확 명령은 밖에서 실행하세요.",
+        "전체 삭제 확인은 60초 미만·목록 불변일 때만 한 번 가능합니다. 간접 요청·확인은 거절합니다.",
     )
-    summary = "캐릭터 개인 줄임말을 관리합니다. 전체 삭제 요청과 확인은 각각 직접 입력하며, 60초 안에 확인해야 합니다. 목록 변경 시 요청이 취소됩니다."
 
     def run(self):
+        _input(self.raw_string, len(self.raw_string))
         args = self.args.strip()
-        # 금지된 간접 실행은 요청 생성·기존 요청 소비 전에 거절한다.
-        if args in ("모두 삭제", "모두 삭제 확인") and getattr(self, "primal_sequence_leaf", False):
-            raise rules.RuleError("전체 삭제 요청과 확인은 각각 직접 입력하세요. 묶음·줄임말로 실행할 수 없습니다.")
+        special = " ".join(args.split())
+        if special in ("모두 삭제 확인", "모두 삭제"):
+            self.delete_all(special)
+            return
+        if args == "전역":
+            from commands.help_pages import shortcut_page
+
+            self.caller.msg(shortcut_page())
+            return
         shortcuts = self.caller.profile_snapshot().get("command_shortcuts", {})
+        require_shortcut_store(shortcuts)
         if not args:
-            entries = [f"{name} = {', '.join(commands) + ' 해' if len(commands) > 1 else commands[0]}"
-                       for name, commands in sorted(shortcuts.items())]
-            self.caller.msg(ft.sheet("개인 줄임말", *(entries or ["등록된 개인 줄임말이 없습니다."])))
-            return
-        if args == "모두 삭제":
-            self.caller.ndb.shortcut_delete_all_request = delete_all_request(shortcuts, monotonic())
-            if not shortcuts:
-                self.caller.msg("삭제할 개인 줄임말이 없습니다.")
-                return
-            self.caller.msg(f"개인 줄임말 {len(shortcuts)}개를 모두 삭제합니다. "
-                            "계속하려면 '줄임말 모두 삭제 확인'을 입력하세요.")
-            return
-        if args == "모두 삭제 확인":
-            request = self.caller.ndb.shortcut_delete_all_request
-            self.caller.ndb.shortcut_delete_all_request = None  # 성공/실패 모두 one-shot
-
-            def clear(profile):
-                current = profile["command_shortcuts"]
-                validate_delete_all(request, current, monotonic())
-                count = len(current)
-                profile["command_shortcuts"] = {}
-                return count
-
-            count = self.caller.change(clear)
-            self.caller.msg(f"개인 줄임말 {count}개를 모두 삭제했습니다.")
+            self.listing(shortcuts)
             return
         parts = args.split(None, 1)
-        operation, rest = parts[0], parts[1] if len(parts) > 1 else ""
-        if operation == "추가":
-            parts = rest.split(None, 1)
-            if len(parts) != 2:
-                raise rules.RuleError("줄임말 추가 이름 정의")
-            name = shortcut_name(parts[0])
-            reserved = reserved_names(self.cmdset)
-            if name in reserved:
-                raise rules.RuleError("기존 명령·별칭·시스템 단축어는 줄임말 이름으로 사용할 수 없습니다.")
-            definition = parse_shortcut_definition(parts[1])
-
-            def register(profile):
-                current = profile["command_shortcuts"]
-                replacement = name in current
-                prospective = {**current, name: definition}
-                validate_shortcut_graph(prospective, reserved)
-                profile["command_shortcuts"] = prospective
-                return replacement
-
-            replaced = self.caller.change(register)
-            self.caller.ndb.shortcut_delete_all_request = None
-            self.caller.msg("줄임말을 변경했습니다." if replaced else "줄임말을 추가했습니다.")
+        name = shortcut_name(parts[0])
+        key = stored_key(shortcuts, name)
+        if len(parts) == 1:
+            if key is None:
+                raise rules.RuleError("등록된 개인 줄임말을 찾을 수 없습니다.")
+            preview, omitted = self.preview(shortcuts[key], 2000)
+            self.caller.msg(ft.sheet("개인 줄임말", f"{key} = {preview}",
+                                     *( ["나머지 정의는 생략했습니다."] if omitted else [])))
             return
-        if operation == "삭제":
-            name = shortcut_name(rest.strip())
+        definition = parts[1].strip()
+        parse_definition(definition)  # 다른 정의·실제 행동·참조 그래프는 검사하지 않는다.
+        from commands.shortcut_execution import Invocation
 
-            def remove(profile):
-                if name not in profile["command_shortcuts"]:
-                    raise rules.RuleError("등록된 개인 줄임말을 찾을 수 없습니다.")
-                del profile["command_shortcuts"][name]
+        origin = getattr(self, "shortcut_invocation", None)
+        if isinstance(origin, Invocation) and not origin.direct and "," in definition:
+            raise rules.RuleError("콤마를 포함하는 정의의 등록·수정은 직접 입력하세요.")
+        if name in reserved_names(self.cmdset):
+            raise rules.RuleError("기존 명령·별칭·시스템 단축어는 줄임말 이름으로 사용할 수 없습니다.")
 
-            self.caller.change(remove)
-            self.caller.ndb.shortcut_delete_all_request = None
-            self.caller.msg("줄임말을 삭제했습니다.")
+        def register(profile):
+            current = require_shortcut_store(profile.get("command_shortcuts"))
+            old_key = stored_key(current, name)
+            if old_key is None and len(current) >= MAX_SHORTCUTS:
+                raise rules.RuleError("개인 줄임말은 100개까지 등록할 수 있습니다.")
+            prospective = dict(current)
+            if old_key is not None:
+                del prospective[old_key]
+            prospective[name] = definition
+            profile["command_shortcuts"] = prospective
+            return old_key is not None
+
+        replaced = self.store_change(register)
+        self.caller.msg("줄임말을 변경했습니다." if replaced else "줄임말을 추가했습니다.")
+
+    def store_change(self, operation):
+        # 다른 진행·회복 상태를 바꾸지 않는 동일 프로필 저장 트랜잭션이다.
+        from world.multiplayer import world_change
+
+        with world_change():
+            profile = self.caller.profile()
+            result = operation(profile)
+            self.caller.save_profile(profile)
+            return result
+
+    @staticmethod
+    def preview(value, limit):
+        # 원본을 전부 직렬화해 거대한 임시 문자열을 만들지 않는다.
+        import reprlib
+
+        if isinstance(value, str):
+            return value[:limit], len(value) > limit
+        printer = reprlib.Repr()
+        printer.maxstring = limit
+        printer.maxother = limit
+        printer.maxlist = 8
+        printer.maxdict = 8
+        preview = printer.repr(value)
+        return preview[:limit], len(preview) > limit or "..." in preview
+
+    def listing(self, shortcuts):
+        entries = []
+        # 100개를 초과한 구형 저장값은 삭제하지 않고 화면만 제한한다.
+        for name in sorted(shortcuts)[:100]:
+            value = shortcuts[name]
+            collision = len(normalized_keys(shortcuts, name.casefold())) > 1
+            try:
+                shortcut_name(name)
+                parse_definition(value)
+                active = not collision
+            except rules.RuleError:
+                active = False
+            preview, omitted = self.preview(value, 120)
+            status = "정규화 충돌" if collision else "활성" if active else "비활성"
+            entries.append(f"{name[:120]} [{status}] = {preview}" + (" (생략)" if omitted else ""))
+        entries.append(f"전체 등록: {len(shortcuts)}개")
+        if len(shortcuts) > 100:
+            entries.append(f"{len(shortcuts) - 100}개 항목을 생략했습니다.")
+        entries.append("비활성 항목은 유효한 정의로 재등록하세요. 이름 충돌·잘못된 이름은 전체 삭제 또는 관리자 복구가 필요합니다.")
+        self.caller.msg(ft.sheet("개인 줄임말", *entries))
+
+    def delete_all(self, args):
+        from commands.shortcut_execution import Invocation
+
+        origin = getattr(self, "shortcut_invocation", None)
+        if not isinstance(origin, Invocation) or not origin.direct:
+            raise rules.RuleError("전체 삭제 요청과 확인은 각각 직접 입력하세요. 묶음·줄임말로 실행할 수 없습니다.")
+        if args == "모두 삭제":
+            shortcuts = self.caller.profile_snapshot().get("command_shortcuts", {})
+            request = delete_all_request(shortcuts, monotonic())
+            self.caller.ndb.shortcut_delete_all_request = request
+            if request is None:
+                self.caller.msg("삭제할 개인 줄임말이 없습니다.")
+                return
+            self.caller.msg(f"개인 줄임말 {len(shortcuts)}개를 모두 삭제합니다. 계속하려면 '모두 삭제 확인 줄임말'을 입력하세요.")
             return
-        raise rules.RuleError(self.usage)
+        request = self.caller.ndb.shortcut_delete_all_request
+        self.caller.ndb.shortcut_delete_all_request = None  # 직접 확인은 성공/실패 모두 일회성이다.
+
+        def clear(profile):
+            current = profile.get("command_shortcuts")
+            validate_delete_all(request, current, monotonic())
+            count = len(current)
+            profile["command_shortcuts"] = {}
+            return count
+
+        count = self.store_change(clear)
+        self.caller.msg(f"개인 줄임말 {count}개를 모두 삭제했습니다.")
+
+
+class DeleteShortcut(Shortcuts):
+    key = "해지"
+    usage = "이름 해지"
+    summary = "개인 줄임말 하나를 삭제합니다. 모두 해지는 '모두'라는 이름 하나만 삭제합니다."
+    help_details = ()
+
+    def run(self):
+        _input(self.raw_string, len(self.raw_string))
+        name = shortcut_name(self.args.strip())
+
+        def remove(profile):
+            current = require_shortcut_store(profile.get("command_shortcuts"))
+            key = stored_key(current, name)
+            if key is None:
+                raise rules.RuleError("등록된 개인 줄임말을 찾을 수 없습니다.")
+            del current[key]
+
+        self.store_change(remove)
+        self.caller.msg("줄임말을 삭제했습니다.")

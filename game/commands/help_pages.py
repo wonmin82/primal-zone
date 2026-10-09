@@ -88,6 +88,7 @@ def help_page(query, commands):
     if selected:
         lines = [selected.summary, ft.text("사용법: ", ft.usage(getattr(selected, "usage", "") or selected.key,
                                                             {selected.key, *selected.aliases}))]
+        lines.extend(getattr(selected, "help_details", ()))
         if selected.aliases:
             lines.append(ft.text("별칭: ", commands_text(selected.aliases)))
         shortcuts = [source for source, target in SHORTCUTS.items() if target == selected.key]
