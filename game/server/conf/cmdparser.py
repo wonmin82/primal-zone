@@ -34,7 +34,8 @@ def _actual(text, cmdset, caller, match_index, session):
     if not quoted:
         multiword = sorted({name.casefold() for cmd in game for name in (cmd.key, *cmd.aliases)
                             if " " in name}, key=len, reverse=True)
-        suffix = next((name for name in multiword if text.casefold().endswith(" " + name)), None)
+        suffix = next((name for name in multiword if text.casefold() == name
+                       or text.casefold().endswith(" " + name)), None)
         if suffix:
             action, args = suffix, text[:-len(suffix)].rstrip()
     candidates = [cmd for cmd in game if action in {name.casefold() for name in (cmd.key, *cmd.aliases)}]

@@ -538,9 +538,11 @@ class CommandShortcutsTests(WorldCommandTest):
         commands = CmdSet()
         commands.add(Locked())
         self.char1.cmdset.add(commands)
-        self.char1.change(lambda p: p.update(command_shortcuts={"잠금": "귀환", "단어": "귀환"}))
-        for raw in ("잠금", "철수 잠금", "철수 여러 단어", "잠금, 상태 해", "철수 잠금, 상태 해"):
-            self.run_raw(raw)
+        self.char1.change(lambda p: p.update(command_shortcuts={"잠금": "귀환", "단어": "$* 말"}))
+        for raw in ("잠금", "철수 잠금", "여러 단어", "철수 여러 단어", "잠금, 상태 해", "철수 잠금, 상태 해"):
+            with patch.object(self.char2, "msg") as other:
+                self.run_raw(raw)
+            other.assert_not_called()
             self.assertEqual(self.char1.zone, "dock")
         engine = Command(key="@잠금엔진", locks="cmd:false()")
         commands.add(engine)
@@ -570,6 +572,27 @@ class CommandShortcutsTests(WorldCommandTest):
         output = self.run_raw("북, 현장검사, 남 해")
         self.assertIn("밖에서 실행", output)
         self.assertEqual(self.char1.zone, "grass")
+
+    def test_exact_multiword_action_alias_uses_real_command_with_empty_arguments(self):
+        from commands.base import GameCommand
+
+        calls = []
+        class Actual(GameCommand):
+            key = "실제검사"
+            aliases = ["여러 단어"]
+            input_style = "target"
+            def run(self):
+                calls.append(self.args)
+        commands = CmdSet(key="ExactMultiwordFixture")
+        commands.add(Actual())
+        self.char1.cmdset.add(commands)
+        self.char1.change(lambda p: p.update(command_shortcuts={"단어": "$* 말"}))
+        with patch.object(self.char2, "msg") as other:
+            self.run_raw("여러 단어")
+            self.run_raw("철수 여러 단어")
+            self.run_raw("여러 단어, 상태 해")
+        other.assert_not_called()
+        self.assertEqual(calls, ["", "철수", ""])
 
     def test_depth_five_and_six_are_checked_on_actual_selected_path(self):
         self.char1.change(lambda p: p.update(command_shortcuts={
