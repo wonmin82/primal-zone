@@ -1,3 +1,53 @@
+## 개인 줄임말 v1.14 검증 기록 (2026-10-09)
+
+기준 main `f09c40f4ef9cee9390ddff93bbb01c5845df5ba5`, branch `codex/shortcut-v114-lazy-execution`. 아래는 이 branch의 미커밋 구현 전체를 사용한 검증이며 최종 커밋 CI는 PR에서 별도로 대조한다. 과거 작업의 prefix 관리·리스트 저장·사전 확장 결과를 소급 변경하지 않는다. 현재 사용법은 [줄임말 계약](command-shortcuts.md)을 따른다.
+
+### 시행착오와 수정
+
+1. 순수 새 파서 9개/0.068초 PASS 후 기존 리스트 기대값 두 건을 신규 문자열 정책으로 보정했다. 기존 경계·순서·게임 진행 보존 assertion은 유지했다.
+2. 초기 22개 통합의 잔여 MAX_COMMANDS 참조 ERROR를 새 순차 한도 테스트로 교체했다. 관리/저장 targeted 7개/10.009초 PASS.
+3. 실행기 통합에서 실제 `확인` 명령과 테스트용 개인 이름의 충돌을 발견해 fixture 이름을 바꿨다. 엔진 전치형 매칭이 최상위 묶음을 먼저 잡는 경우는 `해`의 기존 묶음 선택 경계로 수정했다. 동적 instance hook의 프롬프트 래퍼 우회도 원본 hook 보존으로 수정했다.
+4. 로그아웃 fixture의 SESSION_HANDLER.disconnect Mock을 실제 소유 세션의 종료 경로로 대체했다. 동적 CmdSet 제거는 엔진의 key 경로를 사용하고, 동일 identity로 함수만 바꿀 때의 엔진 merge cache 대신 실제 새 CmdSet identity로 progressive 전환을 검증했다. 캐시/라이브러리를 monkeypatch하지 않았다.
+5. 관련 87개/76.168초 PASS. 엔진 help paging 거절 검사에서 선택 전 session 미설정 ERROR를 실행 컨텍스트의 실제 session으로 보정한 뒤 해당 1개/4.785초 PASS.
+6. 첫 전체 실행은 순수 212개 중 성장 마이그레이션의 구형 리스트 기대 1FAIL로 통합 전 중단했다. 기대 형식을 v11 문자열로 바꾸고 성장/재화/방문 보존 검사는 유지했다. 전체 결과를 성공으로 소급 기록하지 않는다.
+7. 실제 WebSocket 첫 실행은 관찰 출력에 없는 단어 `관찰`을 기대해 실패했다. 실제 목적지 설명을 검사하고 위치 불변 assertion은 유지했다. 후속 26단계 PASS/114.739초: 등록·치환·스냅샷·순환 전 귀환·계단/Exit·삭제 출처·재시작·재로그인. 실패 fixture 로그는 ignored work 경로에 보존했다.
+8. dispatcher helper 재진입이 직접 입력으로 승격되지 않도록 ContextVar 출처를 보강했다. 별개 직접 입력은 비동기 실행 중에도 정상 허용하며 최초 개인 snapshot을 유지한다. 실행/프롬프트 72개/67.968초, 순수 관련 40개/0.237초 PASS.
+
+9. Windows 병렬 DB 검사 두 실행을 겹쳐 clone 파일명 `default_1.sqlite3` 정리 충돌이 발생했다. 해당 전체 run은 본문 643개 PASS였지만 teardown ERROR/exit1이므로 성공 근거에서 제외했다. 검사 실행을 직렬화한 후 전체 run을 새로 수행했다. 플레이 DB를 삭제하거나 초기화하지 않았다.
+10. 자체 리뷰에서 인스턴스 bound hook의 실제 실행 객체 바인딩과 엔진 trim 전 제어문자 보호를 보완했다. 해당 targeted 3개/5.536초 PASS. 마지막 완료 계약의 bare async hook·엔진 batch 재확장 차단·인자형 전역 예약은 관련 suite로 별도 검증한다.
+
+11. 방향 인자를 사용하는 줄임말과 인자를 허용한 미관리 custom Exit의 경계를 재현했다. 일반 Evennia Exit는 이미 무인자 arg_regex로 구분되지만 custom Exit는 공통 인자 거절 뒤 개인 호출도 숨겼다(재현 1FAIL/4.455초). 유효한 후치형 개인 호출은 선택하되 실제 Exit hook에는 인자를 보내지 않도록 보정했다. 무인자 이동·traverse 제한·추가 인자 무변경은 함께 검사한다. 초기 fixture의 cmd lock 변경은 엔진 cmdset 캐시와 구분해 live traverse lock으로 검사했다.
+
+12. 마지막 관련 suite 105개/54.450초에서 batch 차단 안내 기대 1FAIL을 확인했다. 후속 단독 실행에서 두 번째 batch fixture의 사후 `locks` 문자열 변경이 lockhandler를 갱신하지 않는다는 점도 확인했다. 생성자에 테스트 권한을 지정하고 실제 거절 안내를 검사한 뒤 해당 1개/4.406초 PASS다. 파일 로드·실행 전 차단과 위치 불변 assertion을 유지했고 최종 전체 회귀에 포함했다.
+
+### 요구사항별 검증 근거
+
+| 영역 | 구현·회귀 근거 |
+| --- | --- |
+| A 저장·문법 | 문자열/내부 공백/후치형/도움말/100~101개/2000자/조회 저장 없음 |
+| B 변수 | 위치1~9·전체·이스케이프·최장 오류·연속성·부족/초과·반복/혼합·행동 변경·재치환 금지·인자 상한 |
+| C 선택 | 실제/잠긴/다단어 명령 우선·이동 전후 CmdSet·같은 선택 인스턴스·미선택 오류 정의 격리 |
+| D 실행량 | 형제 반복/조상 순환·깊이5/6·10/11·엔진/관리/채팅/Exit/unknown·1000/1001자·부분 실행 |
+| E 묶음·관리 | 새 묶음 선택 금지·콤마 채팅·단일 정의 내부 등록·콤마 정의 직접 등록·간접 전체 삭제 출처 |
+| F 세션·프롬프트 | 캐릭터/두 세션 중복·일반 입력·진짜 logout·unpuppet·세션 제거·늦은 callback·오류 정리·최종 prompt |
+| G 완료·오류 | 동기/비동기 pre/post·generator/coroutine/Deferred func/위험 helper·동적 progressive·일반 오류 계속·치명 오류 중단 |
+| H 구형 데이터 | v7~v11·safe/unsafe 리스트·잘못된 store/key/value·casefold 충돌·역사적 이름/어휘·bounded 조회·진행 불변 |
+| I 전체 삭제 | 요청/만료/fingerprint/직접 one-shot/간접 pending 불변/혼합 clear/빈 dict/캐릭터 격리/logout·restart |
+
+사용자 정의 명령의 숨겨진 별도 대기는 완료 보장 metadata로 금지해야 한다. 일반 Python 함수의 모든 별도 작업을 증명하지 않는다. `look 도움`은 실제 엔진 `look`이 우선해 기획의 예시 변환과 양립하지 않으며 실제 명령 우선 계약을 유지한다. 브라우저 실제 조작·OS IME는 미검증이다.
+
+### 최종 검사
+
+- `scripts/dev.py check`: PASS.
+- `scripts/dev.py test --parallel 2`: 최종 코드 순수213개/2.632초·통합651개/613.216초(runner623.737초), total864개, failure0/error0, teardown 포함 exit0 PASS. 마지막 관련105개 중 batch fixture/안내 기대 실패1건은 해당 단독1개/4.406초를 통과한 뒤 이 전체 run에서 재검증했다.
+- `scripts/dev.py smoke`: Quick PASS/137.657초. 공유 전투·전리품·상점·실제 회복 경계·재로그인·prompt를 검증했다.
+- `scripts/shortcut_smoke.py`: 실제 격리 Portal/Server·WebSocket 26단계 PASS/114.739초. 재시작·재로그인 후 문자열 정의 유지 및 pending 무효를 확인했다.
+- `node --check game/web/static/webclient/js/primal.js`: PASS. `node --test scripts/tests/test_web_prompt.cjs`: 10 PASS/889.0218ms.
+- 두 실제 서버 검증 뒤 raw 제어문자·instance hook·custom Exit/관리 경계를 보강했다. 기존 정상 입력 경로·Harness·게임 타이머는 동일하여 해당 실제 서버 결과를 그 범위의 근거로 재사용하고 보강 사항은 직접 회귀·최종 전체 검사로 확인했다.
+- Markdown23개/상대 링크·앵커262개/fence 오류0, 기존 링크 audit226개·git diff --check PASS. 최신 커밋 GitHub CI는 PR Validation에서 대조한다.
+- 일반 플레이 DB의 SHA256/mtime_ns/size 동일. 두 smoke 성공 후 소유 프로세스·임시 DB 정리 완료.
+- Full/브라우저/OS IME/정적 파일 수집: UI·asset·balance·production timer 변경이 없어 미실행. 이번 WebSocket 자동 입력은 실제 IME 검증을 대신하지 않는다.
+
 ## PR #41 — 최종 문서 Closeout (2026-10-09)
 
 리뷰 수정 HEAD `e2d2ca4f275cae90e79d2de317128579892f5e46`에서 [Game checks 37811678991](https://github.com/wonmin82/primal-zone/actions/runs/37811678991), event=pull_request, check/test/smoke SUCCESS를 확인했다. 순수206개/1.179초·통합606개/372.269초·Quick51.634초 PASS다. 기존 local 전체 회귀와 리뷰 수정 후 Quick 결과는 아래 기록을 그대로 유지한다.
