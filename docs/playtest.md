@@ -1,3 +1,35 @@
+## PR #42 치환·선택 경계와 도움말 리뷰 검증 (2026-10-10)
+
+기준 source `18f61fb7f453ae263a029a369ceab151deee90ac`, main `f09c40f4ef9cee9390ddff93bbb01c5845df5ba5`, branch `codex/shortcut-v114-lazy-execution`. 아래는 이번 리뷰 수정 코드의 새 검사 결과다. 제거된 도움말 commit은 복원하지 않았고 기존 실행 이력은 아래에 보존했다.
+
+### 재현·보정·재검증
+
+1. 원본2,000자(`$*`1,000회)와 호출 인자2,000자로 약200만 자 치환을 만드는 경계를 재현했다. 수정 전 순수 두 검사에서 크기 초과 거절 누락1FAIL·새 지연 API 부재1ERROR였다. `BoundSegment`의 예상 길이·축적 중 검사와 세그먼트별 지연 치환으로 수정하고 순수 줄임말17개/0.101초 PASS를 확인했다. 최종 순수 회귀에는 `tracemalloc`으로 이 입력의 치환 준비·거절이 128KiB 미만인 검사도 포함한다.
+2. P1 실제 dispatcher4개/14.940초 PASS: 대용량 결과가 parser에 전달되지 않음, 앞선 귀환 후 다음 치환 실패의 부분 실행, 중첩·전역 변환·깊이5, 10회 실행 뒤11번째 중단·최종 합계1,000/1,001자 경계. 전체 profile 불변과 완료된 이동의 보존을 함께 검사했다.
+3. 초기 다중 후보 fixture는 Evennia의 동일 별칭 교체 때문에 실제 다중 매칭을 만들지 못했다. `allow_duplicates=True`와 별도 Command identity를 사용해 진짜 후보 두 개를 구성한 뒤, 수정 전 사용자 정의 multimatch `func()`가 호출되는1FAIL/8.532초를 재현했다. 기본 후보 안내의 구현 identity를 검사하고 안전한 선택·완료를 확인할 수 없는 간접 핸들러를 실행 전에 거절하도록 보완했다.
+4. P2·도움말 선별10개에서9PASS/1FAIL(15.933초)을 확인했다. 실패는 기본 후보 안내가 실제 key 대신 입력 별칭의 `겹침-1`·`겹침-2`를 표시하는 기대 차이였다. 실제 안내를 기대하되 후보 미실행·다음 명령 계속·위치 assertion을 유지한 뒤 기본/동적 다중 후보2개/9.472초 PASS를 확인했다.
+5. 명시적인 완료 보장False의 간접 비동기 helper는 `func()`·helper 모두 호출되지 않는다. 기존 동기 명령·pre/post Deferred 순서와 세션 종료 후 늦은 callback 중단을 재검증했다. 숨겨진 helper 작업의 범용 정적 탐지는 지원한다고 주장하지 않는다.
+6. 네 편의 도움말의 실제 dispatcher 출력·섹션 순서·semantic 명령 강조·ANSI 제거 후 내용과 일반 공격/보기/상태·입력/편의 분류의 기존 형식을 검사했다. 관련 통합102개/89.535초 PASS이며 전체 실행으로 재합산하지 않는다.
+
+### 실행 명령과 결과
+
+명령은 저장소 루트에서 `.venv\Scripts\python.exe -X utf8`로 실행했다. 테스트는 `settings_test`의 격리 DB를 사용했고 Django DB 검사 두 실행을 겹치지 않았다.
+
+- `-m unittest world.test_command_shortcuts` (`PYTHONPATH=game`): 순수17개/0.101초 PASS. 이후 추가한 메모리 assertion은 최종 전체 순수 검사에 포함한다.
+- `scripts/dev.py test`의 P1 직접 영향4개: PASS/14.940초. 반복 변수·중첩·전역·11번째·문자열 누적 한도 메서드를 지정했다.
+- `scripts/dev.py test`의 다중 후보/동적 CmdSet2개: PASS/9.472초. 정상 후보 선택과 간접 새 묶음 차단·사용자 입력 대기 차단을 함께 검사했다.
+- `scripts/dev.py test tests.test_command_shortcuts tests.test_shortcut_help tests.test_prompt tests.test_vocabulary tests.test_exit_policy --parallel 2 --reverse`: 통합102개/89.535초 PASS(runner102.928초).
+- `scripts/dev.py check`: PASS.
+- `scripts/dev.py test --parallel 2`: 순수215개/4.445초·통합663개/807.136초 PASS(runner820.507초), failure0/error0·DB teardown 포함 exit0. 기준 코드는 위 두 리뷰 수정 commit이며 이후 변경은 문서-only다. 이 전체 수에 선별 테스트 수를 합산하지 않는다.
+- `scripts/shortcut_smoke.py`: 격리 실제 Portal/Server·WebSocket35단계/93.787초 PASS. 네 상세 도움말·일반 도움말·대용량 거절을 추가하고 기존 관리/변수/순차 부분 실행/Exit/전체 삭제/restart/relogin도 검증했다. 성공 fixture를 정리하고 소유 프로세스를 종료했으며 플레이 DB fingerprint는 전후 동일했다. 도구가 ignored `work/shortcut-v114/live-shortcuts.json`에 실행 근거를 저장한다.
+- 문서23개·상대 링크/앵커267개·code fence 오류0, `git diff --check` PASS. 실제 한도·실행 명령·개발자 계약과 출력 예시를 대조했다.
+
+### 수동 검증 경계
+
+WebSocket으로 수신한 실제 도움말 본문은 [출력 예시](text-examples.md#편의-상세-도움말-실제-출력)에 옮겼다. 자동 semantic/ANSI 검사는 색상을 제거해도 섹션·명령을 이해할 수 있는 텍스트를 확인한다. 실제 브라우저·모바일 폭·OS IME·수동 Telnet은 이번 작업에서 확인하지 않았다. JS/CSS/정적 자산을 바꾸지 않았고 Full production timing은 영향이 없어 반복하지 않았다. 임의 helper의 비동기 완료는 [개발자 계약](architecture.md#새-명령의-완료-계약)과 별도 회귀로 보호해야 한다.
+
+이후 최종 문서 HEAD의 CI는 [PR #42 Validation](https://github.com/wonmin82/primal-zone/pull/42)에 기록한다. 아래 최초 v1.14 구현 기록의 실패·수치·미검증 항목은 당시 사실로 유지한다.
+
 ## 개인 줄임말 v1.14 검증 기록 (2026-10-09)
 
 기준 main `f09c40f4ef9cee9390ddff93bbb01c5845df5ba5`, branch `codex/shortcut-v114-lazy-execution`. 아래는 이 branch의 미커밋 구현 전체를 사용한 검증이며 최종 커밋 CI는 PR에서 별도로 대조한다. 과거 작업의 prefix 관리·리스트 저장·사전 확장 결과를 소급 변경하지 않는다. 현재 사용법은 [줄임말 계약](command-shortcuts.md)을 따른다.

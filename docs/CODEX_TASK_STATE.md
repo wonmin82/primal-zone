@@ -1,3 +1,18 @@
+## PR #42 — 치환·선택 경계 및 도움말 리뷰 수정 (2026-10-10)
+
+- 시작 source HEAD는 `18f61fb7f453ae263a029a369ceab151deee90ac`, base main은 `f09c40f4ef9cee9390ddff93bbb01c5845df5ba5`다. 기존 `codex/shortcut-v114-lazy-execution`에서 작업하며 제거된 도움말 다섯 commit은 복원하지 않았다. PR은 [#42](https://github.com/wonmin82/primal-zone/pull/42)를 갱신하고 자동 병합하지 않는다.
+- P1: `BoundSegment`가 변수 토큰과 인자 참조만 보관하고 현재 세그먼트만 치환한다. 반복 생성 없이 예상 길이를 계산하고 축적 중에도 상한을 검사한다. 중간 개인 호출은 인자2,000자·이름20자·공백을 포함한 2,021자 보호를 사용하며 실제 leaf의 누적1,000자·10회 제한과 구분한다. 앞선 완료 동작과 11번째 직전 중단 정책을 유지한다. 인자형 전역 정의도 같은 경로를 사용한다.
+- P2: 명시적인 `shortcut_completion_guaranteed=False`는 helper나 `func()` 실행 전에 거절한다. 엔진이 기다리는 pre/post Deferred는 유지한다. 기본 다중 매칭의 후보 안내는 허용하지만 최종 선택·완료를 증명하지 못하는 사용자 정의 핸들러는 간접 실행 전에 거절한다. 실제로 선택된 일반 명령은 정상 실행하고 단일 `Sequence`는 차단한다. 임의 Python helper의 비동기 완료를 모두 정적으로 증명하지 않으며 개발자 계약과 회귀 기준은 [구조 문서](architecture.md#새-명령의-완료-계약)에 기록했다.
+- `해`·`줄임말`·`해지`·`단축어` 도움말은 기능 설명 뒤 사용법·예시·실행 규칙·제한·관련 도움말을 같은 순서로 출력한다. 일반 게임 도움말의 사용법·별칭·단축어 형식은 유지한다. 전체 삭제는 요청 후 60초가 지나기 전에 별도 직접 입력으로 확인한다. 실제 WebSocket 도움말 출력은 [텍스트 예시](text-examples.md#편의-상세-도움말-실제-출력)에 발췌했다.
+- 수정 commit: `3feb2f456cebf990a958c6c7aeb88a7f671a5a9b`(치환·선택 경계), `47c44477f8b803531fb1919c40c4003f5bdd1e49`(도움말·출력 회귀). 이 두 commit의 코드와 이어지는 문서-only 수정 범위에서 최종 검사를 수행했다.
+- 재현 실패→수정→검증 이력은 [이번 리뷰 검증](playtest.md#pr-42-치환선택-경계와-도움말-리뷰-검증-2026-10-10)을 따른다. P1 직접 영향4개/14.940초, 다중 후보·동적 CmdSet2개/9.472초, 관련 통합102개/89.535초 PASS. `scripts/dev.py check` PASS.
+- 최종 `scripts/dev.py test --parallel 2`: 순수215개/4.445초·통합663개/807.136초 PASS(runner820.507초), failure0/error0·DB teardown 포함 exit0. 각 선별 실행의 수를 전체 수에 더하지 않는다. 이 검사 후 실행 코드 변경은 없다.
+- 문서23개·상대 링크/앵커267개·code fence 오류0, `git diff --check` PASS. 현재 사용법·한도·완료 계약과 실제 출력 발췌를 대조하고 과거 검증 결과는 보존했다.
+- 실제 격리 Portal/Server·WebSocket35단계/93.787초 PASS: 네 상세 도움말과 일반 도움말 형식, 대용량 거절·부분 실행, 기존 변수·snapshot·Exit·전체 삭제·restart/relogin. 소유 프로세스 종료와 성공 fixture 정리 완료. 플레이 DB SHA256 `b1318296f505b9b7522fcbdedff7642a06cf055e9de72802198c70e6b8a7f700`·size733184·mtime_ns1790080153765082800 불변.
+- 수동 브라우저·모바일 폭·Telnet·OS IME는 미검증이며 실제 서버 WebSocket과 자동 semantic/ANSI 출력 검사를 해당 수동 검사로 대체하지 않는다. JS·CSS·정적 자산·밸런스·타이머 변경이 없어 Full·Node·정적 수집은 반복하지 않았다. 최신 exact-head CI는 PR Validation에 별도로 기록한다.
+
+아래 v1.14 최초 구현 및 이전 PR 기록은 각 실행 시점의 historical 검증이다. 이번 수정의 결과로 과거 실패나 미검증 기록을 소급 변경하지 않는다.
+
 ## 개인 줄임말 확장 v1.14 — 구현·검증 (2026-10-09)
 
 - 기준 main: `f09c40f4ef9cee9390ddff93bbb01c5845df5ba5`. 작업 branch: `codex/shortcut-v114-lazy-execution`. 단일 PR로 제출하며 자동 병합하지 않는다.
