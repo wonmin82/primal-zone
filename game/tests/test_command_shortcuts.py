@@ -160,6 +160,85 @@ class CommandShortcutsTests(WorldCommandTest):
         self.assertEqual(calls, [])
         self.assertEqual(self.char1.zone, "support_roof")
 
+    def test_dynamic_custom_multimatch_addition_and_replacement_stop_indirect_execution(self):
+        from commands.shortcut_execution import require_completed_command
+        from evennia.commands.cmdhandler import CMD_MULTIMATCH
+
+        for replace_existing in (False, True):
+            with self.subTest(replace_existing=replace_existing):
+                self.char1.location = self.rooms["dock"]
+                handled, active = [], []
+                class UpdatedHandler(Command):
+                    key = CMD_MULTIMATCH
+                    locks = "cmd:all()"
+                    def func(self):
+                        handled.append(len(self.matches))
+                        self.caller.msg("갱신된 후보 안내")
+                commands, candidates = self.ambiguity_cmdset(UpdatedHandler())
+                bundle = commands.get("묶음후보")
+                bundle.func = Mock(wraps=bundle.func)
+                gate = Deferred()
+                setup = CmdSet(key="DynamicHandlerReview")
+                setup.priority = 90
+                previous = Command(key=CMD_MULTIMATCH, locks="cmd:all()")
+                previous.func = Mock()
+                if replace_existing:
+                    setup.add(previous)
+                installer = Command(key="처리기교체", locks="cmd:all()")
+                def install():
+                    self.char1.change(lambda p: p.update(credits=p["credits"] + 1))
+                    self.char1.cmdset.add(commands)
+                    active.append(self.char1.ndb.shortcut_execution)
+                installer.func = install
+                installer.at_post_cmd = lambda: gate
+                setup.add(installer)
+                self.char1.cmdset.add(setup)
+                if replace_existing:
+                    self.assertIs(self.char1.cmdset.current.get(CMD_MULTIMATCH).func, previous.func)
+                before = self.char1.profile_snapshot()["credits"]
+                try:
+                    with (patch.object(self.char1, "msg") as message,
+                          patch.object(self.char1, "push_prompt") as prompt,
+                          patch("commands.shortcut_execution.require_completed_command",
+                                wraps=require_completed_command) as checked):
+                        done = []
+                        self.char1.execute_cmd("처리기교체, 겹침, 귀환 해").addCallback(lambda _: done.append(True))
+                        self.assertEqual(done, [])
+                        self.assertEqual(active[0].state, active[0].ACTIVE)
+                        self.assertEqual(self.char1.profile_snapshot()["credits"], before + 1)
+                        installed = deepcopy(self.char1.profile_snapshot())
+                        prompt.assert_not_called()
+                        gate.callback(None)
+                        self.assertEqual(done, [True])
+                        self.assertIn("다중 명령", str(message.call_args_list))
+                        handlers = [call.args[0] for call in checked.call_args_list if call.kwargs.get("multimatch")]
+                        self.assertEqual(len(handlers), 1)
+                        self.assertIsInstance(handlers[0], UpdatedHandler)
+                        self.assertEqual(self.char1.profile_snapshot(), installed)
+                        self.assertEqual(self.char1.zone, "dock")
+                        self.assertEqual(handled, [])
+                        self.assertEqual(candidates, [])
+                        bundle.func.assert_not_called()
+                        previous.func.assert_not_called()
+                        self.assertEqual(active[0].state, active[0].FINISHED)
+                        self.assertIsNone(self.char1.ndb.shortcut_execution)
+                        self.assertEqual(self.char1.ndb.command_output_depth, 0)
+                        prompt.assert_called_once()
+                    with patch.object(self.char1, "push_prompt") as prompt:
+                        self.assertIn("갱신된 후보 안내", self.run_raw("겹침"))
+                        prompt.assert_not_called()  # bare 시스템 Command의 기존 직접 경로는 래퍼를 거치지 않는다.
+                    self.assertEqual(handled, [2])  # 최상위 직접 입력은 새 핸들러를 그대로 사용한다.
+                    self.assertEqual(candidates, [])
+                    bundle.func.assert_not_called()
+                    previous.func.assert_not_called()
+                    self.assertIsNone(self.char1.ndb.shortcut_execution)
+                    self.assertEqual(self.char1.ndb.command_output_depth, 0)
+                finally:
+                    if not gate.called:
+                        gate.callback(None)
+                    self.char1.cmdset.remove(commands.key)
+                    self.char1.cmdset.remove(setup.key)
+
     def test_async_helper_with_explicit_contract_is_rejected_before_side_effects(self):
         work = []
         gate = Deferred()
@@ -905,6 +984,40 @@ class CommandShortcutsTests(WorldCommandTest):
             self.assertEqual(calls, [])
             self.assertIsNone(self.char1.ndb.shortcut_execution)
             self.assertEqual(self.char1.ndb.command_output_depth, 0)
+
+    def test_hidden_helper_return_types_stop_queue_after_runtime_detection(self):
+        async def detached():
+            raise AssertionError("coroutine body must not start")
+        for result in (Deferred(), (value for value in ()), detached()):
+            with self.subTest(result_type=type(result).__name__):
+                self.char1.location = self.rooms["dock"]
+                box, started = [result], []
+                def helper():
+                    started.append("func")
+                    return box[0]
+                command = Command(key="반환검사", locks="cmd:all()")
+                command.func = lambda: helper()
+                commands = CmdSet(key="HiddenReturnReview")
+                commands.add(command)
+                self.char1.cmdset.add(commands)
+                try:
+                    with patch.object(self.char1, "push_prompt") as prompt:
+                        self.run_raw("귀환, 반환검사, 승강기 해")
+                        self.assertEqual(started, ["func"])  # 숨겨진 helper를 사전에 완벽히 분석하지 않는다.
+                        self.assertEqual(self.char1.zone, "support_roof")
+                        self.assertIsNone(self.char1.ndb.shortcut_execution)
+                        self.assertEqual(self.char1.ndb.command_output_depth, 0)
+                        prompt.assert_not_called()  # 완료 미보장 취소는 새 프롬프트를 보내지 않는다.
+                        if isinstance(result, Deferred):
+                            result.callback(None)
+                            self.assertEqual(self.char1.zone, "support_roof")
+                            prompt.assert_not_called()
+                        else:
+                            self.assertIsNone(getattr(result, "gi_frame", getattr(result, "cr_frame", None)))
+                finally:
+                    self.char1.cmdset.remove(commands.key)
+                    if hasattr(result, "close"):
+                        result.close()
 
     def test_prompt_once_on_success_engine_error_and_async_completion(self):
         for raw in ("상태, 장비 해", "없는명령, 상태 해"):

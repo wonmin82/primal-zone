@@ -1,3 +1,14 @@
+## PR #42 최종 방어 테스트 보강 (2026-10-10)
+
+기준 HEAD `37f9fe9c2bda0f5df0fbad5daed29ca911d67a6e`, branch `codex/shortcut-v114-lazy-execution`. 실행 구현·정책은 변경하지 않고 `tests.test_command_shortcuts`에 두 회귀 메서드를 추가했다. 아래 기존 리뷰 결과는 당시 검증 이력으로 유지한다.
+
+- 앞선 명령이 custom `CMD_MULTIMATCH`를 추가/교체하고 post Deferred 완료 후 실제 두 후보를 만나는 조합을 검사한다. 완료 계약 검사에 전달된 새 핸들러 타입까지 확인하며 custom `func()`·일반 후보·Sequence 후보 미실행, 앞선 프로필 변경 보존, FINISHED·출력 깊이0·간접 최종 프롬프트1회를 검증한다. 직접 입력은 갱신된 custom 핸들러를 호출한다.
+- 명시적 완료 미보장False helper의 부작용 전 차단은 기존 테스트를 재사용한다. 새 테스트는 숨겨진 helper가 Deferred/generator/coroutine을 실제 반환했을 때의 방어 중단·이전 귀환 보존·출력/컨텍스트 정리와 늦은 Deferred 완료 후 미재개를 검사한다. helper 자체는 이미 호출되었음을 검증하여 사전 탐지로 오인하지 않으며 generator/coroutine 본문은 실행하지 않는다. 메타데이터 없는 별도 비동기 작업을 모두 정적으로 알아낸다는 보장은 없다.
+- 새 두 메서드 최초 실행: `scripts/dev.py test tests.test_command_shortcuts.CommandShortcutsTests.test_dynamic_custom_multimatch_addition_and_replacement_stop_indirect_execution tests.test_command_shortcuts.CommandShortcutsTests.test_hidden_helper_return_types_stop_queue_after_runtime_detection --parallel 2`, 2개/7.682초 PASS. 이후 직접 custom 시스템 명령의 프롬프트 기대를 추가한 관련88개 실행에서 동일 메서드의 두 subcase가 실패했다(71.902초). bare `Command`의 시스템 경로는 프로젝트 PromptLifecycle을 거치지 않는 기존 동작이었다. 직접 경로의 정확한 기대를0회로 정정하고 간접1회·출력 깊이·핸들러/후보 미실행 assertion은 유지했다. 실제 갱신 핸들러 선택 확인을 보강한 해당 메서드 재실행: 1개/6.924초 PASS.
+- 최종 `scripts/dev.py test tests.test_command_shortcuts tests.test_prompt --parallel 2 --reverse`: 88개/79.780초 PASS(runner96.716초), failure0/error0·DB teardown 포함 exit0. 명시적 완료 미보장False·Deferred pre/post·progressive·세션 종료/늦은 callback·잠긴 명령 우선권·부분 실행·깊이/실행량·프롬프트 기존 회귀도 함께 검사했다. 선별 실행 수를 이 결과에 합산하지 않는다.
+- `scripts/dev.py check`, `git diff --check`: PASS. 명령은 저장소 루트에서 `.venv\Scripts\python.exe -X utf8`로 실행하며 `settings_test`의 격리 DB를 사용한다. 테스트를 건너뛰거나 실제 플레이 DB를 초기화하지 않았다.
+- 실행 코드·JS·밸런스·저장/이동 정책 변경이 없어 로컬 전체 테스트·Quick/Full·브라우저·Telnet은 반복하지 않는다. 새 최종 HEAD의 전체 test/smoke CI는 PR Validation에서 별도로 확인한다.
+
 ## PR #42 치환·선택 경계와 도움말 리뷰 검증 (2026-10-10)
 
 기준 source `18f61fb7f453ae263a029a369ceab151deee90ac`, main `f09c40f4ef9cee9390ddff93bbb01c5845df5ba5`, branch `codex/shortcut-v114-lazy-execution`. 아래는 이번 리뷰 수정 코드의 새 검사 결과다. 제거된 도움말 commit은 복원하지 않았고 기존 실행 이력은 아래에 보존했다.
