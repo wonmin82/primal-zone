@@ -71,7 +71,7 @@ class SemanticTextTests(WorldCommandTest):
                 elif isinstance(obj, SettlementOfficer):
                     self.assertEqual(tokens(output, "command"), ["환율", "교환", "교환", "교환", "교환"])
                 elif isinstance(obj, Shopkeeper):
-                    self.assertEqual(tokens(output, "command"), ["상품", "구매", "가치", "판매"])
+                    self.assertEqual(tokens(output, "command"), ["목록", "사", "가치", "팔아"])
                 elif isinstance(obj, SkillTrainer):
                     self.assertEqual(tokens(output, "command"), ["배워"])
                     self.assertIn(SKILLS[obj.db.skill_id]["name"] + " 배워", output)
@@ -204,8 +204,8 @@ class SemanticTextTests(WorldCommandTest):
         self.assertIn("[주무기]", equip)
         self.assertIn("공격 +2 · 방어 +1", equip.splitlines()[-1])
         profile["inventory"] = {}
-        self.assertEqual(str(view.inventory(profile)), "[소지품] 20칩\n\n비어 있다.")
-        self.assertEqual(tokens(view.shop("supply", "보급관"), "command"), ["구매"])
+        self.assertEqual(str(view.inventory(profile)), "[가진거] 20칩\n\n비어 있다.")
+        self.assertEqual(tokens(view.shop("supply", "보급관"), "command"), ["사"])
         profile["quests"]["radio_tower"].update(started=True, record_read=True)
         quest = view.quest(profile)
         self.assertIn("2/5", quest.splitlines()[1])

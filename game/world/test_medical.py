@@ -34,15 +34,17 @@ class MedicalRulesTests(TestCase):
         self.assertLessEqual(profile["hp"], 0)
         self.assertEqual(profile["credits"], 50)
 
-    def test_treat_and_rest_are_independent_free_full_heals(self):
+    def test_paid_treat_and_free_rest_are_independent(self):
         for operation, other in ((rules.treat, "rest"), (rules.rest, "treat")):
             profile = rules.new_profile()
-            profile.update(hp=5, credits=0)
+            profile.update(hp=5, credits=100)
             before = deepcopy(profile)
             with patch.object(rules, other) as separate, patch.object(rules, "use_bandage") as bandage:
-                self.assertEqual(operation(profile, safe=True), 55)
+                self.assertEqual(operation(profile, safe=True), (55, 12) if operation is rules.treat else 55)
                 separate.assert_not_called()
                 bandage.assert_not_called()
+            if operation is rules.treat:
+                before["credits"] -= 12
             before["hp"] = 60
             self.assertEqual(profile, before)
 

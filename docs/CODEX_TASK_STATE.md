@@ -1270,3 +1270,24 @@ PR #25의 최종 문서 HEAD와 병합 후 main의 test·smoke를 대조하고, 
 - 마지막 광원 이전·소진·logout invariant, shared/person quest의 원자성, 실패 시 inventory·profile·container·facility rollback을 유지한다.
 - 기존 party round-robin·reserved/assigned/protection·Corpse TTL·Enemy respawn·전투 타이머/보상·붕대 회복·빈 장비 상태를 유지한다.
 - 기존 commit rewrite, main 직접 commit/push, 무관한 미커밋 변경 포함, 플레이 DB 초기화, 보호 규칙 우회를 하지 않는다. 새 작업은 최신 대상에서 별도 branch/PR, 기존 PR 수정은 해당 branch이며 병합은 명시 요청 때만 수행한다.
+
+## Issue #46 구현 마감 — 명령·정보·유료 회복 (2026-10-10)
+
+아래는 최초 구현 당시의 마감 요약이다. 당시 경량 검사와 미실행 범위를 보존하며 현재 사전 CI 조건은 아래 PR #51 리뷰 후 정책을 따른다.
+
+- 최신 main `f7a9a30b3d25cd3928f8e9e3b213e7f7da670b49`에서 전용 `feat/46-command-overhaul` 브랜치로 착수했다. PR #43의 문서 마감·병합·브랜치 정리는 완료된 기준선이며 반복하지 않는다.
+- 46-A (`cefb03c`): 정식 명령/별칭·상점 행동·웹 문자열을 통일하고 방향·시체 입력, shooting 자동 공격 예약, 공통 도움말과 충돌 우선순위를 보존했다. 변환 기반만 준비하고 중간 profile v11을 유지했다.
+- 46-B (`fc5ba00`): 상태용 정보 별칭을 제거하면서 소지·장착 ItemEntity의 읽기 전용 `정보`를 등록했다. 정의 가격·modifier와 실제 탄창·광원 상태를 공통 서비스로 출력하고 웹 소지품에서 같은 조회 명령을 사용한다.
+- 46-C: 유료 `회복`의 실제 HP·레벨 비용과 HP/보급칩 원자적 저장, 동일 침대 객체의 회복실 이전, 무료 휴식 유지, profile v12의 과거 의미 보존/충돌 rename/불명확한 원본 보존을 완료했다. 의무관은 의무실에 유지하고 의료 대기실은 바꾸지 않았다.
+- 문서/도움말: [명령 SSOT](commands.md), [플레이 가이드](gameplay.md), [개인 줄임말](command-shortcuts.md), 관련 설계·성장·본부 문서를 현재 정책으로 연결했다. 과거 시점의 실패/의료/저장 기록은 삭제하지 않고 구분했다. [실제 최소 검증](playtest.md#issue-46-명령정보유료-회복-최소-검증-2026-10-10)을 참고한다.
+- 검증: 각 단계의 격리 DB 대표 Smoke 1개와 A/B/C 최종 대표 3개가 성공했다. 변환 원본 보존 보완 뒤 영향 있는 C만 재검사했다. 게임 실행 코드 변경이 포함되지만 DB schema·의존성·CI 설정·경제 가격·전투 주기는 변경하지 않았다.
+- 미검증 범위: 전체 회귀·다중 사용자 경합·서버 재시작 장기 검증·실 브라우저·한글 IME·출력 전수 검증은 #50이다. GitHub 자동 CI는 이후 PR의 최신 HEAD 결과로 확인한다. 현 단계는 구현·최소 검증 완료이며 PR/병합 결과를 미리 기록하지 않는다.
+- PR 정책: 하나의 PR로 `Closes #46`을 연결한다. #47~#49를 선행 구현하지 않았으며 사용자 Merge 승인 전에는 병합·브랜치 삭제·#47 착수를 하지 않는다.
+
+## PR #51 리뷰 보완과 사전 CI 조건 (2026-10-10)
+
+- 리뷰 기준이자 착수 시 최신 HEAD는 `c0789ac4acb1b119eabb2373f0cbf92420c3030a`다. 이 HEAD의 [GitHub CI 38042762580](https://github.com/wonmin82/primal-zone/actions/runs/38042762580)는 `test`·`smoke` 성공이다. 기존 자동 CI 성공은 당시 미실행한 전체 로컬 CI의 근거로 소급하지 않는다.
+- P2 가격: `정보`에서 개당 구매/매입 기준가와 판매 묶음 수량·총액을 구분한다. 정의의 개당 값을 읽고 총액/매입가는 기존 `rules.purchase_price`·`rules.resale_price`를 재사용한다. 가격 미정 상품은 없는 가격을 표시하지 않으며, 상인의 취급·실제 거래 가능성을 보장하지 않는 설명을 유지한다. 거래 규칙·콘텐츠 가격·명령 어휘·profile v12·유료 회복·침대 배치는 바꾸지 않는다.
+- P2 문서: [명령 기준](commands.md#검증-범위)과 [검증 정책](playtest.md#issue-46-pr-51-리뷰-후-검증-정책-2026-10-10)에 최신 정책을 반영한다. 최초 구현 당시 최소 Smoke·전체 로컬 검사 미실행·실패 기록은 역사적 사실로 구분해 보존한다.
+- P1 게이트: 경량 검사와 로컬 커밋 이후 실제 Push할 HEAD에서 현행 CI의 `uv sync --locked --python 3.13`, `check`, `test --parallel 2`, `smoke`를 전부 성공시켜야 한다. 실패·미실행 시 Push하지 않고 수정한 새 HEAD에서 전체 검사를 다시 수행한다. 환경·명령·종료 코드·테스트 수·검증 SHA와 같은 HEAD의 원격 `test`·`smoke` 결과는 [PR #51 Validation](https://github.com/wonmin82/primal-zone/pull/51)에 최종 기록한다. 실행 전 성공이나 향후 병합 결과를 미리 기록하지 않는다.
+- 남은 별도 범위: #50의 Cross-Issue 통합·실 브라우저·한글 IME·복수 플레이어/세션 경합·도움말/UI 종단 간·최종 통합 회귀. 기존 PR #51만 갱신하며 사용자 승인 전에는 Merge·브랜치 삭제·Issue #46 종료·#47 착수를 하지 않는다.

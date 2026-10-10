@@ -2,8 +2,16 @@
 
 from evennia import Command
 from evennia.commands.cmdhandler import CMD_NOINPUT, CMD_NOMATCH
+from evennia.commands.default.help import CmdHelp
 from world import rules
 from world import text as ft
+
+
+class EngineHelp(CmdHelp):
+    """엔진 페이지 입력 계약용 별도 이름. 사용자 도움/영문 help와 분리한다."""
+
+    key = "@help"
+    aliases = []
 
 
 class GameCommand(Command):
@@ -49,8 +57,8 @@ class UnknownCommand(Command):
             self.caller.msg(ft.text(ft.token("warning", message)))
             return
         self.caller.msg(
-            "명령을 확인하세요. 대상 뒤에 행동을 입력합니다: 어린청소룡 공격 · 윤대장 대화\n"
-            "채팅: 안녕하세요 말 또는 '안녕하세요 · 전체 안내: 도움말"
+            "명령을 확인하세요. 대상 뒤에 행동을 입력합니다: 어린청소룡 때려 · 윤대장 대화\n"
+            "채팅: 안녕하세요 말 또는 '안녕하세요 · 전체 안내: 도움"
         )
 
 

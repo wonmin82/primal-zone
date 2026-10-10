@@ -181,7 +181,7 @@ class EnvironmentTests(WorldCommandTest):
         # observation과 무관한 실제 10초 회복 경계가 실행 중 도래하지 않게 한다.
         self.enterContext(patch("typeclasses.explorers.time", return_value=before["recovery"]["updated_at"]))
         state_before = deserialize(self.script.db.environment)
-        local = self.command("보기")
+        local = self.command("봐")
         snapshot = snapshot_for(self.char1.location, 100)
         self.assertIn(env.description(snapshot), local)
         self.char1.push_state.assert_called_with(observed_at=100)
@@ -270,7 +270,7 @@ class EnvironmentTests(WorldCommandTest):
         self.script.db.environment = self.state
         self.assertEqual(snapshot_for(player.location, 100).visibility, "poor")
         self.assertEqual(multiplayer_state(player, now=100)["enemies"], [])
-        self.assertNotIn("어린청소룡", self.command("보기"))
+        self.assertNotIn("어린청소룡", self.command("봐"))
         from world import lighting
 
         profile = player.profile()
@@ -279,7 +279,7 @@ class EnvironmentTests(WorldCommandTest):
         lighting.switch(profile, "flashlight", True, 100)
         player.save_profile(profile)
         self.assertEqual(multiplayer_state(player, now=100)["enemies"], before_state["enemies"])
-        self.assertIn("어린청소룡", self.command("보기"))
+        self.assertIn("어린청소룡", self.command("봐"))
 
     def test_blocked_exit_never_queries_environment_or_hidden_target(self):
         self.char1.location = self.rooms["marsh"]

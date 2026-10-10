@@ -5,15 +5,17 @@ from world import text as ft
 from world.targets import names, parse_selector, resolve, room_objects
 
 from commands.base import GameCommand
+from commands.help_contracts import command_sections
 
 
 class Attack(GameCommand):
+    help_sections = command_sections('때려')
     category = "전투·회복"
-    usage = "어린청소룡 공격 · 갈퀴사냥룡 2 공격"
+    usage = "대상이름 때려 · 대상 2 때려"
     summary = "공유 적에게 2.5초 간격으로 기본 공격합니다."
     input_style = "target"
-    key = "공격"
-    aliases = ["사냥", "attack", "때려"]
+    key = "때려"
+    aliases = ["쳐", "공격"]
 
     def run(self):
         from typeclasses.enemies import Enemy
@@ -35,7 +37,7 @@ class Attack(GameCommand):
             else current
         )
         if not enemy:
-            raise rules.RuleError("사용법: 어린청소룡 공격 · '보기'로 사냥 대상을 확인하세요.")
+            raise rules.RuleError("사용법: 어린청소룡 때려 · '봐'로 사냥 대상을 확인하세요.")
         self.caller.start_combat(enemy)
 
 
@@ -53,11 +55,12 @@ class Heavy(GameCommand):
 
 
 class Shooting(Heavy):
+    help_sections = command_sections('쏴')
     category = "전투·회복"
-    usage = "사격"
+    usage = "쏴"
     summary = "총기로 다음 자동 공격을 강화합니다."
-    key = "사격"
-    aliases = ["shooting"]
+    key = "쏴"
+    aliases = []
     action = "shooting"
 
 

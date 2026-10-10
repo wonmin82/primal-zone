@@ -76,7 +76,7 @@ class ExitPolicyTests(WorldCommandTest):
         obj = create_object(PermissiveExit, key="북", aliases=["n"], location=self.origin,
                             destination=self.rooms["hq_stairs_5f"])
         with patch.object(obj, "return_appearance", return_value=ft.text("실제 관찰 결과")) as appearance:
-            for raw in ("북 보기", "북 봐", "n 보기"):
+            for raw in ("북 봐", "북 봐", "n 봐"):
                 with patch.object(self.char1, "msg") as output:
                     self.char1.execute_cmd(raw)
                 self.assertIn("실제 관찰 결과", str(output.call_args_list))
@@ -93,7 +93,7 @@ class ExitPolicyTests(WorldCommandTest):
 
         obj = create_object(PermissiveExit, key="북", aliases=["n"], location=self.origin,
                             destination=self.rooms["hq_stairs_5f"])
-        self.char1.execute_cmd("정찰 $1 보기, 상태 해 줄임말")
+        self.char1.execute_cmd("정찰 $1 봐, 상태 해 줄임말")
         before = self.snapshot()
         with patch.object(obj, "return_appearance", return_value=ft.text("개인 호출 관찰 결과")):
             for raw in ("북 정찰", "n 정찰"):

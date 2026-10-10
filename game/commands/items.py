@@ -18,6 +18,7 @@ from world.targets import (
 )
 
 from commands.base import GameCommand
+from commands.help_contracts import command_sections
 
 
 class Drop(GameCommand):
@@ -242,13 +243,14 @@ class Drink(Eat):
 
 
 class RemoveArmor(GameCommand):
+    help_sections = command_sections('벗어')
     equipment_change = True
     key = UNEQUIP_ACTIONS["armor"]
-    aliases = ["remove"]
+    aliases = ["벗"]
     expected_slot = "armor"
     category = "아이템·보급"
     input_style = "target"
-    usage = "강화 조끼 벗어"
+    usage = "방어구 벗어 · 방어구 2 벗어"
     summary = "현재 입은 방어구를 벗어 소지품에 남깁니다."
 
     def run(self):
@@ -267,6 +269,7 @@ class RemoveArmor(GameCommand):
 
 
 class Unwield(RemoveArmor):
+    help_sections = ()
     key = UNEQUIP_ACTIONS["weapon"]
     aliases = ["unwield"]
     expected_slot = "weapon"

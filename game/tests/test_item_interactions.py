@@ -144,7 +144,7 @@ class ItemInteractionTests(WorldCommandTest):
             name = ITEMS[identity]["name"]
             self.assertIn(name, view.shop("supply", "보급관"))
             before = self.char1.profile()
-            self.command(name + " 구매")
+            self.command(name + " 사")
             self.assertEqual(self.char1.profile()["credits"], before["credits"] - ITEMS[identity]["value"])
             self.command(name + " " + action)
             self.assertEqual(self.char1.profile()["hp"], before["hp"] + ITEMS[identity]["heal"])
@@ -163,7 +163,7 @@ class ItemInteractionTests(WorldCommandTest):
             self.command(raw)
             self.assertEqual(self.char1.profile(), before)
         self.char1.change(lambda p: p.update(hp=60, credits=0))
-        for raw in ("야전식량 먹어", "정제수 마셔", "야전식량 구매", "정제수 구매"):
+        for raw in ("야전식량 먹어", "정제수 마셔", "야전식량 사", "정제수 사"):
             before = self.char1.profile()
             self.command(raw)
             self.assertEqual(self.char1.profile(), before)
@@ -231,7 +231,7 @@ class ItemInteractionTests(WorldCommandTest):
         state = multiplayer_state(self.char1)
         boxes = [obj for obj in state["interactables"] if obj["name"] == "보관상자"]
         self.assertEqual(
-            [obj["look_command"] for obj in boxes], ["보관상자 1 보기", "보관상자 2 보기"]
+            [obj["look_command"] for obj in boxes], ["보관상자 1 봐", "보관상자 2 봐"]
         )
 
     def test_personal_locker_contents_are_per_caller_and_survive_cache_reload(self):
@@ -316,7 +316,7 @@ class ItemInteractionTests(WorldCommandTest):
         boxes = [i for i in state["interactables"] if i["name"] in ("보관상자", "개인 보관함")]
         self.assertEqual(len(boxes), 2)
         for box in boxes:
-            self.assertEqual(box["actions"], [{"label": "보기", "command": box["name"] + " 보기"}])
+            self.assertEqual(box["actions"], [{"label": "봐", "command": box["name"] + " 봐"}])
 
     def test_combat_restrictions_preserve_profiles_and_container(self):
         self.char1.change(lambda p: p.update(combat_target=123))

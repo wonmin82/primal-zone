@@ -182,7 +182,7 @@
       const title = document.createElement("p"); title.className = "loot-label";
       title.replaceChildren(semantic("remains", corpse.label), " · ", semantic("remains", corpse.name));
       actions.push(title);
-      actions.push(button(corpse.label + " 보기", corpse.look_command));
+      actions.push(button(corpse.label + " 봐", corpse.look_command));
       if (corpse.loot.length) {
         const all = button(corpse.label + " 전리품 회수", corpse.take_command);
         all.disabled = !corpse.loot.some((item) => item.can_take); actions.push(all);
@@ -236,6 +236,7 @@
       } else if (item.equip_action) row.append(button(item.equip_action, selector + " " + item.equip_action));
       else if (item.consume_action) row.append(button(item.consume_action, item.name + " " + item.consume_action));
       else if (item.id === "bandage") row.append(button("사용", "붕대 사용"));
+      if (item.information_command) row.append(button("정보", item.information_command));
       if (item.light_source) {
         const active = observation?.light_source?.name === selector && observation.light_source.active;
         row.append(button(active ? "끄기" : "켜기", selector + (active ? " 꺼" : " 켜")), button("확인", selector + " 확인"));
@@ -259,7 +260,7 @@
     byId("inventory").replaceChildren(...rows);
     const encounter = state.combat_target;
     byId("encounter").hidden = !encounter;
-    if (encounter) byId("encounter").replaceChildren(semantic("hostile", encounter.name), " · 공유 체력 " + encounter.hp + "/" + encounter.max_hp + " · 적 " + encounter.round + "차례" + (encounter.telegraph ? " · 다음 돌진! 견제와 치료를 준비하세요." : " · 강타 / 사격 / 견제 / 치료"));
+    if (encounter) byId("encounter").replaceChildren(semantic("hostile", encounter.name), " · 공유 체력 " + encounter.hp + "/" + encounter.max_hp + " · 적 " + encounter.round + "차례" + (encounter.telegraph ? " · 다음 돌진! 견제와 치료를 준비하세요." : " · 강타 / 쏴 / 견제 / 치료"));
   }
   function connect() {
     if (socket && [WebSocket.OPEN, WebSocket.CONNECTING].includes(socket.readyState)) return;

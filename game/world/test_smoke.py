@@ -279,7 +279,7 @@ class SmokeRestartTests(TestCase):
             {"id": "folding_shield", "count": 1}, {"id": "non_slip_boots", "count": 1}]})
 
         async def act(command, predicate):
-            if command == "미끄럼방지탐사화 구매":
+            if command == "미끄럼방지탐사화 사":
                 player.state["inventory"][1]["count"] += 1
                 self.assertTrue(predicate(player.state), "기존 drop 1개 + 정상 구매 1개를 허용해야 한다")
                 raise PurchaseObserved

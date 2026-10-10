@@ -303,11 +303,11 @@ class GrowthIntegrationTests(WorldCommandTest):
     def test_shortcuts_are_whole_input_only_and_engine_remains_default(self):
         cmdset = CharacterCmdSet(self.char1)
         for alias, key in (
-            ("상", "상태"),
+            ("상", "점수"),
             ("능", "능력"),
             ("기", "기술"),
             ("장", "장비"),
-            ("소", "소지품"),
+            ("소", "가진거"),
         ):
             self.assertEqual(cmdparser(alias, cmdset, self.char1)[0][2].key, key)
         north = Command(key="북")
@@ -335,7 +335,7 @@ class GrowthIntegrationTests(WorldCommandTest):
             (Skills(), "기술"),
             (Experience(), "경험치"),
             (Equipment(), "장비"),
-            (Help(), "도움말"),
+            (Help(), "도움"),
         ):
             with patch.object(self.char1, "msg") as message:
                 command.caller = self.char1

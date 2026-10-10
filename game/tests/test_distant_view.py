@@ -1,4 +1,4 @@
-"""보기 alias, 실제 Exit 관찰과 원거리 정보/부작용 경계 검증."""
+"""봐 alias, 실제 Exit 관찰과 원거리 정보/부작용 경계 검증."""
 
 from copy import deepcopy
 from unittest.mock import Mock, patch
@@ -88,15 +88,15 @@ class DistantViewTests(WorldCommandTest):
             "시체 모두",
         ):
             with self.subTest(target=target):
-                normal = self.command(target + " 보기")
+                normal = self.command(target + " 봐")
                 alias = self.command(target + " 봐")
                 self.assertEqual(str(alias), str(normal))
                 self.assertEqual(alias.segments, normal.segments)
         self.char1.location = self.rooms["dock"]
         for target in ("보관상자", "개인 보관함", "윤대장", "탐사용 벌목도"):
-            self.assertEqual(self.command(target + " 봐"), self.command(target + " 보기"))
-        self.assertEqual(self.command("봐"), self.command("보기"))
-        self.assertIn("봐", self.command("보기 도움말"))
+            self.assertEqual(self.command(target + " 봐"), self.command(target + " 봐"))
+        self.assertEqual(self.command("봐"), self.command("봐"))
+        self.assertIn("봐", self.command("봐 도움말"))
         self.assertIn("북 봐", self.command("봐 도움말"))
 
     def test_existing_direction_keys_and_aliases_use_the_same_preview(self):
@@ -104,9 +104,9 @@ class DistantViewTests(WorldCommandTest):
             self.char1.location = self.rooms[zone]
             for exit_obj in self.char1.location.exits:
                 destination = exit_obj.destination
-                expected = self.command(exit_obj.key + " 보기")
+                expected = self.command(exit_obj.key + " 봐")
                 for name in (exit_obj.key, *exit_obj.aliases.all()):
-                    for action in ("보기", "봐"):
+                    for action in ("봐", "봐"):
                         with self.subTest(zone=zone, name=name, action=action):
                             output = self.command(name + " " + action)
                             self.assertEqual(output, expected)
@@ -287,7 +287,7 @@ class DistantViewTests(WorldCommandTest):
         self.char1.execute_cmd("북")
         self.assertEqual(self.char1.location, target)
         self.assertIn(target.db.zone_id, self.char1.profile()["visited"])
-        output = self.command("보기")
+        output = self.command("봐")
         self.assertIn("'갈퀴사냥룡 2'", output)
         self.assertIn("'시체 2'", output)
         self.assertIn("체력", self.command("갈퀴사냥룡 2 봐"))
@@ -445,7 +445,7 @@ class DistantViewTests(WorldCommandTest):
         self.enemy(room, "shellback")
         enemies = room_enemies(room)
         definition = ENEMIES["shellback"]
-        local = self.command("보기")
+        local = self.command("봐")
         remote = room.return_distant_appearance(self.context(room))
         self.assertIn("철갑등짐승 두 마리", local)
         self.assertIn(definition["presence"], local)
@@ -460,7 +460,7 @@ class DistantViewTests(WorldCommandTest):
         corpse = create_object(Corpse, key="철갑등짐승의 시체", location=room)
         corpse.db.decay_at = 130
         corpse.db.entries = []
-        local = self.command("보기")
+        local = self.command("봐")
         remote = room.return_distant_appearance(self.context(room))
         for output in (local, remote):
             self.assertIn(corpse.key, output)

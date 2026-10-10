@@ -51,11 +51,11 @@ class NativeShopTests(Phase5Test):
     def test_stack_quantity_sale_keeps_source_identity_and_sink_has_no_stock(self):
         row = self.create("bandage", quantity=8)
         sequence, identity = row.sequence, row.pk
-        for raw, remaining in (("붕대 판매", 7), ("붕대 3개 판매", 4)):
+        for raw, remaining in (("붕대 팔아", 7), ("붕대 3개 팔아", 4)):
             self.assertIn("매입", self.command(raw))
             row.refresh_from_db()
             self.assertEqual((row.pk, row.sequence, row.quantity), (identity, sequence, remaining))
-        self.assertIn("매입", self.command("붕대 모두 판매"))
+        self.assertIn("매입", self.command("붕대 모두 팔아"))
         self.assertFalse(ItemEntity.objects.filter(pk=identity).exists())
         self.assertFalse(ItemEntity.objects.filter(owner_object=self.seller).exists())
 
@@ -68,7 +68,7 @@ class NativeShopTests(Phase5Test):
             shop_service.buy(self.char1, seller, "jungle_longblade")
         self.assertEqual(self.state(), before)
         self.assertGreater(shop_service.valuation(self.char1, seller, "정글장도 2"), 0)
-        self.assertIn("매입", self.command("정글장도 2 판매"))
+        self.assertIn("매입", self.command("정글장도 2 팔아"))
         self.assertTrue(ItemEntity.objects.filter(pk=first.pk).exists())
         self.assertFalse(ItemEntity.objects.filter(pk=second.pk).exists())
 
@@ -95,13 +95,13 @@ class NativeShopTests(Phase5Test):
         mag = self.create("mag_556_standard", state={"rounds": 9})
         self.assertEqual(shop_service.resale(mag), 31)
         credits = self.char1.profile()["credits"]
-        output = self.command("카빈표준 판매")
+        output = self.command("카빈표준 팔아")
         self.assertIn("잔탄 9발", output)
         self.assertEqual(self.char1.profile()["credits"], credits + 31)
 
     def test_sale_failures_nonaccepted_quantity_and_save_rollback(self):
         self.create("bandage", quantity=5)
-        for raw in ("붕대 0개 판매", "붕대 -1개 판매", "붕대 9개 판매", "붕대 3개 모두 판매"):
+        for raw in ("붕대 0개 팔아", "붕대 -1개 팔아", "붕대 9개 팔아", "붕대 3개 모두 팔아"):
             before = self.state()
             self.command(raw)
             self.assertEqual(self.state(), before)
@@ -125,9 +125,9 @@ class NativeShopTests(Phase5Test):
         self.char1.location = seller.location
         actions = seller.web_actions(self.char1, "무기상", observed_at=100)
         commands = [row["command"] for row in actions]
-        self.assertIn("무기상에게 절단마체테 2 판매", commands)
-        self.assertIn("무기상에게 정글장도 판매", commands)
-        self.assertNotIn("무기상에게 정글장도 구매", commands)
+        self.assertIn("무기상에게 절단마체테 2 팔아", commands)
+        self.assertIn("무기상에게 정글장도 팔아", commands)
+        self.assertNotIn("무기상에게 정글장도 사", commands)
         self.assertNotIn(str(ItemEntity.objects.first().pk), str(actions))
 
     def test_equipped_or_other_owner_item_cannot_sell(self):
@@ -160,10 +160,10 @@ class LegacyShopCompatibilityTests(Phase5Test):
         self.char1.change(lambda p: (p["inventory"].update(cutting_machete=2), p["equipment"].update(weapon="cutting_machete")))
         seller = self.obj("weapon_shopkeeper")
         self.char1.location = seller.location
-        self.assertIn("무기상에게 절단마체테 판매", str(seller.web_actions(self.char1, "무기상")))
-        self.command("절단마체테 판매")
+        self.assertIn("무기상에게 절단마체테 팔아", str(seller.web_actions(self.char1, "무기상")))
+        self.command("절단마체테 팔아")
         self.assertEqual(self.char1.profile()["inventory"]["cutting_machete"], 1)
-        self.assertNotIn("무기상에게 절단마체테 판매", str(seller.web_actions(self.char1, "무기상")))
+        self.assertNotIn("무기상에게 절단마체테 팔아", str(seller.web_actions(self.char1, "무기상")))
 
     def test_buy_sale_quantity_field_gear_without_entity_creation(self):
         seller = self.obj("supply_shopkeeper")
@@ -171,14 +171,14 @@ class LegacyShopCompatibilityTests(Phase5Test):
         for _ in range(3):
             shop_service.buy(self.char1, seller, "bandage")
         self.char1.change(lambda p: p["inventory"].update(bandage=8, jungle_longblade=1, tactical_protective_suit=1))
-        for raw in ("붕대 판매", "붕대 3개 판매", "붕대 모두 판매"):
+        for raw in ("붕대 팔아", "붕대 3개 팔아", "붕대 모두 팔아"):
             self.assertIn("매입", self.command(raw))
         self.assertNotIn("bandage", self.char1.profile()["inventory"])
         for shop, name in (("weapon", "정글장도"), ("armor", "전술방호복")):
             seller = self.obj(shop + "_shopkeeper")
             self.char1.location = seller.location
             self.assertIn("매입가", self.command(name + " 가치"))
-            self.assertIn("매입", self.command(name + " 판매"))
+            self.assertIn("매입", self.command(name + " 팔아"))
         self.assertFalse(ItemEntity.objects.exists())
 
     def test_legacy_purchase_failure_preserves_every_field(self):

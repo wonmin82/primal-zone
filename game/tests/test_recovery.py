@@ -161,11 +161,13 @@ class RecoveryTests(WorldCommandTest):
         self.assertEqual(self.char1.profile_snapshot(), before)
 
     def test_medical_full_hp_rest_mental_and_credit_reset(self):
+        self.char1.change(lambda p: p.update(credits=100))
         self.clock.return_value = 109
-        self.char1.execute_cmd("의무관 진료")
+        self.char1.execute_cmd("의무관 회복")
         p = self.char1.profile()
         self.assertEqual((p["hp"], p["mental"]), (60, 10))
         self.assertEqual(p["recovery"]["credit"]["hp"], 0)
+        self.char1.move_to(self.rooms["recovery_room"], quiet=True)
         self.char1.execute_cmd("침대 휴식")
         self.assertEqual((self.char1.profile()["hp"], self.char1.profile()["mental"]), (60, 40))
         self.assertIsNone(self.char1.ndb.recovery_task)

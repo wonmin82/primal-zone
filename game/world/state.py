@@ -116,7 +116,7 @@ def multiplayer_state(player, now=None):
                 "name": enemy.key,
                 "label": controls[enemy.id],
                 "attack_command": controls[enemy.id] + " 공격",
-                "look_command": controls[enemy.id] + " 보기",
+                "look_command": controls[enemy.id] + " 봐",
                 "hp": enemy.db.hp,
                 "max_hp": enemy.db.max_hp,
                 "state": enemy.db.state,
@@ -132,7 +132,7 @@ def multiplayer_state(player, now=None):
                 "id": corpse.id,
                 "name": corpse.key,
                 **loot[corpse.id],
-                "look_command": loot[corpse.id]["label"] + " 보기",
+                "look_command": loot[corpse.id]["label"] + " 봐",
                 "decay_at": corpse.db.decay_at,
             }
             for corpse in corpses
@@ -146,7 +146,7 @@ def multiplayer_state(player, now=None):
                 "label": controls[obj.id],
                 "role": obj.semantic_role,
                 "actions": obj.web_actions(player, controls[obj.id], now),
-                "look_command": controls[obj.id] + " 보기",
+                "look_command": controls[obj.id] + " 봐",
             }
             for obj in objects
             if isinstance(obj, ActionObject)

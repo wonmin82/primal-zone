@@ -11,16 +11,16 @@ def shopkeepers(caller):
     return [obj for obj in room_objects(caller) if isinstance(obj, Shopkeeper)]
 
 
-def resolve_shopkeeper(caller, name="", item=None, objects=None, action="구매"):
+def resolve_shopkeeper(caller, name="", item=None, objects=None, action="사"):
     objects = shopkeepers(caller) if objects is None else objects
     if name.strip():
         known = [n for obj in objects for n in names(obj)]
-        return resolve(objects, parse_selector(name, known), caller, "상품")[0]
+        return resolve(objects, parse_selector(name, known), caller, "목록")[0]
     from world.content import ITEMS
     from world.content.shops import accepts
 
     candidates = [obj for obj in objects if item is None or (
-        accepts(obj.db.shop_id, ITEMS.get(item, {})) if action in ("판매", "가치")
+        accepts(obj.db.shop_id, ITEMS.get(item, {})) if action in ("팔아", "가치")
         else item in SHOP_CATALOGS.get(obj.db.shop_id, {}).get("purchase_catalog", ()))]
     if not candidates:
         raise rules.RuleError("이곳에서 해당 물건을 파는 상인을 찾지 못했습니다." if item else "이곳에서 상점 상인을 찾지 못했습니다.")

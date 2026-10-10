@@ -1,4 +1,4 @@
-"""실제 정산관·명령·관찰·영속 객체와 정산 후 구매 동선."""
+"""실제 정산관·명령·관찰·영속 객체와 정산 후 사 동선."""
 
 from copy import deepcopy
 from unittest.mock import Mock, patch
@@ -160,7 +160,7 @@ class SettlementWorldTests(SettlementFixture, WorldCommandTest):
         self.assertEqual([action["command"] for action in next(obj["actions"] for obj in multiplayer_state(self.char1)["interactables"] if obj["name"] == self.officer.key)],
                          ["자원 정산관 환율"])
         self.char1.location = self.rooms["support_2f_e1"]
-        self.assertNotIn("정산관", self.command("북 보기"))
+        self.assertNotIn("정산관", self.command("북 봐"))
 
     def test_bootstrap_identity_aliases_and_all_existing_data_are_preserved(self):
         self.prepare()
@@ -197,10 +197,10 @@ class SettlementWorldTests(SettlementFixture, WorldCommandTest):
         for raw in ("남", "서", "승강기", "5층", "동", "북"):
             self.command(raw)
         self.assertEqual(self.char1.zone, "weapon_shop")
-        shop = self.command("상품")
+        shop = self.command("목록")
         self.assertNotIn("교환", shop)
         self.assertNotIn("회수부품", shop)
-        self.command("절단마체테 구매")
+        self.command("절단마체테 사")
         self.assertEqual(self.char1.profile()["credits"], 6 * SALVAGE_CREDIT_RATE - ITEMS["cutting_machete"]["value"])
         self.assertEqual(self.char1.profile()["inventory"]["cutting_machete"], 1)
         for raw in ("남", "서", "승강기", "1층", "서"):

@@ -40,9 +40,9 @@ class ActionObject(DistantPresenceMixin, DefaultObject):
         """기존 Web control allowlist. 성장·보관 조작은 전용 UI/명령을 유지한다."""
         return [
             {"label": action, "command": target + " " + action}
-            for action in (("보기",) if isinstance(self, Container) else self.actions)
-            if action in ("대화", "조사", "수리", "보기", "진료", "휴식")
-            and (action not in ("진료", "휴식") or self.available(caller, observed_at=observed_at))
+            for action in (("봐",) if isinstance(self, Container) else self.actions)
+            if action in ("대화", "조사", "수리", "봐", "회복", "휴식")
+            and (action not in ("회복", "휴식") or self.available(caller, observed_at=observed_at))
         ]
 
     def perform_action(self, caller, action, args=None):
@@ -343,18 +343,48 @@ class TrainingManager(GrowthTrainer):
 class Doctor(ActionObject):
     semantic_role = "npc"
     detectability = "conspicuous"
-    presence = "탐사자의 상태를 살피며 진료를 준비하고 있다."
-    description = "탐사자의 부상을 살피고 치료하는 의무관이다."
-    actions = ("진료",)
+    presence = "탐사자의 부상을 살피며 회복을 준비하고 있다."
+    description = "보급칩을 받고 부족한 HP를 회복하는 의무관이다. 정신력은 회복하지 않는다."
+    actions = ("회복",)
     available = _service_available
 
+    def quote(self, caller, requested=None):
+        return rules.treatment_quote(caller.profile_snapshot(), requested,
+                                     safe=ROOMS.get(caller.zone, {}).get("safe", False))
+
     def return_appearance(self, looker, **kwargs):
-        return ft.sheet(ft.token(self.semantic_role, self.key), self.description, "",
-                        ft.actions(self.actions if self.available(looker) else ()))
+        lines = [self.description]
+        if self.available(looker):
+            try:
+                restored, cost = self.quote(looker)
+                lines.append(f"현재 HP {restored} 전체 회복 예상 비용: {cost}칩 (실행 시 재계산)")
+            except rules.RuleError as error:
+                lines.append(str(error))
+            lines.append("회복 · 20 회복 · 의무관에게 20 회복 / 회복실 침대 휴식은 무료")
+            lines.append(ft.actions(self.actions))
+        return ft.sheet(ft.token(self.semantic_role, self.key), *lines)
+
+    def web_actions(self, caller, target, observed_at=None):
+        if not self.available(caller, observed_at):
+            return []
+        try:
+            restored, cost = self.quote(caller)
+        except rules.RuleError:
+            return []
+        return [{"label": f"HP {restored} 회복 · 예상 {cost}칩", "command": target + " 회복"}]
 
     def act(self, caller, action, args):
-        caller.change(lambda profile: rules.treat(profile, safe=ROOMS.get(caller.zone, {}).get("safe", False)))
-        caller.msg("의무관의 진료를 받고 체력을 모두 회복했습니다.")
+        quoted_hp, quoted_cost = self.quote(caller, args)
+        caller.msg(f"요청 HP {quoted_hp} 회복 예상 비용: {quoted_cost}칩 (실행 시 재계산)")
+        from world.multiplayer import world_change
+
+        # 유료 서비스는 SP 자연회복 checkpoint와 분리한다. 조회/실패/성공 모두
+        # 요청 자체가 정신력을 증가시키지 않으며 scheduler의 회복은 독립적이다.
+        with world_change():
+            profile = caller.profile()
+            restored, cost = rules.treat(profile, args, safe=ROOMS.get(caller.zone, {}).get("safe", False))
+            caller.save_profile(profile)
+        caller.msg(f"HP {restored} 회복 · 비용 {cost}칩을 지불했습니다. 정신력은 회복하지 않습니다.")
 
 
 class Bed(ActionObject):
@@ -425,7 +455,7 @@ class Shopkeeper(ActionObject):
     detectability = "conspicuous"
     presence = "판매대에서 탐사 장비와 보급품을 정리하고 있다."
     description = "탐사자를 위한 물품을 보급칩으로 판매하는 상인이다."
-    actions = ("대화", "상품", "구매", "가치", "판매")
+    actions = ("대화", "목록", "사", "가치", "팔아")
 
     def available(self, caller, observed_at=None):
         return _service_available(self, caller, observed_at) and self.db.shop_id in SHOP_CATALOGS
@@ -436,18 +466,18 @@ class Shopkeeper(ActionObject):
         from world.shop_service import shop_snapshot
 
         catalog, sales = shop_snapshot(caller, self, observed_at)
-        actions = [{"label": "상품", "command": target + " 상품"}]
+        actions = [{"label": "목록", "command": target + " 목록"}]
         for item in catalog:
             name = ITEMS[item]["name"]
             unit = f" ×{ITEMS[item]['purchase_quantity']}발" if ITEMS[item].get("purchase_quantity", 1) != 1 else ""
-            actions.extend(({"label": f"{name}{unit} · {format_currency(rules.purchase_price(item))} 구매",
-                             "command": f"{target}에게 {name} 구매"},
+            actions.extend(({"label": f"{name}{unit} · {format_currency(rules.purchase_price(item))} 사",
+                             "command": f"{target}에게 {name} 사"},
                             {"label": name + " 가치", "command": f"{target}에게 {name} 가치"}))
         for name, quantity, price, stackable in sales:
-            actions.append({"label": f"{name} · {format_currency(price)} 판매", "command": f"{target}에게 {name} 판매"})
+            actions.append({"label": f"{name} · {format_currency(price)} 팔아", "command": f"{target}에게 {name} 팔아"})
             if stackable and quantity >= 2:
-                actions.append({"label": f"{name} 모두 판매 · 총 {format_currency(quantity * price)}",
-                                "command": f"{target}에게 {name} 모두 판매"})
+                actions.append({"label": f"{name} 모두 팔아 · 총 {format_currency(quantity * price)}",
+                                "command": f"{target}에게 {name} 모두 팔아"})
         return actions
 
     def return_appearance(self, looker, **kwargs):
@@ -457,7 +487,7 @@ class Shopkeeper(ActionObject):
         if self.available(looker):
             target = labels(room_objects(looker))[self.id]
             usage = ft.join([ft.usage(command, set(self.actions)) for command in (
-                f"{target} 상품", f"{target}에게 물건이름 구매", f"{target}에게 물건이름 가치", f"{target}에게 물건이름 판매",
+                f"{target} 목록", f"{target}에게 물건이름 사", f"{target}에게 물건이름 가치", f"{target}에게 물건이름 팔아",
             )], " · ")
         return ft.sheet(ft.token("npc", self.key), self.description, "", usage)
 
@@ -468,9 +498,9 @@ class Shopkeeper(ActionObject):
             raise rules.RuleError("안전한 곳에서만 상점을 이용할 수 있습니다.")
         if self.db.shop_id not in SHOP_CATALOGS:
             raise rules.RuleError("상점 판매 목록을 확인할 수 없습니다.")
-        if action == "상품":
+        if action == "목록":
             caller.msg(view.shop(self.db.shop_id, self.key))
-        elif action == "구매":
+        elif action == "사":
             from world.shop_service import buy
 
             buy(caller, self, args)
@@ -492,7 +522,7 @@ class Shopkeeper(ActionObject):
             caller.msg(ft.text(ft.token("npc", self.key), "은 ", ft.token("item", name), "의 가치를 평가한다.\n",
                                f"구매 기준가는 {format_currency(purchase)}이다.\n" if purchase else "",
                                "매입가는 ", ft.token("reward", format_currency(price)), "이다."))
-        elif action == "판매":
+        elif action == "팔아":
             from world.shop_service import sell
 
             result = sell(caller, self, *args)
@@ -507,7 +537,7 @@ class Incinerator(ActionObject):
     detectability = "conspicuous"
     description = "불필요한 물품을 폐기한다. 출입증은 소각 확정이 필요하며 원래 발급자에게 재발급받을 수 있다."
     presence = "밀폐된 소각로에서 낮은 열기가 느껴진다."
-    actions = ("보기",)
+    actions = ("봐",)
 
     def act(self, caller, action, args):
         caller.msg(self.return_appearance(caller))
@@ -644,7 +674,7 @@ INTERACTABLES = {
     "armor_shopkeeper": {"room": "armor_shop", "typeclass": "Shopkeeper", "name": "방어구상", "aliases": ["방어구 상인"], "shop_id": "armor"},
     "salvage_officer": {"room": "salvage_office", "typeclass": "SettlementOfficer", "name": "자원 정산관", "aliases": ["정산관"]},
     "doctor": {"room": "infirmary", "typeclass": "Doctor", "name": "의무관", "aliases": ["의사"]},
-    "infirmary_bed": {"room": "infirmary", "typeclass": "Bed", "name": "침대", "aliases": ["병상"]},
+    "infirmary_bed": {"room": "recovery_room", "typeclass": "Bed", "name": "침대", "aliases": ["병상"]},
     "emergency_light_cache": {"room": "wreck", "typeclass": "EmergencyLightCache", "name": "비상장비함", "aliases": ["비상함", "장비함"]},
     "shared_container": {"room": "storage_room", "typeclass": "Container", "name": "보관상자", "aliases": []},
     "personal_locker": {"room": "storage_room", "typeclass": "PersonalLocker", "name": "개인 보관함", "aliases": ["보관함"]},

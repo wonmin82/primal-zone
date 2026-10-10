@@ -253,7 +253,7 @@ class TargetIntegrationTests(WorldCommandTest):
         b.db.decay_at = c.db.decay_at = 200
         control = multiplayer_state(self.char1, 100)["corpses"][1]
         self.assertEqual(control["id"], b.id)
-        output = self.look(control["look_command"].removesuffix(" 보기"))
+        output = self.look(control["look_command"].removesuffix(" 봐"))
         self.assertIn("지정: 시체 2", output)
         self.assertIn("회수: " + control["take_command"], output)
         self.char1.execute_cmd(control["take_command"])

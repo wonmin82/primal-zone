@@ -190,7 +190,7 @@ class GameplayIntegrationTests(WorldCommandTest):
     def test_raw_commands_purchase_equip_and_quest(self):
         self.char1.change(lambda data: data.update(credits=200))
         self.char1.location = self.rooms["weapon_shop"]
-        self.char1.execute_cmd("  절단마체테   구매  ")
+        self.char1.execute_cmd("  절단마체테   사  ")
         self.assertEqual(self.char1.profile()["inventory"]["cutting_machete"], 1)
         self.char1.execute_cmd("탐사용 벌목도 해제")
         self.char1.execute_cmd("절단마체테 WIELD")
@@ -210,13 +210,13 @@ class GameplayIntegrationTests(WorldCommandTest):
         for raw in ("승강기", "5층", "서", "북"):
             self.char1.execute_cmd(raw)
         self.assertEqual(self.char1.location, self.rooms["armor_shop"])
-        self.char1.execute_cmd("강화방호조끼 구매")
+        self.char1.execute_cmd("강화방호조끼 사")
         self.assertEqual(self.char1.profile()["inventory"]["reinforced_vest"], 1)
 
     def test_raw_attack_resume_and_movement(self):
         self.char1.execute_cmd("북")
         self.assertEqual(self.char1.location, self.rooms["grass"])
-        self.char1.execute_cmd("어린 청소룡 사냥")
+        self.char1.execute_cmd("어린 청소룡 때려")
         before = self.char1.profile()["combat_target"]
         self.assertEqual(self.char1.combat_target().db.enemy_id, "scavenger")
         with patch.object(self.char1.sessions, "count", return_value=1):
@@ -229,7 +229,7 @@ class GameplayIntegrationTests(WorldCommandTest):
         for raw in (
             "공격 어린청소룡",
             "attack scavenger",
-            "구매 붕대",
+            "사 붕대",
             "buy bandage",
             "착용 낡은칼",
             "대화 윤대장",

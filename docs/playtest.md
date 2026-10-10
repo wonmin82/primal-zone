@@ -18,7 +18,7 @@
 
 ## 현재 안내와 PR #42 병합 결과
 
-플레이 방법은 [플레이 가이드](gameplay.md), 현재 자동 검사 명령은 [6절](#6-자동-테스트-실행)을 따른다. 현재 개인 줄임말은 [v1.14·프로필 v11](command-shortcuts.md)이며 아래 과거 실행의 버전·가격·미실행 결과를 현재 안내로 해석하지 않는다.
+플레이 방법은 [플레이 가이드](gameplay.md), 현재 자동 검사 명령은 [6절](#6-자동-테스트-실행)을 따른다. 개인 줄임말 v1.14의 현재 저장 프로필은 [v12](command-shortcuts.md#프로필-v12의-명령-어휘-이전)다. Issue #46의 Push/PR 업데이트 전에는 [전체 로컬 CI 정책](#issue-46-pr-51-리뷰-후-검증-정책-2026-10-10)을 추가로 적용한다. 아래 과거 실행의 버전·가격·미실행 결과를 현재 안내로 해석하지 않는다.
 
 [PR #42](https://github.com/wonmin82/primal-zone/pull/42)는 2026-10-10 12:49:53 KST에 merge commit `f50d940d6222e73eda4e5404c312d61b134f1ad4`로 병합되었다. 최종 문서 HEAD `ac1130c5d1f8d5f510799cc4921e2126b8fcdea1`의 [CI 38021535424](https://github.com/wonmin82/primal-zone/actions/runs/38021535424)와 병합 main의 [CI 38021936000](https://github.com/wonmin82/primal-zone/actions/runs/38021936000)는 성공했다. 2026-10-10 GitHub 조회로 재확인한 기존 결과이며 이번 문서 정리에서 게임 검사를 새로 실행한 결과가 아니다. 소스 브랜치의 로컬·원격 삭제도 완료 상태다.
 
@@ -1209,7 +1209,7 @@ game과 격리 서버의 정적 파일을 수집하고 실제 DOM의 JS `?v=hq-s
 
 첫 보스는 **Lv.4 이상, 획득 가능한 T1 무기·방호복, 체력·정신력 회복, 충분한 붕대**를 준비한다. 이는 수동 확인 준비 조건이며 실제 build별 소요·회복·탄약 경제의 평가와 최소 조정 결과는 [Phase 7C 분석](phase7c-balance-analysis.md)을 따른다.
 Lv.4에 필요한 누적 경험치는 240입니다. 부족하면 사냥과 휴식을 반복합니다.
-비전투 상태로 귀환하면 옥상입니다. 의무실의 진료·휴식으로 회복하고 본부 5층 기본점에서 장비를 준비한 뒤 승강기 1층→중앙 로비→부두로 돌아갑니다.
+비전투 상태로 귀환하면 옥상입니다. 의무실의 유료 회복 또는 회복실 침대의 무료 휴식으로 회복하고 본부 5층 기본점에서 장비를 준비한 뒤 승강기 1층→중앙 로비→부두로 돌아갑니다.
 
 1. 부두에서 `북` → `북` → `북` → `북`으로 이동합니다. 초지 → 오솔길 → 물안개 습지 → 통신탑 능선 경로입니다.
 2. `능선의우두머리 공격`로 보스전을 시작합니다.
@@ -1823,3 +1823,55 @@ Version3 cache_claimed=true fixture의 dry-run은 tag1개 entitlement를 계획�
 - 이번 문서 마감은 실행 코드·schema·의존성을 변경하지 않는다. 기존 로컬 pure46개/0.515초·migration/runtime/regions53개/66.853초·shortcut22개/14.637초 결과를 유지하고 게임 테스트·browser·local smoke를 재실행하지 않는다. 문서의 명령·링크·cache 정책·운영 절차를 대조하고 `git diff --check`를 확인한다.
 - 실제 production/play DB migration은 미실행이다. 백업→서버 정지→dry-run→apply→verify→cutover→서버 시작 절차는 별도 maintenance 작업이며 PR 병합만으로 데이터 변환을 실행하지 않는다.
 - 사용자 병합 승인에 따른 문서 마감 최신 HEAD와 병합 main의 CI는 각각 PR Validation과 최종 보고에 별도 run/SHA로 기록한다. 과거 성공 결과를 새 HEAD 검사로 대신하지 않는다. 이전 실패·재실행 이력과 Phase 7 미검증 항목은 유지한다.
+
+## Issue #46 명령·정보·유료 회복 최소 검증 (2026-10-10)
+
+이 절과 아래 두 CI 보완 절은 최초 구현 당시의 실행 이력이다. 로컬 전체 CI를 수행하지 않았던 사실을 보존하며, 현재 Push/PR 업데이트 조건은 [리뷰 후 검증 정책](#issue-46-pr-51-리뷰-후-검증-정책-2026-10-10)을 따른다.
+
+- 기준: 최신 main `f7a9a30b3d25cd3928f8e9e3b213e7f7da670b49`에서 시작한 `feat/46-command-overhaul`. 46-A `cefb03c`, 46-B `fc5ba00` 이후 46-C 미커밋 변경을 포함한 격리 fixture 검사다. 기존 플레이 DB를 초기화하거나 변경하지 않았다.
+- 실행: `.venv/Scripts/python.exe scripts/dev.py test tests.test_command_overhaul.CommandOverhaulSmoke.test_phase_a --parallel 1`, 같은 경로의 `test_phase_b`, `test_phase_c`: 각 1개 성공. 최종 `.venv/Scripts/python.exe scripts/dev.py test tests.test_command_overhaul --parallel 1`: 대표 3개 성공. 이후 원본 보존 보완에 직접 영향을 받는 C 1개 재검사도 성공했다.
+- A: 실제 CmdSet을 통해 새 명령·대표 별칭·상점 거래·수직 방향·시체 번호/보호 권한·개인 정의·도움말을 확인했다. `쏴`의 shooting 예약에서 HP·탄약·다음 공격 시각이 즉시 바뀌지 않음을 확인했다. 전역 고정/인자형 도움말은 정식 페이지로 연결된다.
+- B: 소지/장착 무기·동명 번호·실제 탄창 잔탄·손전등·붕대 조회와 `정보 도움`을 확인했다. 조회 전후 저장 프로필과 ItemEntity 상태가 동일했다.
+- C: 전량·부분 HP, 공식의 레벨 10/50/99/100 사례, 부족 잔액·잘못된 수량·저장 예외의 rollback, SP 불변, 동일 Stable ID 침대의 회복실 이전과 반복 bootstrap, 무료 HP/SP 휴식을 확인했다. v7/v11→v12의 응급처치/의료/사격 구분, 불명확한 정의의 원본 보존과 버전별 멱등성을 확인했다.
+- 문서: GitHub GFM Markdown API로 변경 문서의 제목·표·코드 블록을 렌더링하고 저장소 Markdown 상대경로·앵커 및 기존 README 참조를 검사했다. 상세 결과는 작업 scratch의 보고서와 PR Validation에 기록하며, 명령·가격·배치 설명은 구현과 대조했다. 과거 버전의 진료/침대/어휘 기록은 과거 정책으로 표시하고 보존했다.
+- 미실행: 로컬 전체 회귀, 실 서버 Quick/Full smoke, 다중 세션 경합, 재시작 장기 검증, 실제 브라우저·한글 IME·시각/출력 전수 검사. 사용자 지정 범위에 따라 #50에서 검증한다. 자동 GitHub CI는 로컬 최소 Smoke와 구분해 최신 PR HEAD 결과를 PR에 기록한다.
+
+### Issue #46 첫 자동 CI의 기존 입력 보정
+
+- `3c28205`의 [Game checks 38041514739](https://github.com/wonmin82/primal-zone/actions/runs/38041514739): 코드 검사는 성공했으나 pure 215개 중 구 소지품 제목·8방향 개수·v7→현재 어휘 기대 3건과 smoke 구매 mock 1건이 실패했다. 자동 Quick smoke는 제거된 `사냥` 입력으로 전투 시작을 기다리다 timeout이었다. 이 결과를 성공으로 덮어쓰지 않는다.
+- 해당 fixture의 현재 기대값과 구매 mock·Quick 입력을 새 명령으로 맞췄다. 같은 입력 대조에서 남은 현재 거래/회복 fixture도 새 별칭·회복실 배치로 정리했다. 구 역사적 변환 함수만 확인하는 테스트의 당시 입력은 유지했다.
+- 실패한 `world.test_economy.EconomyRulesTests.test_wallet_display_with_and_without_inventory`, `world.test_vocabulary.VocabularyTests.test_global_shortcuts_follow_direction_ssot_and_canonical_inventory`, `world.test_vocabulary.VocabularyTests.test_v7_hil_name_collision_preserves_data_and_exact_references`, `world.test_smoke.SmokeRestartTests.test_full_boss_purchase_accepts_boots_previously_obtained_by_drop`만 `scripts/dev.py test ... --parallel 1`로 실행해 4개 성공했다. 전체 로컬 회귀는 실행하지 않았다.
+- 새 방어구 도움말을 무기 해제가 잘못 상속하지 않도록 분리하고, 삭제된 보기 입력을 안내하던 정산 오류를 수정했다. 이후 자동 CI는 새 PR HEAD에서 별도 확인한다.
+- 무기 해제 도움말 분리를 포함한 `tests.test_command_overhaul.CommandOverhaulSmoke.test_phase_a --parallel 1`: 대표 Smoke 1개 성공. `ruff check game scripts`, `git diff --check` 성공.
+
+### Issue #46 의료 대상·엔진 도움 호환 보완
+
+- `850de16`의 [Game checks 38041875963](https://github.com/wonmin82/primal-zone/actions/runs/38041875963): 자동 Quick smoke 성공, pure 215개 성공, integration 668개에서 17개 기대 비교 실패. 현재 제목·profile v12·별칭 정렬/실제 명령 우선순위의 구 기대값 외에 수량 없는 `의무관에게 회복`과 엔진 페이지 도움 경로가 포함됐다.
+- 수량 없는 의료 대상/조사는 전량 HP 회복으로 처리하고 의무관 상세의 행동 토큰을 유지했다. `도움`·영문 help와 분리한 `@help`만 엔진 완료 계약의 호환 예외로 등록했다. 추가 페이지 입력을 받는 간접 실행 거절은 기존 guard를 유지한다. 본부 관찰 예시와 현재/과거 의료 안내를 구분하고 일반 시설 상태 오류 문구를 복원했다.
+- 해당 변경의 A/C 대표 Smoke만 `.venv/Scripts/python.exe scripts/dev.py test tests.test_command_overhaul.CommandOverhaulSmoke.test_phase_a tests.test_command_overhaul.CommandOverhaulSmoke.test_phase_c --parallel 1`로 실행해 2개 성공했다. `사` 직접 실행, 엔진 페이지 간접 실행 거절, `의사에게 회복` 전량/비용도 포함한다. B 조회·거래 가격·전투 주기·schema·CI 설정은 이 보완에서 바꾸지 않았다.
+- 로컬 전체 회귀는 여전히 미실행이며 이후 자동 CI는 새 HEAD에 대해 PR Validation에 기록한다. 앞선 CI 실패·수정 근거와 #50의 경합·장기·브라우저 검증 공백은 유지한다.
+
+## Issue #46 PR #51 리뷰 후 검증 정책 (2026-10-10)
+
+최신 Issue #46과 PR #51 리뷰 요청에 따라 사전 검증 정책을 갱신했다. 개발 중에는 변경 범위의 경량 검사를 수행하고 로컬 단계별 커밋을 허용한다. 원격 Push 또는 PR 업데이트 전에는 **실제 Push할 커밋 HEAD에서 GitHub CI와 동등한 전체 로컬 검사 성공**이 필수다. 기존 구현 당시의 미실행 기록과 자동 CI 실패 이력은 위 절에 그대로 보존한다.
+
+현행 `.github/workflows/tests.yml`에는 추가 테스트 환경 변수가 없으며 `test`·`smoke` 두 작업의 로컬 필수 명령은 다음과 같다. 저장소 루트에서 실행하며, 테스트와 Quick smoke는 기존 격리 SQLite/fixture를 사용하고 플레이 DB를 초기화하지 않는다.
+
+```powershell
+uv sync --locked --python 3.13
+uv run python scripts/dev.py check
+uv run python scripts/dev.py test --parallel 2
+uv run python scripts/dev.py smoke
+```
+
+- 실패·미실행 상태에서는 Push하지 않는다. 실패 수정이나 검사 이후 코드 변경이 있으면 새 커밋 HEAD에서 전체 검사를 다시 수행한다. 커밋마다 개발 중 전체 회귀를 반복하라는 정책은 아니다.
+- 환경(OS·Python·uv), 실제 명령·종료 코드·성공/실패·테스트 수와 검증한 전체 SHA를 [PR #51 Validation](https://github.com/wonmin82/primal-zone/pull/51)에 기록한다. 로컬 커밋 이후에 전체 CI를 실행하므로 이 문서에서 실행 전 결과나 자기 커밋 SHA를 미리 확정하지 않는다.
+- Push 후 동일 HEAD의 GitHub Actions `test`·`smoke` Run URL과 최종 결과를 별도로 확인한다. 원격 CI 실패를 수정한 경우도 로컬 전체 CI를 먼저 통과해야 다음 Push를 할 수 있다. PR 설명만 갱신하고 코드가 같으면 동일 검증 SHA를 사용한다.
+- 이번 리뷰의 경량 검사는 `tests.test_command_overhaul`을 사용한다. 46-B에 탄약 세 종류의 개당/묶음 단위, 일반 상품·가격 미정·별도 매입가·비탄약 묶음·읽기 전후 불변, 실제 구매/판매·가치/얼마·잔탄 탄창 평가를 추가했다. 경량 결과와 커밋 후 전체 CI 결과는 구분해 PR에 기록한다.
+- #50의 별도 범위는 여러 Issue 통합 시나리오, 실제 브라우저·한글 IME, 복수 플레이어/세션 경합, 도움말/UI 종단 간 검사와 최종 통합 회귀다. 이 범위로 #46 자체의 Push 전 로컬 CI를 연기하지 않는다. Full production timing·장기 재시작 검증 역시 이번 Quick 성공으로 대체하지 않는다.
+
+### 리뷰 수정의 커밋 전 경량 결과
+
+- 기준은 `c0789ac4acb1b119eabb2373f0cbf92420c3030a` 이후 가격 출력·도움말·테스트·검증 정책의 미커밋 수정이다. Windows 10 build 19045, Python 3.13.15, uv 0.12.13에서 `uv run python scripts/dev.py test tests.test_command_overhaul --parallel 1`: 5개/42.051초 성공, runner 58.544초, 종료 코드 0. 기존 A/B/C와 새 가격/거래 검사를 포함하며 이후 문서만 보완했다.
+- `uv run python scripts/dev.py check`: 성공, 종료 코드 0. GitHub GFM 렌더링과 저장소 Markdown 상대경로/앵커 검사를 성공시켰다. 새 안내의 잘못된 프로필 문서 앵커 1건은 수정 후 재검사해 오류 0을 확인했다. `git diff --check`: 성공.
+- 이 경량 결과는 Push 허용 근거가 아니다. 다음 로컬 커밋의 정확한 SHA에서 위 전체 CI 네 명령을 수행하고, 확인된 결과만 PR Validation에 추가한다. 전체 로컬 검사·원격 CI·미검증 #50 범위를 구분한다.

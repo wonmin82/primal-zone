@@ -31,8 +31,8 @@ class VocabularyTests(TestCase):
         before = deepcopy(old)
         migrated = rules.migrate_profile(old)
         self.assertEqual(migrated["command_shortcuts"], {
-            "힐_개인3": "소지품", "힐_개인": "장비", "힐_개인2": "상태",
-            "생존": ["힐_개인3", "힐 보기", "힐 말", "'힐, 회복", "진료", "붕대 사용"],
+            "힐_개인3": "가진거", "힐_개인": "장비", "힐_개인2": "점수",
+            "생존": ["힐_개인3", "힐 봐", "힐 말", "'힐, 회복", "회복", "붕대 사용"],
         })
         self.assertEqual(old, before)
         self.assertEqual(rules.migrate_profile(migrated), migrated)
@@ -48,10 +48,12 @@ class VocabularyTests(TestCase):
         self.assertEqual(old["기록"], [*historical, "가", "가방"])
 
     def test_global_shortcuts_follow_direction_ssot_and_canonical_inventory(self):
-        self.assertEqual(len(DIRECTION_SHORTCUTS), 8)
-        self.assertEqual(len(set(data["shortcut"] for data in DIRECTIONS.values() if "shortcut" in data)), 8)
+        self.assertEqual(len(DIRECTION_SHORTCUTS), 11)
+        self.assertEqual(len(set(data["shortcut"] for data in DIRECTIONS.values() if "shortcut" in data)), 10)
+        self.assertEqual({name: DIRECTION_SHORTCUTS[name] for name in ("ㅇ", "ㅁ", "아")},
+                         {"ㅇ": "위", "ㅁ": "아래", "아": "아래"})
         self.assertEqual({key: SHORTCUTS[key] for key in DIRECTION_SHORTCUTS}, DIRECTION_SHORTCUTS)
-        self.assertEqual(SHORTCUTS["소"], "소지품")
+        self.assertEqual(SHORTCUTS["소"], "가진거")
         self.assertNotIn("가", SHORTCUTS)
 
     def test_v7_migration_preserves_gameplay_and_firstaid_rank_and_queue(self):
@@ -69,8 +71,8 @@ class VocabularyTests(TestCase):
         self.assertNotIn("firstaid", migrated["skills"])
         self.assertEqual(migrated["queued_action"], "attack")
         self.assertEqual(migrated["command_shortcuts"], {
-            "점검": "상태, 장비, 소지품 해", "인사": ["회복 말", "'상점, 치료"],
-            "쇼핑": "무기상 상품, 붕대 구매, 의무관에게 진료, 소지품, 붕대 사용, 내려 해"})
+            "점검": "점수, 장비, 가진거 해", "인사": ["회복 말", "'상점, 치료"],
+            "쇼핑": "무기상 목록, 붕대 사, 의무관에게 회복, 가진거, 붕대 사용, 내려 해"})
         for key in old.keys() - {"version", "skills", "queued_action", "command_shortcuts", "skill_ready_at"}:
             self.assertEqual(migrated[key], old[key], key)
         self.assertEqual(rules.migrate_profile(migrated), migrated)

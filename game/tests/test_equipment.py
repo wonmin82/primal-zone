@@ -89,10 +89,10 @@ class EquipmentTests(WorldCommandTest):
         self.char1.change(lambda p: p.update(credits=1000))
         for name, identity, alias in (
             ("절단마체테", "cutting_machete", "WIELD"),
-            ("강화방호조끼", "reinforced_vest", "wear"),
+            ("강화방호조끼", "reinforced_vest", "입어"),
         ):
             self.char1.location = self.rooms["weapon_shop" if identity == "cutting_machete" else "armor_shop"]
-            self.char1.execute_cmd(f"{name} 구매")
+            self.char1.execute_cmd(f"{name} 사")
             slot = ITEMS[identity]["slot"]
             self.char1.change(lambda p: rules.unequip(p, p["equipment"][slot], slot))
             self.char1.execute_cmd(f"{name} {alias}")
@@ -135,13 +135,14 @@ class EquipmentTests(WorldCommandTest):
         self.assertEqual((rules.stats(self.char1.profile())["attack"], rules.stats(self.char1.profile())["defense"]), (14, 4))
         for shop_id, catalog in SHOP_CATALOGS.items():
             self.assertEqual({ITEMS[i]["name"] for i in catalog["purchase_catalog"]}, set(tokens(view.shop(shop_id, "상인"), "item")))
-        for action, alias in (("무장", "wield"), ("착용", "wear")):
+        for action, aliases in (("무장", ["wield"]), ("착용", ["입어", "입"])):
             registered = [c for c in COMMANDS if c.key == action]
             self.assertEqual(len(registered), 1)
-            self.assertEqual(list(registered[0].aliases), [alias])
+            self.assertCountEqual(registered[0].aliases, aliases)
             command = Help()
             command.caller, command.args = self.char1, action
             with patch.object(self.char1, "msg") as message:
                 command.run()
-            self.assertIn(alias, tokens(message.call_args.args[0], "command"))
+            for alias in aliases:
+                self.assertIn(alias, tokens(message.call_args.args[0], "command"))
             self.assertIn(registered[0].usage, message.call_args.args[0])

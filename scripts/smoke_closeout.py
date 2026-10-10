@@ -104,7 +104,7 @@ class Closeout:
         # Lv.1 has no earned upgrade. Training becomes available after real XP gains.
         await player.expect_text("강타 배워", "남은 기술 훈련")
         await travel_to(player, 'infirmary')
-        await player.act("의무관 진료", lambda s: s["hp"] == s["max_hp"])
+        await player.act("의무관 회복", lambda s: s["hp"] == s["max_hp"])
         self.scenario.phase = "defeat"
         outsider = self.outsider
         await route(outsider, (("북", "trail"),))
@@ -113,13 +113,14 @@ class Closeout:
         await outsider.until(lambda s: s["zone"] == "infirmary" and s["combat_target"] is None,
                              self.scenario.timeouts.combat)
         assert outsider.state["hp"] == 1 and outsider.state["credits"] == before - min(before, 10)
+        await travel_to(outsider, "recovery_room")
         await outsider.act("침대 휴식", lambda s: s["hp"] == s["max_hp"] and s["mental"] == s["max_mental"])
         self.scenario.report("defeat", "actual enemy → infirmary / HP 1 / 최대 10칩 / Bed HP·정신력 full")
         self.scenario.phase = "hq-closeout"
         await player.act("귀환", lambda s: s["zone"] == "support_roof")
         await self.floor(player, "1층", "hq_concourse")
         await travel_to(player, 'supply_shop')
-        for command, item in (("붕대 구매", "bandage"), ("탐사용손전등 구매", "flashlight"), ("건전지 구매", "battery")):
+        for command, item in (("붕대 사", "bandage"), ("탐사용손전등 사", "flashlight"), ("건전지 사", "battery")):
             before = count_item(player.state, item)
             await player.act(command, lambda s, item=item, before=before: count_item(s, item) == before + 1)
         await player.expect_text("탐사용손전등에 건전지 넣어", "넣")
@@ -127,7 +128,7 @@ class Closeout:
         await travel_to(player, 'hq_concourse')
         await self.floor(player, "5층", "support_5f_c")
         await travel_to(player, 'armor_shop')
-        await player.act("강화방호조끼 구매", lambda s: count_item(s, "reinforced_vest") == 1)
+        await player.act("강화방호조끼 사", lambda s: count_item(s, "reinforced_vest") == 1)
         # 격리 smoke fixture는 준비 단계에서 기본 손 무기를 명시 해제한다.
         assert player.state["equipment"]["hands"] is None
         await player.act("절단마체테 무장", lambda s: s["equipment"]["hands"] == "절단마체테 [주무기]")
@@ -186,6 +187,7 @@ class Closeout:
         await self.floor(player, "3층", "support_3f_c")
         await travel_to(player, 'infirmary')
         if player.state['hp'] < player.state['max_hp'] or player.state['mental'] < player.state['max_mental']:
+            await travel_to(player, 'recovery_room')
             await player.act('침대 휴식', lambda s: s['hp'] == s['max_hp'] and s['mental'] == s['max_mental'])
         self.scenario.report('expedition-recovery', '연속 사냥 후 실제 3층 침대 회복 / 전투 수치·fixture 변경 없음')
         await self.dock(player)
@@ -248,12 +250,12 @@ class Closeout:
         await self.floor(player, '5층', 'support_5f_c')
         await travel_to(player, 'weapon_shop')
         if not count_item(player.state, 'folding_shield'):
-            await player.act('접이식방패 구매', lambda s: count_item(s, 'folding_shield') == 1)
+            await player.act('접이식방패 사', lambda s: count_item(s, 'folding_shield') == 1)
             await player.act('접이식방패 착용', lambda s: '접이식방패' in s['equipment']['hands'])
         if advanced:
             # 첫 보고의 실제 출입증으로 열린 전초 병기고에서 T2를 구매한다.
             await travel_to(player, 'outpost_weapon')
-            await player.act('정글장도 구매', lambda s: count_item(s, 'jungle_longblade') == 1)
+            await player.act('정글장도 사', lambda s: count_item(s, 'jungle_longblade') == 1)
             await player.act('절단마체테 해제', lambda s: '절단마체테' not in s['equipment']['hands'])
             await player.act('정글장도 무장', lambda s: '정글장도 [주무기]' in s['equipment']['hands'])
         if advanced:
@@ -261,13 +263,13 @@ class Closeout:
             await self.floor(player, '5층', 'support_5f_c')
             await travel_to(player, 'outpost_equipment')
             await player.act('강화방호조끼 벗어', lambda s: s['equipment']['body'] is None)
-            await player.act('강화방호조끼 판매', lambda s: count_item(s, 'reinforced_vest') == 0)
-            await player.act('전술방호복 구매', lambda s: count_item(s, 'tactical_protective_suit') == 1)
+            await player.act('강화방호조끼 팔아', lambda s: count_item(s, 'reinforced_vest') == 0)
+            await player.act('전술방호복 사', lambda s: count_item(s, 'tactical_protective_suit') == 1)
             await player.act('전술방호복 착용', lambda s: s['equipment']['body'] == '전술방호복')
         else:
             await travel_to(player, 'armor_shop')
             boots = count_item(player.state, 'non_slip_boots')
-            await player.act('미끄럼방지탐사화 구매', lambda s: count_item(s, 'non_slip_boots') == boots + 1)
+            await player.act('미끄럼방지탐사화 사', lambda s: count_item(s, 'non_slip_boots') == boots + 1)
             await player.act('미끄럼방지탐사화 착용', lambda s: s['equipment']['feet'] == '미끄럼방지탐사화')
         if count_item(player.state, 'expedition_tag') and not player.state['equipment']['neck']:
             await player.act('탐사인식표 착용', lambda s: s['equipment']['neck'] == '탐사인식표')
@@ -283,7 +285,7 @@ class Closeout:
             before = count_item(player.state, 'bandage')
             assert player.state['credits'] >= ITEMS['bandage']['value'], (
                 'Full 보스 준비금 부족', player.state['credits'], before)
-            await player.act('붕대 구매', lambda s: count_item(s, 'bandage') == before + 1)
+            await player.act('붕대 사', lambda s: count_item(s, 'bandage') == before + 1)
         await travel_to(player, 'hq_concourse')
         await self.floor(player, '4층', 'support_4f_c')
         await travel_to(player, 'training_room')
@@ -311,6 +313,7 @@ class Closeout:
                              f"{'T2' if advanced else 'T1'} 실제 구매/장착·교관 배분·강타 훈련 / "
                              f"Lv.{player.state['level']} HP {player.state['max_hp']}")
         await travel_to(player, 'infirmary')
+        await travel_to(player, 'recovery_room')
         await player.act('침대 휴식', lambda s: s['hp'] == s['max_hp'] and s['mental'] == s['max_mental'])
 
     async def restart(self):

@@ -34,8 +34,8 @@ async def scenario(harness, report):
             titles = ("사용법", "예시", "실행 규칙", "제한", "관련 도움말")
             assert [line for line in output.splitlines() if line in titles] == list(titles)
             assert "\n\n\n" not in output
-        for name in ("공격", "보기", "상태"):
-            await command(first, name + " 도움말", "사용법:")
+        for name in ("공격", "봐", "상태"):
+            await command(first, name + " 도움말", "사용법\n")
         await command(first, "증폭 " + "$*" * 1000 + " 줄임말", "추가했습니다")
         before = first.state["zone"]
         await command(first, "x" * 2000 + " 증폭", "허용 크기")
@@ -45,10 +45,10 @@ async def scenario(harness, report):
         await command(second, "장확 줄임말", "찾을 수 없습니다")
         await command(first, "동작 남 $1 줄임말", "추가했습니다")
         before = first.state["zone"]
-        await command(first, "보기 동작", "중앙 로비")
+        await command(first, "봐 동작", "중앙 로비")
         assert first.state["zone"] == before
         await command(first, "실행 $* 줄임말", "추가했습니다")
-        await command(first, "상태 실행", "상태")
+        await command(first, "점수 실행", "점수")
         await command(first, "상태, 장비 해 실행", "새 묶음")
         await command(first, "인사 안녕, 반가워 말 줄임말", "추가했습니다")
         await command(first, "인사, 상태 해", "안녕, 반가워")
@@ -58,7 +58,7 @@ async def scenario(harness, report):
         await command(first, "순환", "순환 참조")
         assert first.state["zone"] == "support_roof"  # 이미 실행된 귀환은 유지
         await travel_to(first, "hq_concourse")
-        await command(first, "계단, 위, 나가기, 상태 해", "상태")
+        await command(first, "계단, 위, 나가기, 점수 해", "점수")
         assert first.state["zone"] == "support_2f_c"
         before = first.state["zone"]
         await command(first, "계단 올라, 상태 해", "대상 뒤에 행동")

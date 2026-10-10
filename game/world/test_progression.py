@@ -80,7 +80,7 @@ class ProgressionTests(TestCase):
         before = deepcopy(old)
         migrated = rules.migrate_profile(old)
         self.assertEqual(old, before)
-        self.assertEqual(migrated["version"], 11)
+        self.assertEqual(migrated["version"], 12)
         self.assertNotIn("proficiencies", migrated)
         self.assertNotIn("guard_until", migrated)
         self.assertEqual(set(migrated["skills"].values()), {1})

@@ -23,7 +23,7 @@ def render(context):
         identity, action = hint["target"], hint["action"]
         if any(obj.tags.has(identity, category="primal_interactable")
                and can_perceive(obj, context) and obj.supports_action(action)
-               and (action not in ("진료", "휴식", "환율", "상품") or obj.available(context.viewer, observed_at=context.observed_at))
+               and (action not in ("회복", "휴식", "환율", "목록") or obj.available(context.viewer, observed_at=context.observed_at))
                for obj in objects):
             rendered.append(f"{INTERACTABLES[identity]['name']} {action}")
     if rendered:

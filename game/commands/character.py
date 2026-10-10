@@ -9,15 +9,17 @@ from world import text as ft
 from world.content import REGIONS, ROOMS
 
 from commands.base import GameCommand
+from commands.help_contracts import command_sections
 
 
 class Look(CmdLook):
+    help_sections = command_sections('봐')
     category = "이동·탐사"
-    usage = "보기 · 대상 보기 · 대상 봐 · 대상 2 보기 · 대상 모두 보기 · 시체 모두 보기 · 북 보기 · 북동 보기 · 북 봐"
+    usage = "봐 · 대상 봐 · 대상 2 봐 · 대상 모두 봐 · 시체 모두 봐 · 북 봐 · 북동 봐"
     summary = "주변과 대상을 살펴봅니다. 방향을 보면 이동 없이 인접 장소의 존재만 관찰합니다."
     input_style = "target"
-    key = "보기"
-    aliases = ["look", "l", "둘러보기", "봐"]
+    key = "봐"
+    aliases = ["본", "보", "`"]
 
     def func(self):
         from typeclasses.exits import Exit
@@ -50,7 +52,7 @@ class Look(CmdLook):
             try:
                 selector = parse_selector(name, [n for obj in objects for n in names(obj)])
             except rules.RuleError:
-                selector = None  # 소지품의 실제 이름도 포함하는 기존 보기 경로에서 검증한다.
+                selector = None  # 소지품의 실제 이름도 포함하는 기존 봐 경로에서 검증한다.
             candidates = matching(objects, selector) if selector else []
             if candidates and all(isinstance(obj, Exit) for obj in candidates):
                 try:
@@ -106,7 +108,7 @@ class Look(CmdLook):
                     if entity_runtime(self.caller):
                         from world.lighting_service import status as light_status
 
-                        item = resolve_item(self.caller, name, "보기")
+                        item = resolve_item(self.caller, name, "봐")
                         identity = item.definition_id
                         detail = light_status(self.caller, item, observed_at) if ITEMS[identity].get("light_source") else state_summary(item)
                         self.caller.msg(ft.compact(ft.token("item", selector_label(self.caller, item)),
@@ -114,7 +116,7 @@ class Look(CmdLook):
                                                    detail, ITEMS[identity].get("firearm_family", "")))
                         self.caller.push_state(observed_at=observed_at)
                         return
-                    identity = item_selector(name, inventory, "보기")
+                    identity = item_selector(name, inventory, "봐")
                     from world import lighting
 
                     status = lighting.status(profile, identity, observed_at) if ITEMS[identity].get("light_source") else None
@@ -133,6 +135,7 @@ class Look(CmdLook):
 
 
 class Exits(GameCommand):
+    help_sections = command_sections('출구')
     category = "이동·탐사"
     usage = "출구"
     summary = "실제 출구와 목적지의 공개 가능한 이름, 현재 이동 제한을 조회합니다. 전투 중에도 사용할 수 있습니다."
@@ -184,31 +187,34 @@ class Weather(GameCommand):
 
 
 class Help(GameCommand):
+    help_sections = command_sections('도움')
     category = "편의"
-    usage = "도움말 · 명령이름 도움말"
+    usage = "도움 · 명령이름 도움"
     summary = "분류별 명령과 개별 명령의 사용법·별칭을 확인합니다."
     input_style = "target"
-    key = "도움말"
-    aliases = ["안내", "?"]
+    key = "도움"
+    aliases = ["도움말"]
 
     def run(self):
+        from commands.account_commands import Who
         from commands.help_pages import help_page, root_page
         from commands.registry import COMMANDS
 
-        commands = [cls for cls in COMMANDS if getattr(cls, "input_style", None)]
+        commands = [cls for cls in [*COMMANDS, Who] if getattr(cls, "input_style", None)]
         query = (getattr(self, "args", "") or "").strip()
         page = help_page(query, commands) if query else root_page()
         if page is None:
-            raise rules.RuleError("등록된 명령을 찾을 수 없습니다. '도움말'에서 확인하세요.")
+            raise rules.RuleError("등록된 명령을 찾을 수 없습니다. '도움'에서 확인하세요.")
         self.caller.msg(page)
 
 
 class Status(GameCommand):
+    help_sections = command_sections('점수')
     category = "성장"
-    usage = "상태"
+    usage = "점수"
     summary = "레벨·체력·전투 수치·특성을 확인합니다."
-    key = "상태"
-    aliases = ["stat", "정보"]
+    key = "점수"
+    aliases = ["상태", "상", "점"]
 
     def run(self):
         self.caller.msg(view.status(self.caller.key, self.caller.profile()))
@@ -227,11 +233,12 @@ class Quest(GameCommand):
 
 
 class Map(GameCommand):
+    help_sections = command_sections('지도')
     category = "이동·탐사"
     usage = "지도"
     summary = "방문한 지역과 출구를 확인합니다."
     key = "지도"
-    aliases = ["map"]
+    aliases = ["지"]
 
     def run(self):
         visited = set(self.caller.profile_snapshot()["visited"])
@@ -285,6 +292,8 @@ class Skills(GameCommand):
 
 
 class Experience(GameCommand):
+    help_sections = command_sections('경험치')
+    aliases = ["경"]
     key = "경험치"
     category = "성장"
     summary = "현재 레벨의 경험치 진행과 다음 레벨의 훈련·특성 획득량을 확인합니다."
@@ -300,7 +309,7 @@ class GlobalShortcuts(GameCommand):
     summary = "게임에서 기본 제공하는 고정 단축어를 확인합니다."
     help_sections = (
         ("사용법", ("단축어", "전역 줄임말")),
-        ("예시", ("상 → 상태", "장 → 장비")),
+        ("예시", ("상 → 점수", "장 → 장비", "ㅇ → 위", "아 → 아래", "시 → 시체에서 모두 가져", "시2 → 시체 2에서 모두 가져")),
         ("실행 규칙", (
             "고정 단축어는 정확하게 일치하는 입력에 적용하며 한 번만 변환합니다.",
             "고정 단축어는 개인 줄임말보다 우선합니다.",
@@ -310,7 +319,7 @@ class GlobalShortcuts(GameCommand):
             "사용자가 고정 단축어를 등록·수정·삭제할 수 없습니다.",
             "고정 단축어와 충돌하는 이름으로 개인 줄임말을 등록할 수 없습니다.",
         )),
-        ("관련 도움말", ("줄임말 도움말", "해 도움말")),
+        ("관련 도움말", ("줄임말 도움", "해 도움")),
     )
 
     def run(self):

@@ -12,10 +12,11 @@ DIRECTIONS = {
 }
 PLANAR_DIRECTIONS = tuple(DIRECTIONS)
 DIRECTIONS.update({
-    "위": {"alias": "u", "opposite": "아래"},
-    "아래": {"alias": "d", "opposite": "위"},
+    "위": {"shortcut": "ㅇ", "alias": "u", "opposite": "아래"},
+    "아래": {"shortcut": "ㅁ", "alias": "d", "opposite": "위"},
 })
 DIRECTION_SHORTCUTS = {data["shortcut"]: key for key, data in DIRECTIONS.items() if "shortcut" in data}
+DIRECTION_SHORTCUTS["아"] = "아래"
 DIRECTION_ORDER = tuple(DIRECTIONS)
 DIRECTION_ALIASES = {key: data["alias"] for key, data in DIRECTIONS.items()}
 OPPOSITE_DIRECTIONS = {key: data["opposite"] for key, data in DIRECTIONS.items()}

@@ -31,16 +31,19 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         Populates the cmdset
         """
         super().at_cmdset_creation()
+        for name in ("look", "inventory", "help"):
+            self.remove(name)
         from commands.registry import COMMANDS
 
         for command in COMMANDS:
             self.add(command())
         from evennia.commands.default.syscommands import SystemMultimatch
 
-        from commands.base import NoInput
+        from commands.base import EngineHelp, NoInput
         from commands.prompt import with_prompt
 
         self.add(NoInput())
+        self.add(EngineHelp())
         self.add(with_prompt(SystemMultimatch()))
 
 
@@ -59,6 +62,8 @@ class AccountCmdSet(default_cmds.AccountCmdSet):
         Populates the cmdset
         """
         super().at_cmdset_creation()
+        for name in ("who", "look", "help"):
+            self.remove(name)
         from commands.account_commands import Quit, Who
 
         self.add(Quit())
