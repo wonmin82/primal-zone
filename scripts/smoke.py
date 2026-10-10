@@ -222,12 +222,12 @@ class Scenario:
             initial_credits = {player.name: player.state["credits"] for player in self.players}
             enemy_id = first.state["enemies"][0]["id"]
             started = monotonic()
-            await first.act("어린청소룡 사냥", lambda state: state["combat_target"] is not None)
+            await first.act("어린청소룡 때려", lambda state: state["combat_target"] is not None)
             # 단축 전투에서 두 번째 플레이어의 화면 전송을 기다리는 사이 적이 죽지 않도록
             # 참여와 outsider 거절 요청을 같은 시점에 보낸다. 권한은 서버가 판정한다.
             await asyncio.gather(
-                second.act("어린청소룡 사냥", lambda state: state["combat_target"] is not None),
-                outsider.expect_text("어린청소룡 사냥", "다른 파티"),
+                second.act("어린청소룡 때려", lambda state: state["combat_target"] is not None),
+                outsider.expect_text("어린청소룡 때려", "다른 파티"),
             )
             await first.until(lambda state: state["player_round"] >= 1, self.timeouts.combat)
             first_round = monotonic() - started

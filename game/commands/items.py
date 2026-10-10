@@ -250,7 +250,7 @@ class RemoveArmor(GameCommand):
     expected_slot = "armor"
     category = "아이템·보급"
     input_style = "target"
-    usage = "강화 조끼 벗어"
+    usage = "방어구 벗어 · 방어구 2 벗어"
     summary = "현재 입은 방어구를 벗어 소지품에 남깁니다."
 
     def run(self):
@@ -269,6 +269,7 @@ class RemoveArmor(GameCommand):
 
 
 class Unwield(RemoveArmor):
+    help_sections = ()
     key = UNEQUIP_ACTIONS["weapon"]
     aliases = ["unwield"]
     expected_slot = "weapon"

@@ -216,7 +216,7 @@ class EconomyTests(WorldCommandTest):
         self.command("탐사용 벌목도 해제")
         self.command("절단마체테 무장")
         self.assertIn("55칩", self.command("무기상에게 절단마체테 가치"))
-        self.assertIn("27칩", self.command("절단마체테 value"))
+        self.assertIn("27칩", self.command("절단마체테 얼마"))
         actions = multiplayer_state(self.char1)["interactables"][0]["actions"]
         single = next(a for a in actions if a["label"] == "절단마체테 · 27칩 팔아")
         self.assertTrue(single["command"].endswith("절단마체테 팔아"))

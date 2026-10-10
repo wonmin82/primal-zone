@@ -58,7 +58,7 @@ class ShopTests(WorldCommandTest):
             seller = self.sellers[shop_id]
             self.char1.location = seller.location
             for raw in (ITEMS[item]["name"] + " 사", seller.key + "에게 " + ITEMS[item]["name"] + " 사",
-                        seller.aliases.all()[0] + "에게 " + ITEMS[item]["name"] + " buy"):
+                        seller.aliases.all()[0] + "에게 " + ITEMS[item]["name"] + " 구입"):
                 before = deepcopy(self.char1.profile())
                 self.assertIn("1개를 받아", self.command(raw))
                 before["credits"] -= ITEMS[item]["value"]

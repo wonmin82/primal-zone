@@ -16,12 +16,12 @@ class EconomyRulesTests(TestCase):
         self.assertEqual(format_currency(127), "127칩")
         profile = rules.new_profile()
         profile["credits"] = 127
-        self.assertIn("[소지품] 127칩", presentation.inventory(profile))
+        self.assertIn("[가진거] 127칩", presentation.inventory(profile))
         profile["inventory"] = {}
-        self.assertIn("[소지품] 127칩", presentation.inventory(profile))
+        self.assertIn("[가진거] 127칩", presentation.inventory(profile))
         self.assertIn("비어 있다.", presentation.inventory(profile))
         self.assertNotIn("chip", ITEMS)
-        self.assertEqual(rules.PROFILE_VERSION, 11)
+        self.assertEqual(rules.PROFILE_VERSION, 12)
 
     def test_amount_and_common_selector_are_distinct(self):
         for raw, amount, index in (("칩", 1, None), ("20칩", 20, None),

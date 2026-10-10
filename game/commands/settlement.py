@@ -17,7 +17,7 @@ def resolve_officer(caller, action, name="", objects=None):
     objects = officers(caller) if objects is None else objects
     if not name.strip():
         if not objects:
-            raise rules.RuleError("이곳에서 이용할 정산관을 찾지 못했습니다. '보기'로 주변을 살펴보세요.")
+            raise rules.RuleError("이곳에서 이용할 정산관을 찾지 못했습니다. '봐'로 주변을 살펴보세요.")
         if len(objects) > 1:
             raise rules.RuleError("정산관이 여러 명입니다. 대상 이름과 번호를 지정하세요.")
         return objects[0]

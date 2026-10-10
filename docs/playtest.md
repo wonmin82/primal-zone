@@ -1833,3 +1833,11 @@ Version3 cache_claimed=true fixture의 dry-run은 tag1개 entitlement를 계획�
 - C: 전량·부분 HP, 공식의 레벨 10/50/99/100 사례, 부족 잔액·잘못된 수량·저장 예외의 rollback, SP 불변, 동일 Stable ID 침대의 회복실 이전과 반복 bootstrap, 무료 HP/SP 휴식을 확인했다. v7/v11→v12의 응급처치/의료/사격 구분, 불명확한 정의의 원본 보존과 버전별 멱등성을 확인했다.
 - 문서: GitHub GFM Markdown API로 변경 문서의 제목·표·코드 블록을 렌더링하고 저장소 Markdown 상대경로·앵커 및 기존 README 참조를 검사했다. 상세 결과는 작업 scratch의 보고서와 PR Validation에 기록하며, 명령·가격·배치 설명은 구현과 대조했다. 과거 버전의 진료/침대/어휘 기록은 과거 정책으로 표시하고 보존했다.
 - 미실행: 로컬 전체 회귀, 실 서버 Quick/Full smoke, 다중 세션 경합, 재시작 장기 검증, 실제 브라우저·한글 IME·시각/출력 전수 검사. 사용자 지정 범위에 따라 #50에서 검증한다. 자동 GitHub CI는 로컬 최소 Smoke와 구분해 최신 PR HEAD 결과를 PR에 기록한다.
+
+### Issue #46 첫 자동 CI의 기존 입력 보정
+
+- `3c28205`의 [Game checks 38041514739](https://github.com/wonmin82/primal-zone/actions/runs/38041514739): 코드 검사는 성공했으나 pure 215개 중 구 소지품 제목·8방향 개수·v7→현재 어휘 기대 3건과 smoke 구매 mock 1건이 실패했다. 자동 Quick smoke는 제거된 `사냥` 입력으로 전투 시작을 기다리다 timeout이었다. 이 결과를 성공으로 덮어쓰지 않는다.
+- 해당 fixture의 현재 기대값과 구매 mock·Quick 입력을 새 명령으로 맞췄다. 같은 입력 대조에서 남은 현재 거래/회복 fixture도 새 별칭·회복실 배치로 정리했다. 구 역사적 변환 함수만 확인하는 테스트의 당시 입력은 유지했다.
+- 실패한 `world.test_economy.EconomyRulesTests.test_wallet_display_with_and_without_inventory`, `world.test_vocabulary.VocabularyTests.test_global_shortcuts_follow_direction_ssot_and_canonical_inventory`, `world.test_vocabulary.VocabularyTests.test_v7_hil_name_collision_preserves_data_and_exact_references`, `world.test_smoke.SmokeRestartTests.test_full_boss_purchase_accepts_boots_previously_obtained_by_drop`만 `scripts/dev.py test ... --parallel 1`로 실행해 4개 성공했다. 전체 로컬 회귀는 실행하지 않았다.
+- 새 방어구 도움말을 무기 해제가 잘못 상속하지 않도록 분리하고, 삭제된 보기 입력을 안내하던 정산 오류를 수정했다. 이후 자동 CI는 새 PR HEAD에서 별도 확인한다.
+- 무기 해제 도움말 분리를 포함한 `tests.test_command_overhaul.CommandOverhaulSmoke.test_phase_a --parallel 1`: 대표 Smoke 1개 성공. `ruff check game scripts`, `git diff --check` 성공.

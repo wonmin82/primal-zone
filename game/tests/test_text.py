@@ -204,7 +204,7 @@ class SemanticTextTests(WorldCommandTest):
         self.assertIn("[주무기]", equip)
         self.assertIn("공격 +2 · 방어 +1", equip.splitlines()[-1])
         profile["inventory"] = {}
-        self.assertEqual(str(view.inventory(profile)), "[소지품] 20칩\n\n비어 있다.")
+        self.assertEqual(str(view.inventory(profile)), "[가진거] 20칩\n\n비어 있다.")
         self.assertEqual(tokens(view.shop("supply", "보급관"), "command"), ["사"])
         profile["quests"]["radio_tower"].update(started=True, record_read=True)
         quest = view.quest(profile)

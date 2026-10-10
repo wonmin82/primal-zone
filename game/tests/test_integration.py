@@ -216,7 +216,7 @@ class GameplayIntegrationTests(WorldCommandTest):
     def test_raw_attack_resume_and_movement(self):
         self.char1.execute_cmd("북")
         self.assertEqual(self.char1.location, self.rooms["grass"])
-        self.char1.execute_cmd("어린 청소룡 사냥")
+        self.char1.execute_cmd("어린 청소룡 때려")
         before = self.char1.profile()["combat_target"]
         self.assertEqual(self.char1.combat_target().db.enemy_id, "scavenger")
         with patch.object(self.char1.sessions, "count", return_value=1):

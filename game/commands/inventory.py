@@ -28,7 +28,7 @@ class Equip(GameCommand):
     help_sections = command_sections('착용')
     equipment_change = True
     category = "아이템·보급"
-    usage = "강화 조끼 착용"
+    usage = "방어구 착용 · 방어구 2 착용"
     summary = "소유한 방어구를 착용합니다."
     input_style = "target"
     expected_slot = "armor"

@@ -58,7 +58,7 @@ async def scenario(harness, report):
         await command(first, "순환", "순환 참조")
         assert first.state["zone"] == "support_roof"  # 이미 실행된 귀환은 유지
         await travel_to(first, "hq_concourse")
-        await command(first, "계단, 위, 나가기, 상태 해", "상태")
+        await command(first, "계단, 위, 나가기, 점수 해", "점수")
         assert first.state["zone"] == "support_2f_c"
         before = first.state["zone"]
         await command(first, "계단 올라, 상태 해", "대상 뒤에 행동")

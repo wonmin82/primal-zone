@@ -81,6 +81,9 @@ class CommandOverhaulSmoke(NativeItemTest):
             self.assertEqual(help_page("회수", COMMANDS), help_page("가져", COMMANDS))
         self.assertEqual(help_page("시2", COMMANDS), help_page("가져", COMMANDS))
         titles = ["사용법", "예시", "실행 규칙", "제한", "관련 도움말"]
+        weapon_help = self.raw("해제 도움")
+        self.assertIn("강철 마체테 해제", weapon_help)
+        self.assertNotIn("방어구 벗어", weapon_help)
         for cls in COMMANDS:
             if cls.key in ("봐", "출구", "도움", "점수", "가진거", "때려", "목록", "사", "팔아", "쏴", "지도", "경험치", "장비", "착용", "벗어", "가져", "줄임말", "가치"):
                 self.assertEqual([title for title, _ in cls.help_sections], titles, cls.key)
