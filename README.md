@@ -3,6 +3,8 @@
 사냥하고 장비를 모으며, 잊힌 섬을 탐험하는 한국어 명령 기반 웹 MUD.
 주요 탐험과 임무는 혼자 진행할 수 있으며, 다른 탐사자와 파티를 맺어 공유 월드에서 함께 사냥할 수 있다.
 
+<a id="현재-구현"></a>
+
 ## 주요 기능
 
 | 분야 | 플레이할 수 있는 내용 |
@@ -113,6 +115,26 @@ Telnet 8700은 평문이며 웹 HTTP/WS도 TLS를 제공하지 않는다.
 일반 명령 실패는 다음으로 진행하고 줄임말 구조·확장 오류는 남은 실행을 중단한다. 완료한 동작은 되돌리지 않는다.
 개인 줄임말 v1.14의 변수·한도·삭제·실행 계약은 [상세 안내](docs/command-shortcuts.md), 플레이 예시는 [가이드](docs/gameplay.md#개인-줄임말과-묶음-명령)를 따른다.
 
+상세 플레이 항목은 아래 가이드 절에서 확인한다. 기존 README 항목 링크도 각 안내로 연결된다.
+
+| 플레이 항목 | 상세 안내 |
+| --- | --- |
+| <a id="대상-선택과-전리품-회수"></a>대상 선택과 전리품 회수 | [대상 번호](docs/gameplay.md#같은-이름의-대상과-번호) · [전리품 회수](docs/gameplay.md#전리품과-보급칩) |
+| <a id="탐사-기록과-정보-조회"></a>탐사 기록과 정보 조회 | [기본 조작·화면](docs/gameplay.md#게임-시작과-기본-조작) · [정보·도움말](docs/gameplay.md#명령-입력과-도움말) |
+| <a id="장비와-획득-경로"></a>장비와 획득 경로 | [장비·주무기](docs/gameplay.md#장비아이템보관) · [가격·획득처](docs/final-content.md) |
+| <a id="물건-사용과-보관"></a>물건 사용과 보관 | [전달·보관](docs/gameplay.md#물건-전달과-보관) · [회복 물품](docs/gameplay.md#체력정신력회복) |
+| <a id="화폐와-회수-자원-정산"></a>화폐와 회수 자원 정산 | [보급칩](docs/gameplay.md#칩-전달버리기부분-회수) · [회수부품 정산](docs/gameplay.md#회수부품-정산) |
+| <a id="본부-npc-상점"></a>본부 NPC 상점 | [상점 위치·구매·판매](docs/gameplay.md#상점정산소각) |
+| <a id="출입증과-소각"></a>출입증과 소각 | [입장·재발급·물품 폐기](docs/gameplay.md#출입증과-소각) |
+| <a id="의료와-복귀"></a>의료와 복귀 | [회복·귀환·패배](docs/gameplay.md#체력정신력회복) |
+| <a id="정신력과-자연회복"></a>정신력과 자연회복 | [정신력·회복 수단](docs/gameplay.md#체력정신력회복) · [자연회복·재접속](docs/gameplay.md#자연회복과-재접속) |
+| <a id="성장과-재훈련"></a>성장과 재훈련 | [능력·교관·훈련·재분배](docs/gameplay.md#성장과-재훈련) |
+| <a id="동적-환경"></a>동적 환경 | [날씨·시간·조명](docs/gameplay.md#날씨시간조명손전등) |
+| <a id="탐사-광원과-시설-조명"></a>탐사 광원과 시설 조명 | [손전등 확보·전원·시설 조명](docs/gameplay.md#손전등-확보와-사용) |
+| <a id="두-번째-탐사-지역"></a>두 번째 탐사 지역 | [본부·탐사 지역](docs/gameplay.md#본부와-탐사-지역) · [깊은 밀림 임무·스포일러](docs/gameplay.md#깊은-밀림-조사) |
+
+<a id="개발"></a>
+
 ## 개발 및 테스트
 
 저장소 루트에서 실행한다.
@@ -135,8 +157,6 @@ uv run python scripts/dev.py stop
 
 병렬·선별 테스트, DB 격리, Quick/Full smoke 차이, 수동 확인과 과거 CI·실패 이력은 [테스트 안내](docs/playtest.md#6-자동-테스트-실행)에 있다.
 검사는 플레이 DB와 운영 인증 설정을 보존한다. 브라우저 화면·실제 한글 IME 확인은 자동 테스트와 별도로 수행한다.
-
-<a id="개발"></a>
 
 ### 정적 파일 수집
 
@@ -180,20 +200,5 @@ Neo둥근모 Code v1.601을 **SIL Open Font License 1.1**로 자체 제공한다
 | [개발 작업 및 검증 이력](docs/CODEX_TASK_STATE.md) | 현재 마감 상태와 과거 개발·검증 기록 |
 
 세부 설계: [장비](docs/equipment.md) · [광원·총기](docs/lighting-firearms.md) · [전리품](docs/loot-claims.md) · [출입증·상점](docs/credentials-access-shops.md) · [본부 배치](docs/headquarters-redesign.md) · [아이템 migration](docs/item-migration.md) · [텍스트 출력 예](docs/text-examples.md).
-
-<a id="현재-구현"></a>
-<a id="장비와-획득-경로"></a>
-<a id="두-번째-탐사-지역"></a>
-<a id="동적-환경"></a>
-<a id="대상-선택과-전리품-회수"></a>
-<a id="화폐와-회수-자원-정산"></a>
-<a id="본부-npc-상점"></a>
-<a id="출입증과-소각"></a>
-<a id="의료와-복귀"></a>
-<a id="정신력과-자연회복"></a>
-<a id="성장과-재훈련"></a>
-<a id="물건-사용과-보관"></a>
-<a id="탐사-기록과-정보-조회"></a>
-<a id="탐사-광원과-시설-조명"></a>
 
 기존 README의 상세 플레이 항목은 [플레이 가이드](docs/gameplay.md)로 모았다. 장비의 확정 수치는 [최종 콘텐츠](docs/final-content.md), 개발 이력은 [작업 상태](docs/CODEX_TASK_STATE.md)에서 확인한다.
