@@ -32,6 +32,8 @@
 - 이 성공 뒤 Push하고 [PR #52](https://github.com/wonmin82/primal-zone/pull/52)를 생성했다. [최초 CI 38059757263](https://github.com/wonmin82/primal-zone/actions/runs/38059757263)의 Smoke는 새 대화 시나리오 성공 뒤 기존 물리 전리품 배정 assertion에서 실패했다. 기존 검사는 모든 드롭의 배정자를 첫 참가자로 가정했으나 자원·special 독립 드롭은 두 아이템을 만들 수 있고 실제 규칙은 파티 가입 순서대로 번갈아 배정한다.
 - `scripts/smoke.py`의 기대값을 물리 entry 순서별 round-robin으로 정정했다. 파티원의 회수 권한·보호 상태 assertion과 실제 outsider 거절·부분 칩 분배는 유지한다. 게임 드롭·배정·가격·타이머 코드는 변경하지 않았다.
 - `uv run python scripts/dev.py test tests.test_loot.LootTests.test_party_round_robin_delivers_to_assignees tests.test_loot_entities.LootEntityTests.test_explicit_native_generation_reuses_round_robin_and_currency_allocation --parallel 1`: 두 아이템을 확정 드롭하는 기존 legacy/native 검사 2개 성공(종료 0, 5.860초). 새 커밋의 Quick 성공 전 추가 Push하지 않으며 최신 원격 CI 결과는 PR Validation에 확정한다.
+- 최초 원격 전체 `test`는 순수 223개 성공, 통합 687개 중 685개 성공·2개 실패(456.009초, 종료 1)였다. 의무관·정산관의 기존 웹 버튼 기대값에 신규 말 걸기 버튼이 없었다. 새 버튼을 정확한 기대 목록에 포함하고, 정산 검사는 마지막 버튼이라는 위치 가정 대신 실제 교환 명령을 선택했다. 기존 칩·자원 상태 검사와 먼 방의 비공개 서비스 노출 금지 검사는 유지했다.
+- `uv run python scripts/dev.py test tests.test_medical.MedicalCommandsTests.test_web_presentation_and_distant_privacy_use_real_objects tests.test_settlement.SettlementWorldTests.test_server_actions_resource_snapshot_and_settlement_push --parallel 1`: 실패 영역 2개 재검사 성공(종료 0, 9.779초). 새 테스트 커밋 HEAD의 Quick과 원격 전체 CI를 다시 확인한다. 로컬 전체 회귀는 실행하지 않았다.
 
 ### 추가 수동 확인 범위
 

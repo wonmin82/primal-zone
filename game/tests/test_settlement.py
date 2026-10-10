@@ -144,21 +144,21 @@ class SettlementWorldTests(SettlementFixture, WorldCommandTest):
         self.prepare(scrap=7, credits=0)
         actions = next(obj["actions"] for obj in multiplayer_state(self.char1)["interactables"] if obj["name"] == self.officer.key)
         self.assertEqual([action["command"] for action in actions],
-                         ["자원 정산관 환율", "자원 정산관에게 회수부품 모두 교환"])
+                         ["자원 정산관 환율", "자원 정산관에게 회수부품 모두 교환", "'자원 정산관에게 안녕"])
         self.assertEqual(render(context_for(self.char1)), "자원 정산관 환율")
         appearance = str(self.officer.return_appearance(self.char1))
         for usage in ("환율", "10개", "모두"):
             self.assertIn(usage, appearance)
         self.char1.push_state = lambda: Explorer.push_state(self.char1)
         with patch.object(self.char1, "msg") as output:
-            self.char1.execute_cmd(actions[-1]["command"])
+            self.char1.execute_cmd(next(action["command"] for action in actions if action["command"].endswith(" 교환")))
         payloads = [call.kwargs["pz_state"][0][0] for call in output.call_args_list if "pz_state" in call.kwargs]
         self.assertTrue(payloads)
         for state in payloads:
             self.assertEqual(state["credits"], 7 * SALVAGE_CREDIT_RATE)
             self.assertEqual(state["resources"], {"scrap": {"name": "회수부품", "count": 0}})
         self.assertEqual([action["command"] for action in next(obj["actions"] for obj in multiplayer_state(self.char1)["interactables"] if obj["name"] == self.officer.key)],
-                         ["자원 정산관 환율"])
+                         ["자원 정산관 환율", "'자원 정산관에게 안녕"])
         self.char1.location = self.rooms["support_2f_e1"]
         self.assertNotIn("정산관", self.command("북 봐"))
 
