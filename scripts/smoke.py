@@ -262,7 +262,13 @@ class Scenario:
             corpse_id = first.state["corpses"][0]["id"]
             await second.until(lambda state: any(c["id"] == corpse_id for c in state["corpses"]))
             physical = [entry for entry in second.state["corpses"][0]["loot"] if entry["kind"] == "item"]
-            assert all(entry["assigned_name"] == first.name and entry["can_take"] and entry["protected"] for entry in physical)
+            # 자원과 special이 함께 드롭되면 가입 순서로 번갈아 배정된다.
+            # 모두 첫 참가자에게 배정된다고 가정하면 정상 RNG 결과에도 실패한다.
+            assignees = (first.name, second.name)
+            assert [entry["assigned_name"] for entry in physical] == [
+                assignees[index % len(assignees)] for index in range(len(physical))
+            ], physical
+            assert all(entry["can_take"] and entry["protected"] for entry in physical), physical
             await outsider.until(lambda state: bool(state["corpses"]))
             # Quick corpse 구간에서 두 command 왕복을 직렬 대기하지 않는다.
             # 부분 지급 후에도 남은 loot의 권한은 동일하므로 서버 처리 순서와 무관하다.

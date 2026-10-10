@@ -26,6 +26,13 @@
 
 초기 NPC 검사에서 fixture 전용 아이템의 획득 경로 검사, 발전기 수리 누락 보고 fixture, 상점 catalog의 dict/list 접근을 발견했다. 테스트 fixture와 실제 catalog 조회·보고 최종 조건을 정정하고 관련 범위를 재검증했다. 과거 실패를 성공으로 소급하지 않는다. 최종 코드 검사·문서 링크·diff 검사와 커밋 HEAD의 Quick/원격 CI 실제 결과·전체 SHA는 PR Validation에 기록하며 결과를 확인하기 전 완료로 기록하지 않는다.
 
+### PR #52의 최종 Quick 및 CI 보정
+
+- 커밋 `db5a41baa0b776ac9313821d3173c57a97d440b4`의 첫 로컬 Quick은 NPC·개인 메시징 성공 후 기존 시체 보호 요청에 대상 없음이 반환되어 종료 1이었다. 시체의 단축 수명은 10초이며 서버 예외는 없었다. 코드·설정·타이머·assertion 변경 없이 동일 HEAD 재실행은 전체 성공(종료 0, 109.732초)했다. 두 실행 모두 플레이 DB 해시·mtime·크기는 불변이며 실패 격리 DB/로그는 보존했다. 단축 관찰 창의 지연 가능성은 재발 시 별도 진단한다.
+- 이 성공 뒤 Push하고 [PR #52](https://github.com/wonmin82/primal-zone/pull/52)를 생성했다. [최초 CI 38059757263](https://github.com/wonmin82/primal-zone/actions/runs/38059757263)의 Smoke는 새 대화 시나리오 성공 뒤 기존 물리 전리품 배정 assertion에서 실패했다. 기존 검사는 모든 드롭의 배정자를 첫 참가자로 가정했으나 자원·special 독립 드롭은 두 아이템을 만들 수 있고 실제 규칙은 파티 가입 순서대로 번갈아 배정한다.
+- `scripts/smoke.py`의 기대값을 물리 entry 순서별 round-robin으로 정정했다. 파티원의 회수 권한·보호 상태 assertion과 실제 outsider 거절·부분 칩 분배는 유지한다. 게임 드롭·배정·가격·타이머 코드는 변경하지 않았다.
+- `uv run python scripts/dev.py test tests.test_loot.LootTests.test_party_round_robin_delivers_to_assignees tests.test_loot_entities.LootEntityTests.test_explicit_native_generation_reuses_round_robin_and_currency_allocation --parallel 1`: 두 아이템을 확정 드롭하는 기존 legacy/native 검사 2개 성공(종료 0, 5.860초). 새 커밋의 Quick 성공 전 추가 Push하지 않으며 최신 원격 CI 결과는 PR Validation에 확정한다.
+
 ### 추가 수동 확인 범위
 
 #47의 자동 검사는 말/작은따옴표·에게 미발견 공개 fallback·복수/잘못된 번호 오류·300자/제어문자·문맥/만료/이동·원문 동일/수신자별 강조·조회 무부작용·행동 원자성·토큰·22개 NPC·비공개 메시지/차단/최근 상대·실제 CmdSet page/tell/whisper 제거·v13 원본 보존/묶음/간접 참조/충돌/멱등성을 확인한다. Quick은 실제 WebSocket으로 임무 조회·선택 토큰 수락·공개 fallback·개인 메시지/답장/차단과 기존 공유 전투/전리품을 연결한다.
