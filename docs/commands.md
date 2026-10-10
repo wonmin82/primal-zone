@@ -43,7 +43,24 @@ v7 이하의 `회복`은 먼저 기존 v8/v10 변환을 거쳐 붕대 응급처�
 
 ## 검증 범위
 
-Issue #46은 단계별 격리 DB의 대표 Smoke만 실행한다. 전체 회귀·다중 세션 경합·재시작 장기 검증·실 브라우저·한글 IME·출력 전수 검증은 #50에서 수행한다. 자동 GitHub CI는 별도 결과로 기록한다.
+Issue #46의 현재 정책(2026-10-10 갱신)은 개발 중 경량 검증과 Push 전 전체 로컬 CI를 구분한다. 46-A·B·C 내부 개발 중에는 변경 범위의 격리 DB 대표 Smoke를 수행하고 단계별 로컬 커밋을 허용한다. 커밋마다 전체 회귀를 반복하지 않는다.
+
+원격 Push 또는 PR 생성·업데이트 직전에는 실제 Push할 커밋 HEAD에서 현행 `.github/workflows/tests.yml`과 동등한 로컬 CI 전체를 통과해야 한다. 현재 필수 명령은 다음과 같다.
+
+```powershell
+uv sync --locked --python 3.13
+uv run python scripts/dev.py check
+uv run python scripts/dev.py test --parallel 2
+uv run python scripts/dev.py smoke
+```
+
+하나라도 실패하거나 실행하지 못하면 Push하지 않는다. 검사 이후 코드가 바뀌면 변경된 HEAD에서 전체 로컬 CI를 다시 수행한다. 실제 환경·명령·종료 코드·테스트 수·검증 SHA를 [PR #51 Validation](https://github.com/wonmin82/primal-zone/pull/51)에 기록하고, Push 후 같은 HEAD의 GitHub Actions `test`·`smoke` 결과를 별도로 확인한다. 원격 실패를 수정한 커밋도 다시 로컬 CI 게이트를 통과해야 한다.
+
+여러 Issue의 통합 시나리오·실 브라우저·한글 IME·복수 플레이어/세션 경합·도움말/UI 종단 간 검사·최종 통합 회귀는 #50에서 수행한다. #50의 별도 검증은 #46의 Push 전 전체 로컬 CI 의무를 대체하지 않는다. 상세 이력은 [테스트 안내](playtest.md#issue-46-pr-51-리뷰-후-검증-정책-2026-10-10)를 참고한다.
+
+### 최초 구현 당시의 경량 검증 이력
+
+아래는 최신 사전 CI 정책이 적용되기 전의 실제 실행 기록이다. 당시 미실행한 전체 로컬 검사와 이후 자동 CI를 구분하며, 현재 Push 허용 조건으로 사용하지 않는다.
 
 46-A: `.venv/Scripts/python.exe scripts/dev.py test tests.test_command_overhaul.CommandOverhaulSmoke.test_phase_a --parallel 1` 성공(대표 Smoke 1개). 정식 명령·별칭·상점·방향·시체 입력·shooting 예약·개인 정의 변환·도움말 섹션/별칭을 확인했다. `ruff check game scripts`, JavaScript `node --check`, `git diff --check` 통과. 로컬 전체 회귀·실 브라우저·서버 전체 smoke는 요청 범위에 따라 미실행했다.
 

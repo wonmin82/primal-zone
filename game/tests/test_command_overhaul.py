@@ -127,6 +127,86 @@ class CommandOverhaulSmoke(NativeItemTest):
         self.assertEqual(before, self.atomic_state())
 
 
+    def test_phase_b_price_units_and_read_only(self):
+        from world.content import ITEMS
+
+        bundle = deepcopy(ITEMS["bandage"])
+        bundle.update(name="시험묶음", value=100, purchase_unit_value=3,
+                      purchase_quantity=4, resale_unit_value=2)
+        fallback = deepcopy(ITEMS["bandage"])
+        fallback.update(name="기본묶음", value=7, purchase_quantity=4)
+        resale_only = deepcopy(ITEMS["bandage"])
+        resale_only.pop("value")
+        resale_only.update(name="매입전용품", resale_unit_value=6)
+        purchase_only = deepcopy(resale_only)
+        purchase_only.pop("resale_unit_value")
+        purchase_only.update(name="구매전용품", purchase_unit_value=9)
+        unavailable = deepcopy(ITEMS["bandage"])
+        unavailable.update(name="매매불가품", value=0)
+        self.enterContext(patch.dict(ITEMS, {"test_bundle": bundle, "test_fallback": fallback,
+                                           "test_resale": resale_only, "test_purchase": purchase_only,
+                                           "test_unavailable": unavailable}))
+        cases = (
+            ("ammo_9", ("개당 구매 기준가: 2칩", "상점 판매 묶음: 12발", "묶음 구매 기준가: 24칩", "개당 매입 기준가: 1칩"), ("기준 구매가: 24칩",)),
+            ("ammo_556", ("개당 구매 기준가: 2칩", "상점 판매 묶음: 20발", "묶음 구매 기준가: 40칩", "개당 매입 기준가: 1칩"), ()),
+            ("ammo_762", ("개당 구매 기준가: 4칩", "상점 판매 묶음: 8발", "묶음 구매 기준가: 32칩", "개당 매입 기준가: 2칩"), ()),
+            ("bandage", ("기준 구매가: 10칩", "기준 매입가: 5칩"), ("상점 판매 묶음", "개당 구매")),
+            ("generator_repair_part", ("정비용 회수부품",), ("기준 구매가", "기준 매입가", "상점 판매 묶음")),
+            ("test_bundle", ("개당 구매 기준가: 3칩", "상점 판매 묶음: 4개", "묶음 구매 기준가: 12칩", "개당 매입 기준가: 2칩"), ()),
+            ("test_fallback", ("개당 구매 기준가: 7칩", "상점 판매 묶음: 4개", "묶음 구매 기준가: 28칩", "개당 매입 기준가: 3칩"), ()),
+            ("test_resale", ("기준 매입가: 6칩",), ("기준 구매가", "상점 판매 묶음")),
+            ("test_purchase", ("기준 구매가: 9칩",), ("기준 매입가",)),
+            ("test_unavailable", ("매매불가품",), ("기준 구매가",)),
+        )
+        for identity, _, _ in cases:
+            self.create(identity)
+        before = deepcopy(self.atomic_state())
+        saved = deepcopy(dict(self.char1.db.profile))
+        for identity, included, excluded in cases:
+            with self.subTest(identity=identity):
+                output = self.raw(f"{ITEMS[identity]['name']} 정보")
+                for text in included:
+                    self.assertIn(text, output)
+                for text in excluded:
+                    self.assertNotIn(text, output)
+                self.assertIn("취급·매매 가능성을 보장하지", output)
+                self.assertEqual(before, self.atomic_state())
+                self.assertEqual(saved, dict(self.char1.db.profile))
+        self.assertIn("묶음 수량", self.raw("정보 도움"))
+
+    def test_phase_b_shop_prices_unchanged(self):
+        from world import shop_service
+        from world.equipment_service import resolve_item
+
+        self.char1.location = self.rooms["outpost_weapon"]
+        self.char1.change(lambda p: p.update(credits=200))
+        for identity, name, quantity, purchase, resale in (
+                ("ammo_9", "9mm 권총탄", 12, 24, 1),
+                ("ammo_556", "5.56mm 카빈탄", 20, 40, 1),
+                ("ammo_762", "7.62mm 소총탄", 8, 32, 2)):
+            with self.subTest(identity=identity):
+                self.assertEqual(rules.purchase_price(identity), purchase)
+                self.assertEqual(rules.resale_price(identity), resale)
+                credits = self.char1.profile_snapshot()["credits"]
+                self.raw(f"{name} 사")
+                profile = self.char1.profile_snapshot()
+                self.assertEqual(profile["inventory"][identity], quantity)
+                self.assertEqual(profile["credits"], credits - purchase)
+                self.assertIn(f"{resale}칩", self.raw(f"{name} 가치"))
+                self.assertEqual(self.raw(f"{name} 가치"), self.raw(f"{name} 얼마"))
+                self.raw(f"{name} 모두 팔아")
+                self.assertNotIn(identity, self.char1.profile_snapshot()["inventory"])
+                self.assertEqual(self.char1.profile_snapshot()["credits"], credits - purchase + quantity * resale)
+        gun = firearm_service.create_firearm("scout_pistol", owner_object=self.char1, mode="partial", rounds=7)
+        magazine = firearm_service.loaded_magazine_item(gun)
+        firearm_service.unload_magazine(self.char1, gun)
+        item = resolve_item(self.char1, "9mm 표준탄창", "정보")
+        self.assertEqual(item.pk, magazine.pk)
+        # 빈 탄창 12칩 + 잔탄 7발 × 개당 1칩의 기존 견적을 유지한다.
+        self.assertEqual(shop_service.resale(item), 19)
+        self.assertIn("19칩", self.raw("9mm 표준탄창 가치"))
+        self.assertEqual(self.raw("9mm 표준탄창 가치"), self.raw("9mm 표준탄창 얼마"))
+
     def test_phase_c(self):
         from evennia import search_tag
         from typeclasses.interactables import INTERACTABLES

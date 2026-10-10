@@ -41,11 +41,27 @@ def item_information(character, value, observed_at=None):
     if kind in TYPE_LABELS:
         lines.append("종류: " + TYPE_LABELS[kind])
     lines.append(f"수량 {item.quantity} · {'장착 중' if item.location_kind == 'equipment' else '장전 중' if item.location_kind == 'inside' else '소지 중'}")
-    if "value" in definition:
-        lines.append("기준 구매가: " + format_currency(rules.purchase_price(item.definition_id)))
-    if "resale_unit_value" in definition or "value" in definition:
-        price = definition["resale_unit_value"] if "resale_unit_value" in definition else rules.resale_price(item.definition_id)
-        lines.append("기준 매입가: " + format_currency(price))
+    quantity = definition.get("purchase_quantity", 1)
+    try:
+        purchase = rules.purchase_price(item.definition_id)
+    except rules.RuleError:
+        purchase = None
+    if purchase is not None:
+        if quantity > 1:
+            unit = "발" if definition.get("ammo_type") else "개"
+            # 개당 값은 정의에서 읽고 묶음 총액은 공통 거래 규칙에 맡긴다.
+            unit_value = definition.get("purchase_unit_value", definition.get("value"))
+            lines.extend(["개당 구매 기준가: " + format_currency(unit_value),
+                          f"상점 판매 묶음: {quantity}{unit}",
+                          "묶음 구매 기준가: " + format_currency(purchase)])
+        else:
+            lines.append("기준 구매가: " + format_currency(purchase))
+    try:
+        resale = rules.resale_price(item.definition_id)
+    except rules.RuleError:
+        resale = None
+    if resale is not None:
+        lines.append(("개당 매입 기준가: " if quantity > 1 else "기준 매입가: ") + format_currency(resale))
     properties, modifiers = eq.definition_parts(item.definition_id, definition)
     if properties:
         lines.append("장착 슬롯: " + eq.SLOT_LABELS[properties["slot"]])
@@ -92,5 +108,5 @@ def item_information(character, value, observed_at=None):
         lines.append("소유자별 하나만 보유할 수 있습니다.")
     if kind == "credential":
         lines.append("출입증은 소각 확정이 필요하며 원래 발급자에게 재발급을 요청할 수 있습니다.")
-    lines.extend(["", "정의된 기준 가격입니다. 현재 상인의 실제 견적은 가치·얼마로 확인하세요."])
+    lines.extend(["", "정의된 기준 가격이며 상인의 취급·매매 가능성을 보장하지 않습니다. 실제 견적은 가치·얼마로 확인하세요."])
     return ft.compact(ft.token("command", "정보"), ft.token("item", label), *lines)
