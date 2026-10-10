@@ -6,7 +6,7 @@
 | --- | --- |
 | Markdown 문법·렌더링 | 일회성 문서 검사와 `gh api markdown`으로 PR 변경 Markdown 10개의 제목·표·코드 fence 렌더링 확인 성공. 마감 기록 추가 후 다시 검사했다. |
 | 상대경로·내부 링크 | 저장소 Markdown 48개 전체의 상대 링크 372개·앵커 링크 118개 검사 오류 0. README·gameplay 내부 링크 및 installation·game/README 등 다른 문서의 진입 링크도 포함한다. |
-| GitHub 자동·명시적 앵커 | `fa8d6ff458c9de543650ac5c213430300b0bdd6b`의 GitHub Contents API HTML에서 README 자동 ID 11개·명시적 ID 17개와 gameplay 자동 ID 29개 확인 성공. 마감 변경에서 두 파일은 불변이며 명시적/자동 ID 중복·충돌이 없다. |
+| GitHub 자동·명시적 앵커 | `fa8d6ff458c9de543650ac5c213430300b0bdd6b`의 GitHub Contents API HTML에서 README 자동 ID 11개·명시적 ID 17개와 gameplay 자동 ID 29개 확인 성공. 마감 변경에서 두 파일은 불변이다. 전체 문서 실제 HTML 추가 검사에서 기존 playtest 제목과 명시적 ID의 충돌 1건을 발견해 중복 명시적 앵커만 제거했다. 동일 ID의 자동 제목 앵커와 과거 본문·외부/내부 참조는 유지하며 수정 후 중복·충돌을 다시 검사했다. |
 | 기존 README 호환성·의미 | 원본 주요 앵커 21개 보존. 상세 항목 13개의 앵커·항목 이름·정확한 가이드 절 링크가 같은 표 행에 있고, 나머지 명시적 앵커 4개는 관련 제목 바로 앞이다. P2/P3 해결 완료, `#개발`과 `#개발-및-테스트` 모두 개발·테스트 시작 위치다. |
 | 정보·문서 역할 보존 | 원본 주요 절의 유효 정보는 [보존 표](CODEX_TASK_STATE.md#원본-readme-정보-보존-대조)에서 README 유지·gameplay 이동·상세 문서 연결·정정·중복 통합으로 확인한다. 앵커 보완 전후의 기존 본문·제목·명령·수치·링크는 동일하다. |
 | 주요 명령 예시·구현 | 이전 `a42a794de015cce49925fc61129ac52a4eb8c3b0`에서 구현·기존 테스트 정적 대조와 DB 없는 순수 helper 확인 21개 그룹 성공. 첫 사냥/임무 경로·가격·회복/전리품/환경·등록 명령/Exit·CLI, README/가이드 코드 블록 15개/38개와 줄임말 예시 4개를 대조했다. 이후 코드·해당 본문이 동일해 재사용하며 실제 서버 명령 실행이나 이번 새 게임 테스트로 표현하지 않는다. |
@@ -158,8 +158,6 @@ WebSocket으로 수신한 실제 도움말 본문은 [출력 예시](text-exampl
 - Full smoke·브라우저·OS IME·실제 모바일 기기·수동 Telnet은 이번 리뷰 수정에서 재실행하지 않았다. lifecycle/timer/harness·월드 구조·UI/JS·입력 composition은 변경하지 않았고 새 권한/공개/인자 경계는 직접 회귀·전체 테스트·Quick로 검증했다. 아래 기존 Full749.938초 및 desktop/390px iframe 결과는 원래 실행 기준의 historical 근거이며 새 권한 사례의 실제 브라우저 성공으로 대신하지 않는다.
 - 개발 DB SHA256 `b1318296f505b9b7522fcbdedff7642a06cf055e9de72802198c70e6b8a7f700`·size733184·mtime_ns1790080153765082800 불변. 테스트는 in-memory/격리 DB, Quick는 독립 SQLite·owned process를 사용하고 종료했다. Room52·NPC21명·Entity/권리·방문 데이터·밸런스/schema/Bootstrap을 변경하지 않았다.
 - 최종 Markdown23개/상대 링크·앵커254개/fence 오류0 및 git diff --check PASS다. 최신 PR HEAD CI는 PR Validation에 기록한다. GitHub review thread는 시작 시0건이었다. 자동 병합/branch 삭제는 하지 않는다.
-
-<a id="계단승강기와-출구-인터페이스-통합-2026-10-09"></a>
 
 ## 계단·승강기와 출구 인터페이스 통합 (2026-10-09)
 
