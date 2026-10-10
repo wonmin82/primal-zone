@@ -1,5 +1,6 @@
 """Issue #47 공개 대화·트랜잭션·원래 NPC 선택 계약의 기능 회귀."""
 
+import re
 from copy import deepcopy
 from unittest.mock import Mock, patch
 
@@ -33,6 +34,174 @@ class NPCDialogueTests(NativeItemTest):
         self.char1.execute_cmd(raw).addCallback(lambda _: completed.append(True))
         self.assertEqual(completed, [True])
         return "\n".join(map(str, self.messages(self.char1)))
+
+    def npc_messages(self, character, npc=None):
+        return [value for value in self.messages(character) if str(value).startswith((npc or self.npc).key + ":")]
+
+    def guides(self, character):
+        return [str(value) for value in self.messages(character) if str(value).startswith("현재 사용 가능:")]
+
+    def test_unknown_followup_public_readonly_and_failure_reset(self):
+        dialogue.say(self.char1, "윤대장에게 임무")
+        state = deepcopy(self.atomic_state())
+        context = deepcopy(dialogue.current_context(self.char1))
+        self.char1.msg.reset_mock()
+        self.char2.msg.reset_mock()
+        dialogue.say(self.char1, "그건 어디서 찾나요?")
+        self.assertEqual(len(self.npc_messages(self.char1)), 1)
+        self.assertEqual(str(self.npc_messages(self.char1)[0]), str(self.npc_messages(self.char2)[0]))
+        self.assertIn("잘 모르겠군", str(self.npc_messages(self.char1)[0]))
+        self.assertEqual(len(self.guides(self.char1)), 1)
+        self.assertEqual(self.guides(self.char2), [])
+        self.assertEqual(state, self.atomic_state())
+        self.assertEqual(dialogue.current_context(self.char1)["at"], context["at"])
+        self.assertEqual(dialogue.current_context(self.char1)["intent_id"], context["intent_id"])
+        self.assertIsNone(dialogue.current_context(self.char2))
+        dialogue.say(self.char1, "그건 어떤 뜻인가요?")
+        self.assertEqual(len(self.npc_messages(self.char1)), 1)
+        self.assertEqual(dialogue.current_context(self.char1)["failures"], 2)
+        dialogue.say(self.char1, "진행")
+        self.assertEqual(dialogue.current_context(self.char1)["failures"], 0)
+        dialogue.say(self.char1, "그건 어디서 찾나요?")
+        self.assertEqual(len(self.npc_messages(self.char1)), 3)
+
+    def test_explicit_unknown_and_general_chat_context_boundaries(self):
+        for _ in range(2):
+            dialogue.say(self.char1, "윤대장에게 잘 모르겠어요")
+        self.assertEqual(len(self.npc_messages(self.char1)), 2)
+        dialogue.say(self.char1, "윤대장에게 임무")
+        self.char1.msg.reset_mock()
+        for body in ("오늘 저녁 뭐 먹나요?", "철수에게 그건 어디서 찾나요?", "그 사람은 오나요?"):
+            dialogue.say(self.char1, body)
+        self.assertEqual(self.npc_messages(self.char1), [])
+        with patch("world.npc_dialogue.time", return_value=280):
+            dialogue.say(self.char1, "그건 어디서 찾나요?")
+        self.assertEqual(self.npc_messages(self.char1), [])
+        self.assertIsNone(dialogue.current_context(self.char1))
+        self.assertNotIn(self.npc.id, self.char1.ndb.npc_dialogue_guides or {})
+
+    def test_other_npc_topic_wins_and_resets_failures(self):
+        doctor = create_object("typeclasses.interactables.Doctor", key="의무관", location=self.char1.location)
+        dialogue.say(self.char1, "윤대장에게 임무")
+        dialogue.say(self.char1, "그건 어디서 찾나요?")
+        self.char1.msg.reset_mock()
+        dialogue.say(self.char1, "의료")
+        self.assertEqual(self.npc_messages(self.char1), [])
+        self.assertEqual(len(self.npc_messages(self.char1, doctor)), 1)
+        self.assertEqual(dialogue.current_context(self.char1)["npc_id"], doctor.id)
+        self.assertEqual(dialogue.current_context(self.char1)["failures"], 0)
+
+    def test_guides_deduplicate_per_listener_and_update_on_state_change(self):
+        dialogue.say(self.char1, "윤대장에게 안녕")
+        self.assertEqual(len(self.guides(self.char1)), 1)
+        self.assertEqual(len(self.guides(self.char2)), 1)
+        self.assertIn("'윤대장에게 수락", self.guides(self.char1)[0])
+        self.assertNotIn("보고", self.guides(self.char1)[0])
+        listener_context = deepcopy(self.char1.ndb.npc_dialogue_context)
+        dialogue.say(self.char2, "윤대장에게 임무")
+        self.assertEqual(len(self.guides(self.char1)), 1)
+        self.assertEqual(len(self.guides(self.char2)), 1)
+        self.assertEqual(self.char1.ndb.npc_dialogue_context, listener_context)
+        dialogue.say(self.char2, "윤대장에게 화제 안내")
+        self.assertEqual(len(self.guides(self.char1)), 1)
+        self.assertEqual(len(self.guides(self.char2)), 2)
+        dialogue.say(self.char1, "윤대장에게 수락")
+        self.assertEqual(len(self.guides(self.char1)), 2)
+        self.assertEqual(len(self.guides(self.char2)), 2)
+        self.assertNotIn("수락", self.guides(self.char1)[-1])
+        self.char1.change(lambda p: p["quests"]["radio_tower"].update(generator_fixed=True, boss_defeated=True))
+        dialogue.say(self.char2, "윤대장에게 임무")
+        self.assertEqual(len(self.guides(self.char1)), 3)
+        self.assertIn("'윤대장에게 보고", self.guides(self.char1)[-1])
+        self.assertEqual(len(self.guides(self.char2)), 2)
+        self.assertEqual([str(v) for v in self.npc_messages(self.char1)],
+                         [str(v) for v in self.npc_messages(self.char2)])
+
+    def test_guide_expiry_npc_independence_and_lifecycle(self):
+        doctor = create_object("typeclasses.interactables.Doctor", key="의무관", location=self.char1.location)
+        dialogue.say(self.char1, "윤대장에게 안녕")
+        dialogue.say(self.char1, "의무관에게 안녕")
+        dialogue.say(self.char1, "윤대장에게 안녕")
+        self.assertEqual(len(self.guides(self.char1)), 2)
+        self.assertEqual(set(self.char1.ndb.npc_dialogue_guides), {self.npc.id, doctor.id})
+        with patch("world.npc_dialogue.time", return_value=280):
+            dialogue.say(self.char1, "윤대장에게 안녕")
+        self.assertEqual(len(self.guides(self.char1)), 3)
+        self.npc.location = self.rooms["grass"]
+        dialogue.say(self.char1, "의무관에게 안녕")
+        self.assertNotIn(self.npc.id, self.char1.ndb.npc_dialogue_guides)
+        self.char1.move_to(self.rooms["hq_concourse"], quiet=True)
+        self.assertFalse(self.char1.ndb.npc_dialogue_guides)
+        self.char1.move_to(self.rooms["dock"], quiet=True)
+        dialogue.say(self.char1, "의무관에게 안녕")
+        self.char1.at_post_unpuppet()
+        self.assertFalse(self.char1.ndb.npc_dialogue_guides)
+        dialogue.say(self.char1, "의무관에게 안녕")
+        self.char1.at_server_shutdown()
+        self.assertFalse(self.char1.ndb.npc_dialogue_guides)
+
+    def test_guides_inactive_topics_and_bounded_cache(self):
+        self.char2.change(lambda p: p.update(combat_target=123))
+        dialogue.say(self.char1, "윤대장에게 임무")
+        dialogue.say(self.char1, "윤대장에게 임무")
+        self.assertEqual(len(self.guides(self.char2)), 1)
+        self.assertIn("없음", self.guides(self.char2)[0])
+        self.assertEqual(dialogue.available_dialogue_topics(self.char2, self.npc), ())
+        self.assertTrue(all(segment["role"] == "text" for value in self.npc_messages(self.char2)
+                            for segment in value.segments if segment["text"].startswith("〈")))
+        self.char2.change(lambda p: p.update(combat_target=None))
+        dialogue.say(self.char1, "윤대장에게 임무")
+        self.assertEqual(len(self.guides(self.char2)), 2)
+        with patch("world.npc_dialogue.GUIDE_LIMIT", 1):
+            doctor = create_object("typeclasses.interactables.Doctor", key="의무관", location=self.char1.location)
+            dialogue.say(self.char1, "의무관에게 안녕")
+            self.assertEqual(set(self.char1.ndb.npc_dialogue_guides), {doctor.id})
+
+    def test_all_npc_output_keywords_belong_to_ssot(self):
+        from typeclasses.interactables import INTERACTABLES
+
+        for identity, row in INTERACTABLES.items():
+            intents = intents_for(row["typeclass"])
+            if not intents:
+                continue
+            npc = next(obj for obj in self.rooms[row["room"]].contents if obj.tags.has(identity, category="primal_interactable"))
+            self.char1.location = self.char2.location = npc.location
+            words = {item.keyword for item in intents}
+            for intent in intents:
+                if not intent.mutates_state:
+                    raw = dialogue.response(self.char1, npc, intent)
+                    self.assertTrue(set(re.findall(r"〈([^〉]+)〉", raw)) <= words, (identity, raw))
+            self.char1.msg.reset_mock()
+            dialogue.say(self.char1, npc.key + "에게 잘 모르겠어요")
+            raw = str(self.npc_messages(self.char1, npc)[0])
+            offered = re.findall(r"〈([^〉]+)〉", raw)
+            expected = [item.keyword for item in dialogue.available_dialogue_topics(self.char1, npc)]
+            self.assertEqual(offered, expected, identity)
+            self.assertEqual(len(offered), len(set(offered)))
+            self.assertLessEqual(len(offered), 3)
+            self.assertNotIn("〈키워드〉", raw)
+
+    def test_help_guide_request_matches_say_alias(self):
+        first = self.command("말 도움")
+        self.char1.msg.reset_mock()
+        self.assertEqual(self.command("say 도움"), first)
+        self.assertIn("화제 안내 말", first)
+        self.char1.msg.reset_mock()
+        self.command("윤대장에게 화제 안내 말")
+        self.assertEqual(len(self.guides(self.char1)), 1)
+
+    def test_numbered_guide_refresh_and_empty_topic_response(self):
+        dialogue.say(self.char1, "윤대장에게 안녕")
+        create_object("typeclasses.interactables.Commander", key="윤대장", location=self.char1.location)
+        dialogue.say(self.char1, "윤대장 1에게 임무")
+        self.assertEqual(len(self.guides(self.char1)), 2)
+        self.assertIn("'윤대장 1에게 임무", self.guides(self.char1)[-1])
+        with patch("world.npc_dialogue.available_intents", return_value=()):
+            self.char1.msg.reset_mock()
+            dialogue.say(self.char1, "윤대장 1에게 잘 모르겠어요")
+            reply = str(self.npc_messages(self.char1)[0])
+            self.assertIn("더 안내할 내용이 없습니다", reply)
+            self.assertNotIn("〈", reply)
 
     def test_say_quote_equivalence_and_original(self):
         saved = deepcopy(dict(self.char1.db.profile))

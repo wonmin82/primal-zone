@@ -18,6 +18,10 @@ class IntentTests(unittest.TestCase):
     def test_ssot_conflicts_and_followups(self):
         for name in SERVICE_INTENTS:
             self.assertEqual(intent_errors(name), [])
+            for request in ("화제 안내", "사용 가능한 화제"):
+                intent = recognize(SERVICE_INTENTS[name], request)
+                self.assertEqual(intent.intent_id, "greeting")
+                self.assertFalse(intent.mutates_state)
         self.assertTrue(intent_errors("Commander", (MISSION[0], replace(MISSION[1], keyword="안녕"))))
         self.assertTrue(intent_errors("Commander", (replace(MISSION[0], next_topics=("missing",)),)))
 
@@ -26,5 +30,10 @@ class IntentTests(unittest.TestCase):
         inactive = ft.dialogue_keyword("수락", "action")
         self.assertEqual(str(active), str(inactive))
         self.assertEqual(active.segments[0]["role"], "dialogue_action")
+        self.assertIn("|y", active.ansi())
+        self.assertNotIn("|y", inactive.ansi())
+        topic = ft.dialogue_keyword("임무", "topic", "opaque")
+        self.assertIn("|c", topic.ansi())
+        self.assertEqual(topic.segments[0]["role"], "dialogue_topic")
         self.assertNotIn("dialogue_selection", inactive.segments[0])
         self.assertIsNot(active.segments[0], inactive.segments[0])

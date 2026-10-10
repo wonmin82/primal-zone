@@ -17,7 +17,8 @@ class Intent:
     mutates_state: bool = False
 
 
-GREETING = Intent("greeting", "안녕", ("안녕하세요", "반갑습니다"), priority=100, handler="greet")
+GUIDE_REQUESTS = ("화제 안내", "사용 가능한 화제")
+GREETING = Intent("greeting", "안녕", ("안녕하세요", "반갑습니다", *GUIDE_REQUESTS), priority=100, handler="greet")
 MISSION = (
     GREETING,
     Intent("mission", "임무", ("의뢰",), next_topics=("accept", "progress")),

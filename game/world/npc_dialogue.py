@@ -1,5 +1,6 @@
 """공개 NPC 대화. 조회/상태 변경·개인 결과·수신자별 선택 권한을 분리한다."""
 
+import re
 import secrets
 import unicodedata
 from time import time
@@ -8,7 +9,7 @@ from evennia.utils.ansi import strip_ansi
 
 from world import rules
 from world import text as ft
-from world.dialogue_intents import intents_for, recognize
+from world.dialogue_intents import GUIDE_REQUESTS, intents_for, recognize
 from world.multiplayer import after_change, object_by_id, world_change
 from world.targets import (
     TargetSelector,
@@ -21,6 +22,7 @@ from world.targets import (
 
 CONTEXT_TTL = 180
 TOKEN_LIMIT = 256
+GUIDE_LIMIT = 32
 QUEST_NPCS = {
     "Commander": ("radio_tower", "outpost_supply_pass", rules.commander_talk),
     "Pathfinder": ("deep_jungle", "special_supply_pass", rules.jungle_talk),
@@ -80,6 +82,16 @@ def available(caller, npc, intent):
     return state["claimed"] and not has_credential(caller, credential_id)
 
 
+def available_intents(caller, npc):
+    """실행·강조·개인 안내가 공유하는 SSOT 순서의 활성 Intent."""
+    return tuple(item for item in intents_for(type_name(npc)) if available(caller, npc, item))
+
+
+def available_dialogue_topics(caller, npc):
+    return tuple(item for item in available_intents(caller, npc)
+                 if not item.mutates_state and item.intent_id != "greeting")[:3]
+
+
 def explicit_target(caller, original):
     """발화 앞부분의 조사 경계만 검사. 미발견이면 원문을 그대로 돌려준다."""
     pool = nearby(caller)
@@ -118,6 +130,9 @@ def current_context(caller, now=None):
     npc = object_by_id(context["npc_id"])
     if (not npc or context["location_id"] != getattr(caller.location, "id", None)
             or not 0 <= now - context["at"] < CONTEXT_TTL or not accessible(caller, npc)):
+        guides = dict(caller.ndb.npc_dialogue_guides or {})
+        guides.pop(context["npc_id"], None)
+        caller.ndb.npc_dialogue_guides = guides
         clear_context(caller)
         return None
     return context
@@ -126,7 +141,7 @@ def current_context(caller, now=None):
 def remember(caller, npc, intent):
     caller.ndb.npc_dialogue_context = {
         "npc_id": npc.id, "intent_id": intent.intent_id,
-        "active_keywords": tuple(item.keyword for item in intents_for(type_name(npc)) if available(caller, npc, item)),
+        "active_keywords": tuple(item.keyword for item in available_intents(caller, npc)),
         "at": time(), "location_id": caller.location.id, "failures": 0,
     }
 
@@ -157,7 +172,16 @@ def choose(caller, body, explicit=None):
         return candidates[0]
     if len(candidates) > 1:
         caller.msg("이 화제를 다루는 NPC가 여러 명입니다. 'NPC이름에게 " + body + "처럼 상대를 지정하세요.")
+    elif context and contextual_question(body):
+        return object_by_id(context["npc_id"]), None
     return None, None
+
+
+def contextual_question(body):
+    """지시어를 포함한 짧은 후속 질문만 문맥에 연결한다. 일반 채팅은 그대로 둔다."""
+    return bool("에게" not in body
+                and re.match(r"^(?:그건|그것|그거|그게|그러면|그럼|그래서|이건|이것|이거|무슨 뜻)", body)
+                and re.search(r"(?:[?？]|(?:나요|까요|가요|인지요|는지요)[.!]?)$", body))
 
 
 def token_store(caller):
@@ -223,35 +247,50 @@ def response(caller, npc, intent):
     raise rules.RuleError("지원하지 않는 대화 화제입니다.")
 
 
-def broadcast(caller, npc, raw):
-    import re
+def keyword_guide(recipient, npc, active, *, force=False):
+    from world.targets import labels
+
+    now = time()
+    present = {obj.id for obj in recipient.location.contents if supports(obj)} if recipient.location else set()
+    store = {key: row for key, row in dict(recipient.ndb.npc_dialogue_guides or {}).items()
+             if key in present and row["location_id"] == getattr(recipient.location, "id", None)
+             and 0 <= now - row["at"] < CONTEXT_TTL}
+    words = tuple(dict.fromkeys(item.keyword for item in active if item.intent_id != "greeting"))
+    target = labels(nearby(recipient)).get(npc.id, npc.key)
+    previous = store.get(npc.id)
+    if force or not previous or previous["keywords"] != words or previous["target"] != target:
+        recipient.msg("현재 사용 가능: " + " · ".join(f"'{target}에게 {word}" for word in words)
+                      if words else "현재 사용 가능: 없음 (NPC 식별·접근·비전투 조건을 확인하세요.)")
+        store.pop(npc.id, None)
+        while len(store) >= GUIDE_LIMIT:
+            del store[next(iter(store))]
+        store[npc.id] = {"keywords": words, "target": target, "at": now,
+                         "location_id": getattr(recipient.location, "id", None)}
+    recipient.ndb.npc_dialogue_guides = store
+
+
+def broadcast(caller, npc, raw, *, guide_requested=False):
 
     from typeclasses.explorers import Explorer
-
-    from world.targets import labels
 
     intents = {item.keyword: item for item in intents_for(type_name(npc))}
     # 같은 raw를 사용하면서 수신자마다 새 Text와 선택 토큰을 만든다.
     for recipient in tuple(caller.location.contents):
         if not isinstance(recipient, Explorer):
             continue
-        parts, active = [ft.token("npc", npc.key), ": "], []
+        parts = [ft.token("npc", npc.key), ": "]
+        active = available_intents(recipient, npc)
+        active_ids = {item.intent_id for item in active}
         for part in re.split(r"(〈[^〉]+〉)", raw):
             intent = intents.get(part[1:-1]) if part.startswith("〈") and part.endswith("〉") else None
             if intent:
-                enabled = available(recipient, npc, intent)
+                enabled = intent.intent_id in active_ids
                 selection = issue_token(recipient, npc, intent) if enabled else None
                 parts.append(ft.dialogue_keyword(intent.keyword, intent.kind, selection))
-                if enabled:
-                    active.append(intent.keyword)
             else:
                 parts.append(part)
         recipient.msg(ft.text(*parts, kind="chat"))
-        if active:
-            target = labels(nearby(recipient)).get(npc.id, npc.key)
-            recipient.msg("현재 사용 가능: " + " · ".join(f"'{target}에게 {word}" for word in active))
-        else:
-            recipient.msg("현재 사용 가능: 없음 (NPC 식별·접근·비전투 조건을 확인하세요.)")
+        keyword_guide(recipient, npc, active, force=guide_requested and recipient.id == caller.id)
 
 
 def public_speech(caller, original):
@@ -260,25 +299,25 @@ def public_speech(caller, original):
         recipient.msg(message)
 
 
-def deliver(caller, npc, intent, raw, personal="", selection=None):
+def deliver(caller, npc, intent, raw, personal="", selection=None, *, guide_requested=False):
     if selection:
         store = token_store(caller)
         store.pop(selection, None)
         caller.ndb.npc_dialogue_tokens = store
     remember(caller, npc, intent)
-    broadcast(caller, npc, raw)
+    broadcast(caller, npc, raw, guide_requested=guide_requested)
     if personal:
         caller.msg(ft.text(ft.token("reward", personal)))
     if not caller.ndb.npc_dialogue_guided:
         caller.ndb.npc_dialogue_guided = True
-        caller.msg("〈키워드〉는 NPC에게 할 말입니다. 예: 'NPC이름에게 키워드 또는 NPC이름에게 키워드 말. 개인 메시지는 대화를 사용하세요.")
+        caller.msg("대사의 꺾쇠 안 단어로 NPC에게 말할 수 있습니다. 화제 안내 말로 현재 입력을 다시 확인하세요. 개인 메시지는 대화를 사용하세요.")
 
 
-def execute(caller, npc, intent, *, selection=None):
+def execute(caller, npc, intent, *, selection=None, guide_requested=False):
     if not available(caller, npc, intent):
         raise rules.RuleError("지금은 이 NPC의 해당 키워드를 사용할 수 없습니다. 위치·시야·비전투·임무 조건을 확인하세요.")
     if not intent.mutates_state:
-        deliver(caller, npc, intent, response(caller, npc, intent))
+        deliver(caller, npc, intent, response(caller, npc, intent), guide_requested=guide_requested)
         return
     from world.content import ITEMS
     from world.credential_service import issuer_talk, reissue_credential
@@ -330,14 +369,27 @@ def say(caller, value):
     if not npc:
         return
     if not intent:
+        if not accessible(caller, npc):
+            caller.msg("지금은 이 NPC에게 질문할 수 없습니다. 위치·시야·비전투 조건을 확인하세요.")
+            return
         context = current_context(caller)
-        if context:
+        if context and context["npc_id"] == npc.id:
             context["failures"] += 1
             caller.ndb.npc_dialogue_context = context
-        greeting = next(item for item in intents_for(type_name(npc)) if item.intent_id == "greeting")
-        broadcast(caller, npc, "정확한 〈키워드〉로 말씀해 주세요. " + response(caller, npc, greeting))
+            if not explicit and context["failures"] > 1:
+                return
+        topics = available_dialogue_topics(caller, npc)
+        opening = {"Commander": "무엇을 묻는지 잘 모르겠군.",
+                   "Pathfinder": "그 질문은 잘 이해하지 못했습니다.",
+                   "Shopkeeper": "어떤 물품 이야기인지 잘 모르겠어요.",
+                   "Doctor": "어떤 의료 안내가 필요한지 잘 모르겠습니다.",
+                   "SettlementOfficer": "어떤 정산 안내를 원하시는지 잘 모르겠습니다."}.get(
+                       type_name(npc), "어떤 훈련 안내가 필요한지 잘 모르겠습니다.")
+        guidance = (" " + " · ".join(f"〈{item.keyword}〉" for item in topics) + "에 관해 물어보세요."
+                    if topics else " 지금은 이곳에서 더 안내할 내용이 없습니다.")
+        broadcast(caller, npc, opening + guidance, guide_requested=True)
         return
-    execute(caller, npc, intent)
+    execute(caller, npc, intent, guide_requested=" ".join(body.split()) in GUIDE_REQUESTS)
 
 
 def select_keyword(caller, token, session):

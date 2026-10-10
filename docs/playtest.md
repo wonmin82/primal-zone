@@ -8,6 +8,23 @@
 
 ### 실제 개발 중 검사
 
+#### PR #52 리뷰 후속 검증 (2026-10-11)
+
+기준 HEAD `ccbe9f0b2d3f132116764d176098becd431ed7a2` 이후 P2 세 건을 보완했다. 명시적 NPC·유효 문맥의 후속 질문에 짧은 이해 실패 응답을 제공하고, 일반 채팅·다른 NPC의 화제 선택은 보호한다. 안내는 현재 활성 읽기 전용 Intent 1~3개에서 만들며 가짜 꺾쇠 키워드를 제거했다. 개인 안내는 NPC별 첫 안내·활성 목록/대상 번호 변경·명시적 요청·필요한 실패 안내 때만 출력한다. 32개/180초 비영속 캐시와 기존 이동·접속 해제·서버 종료 생명주기를 사용하며 공개 NPC 원문·행동 원자성·개인 메시징·v13은 유지한다.
+
+| 실제 실행한 후속 검사 | 결과 |
+| --- | --- |
+| `uv run python scripts/dev.py test tests.test_npc_dialogue --parallel 1` | 초기 20개 성공, 종료 0, 118.001초. |
+| `uv run python scripts/dev.py test tests.test_npc_dialogue tests.test_text.SemanticTextTests.test_npc_quest_rewards_and_player_movement_keep_roles tests.test_text.SemanticTextTests.test_web_wire_preserves_literal_untrusted_text_without_markup tests.test_text.SemanticTextTests.test_chat_body_never_acquires_entity_or_command_roles --parallel 1` | 최종 코드 24개 성공, 종료 0, 122.804초. 후속 질문/반복 실패/정상 입력 초기화/다른 NPC/만료/원문 공개/상태 불변, 22개 NPC 출력의 SSOT 키워드, 개인 안내/상태 변화/번호 변화/접속 해제/종료/상한/빈 화제, 도움말 및 기존 Text 경계를 확인했다. |
+| `uv run python -m unittest world.test_dialogue_intents world.test_dialogue_migration` (`game`에서) | 7개 성공, 종료 0. Intent 충돌·읽기 전용 안내 별칭·ANSI/웹 의미 세그먼트·기존 방법 B를 확인했다. |
+| `node --test ../scripts/tests/test_web_prompt.cjs` (`game`에서) | 기존 웹 자동 검사 12개 성공, 종료 0. 렌더링·클릭/키보드·비활성·안전한 DOM·대비/포커스 계약을 확인했다. JS/CSS는 수정하지 않았다. |
+| `uv run python scripts/dev.py check` / `git diff --check` | 코드 정리 후 모두 성공, 종료 0. 초기 검사에서 새 테스트의 import 순서 오류 1건을 정리했다. |
+| GitHub GFM 렌더링과 저장소 Markdown 상대 링크/앵커 | 오류 0. 새 설계 절과 가이드·어휘 문서 연결, 예시 코드 블록을 확인했다. |
+
+초기 순수 검사 선택에 존재하지 않는 `world.test_text` label이 포함되어 로드 실패했다. 실제 `tests.test_text`의 관련 label 3개로 정정해 위 최종 기능 검사에 포함했다. 실패를 게임 회귀 또는 통과로 기록하지 않는다. 환경은 아래와 동일한 Windows 10 Pro 10.0.19045 / Python 3.13.15 / uv 0.12.13이다. 기존 격리 fixture를 사용했으며 플레이 DB 초기화·삭제는 없다.
+
+위 표는 후속 커밋 전 경량 검증 기록이다. 확정 커밋 HEAD의 Quick 성공 뒤에만 Push하며 해당 SHA·실제 Quick 결과·최신 전체 CI 링크는 [PR #52](https://github.com/wonmin82/primal-zone/pull/52)의 Review Follow-up/Validation에 기록한다. 아래 기존 Quick/CI 결과는 과거 HEAD의 기록으로 보존하며 새 HEAD의 성공으로 대신하지 않는다. 로컬 전체 회귀·실 브라우저·OS IME·수동 E2E는 이번 후속 검사에서 실행하지 않았다. 실제 브라우저·다중 세션·장기 재시작 통합은 #50의 별도 검증이다.
+
 환경은 Windows 10 build 19045, Python 3.13.15, uv 0.12.13이다. 테스트는 기존 독립 SQLite/ItemEntity fixture를 사용한다. 플레이 DB 초기화·삭제·기존 인증 정책 변경은 없다.
 
 | 실행 명령·범위 | 실제 결과 |

@@ -394,6 +394,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         self.ndb.shortcut_delete_all_request = None
         self.ndb.npc_dialogue_context = None
         self.ndb.npc_dialogue_tokens = None
+        self.ndb.npc_dialogue_guides = None
         if not self.sessions.count():
             self.cancel_pending_prompt()
             self.ndb.command_output_depth = 0
@@ -417,6 +418,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         self.ndb.shortcut_delete_all_request = None
         self.ndb.npc_dialogue_context = None
         self.ndb.npc_dialogue_tokens = None
+        self.ndb.npc_dialogue_guides = None
         self.reconcile_lights(time(), turn_off=True)
         self.leave_combat()
         if self.sessions.count():
@@ -502,6 +504,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
     def clear_dialogue(self):
         self.ndb.npc_dialogue_context = None
         self.ndb.npc_dialogue_tokens = None
+        self.ndb.npc_dialogue_guides = None
 
     def present_destination(self, source_location, **kwargs):
         # DefaultCharacter의 내부 look은 별도 사용자 입력이 아니다.
