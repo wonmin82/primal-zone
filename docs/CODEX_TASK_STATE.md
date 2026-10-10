@@ -53,7 +53,7 @@
 
 ### 현재 설명과 historical 구분
 
-- equipment와 architecture의 현재 프로필 v10 표기를 v11로 정정한다. Phase 2/3 및 성장 v10의 당시 정책은 별도 historical 문단·연결로 유지한다.
+- equipment·item-entities·architecture의 현재 프로필 v10 표기를 v11로 정정한다. Phase 2/3/6 및 성장 v10의 당시 정책은 별도 historical 문단·연결로 유지한다.
 - architecture의 현재 액티브 방어·고정 강타 cooldown·Telnet 비활성·legacy 두 슬롯 합산·스택 저장 설명을 실제 패시브/Rank·네트워크·ItemEntity snapshot/instance 계약과 맞춘다. 초기 슬롯별 설계 본문은 historical 절로 보존한다.
 - final-content의 현재 package 비교 표에서 5.56mm 20발 직접 구매값을 60→40칩으로 바로잡는다. Phase 6의 3칩/발 측정과 후속 2칩/발 조정 이력은 수정하지 않는다. 실제 가격·package·콘텐츠는 변경하지 않는다.
 - playtest의 현재 v11·3층 의무실·5층 병기점·교관 배치·실제 승강기 Exit·55/27칩 절단마체테·5칩 붕대 매입 안내를 바로잡는다. 옛 본부 연결·숙련/유료 학습·초기 장비 절차는 historical임을 표시하고 당시 실패·검증 결과는 보존한다.

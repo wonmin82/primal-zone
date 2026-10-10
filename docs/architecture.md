@@ -212,7 +212,7 @@ DEFAULT는 구조적으로 행동을 지원하는 첫 대상을 선택한다. IN
 
 수치와 상태 규칙은 [장기 성장 설계](progression.md)에 정리한다. `world/progression.py`의 SKILLS와 순수 helper가 SSOT이고 `world.test_progression`이 대표 값·경계를 검증한다. 장비는 기존 외부 능력치 보정이며 별도 숙련은 없다. 레벨 cap은 기본 기술의 추가 Rank 합 +1로 도출한다.
 
-profile v10의 `attributes`는 기본 10과 추가 투자, `skills`는 여덟 Rank다. 남은 포인트·훈련은 레벨과 투자량에서 도출하며 가변 잔액을 저장하지 않는다. migration은 옛 기술을 R1로 환원하고 proficiency/guard를 제거한다. 특성은 canonical 순서로 +20·레벨 예산을 제한하고 기존 XP·장비·소지품·임무·월드 진행을 유지한다. 현재 버전의 잘못된 Rank도 저장 전에 같은 정규화를 거친다. read-only snapshot은 입력과 DB를 바꾸지 않는다.
+v10에서 도입해 현재 v11에서도 유지하는 `attributes`는 기본 10과 추가 투자, `skills`는 여덟 Rank다. 남은 포인트·훈련은 레벨과 투자량에서 도출하며 가변 잔액을 저장하지 않는다. migration은 옛 기술을 R1로 환원하고 proficiency/guard를 제거한다. 특성은 canonical 순서로 +20·레벨 예산을 제한하고 기존 XP·장비·소지품·임무·월드 진행을 유지한다. 현재 버전의 잘못된 Rank도 저장 전에 같은 정규화를 거친다. read-only snapshot은 입력과 DB를 바꾸지 않는다.
 
 <a id="npc-소유-훈련과-지원동-시설"></a>
 
@@ -566,7 +566,7 @@ legacy lighting은 기존 light_sources를 단일 adapter 경계에서 LightSnap
 
 ## Phase 2 장비·Modifier·Defense (2026-10-05)
 
-현재 장비 계산은 `equipment_service → EquipmentSnapshot → equipment/modifiers/rules/recovery/presentation` 경계로 연결한다. ORM은 service에 있고 rules/progression/recovery의 계산은 DB·Evennia와 독립적이다. profile version은 10이다. 아래 과거 구현 설명의 고정 방어와 두 legacy 장비 slot은 이번 단계의 최종 계산·slot 계약보다 우선하지 않는다.
+당시 장비 계산은 `equipment_service → EquipmentSnapshot → equipment/modifiers/rules/recovery/presentation` 경계로 연결했다. ORM은 service에 있고 rules/progression/recovery의 계산은 DB·Evennia와 독립적이다. Phase 2 당시 profile version은 10이었다. 아래 초기 구현 설명의 고정 방어와 두 legacy 장비 slot은 Phase 2의 계산·slot 계약보다 우선하지 않는다. 현재 프로필·장비 계약은 위 현재 절을 따른다.
 
 Entity 장비는 equipment/Explorer/최종 slot에 저장하며 손 capacity2·반지2·나머지1과 손 조합을 검사한다. 주무기는 Explorer Attribute의 ItemEntity UUID 참조이며 공통 create/move/delete transaction 안에서 자동 선택·승계·제거한다. 장비 변경은 옛 recovery rate 정산 → 새 위치/주무기/snapshot → 새 max/rate 계산 → current clamp → 저장 순서다. 자원 무료 회복과 자동 장비 교체는 없다.
 
