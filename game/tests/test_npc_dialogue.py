@@ -5,8 +5,10 @@ from copy import deepcopy
 from unittest.mock import Mock, patch
 
 from evennia import create_object
+from evennia.utils.ansi import parse_ansi, strip_raw_ansi
 from world import npc_dialogue as dialogue
 from world import rules
+from world import text as ft
 from world.bootstrap import build_world
 from world.content.integrity import errors
 from world.dialogue_intents import intents_for
@@ -146,6 +148,11 @@ class NPCDialogueTests(NativeItemTest):
         dialogue.say(self.char1, "윤대장에게 임무")
         self.assertEqual(len(self.guides(self.char2)), 1)
         self.assertIn("없음", self.guides(self.char2)[0])
+        empty = next(value for value in self.messages(self.char2) if str(value).startswith("현재 사용 가능:"))
+        self.assertIsInstance(empty, ft.Text)
+        self.assertEqual(empty.kind, "event")
+        self.assertEqual(empty.segments, [{"role": "muted", "text": self.guides(self.char2)[0]}])
+        self.assertEqual(strip_raw_ansi(parse_ansi(empty.ansi())), str(empty))
         self.assertEqual(dialogue.available_dialogue_topics(self.char2, self.npc), ())
         self.assertTrue(all(segment["role"] == "text" for value in self.npc_messages(self.char2)
                             for segment in value.segments if segment["text"].startswith("〈")))
@@ -275,6 +282,23 @@ class NPCDialogueTests(NativeItemTest):
         a = next(value for value in self.messages(self.char1) if str(value).startswith("윤대장:"))
         b = next(value for value in self.messages(self.char2) if str(value).startswith("윤대장:"))
         self.assertEqual(str(a), str(b))
+        original = "윤대장에게 임무"
+        mission = next(item for item in intents_for("Commander") if item.intent_id == "mission")
+        expected_npc_body = dialogue.response(self.char1, self.npc, mission)
+        for character, spoken in ((self.char1, a), (self.char2, b)):
+            player = next(value for value in self.messages(character)
+                          if str(value).startswith(self.char1.key + ":"))
+            self.assertEqual(str(player), self.char1.key + ": " + original)
+            self.assertEqual(str(spoken), self.npc.key + ": " + expected_npc_body)
+            for message, role, name in ((player, "player", self.char1.key), (spoken, "npc", self.npc.key)):
+                self.assertIsInstance(message, ft.Text)
+                self.assertEqual(message.kind, "chat")
+                self.assertEqual(message.segments[0], {"role": role, "text": name})
+                self.assertEqual(message.segments[1], {"role": "text", "text": ": "})
+                self.assertEqual(strip_raw_ansi(parse_ansi(message.ansi())), str(message))
+            self.assertEqual(player.segments[2:], [{"role": "text", "text": original}])
+            self.assertTrue(player.ansi().startswith("|g" + self.char1.key + "|n"))
+            self.assertTrue(spoken.ansi().startswith("|c" + self.npc.key + "|n"))
         def accept_segment(value):
             return next(segment for segment in value.segments if segment["text"] == "〈수락〉")
         self.assertEqual(accept_segment(a)["role"], "dialogue_action")
@@ -285,6 +309,33 @@ class NPCDialogueTests(NativeItemTest):
         self.assertIsNotNone(dialogue.current_context(self.char1))
         with patch("world.npc_dialogue.time", return_value=280):
             self.assertIsNone(dialogue.current_context(self.char1))
+
+    def test_personal_guides_semantics_keep_plain_text_and_separate_chat(self):
+        dialogue.say(self.char1, "윤대장에게 임무")
+        guide = next(value for value in self.messages(self.char1) if str(value).startswith("현재 사용 가능:"))
+        self.assertIsInstance(guide, ft.Text)
+        self.assertEqual(guide.kind, "event")
+        self.assertEqual(guide.segments[0], {"role": "muted", "text": "현재 사용 가능: "})
+        commands = [part["text"] for part in guide.segments if part["role"] == "command"]
+        self.assertEqual(commands, ["'윤대장에게 " + word for word in ("임무", "진행", "지역", "출입증", "수락")])
+        self.assertEqual(str(guide), "현재 사용 가능: " + " · ".join(commands))
+        self.assertEqual([part for part in guide.segments if part["role"] == "text"],
+                         [{"role": "text", "text": " · "}] * (len(commands) - 1))
+        self.assertEqual(strip_raw_ansi(parse_ansi(guide.ansi())), str(guide))
+        self.assertFalse(any(part["role"] in ("npc", "player", "dialogue_topic", "dialogue_action")
+                             for part in guide.segments))
+        usage = next(value for value in self.messages(self.char1) if str(value).startswith("대사의 꺾쇠"))
+        self.assertIsInstance(usage, ft.Text)
+        self.assertEqual(usage.kind, "event")
+        self.assertEqual([part["text"] for part in usage.segments if part["role"] == "command"],
+                         ["화제 안내 말", "대화"])
+        self.assertTrue(all(part["role"] in ("muted", "command") for part in usage.segments))
+        self.assertEqual(str(usage), "대사의 꺾쇠 안 단어로 NPC에게 말할 수 있습니다. 화제 안내 말로 현재 입력을 다시 확인하세요. 개인 메시지는 대화를 사용하세요.")
+        self.assertEqual(strip_raw_ansi(parse_ansi(usage.ansi())), str(usage))
+        dialogue.say(self.char1, "윤대장에게 임무")
+        self.assertEqual(len(self.guides(self.char1)), 1)
+        self.assertEqual(sum(str(value).startswith("대사의 꺾쇠") for value in self.messages(self.char1)), 1)
+        self.assertEqual(len(self.npc_messages(self.char1)), 2)
 
     def test_exact_transitions_private_reward_and_rollback(self):
         dialogue.say(self.char1, "윤대장에게 수락")

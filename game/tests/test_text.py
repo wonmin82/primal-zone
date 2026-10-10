@@ -348,25 +348,36 @@ class SemanticTextTests(WorldCommandTest):
         )
 
     def test_web_wire_preserves_literal_untrusted_text_without_markup(self):
+        from world.npc_dialogue import say
+
         value = "<img src=x onerror=alert(1)> |r붕대|n $You()\x1b[31m"
         message = ft.text(ft.token("player", value), ": ", value, kind="chat")
-        with patch.object(self.session, "protocol_key", "websocket"):
-            with patch.object(DefaultCharacter, "msg") as base:
-                Explorer.msg(self.char1, (message, {"type": "look"}), session=self.session)
-        args = base.call_args.kwargs
-        self.assertNotIn("text", args)
-        wire = evennia.SESSION_HANDLER.clean_senddata(self.session, args)
-        payload = wire["pz_log"][0][0]
-        self.assertEqual(payload["kind"], "chat")
-        self.assertEqual(payload["segments"], message.segments)
-        self.assertNotIn("\x1b", str(payload))
-        self.assertIn("$You()", str(payload))
-        self.assertIn("<img", str(payload))  # 브라우저는 textContent로만 표시한다.
-        with patch.object(self.session, "protocol_key", "telnet"):
-            with patch.object(DefaultCharacter, "msg") as base:
-                Explorer.msg(self.char1, message, session=self.session)
-        self.assertEqual(strip_raw_ansi(base.call_args.args[0]), str(message))
-        self.assertTrue(base.call_args.kwargs["options"]["raw"])
+        with patch.object(self.char1, "msg") as messages:
+            say(self.char1, "윤대장에게 임무")
+        emitted = [call.args[0] for call in messages.call_args_list if call.args]
+        self.assertTrue(all(isinstance(item, ft.Text) for item in emitted))
+        self.assertEqual([item.kind for item in emitted], ["chat", "chat", "event", "event"])
+        for output in (message, *emitted):
+            with self.subTest(kind=output.kind, text=str(output)):
+                with patch.object(self.session, "protocol_key", "websocket"):
+                    with patch.object(DefaultCharacter, "msg") as base:
+                        Explorer.msg(self.char1, (output, {"type": "look"}), session=self.session)
+                args = base.call_args.kwargs
+                self.assertNotIn("text", args)
+                wire = evennia.SESSION_HANDLER.clean_senddata(self.session, args)
+                payload = wire["pz_log"][0][0]
+                self.assertEqual(payload["kind"], output.kind)
+                self.assertEqual(payload["segments"], output.segments)
+                self.assertEqual("".join(part["text"] for part in payload["segments"]), str(output))
+                self.assertNotIn("\x1b", str(payload))
+                if output is message:
+                    self.assertIn("$You()", str(payload))
+                    self.assertIn("<img", str(payload))  # 브라우저는 textContent로만 표시한다.
+                with patch.object(self.session, "protocol_key", "telnet"):
+                    with patch.object(DefaultCharacter, "msg") as base:
+                        Explorer.msg(self.char1, output, session=self.session)
+                self.assertEqual(strip_raw_ansi(base.call_args.args[0]), str(output))
+                self.assertTrue(base.call_args.kwargs["options"]["raw"])
 
     def test_chat_body_never_acquires_entity_or_command_roles(self):
         self.char1.key = "검증|r이름<img>"

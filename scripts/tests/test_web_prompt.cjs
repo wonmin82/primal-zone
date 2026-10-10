@@ -108,6 +108,22 @@ test("NPC 키워드는 승인된 토큰만 버튼으로 렌더링하고 원문�
   c.document.fire("keydown", {target:row.children[4],key:"Enter"});
   c.document.fire("keydown", {target:action,key:"Enter",isComposing:true});
   assert.equal(c.socket.sent.length, sent);
+  const segments = [
+    {role:"muted",text:"현재 사용 가능: "},
+    {role:"command",text:"'윤대장에게 임무"},
+    {role:"text",text:" · "},
+    {role:"command",text:"'윤대장에게 <img src=x> |r진행|n"},
+  ];
+  c.receive("pz_log", {kind:"event", segments});
+  const guide = c.log.lastElementChild;
+  assert.equal(guide.className, "log-entry event");
+  assert.equal(guide.textContent, segments.map(part => part.text).join(""));
+  assert.deepEqual(guide.children.map(part => part.className),
+    ["semantic-muted", "semantic-command", "semantic-text", "semantic-command"]);
+  assert.ok(guide.children.every(part => part.tagName === "span"));
+  assert.equal(guide.children[3].textContent, segments[3].text);
+  c.document.fire("click", {target:guide.children[1]});
+  assert.equal(c.socket.sent.length, sent); // 명령 예시는 별도 NPC 선택 버튼이 아니다.
 });
 
 test("NPC 키워드 팔레트는 로그 배경과 4.5:1 이상 대비하고 포커스 표시 유지", () => {
@@ -135,6 +151,20 @@ test("일반 명령은 마지막 대기 prompt와 같은 행, command semantic �
   c.event("상태 결과"); c.prompt(full);
   assert.equal(c.log.lastElementChild.dataset.awaitingInput, "true");
   assert.equal(row.textContent, "[ 60/60 · 40/40 ] > 상태");
+  const dialogue = client();
+  dialogue.submit("'윤대장에게 임무");
+  dialogue.receive("pz_log", {kind:"chat", segments:[
+    {role:"player",text:"탐사자"}, {role:"text",text:": "}, {role:"text",text:"윤대장에게 임무"},
+  ]});
+  dialogue.receive("pz_log", {kind:"chat", segments:[
+    {role:"npc",text:"윤대장"}, {role:"text",text:": "}, {role:"text",text:"임무를 안내합니다."},
+  ]});
+  assert.deepEqual(dialogue.log.children.map(entry => entry.textContent), [
+    "[ 60/60 · 40/40 ] > '윤대장에게 임무", "탐사자: 윤대장에게 임무", "윤대장: 임무를 안내합니다.",
+  ]);
+  assert.deepEqual(dialogue.log.children.slice(1).map(entry => entry.className), ["log-entry chat", "log-entry chat"]);
+  assert.deepEqual(dialogue.log.children.slice(1).map(entry => entry.children.map(part => part.className)),
+    [["semantic-player", "semantic-text", "semantic-text"], ["semantic-npc", "semantic-text", "semantic-text"]]);
 });
 test("자동 피해 메시지 뒤에는 과거 prompt 대신 최신 서버 state로 새 입력 행", () => {
   const c = client(); const old = c.log.lastElementChild;

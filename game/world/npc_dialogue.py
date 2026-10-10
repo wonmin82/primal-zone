@@ -259,8 +259,14 @@ def keyword_guide(recipient, npc, active, *, force=False):
     target = labels(nearby(recipient)).get(npc.id, npc.key)
     previous = store.get(npc.id)
     if force or not previous or previous["keywords"] != words or previous["target"] != target:
-        recipient.msg("현재 사용 가능: " + " · ".join(f"'{target}에게 {word}" for word in words)
-                      if words else "현재 사용 가능: 없음 (NPC 식별·접근·비전투 조건을 확인하세요.)")
+        if words:
+            guide = ft.text(ft.token("muted", "현재 사용 가능: "),
+                            ft.join([ft.token("command", f"'{target}에게 {word}") for word in words], " · "),
+                            kind="event")
+        else:
+            guide = ft.text(ft.token("muted", "현재 사용 가능: 없음 (NPC 식별·접근·비전투 조건을 확인하세요.)"),
+                            kind="event")
+        recipient.msg(guide)
         store.pop(npc.id, None)
         while len(store) >= GUIDE_LIMIT:
             del store[next(iter(store))]
@@ -310,7 +316,10 @@ def deliver(caller, npc, intent, raw, personal="", selection=None, *, guide_requ
         caller.msg(ft.text(ft.token("reward", personal)))
     if not caller.ndb.npc_dialogue_guided:
         caller.ndb.npc_dialogue_guided = True
-        caller.msg("대사의 꺾쇠 안 단어로 NPC에게 말할 수 있습니다. 화제 안내 말로 현재 입력을 다시 확인하세요. 개인 메시지는 대화를 사용하세요.")
+        caller.msg(ft.text(ft.token("muted", "대사의 꺾쇠 안 단어로 NPC에게 말할 수 있습니다. "),
+                           ft.token("command", "화제 안내 말"),
+                           ft.token("muted", "로 현재 입력을 다시 확인하세요. 개인 메시지는 "),
+                           ft.token("command", "대화"), ft.token("muted", "를 사용하세요."), kind="event"))
 
 
 def execute(caller, npc, intent, *, selection=None, guide_requested=False):

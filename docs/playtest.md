@@ -8,6 +8,18 @@
 
 ### 실제 개발 중 검사
 
+#### PR #52 대화 출력 형식 검증 (2026-10-11)
+
+기준 HEAD `c74437194fa6fbbcd7bb1855448923663cb4574a` 이후 개인 활성 키워드·최초 사용 안내의 출력 객체만 `Text(kind="event")`로 통일했다. 설명은 `muted`, 실제 입력 예시는 `command`, 사이 구분자는 `text`이며 원문·안내 시점·반복 억제·빈 목록 처리를 유지한다. 공개 발화의 `Text(kind="chat")`·화자 역할과 프롬프트 기록은 변경하지 않았다. 아래 이전 후속 검증과 실패 이력은 당시 결과로 보존한다.
+
+| 실제 실행한 출력 형식 검사 | 결과 |
+| --- | --- |
+| `uv run python scripts/dev.py test tests.test_npc_dialogue tests.test_text.SemanticTextTests.test_web_wire_preserves_literal_untrusted_text_without_markup tests.test_text.SemanticTextTests.test_npc_quest_rewards_and_player_movement_keep_roles tests.test_text.SemanticTextTests.test_chat_body_never_acquires_entity_or_command_roles --parallel 1` | 25개 성공, 종료 0, 123.900초(runner 137.171초). 실제 공개 경로의 플레이어/NPC 공통 이름·콜론·본문 역할, 수신자별 키워드·동일 원문·청취자 문맥 불변, 개인 안내/빈 목록/최초 사용법의 event 역할과 반복 억제, 실제 Explorer.msg의 ANSI 및 웹 kind/segments 전달을 확인했다. |
+| `node --test scripts/tests/test_web_prompt.cjs` | 12개 성공, 종료 0. 기존 렌더러의 안내 semantic 클래스·문자열 보존·안전한 DOM 및 입력 프롬프트/플레이어 발화/NPC 발화의 별도 행 유지 검사를 보강했다. JS/CSS 실행 파일은 변경하지 않았다. |
+| `uv run python scripts/dev.py check` / `git diff --check` | 성공, 종료 0. |
+
+기존 격리 SQLite/ItemEntity fixture를 사용했다. 로컬 전체 회귀·실 브라우저·OS 한글 IME·수동 다중 세션 E2E는 실행하지 않았다. 문서 GFM 렌더링/상대 링크/앵커와 확정 커밋 HEAD의 Quick 결과·최신 원격 전체 CI는 [PR #52](https://github.com/wonmin82/primal-zone/pull/52)의 대화 출력 형식 Validation에 기록한다. Quick 성공 전에는 Push하지 않으며 이전 HEAD의 성공을 새 HEAD 검증으로 대신하지 않는다. 실제 브라우저·비색상 터미널의 수동 접근성·복수 세션 및 통합 시나리오는 #50에서 추가 확인한다.
+
 #### PR #52 리뷰 후속 검증 (2026-10-11)
 
 기준 HEAD `ccbe9f0b2d3f132116764d176098becd431ed7a2` 이후 P2 세 건을 보완했다. 명시적 NPC·유효 문맥의 후속 질문에 짧은 이해 실패 응답을 제공하고, 일반 채팅·다른 NPC의 화제 선택은 보호한다. 안내는 현재 활성 읽기 전용 Intent 1~3개에서 만들며 가짜 꺾쇠 키워드를 제거했다. 개인 안내는 NPC별 첫 안내·활성 목록/대상 번호 변경·명시적 요청·필요한 실패 안내 때만 출력한다. 32개/180초 비영속 캐시와 기존 이동·접속 해제·서버 종료 생명주기를 사용하며 공개 NPC 원문·행동 원자성·개인 메시징·v13은 유지한다.
