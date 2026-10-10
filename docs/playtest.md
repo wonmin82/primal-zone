@@ -1,3 +1,89 @@
+## Issue #47 NPC 대화·개인 메시지 검증
+
+[Issue #47 v3.5 FINAL](https://github.com/wonmin82/primal-zone/issues/47)의 개발·검증 기록이다. 현재 사용자 입력은 [플레이 가이드](gameplay.md#npc-대화와-개인-메시지), 기술 계약은 [NPC 대화 설계](npc-dialogue.md)를 따른다. 아래 과거 PR/Phase 기록의 NPC `대화`·프로필 버전·당시 테스트 결과는 역사적 근거로 유지한다.
+
+### 검증 정책
+
+개발 중 직접 영향을 받는 순수·격리 기능·콘텐츠·웹 자동 테스트만 실행한다. 실제 Push할 커밋 HEAD에서 `uv run python scripts/dev.py smoke`의 격리 Quick을 통과한 뒤 Push한다. 실행 코드·테스트 변경 후에는 새 HEAD에서 다시 Quick을 수행한다. 실패·미실행이면 Push하지 않는다. 로컬 전체 회귀를 중복 실행하지 않으며, Push 후 최신 HEAD의 GitHub Actions 전체 `test`·`smoke`를 확인한다. Issue #46의 사전 전체 로컬 CI 정책은 #46 당시의 별도 기록이다.
+
+### PR #52 최종 문서 마감 (2026-10-11)
+
+마감 시작 HEAD `7f6db0e332a865fbb56e1e0b5950b339ff6de479`의 실제 결과를 재확인했다. 아래 이전 경량 검사·실패·수정 기록은 당시 결과로 유지한다. 이번 문서 마감에는 작업 상태/마감 기록과 줄임말 문서 서두의 현행 v13 정정만 포함하며 실행 코드·테스트·UI·가격·퀘스트·저장 규칙은 변경하지 않는다.
+
+| 구분 | 실제 결과와 실행 시점 |
+| --- | --- |
+| 개발 중 관련 검사 | 동일한 코드·테스트의 `7f6db0e` 커밋 직전 NPC/Text 25개·Node 웹 12개 및 코드 검사 성공. 전체 명령·123.900초 결과는 [출력 형식 기록](#pr-52-대화-출력-형식-검증-2026-10-11)에 보존한다. 문서만 추가되어 이번에 게임 검사를 반복하지 않으며 새 실행으로 합산하지 않는다. |
+| 시작 HEAD 로컬 Quick | `uv run python scripts/dev.py smoke`, 정확한 `7f6db0e`에서 103.335초·종료 0. 기존 격리 SQLite/fixture/실제 WebSocket·scheduler를 사용했고 플레이 DB SHA256·mtime·크기는 불변이었다. |
+| 시작 HEAD GitHub 전체 CI | [Game checks 38092369126](https://github.com/wonmin82/primal-zone/actions/runs/38092369126), `7f6db0e` 대상 test·smoke 성공. Ubuntu/Python 3.13.16, 코드 검사·순수 223개/1.285초·통합 697개/501.392초(총 920개), 원격 Quick 55.688초. |
+| 새 문서 마감 검증 | Markdown/GFM 렌더링·상대 링크/앵커 검사 오류 0, 현행 명령/출력/버전과 historical 기록의 구분 확인, `git diff --check` 종료 0. 상세 결과는 PR Closeout에 기록한다. |
+| 새 문서 HEAD Push 게이트 | 커밋 후 정확한 HEAD의 `uv run python scripts/dev.py smoke` 성공·종료 0 확인 뒤에만 Push한다. 새 HEAD의 GitHub test·smoke를 다시 확인하며 SHA·실행 결과·링크는 [PR #52 Closeout](https://github.com/wonmin82/primal-zone/pull/52)에 별도로 확정한다. 위 시작 HEAD의 성공은 새 HEAD의 성공이 아니다. |
+
+로컬 전체 회귀·실 브라우저·OS 한글 IME·비색상 터미널 수동 접근성·실제 복수 플레이어/세션 경합·장기 재시작·production Full timing은 이번 마감에서 미실행이다. #50의 Cross-Issue·도움말/UI 종단 간·수동 통합 범위와 자동 검사 성공을 구분한다. 실제 병합 결과·main CI·브랜치 삭제는 Merge 후 PR/Issue 진행 기록에 남기며 선기록하지 않는다. Issue #47은 열린 상태로 유지한다.
+
+### 실제 개발 중 검사
+
+#### PR #52 대화 출력 형식 검증 (2026-10-11)
+
+기준 HEAD `c74437194fa6fbbcd7bb1855448923663cb4574a` 이후 개인 활성 키워드·최초 사용 안내의 출력 객체만 `Text(kind="event")`로 통일했다. 설명은 `muted`, 실제 입력 예시는 `command`, 사이 구분자는 `text`이며 원문·안내 시점·반복 억제·빈 목록 처리를 유지한다. 공개 발화의 `Text(kind="chat")`·화자 역할과 프롬프트 기록은 변경하지 않았다. 아래 이전 후속 검증과 실패 이력은 당시 결과로 보존한다.
+
+| 실제 실행한 출력 형식 검사 | 결과 |
+| --- | --- |
+| `uv run python scripts/dev.py test tests.test_npc_dialogue tests.test_text.SemanticTextTests.test_web_wire_preserves_literal_untrusted_text_without_markup tests.test_text.SemanticTextTests.test_npc_quest_rewards_and_player_movement_keep_roles tests.test_text.SemanticTextTests.test_chat_body_never_acquires_entity_or_command_roles --parallel 1` | 25개 성공, 종료 0, 123.900초(runner 137.171초). 실제 공개 경로의 플레이어/NPC 공통 이름·콜론·본문 역할, 수신자별 키워드·동일 원문·청취자 문맥 불변, 개인 안내/빈 목록/최초 사용법의 event 역할과 반복 억제, 실제 Explorer.msg의 ANSI 및 웹 kind/segments 전달을 확인했다. |
+| `node --test scripts/tests/test_web_prompt.cjs` | 12개 성공, 종료 0. 기존 렌더러의 안내 semantic 클래스·문자열 보존·안전한 DOM 및 입력 프롬프트/플레이어 발화/NPC 발화의 별도 행 유지 검사를 보강했다. JS/CSS 실행 파일은 변경하지 않았다. |
+| `uv run python scripts/dev.py check` / `git diff --check` | 성공, 종료 0. |
+
+기존 격리 SQLite/ItemEntity fixture를 사용했다. 로컬 전체 회귀·실 브라우저·OS 한글 IME·수동 다중 세션 E2E는 실행하지 않았다. 문서 GFM 렌더링/상대 링크/앵커와 확정 커밋 HEAD의 Quick 결과·최신 원격 전체 CI는 [PR #52](https://github.com/wonmin82/primal-zone/pull/52)의 대화 출력 형식 Validation에 기록한다. Quick 성공 전에는 Push하지 않으며 이전 HEAD의 성공을 새 HEAD 검증으로 대신하지 않는다. 실제 브라우저·비색상 터미널의 수동 접근성·복수 세션 및 통합 시나리오는 #50에서 추가 확인한다.
+
+#### PR #52 리뷰 후속 검증 (2026-10-11)
+
+기준 HEAD `ccbe9f0b2d3f132116764d176098becd431ed7a2` 이후 P2 세 건을 보완했다. 명시적 NPC·유효 문맥의 후속 질문에 짧은 이해 실패 응답을 제공하고, 일반 채팅·다른 NPC의 화제 선택은 보호한다. 안내는 현재 활성 읽기 전용 Intent 1~3개에서 만들며 가짜 꺾쇠 키워드를 제거했다. 개인 안내는 NPC별 첫 안내·활성 목록/대상 번호 변경·명시적 요청·필요한 실패 안내 때만 출력한다. 32개/180초 비영속 캐시와 기존 이동·접속 해제·서버 종료 생명주기를 사용하며 공개 NPC 원문·행동 원자성·개인 메시징·v13은 유지한다.
+
+| 실제 실행한 후속 검사 | 결과 |
+| --- | --- |
+| `uv run python scripts/dev.py test tests.test_npc_dialogue --parallel 1` | 초기 20개 성공, 종료 0, 118.001초. |
+| `uv run python scripts/dev.py test tests.test_npc_dialogue tests.test_text.SemanticTextTests.test_npc_quest_rewards_and_player_movement_keep_roles tests.test_text.SemanticTextTests.test_web_wire_preserves_literal_untrusted_text_without_markup tests.test_text.SemanticTextTests.test_chat_body_never_acquires_entity_or_command_roles --parallel 1` | 최종 코드 24개 성공, 종료 0, 122.804초. 후속 질문/반복 실패/정상 입력 초기화/다른 NPC/만료/원문 공개/상태 불변, 22개 NPC 출력의 SSOT 키워드, 개인 안내/상태 변화/번호 변화/접속 해제/종료/상한/빈 화제, 도움말 및 기존 Text 경계를 확인했다. |
+| `uv run python -m unittest world.test_dialogue_intents world.test_dialogue_migration` (`game`에서) | 7개 성공, 종료 0. Intent 충돌·읽기 전용 안내 별칭·ANSI/웹 의미 세그먼트·기존 방법 B를 확인했다. |
+| `node --test ../scripts/tests/test_web_prompt.cjs` (`game`에서) | 기존 웹 자동 검사 12개 성공, 종료 0. 렌더링·클릭/키보드·비활성·안전한 DOM·대비/포커스 계약을 확인했다. JS/CSS는 수정하지 않았다. |
+| `uv run python scripts/dev.py check` / `git diff --check` | 코드 정리 후 모두 성공, 종료 0. 초기 검사에서 새 테스트의 import 순서 오류 1건을 정리했다. |
+| GitHub GFM 렌더링과 저장소 Markdown 상대 링크/앵커 | 오류 0. 새 설계 절과 가이드·어휘 문서 연결, 예시 코드 블록을 확인했다. |
+
+초기 순수 검사 선택에 존재하지 않는 `world.test_text` label이 포함되어 로드 실패했다. 실제 `tests.test_text`의 관련 label 3개로 정정해 위 최종 기능 검사에 포함했다. 실패를 게임 회귀 또는 통과로 기록하지 않는다. 환경은 아래와 동일한 Windows 10 Pro 10.0.19045 / Python 3.13.15 / uv 0.12.13이다. 기존 격리 fixture를 사용했으며 플레이 DB 초기화·삭제는 없다.
+
+위 표는 후속 커밋 전 경량 검증 기록이다. 확정 커밋 HEAD의 Quick 성공 뒤에만 Push하며 해당 SHA·실제 Quick 결과·최신 전체 CI 링크는 [PR #52](https://github.com/wonmin82/primal-zone/pull/52)의 Review Follow-up/Validation에 기록한다. 아래 기존 Quick/CI 결과는 과거 HEAD의 기록으로 보존하며 새 HEAD의 성공으로 대신하지 않는다. 로컬 전체 회귀·실 브라우저·OS IME·수동 E2E는 이번 후속 검사에서 실행하지 않았다. 실제 브라우저·다중 세션·장기 재시작 통합은 #50의 별도 검증이다.
+
+환경은 Windows 10 build 19045, Python 3.13.15, uv 0.12.13이다. 테스트는 기존 독립 SQLite/ItemEntity fixture를 사용한다. 플레이 DB 초기화·삭제·기존 인증 정책 변경은 없다.
+
+| 실행 명령·범위 | 실제 결과 |
+| --- | --- |
+| `uv run python -m unittest world.test_dialogue_intents world.test_dialogue_migration world.test_command_shortcuts world.test_progression world.test_economy world.test_headquarters` (`game`에서) | 최종 순수 65개 성공(종료 0). Intent/방법 B/기존 어휘·성장·경제·힌트의 NPC 지원·방·문자열 스키마 경계를 확인했다. |
+| `uv run python scripts/dev.py test` + NPC·개인 메시지·웹·상점·출입증·소각·훈련 및 실제 보고/지역의 명시적 관련 label (`--parallel 1`) | 56개 중 55개 성공, Text 테스트 1개는 새 개인 안내의 일반 문자열을 Text로 가정해 실패했다. 세그먼트 검사 대상을 Text로 한정했다. |
+| `uv run python scripts/dev.py test` + NPC 전체·수정한 Text 검사·#46 명령 전체 및 힌트/밀림 보고/프로필 저장의 관련 label (`--parallel 1`) | 수정 후 23개 모두 성공. 두 임무 조회·수락·보고·재발급, 개인 결과 분리, rollback, 제어 세션·원래 NPC 토큰, 기존 가격/회복/저장·콘텐츠 경계를 확인했다. |
+| 기존 서비스/본부의 관련 검사 | 19개 중 18개 성공, 호환 `commands.gameplay`의 삭제된 Talk import 때문에 해당 통합 모듈 1개 로드 실패. 구형 export를 제거하고 새 social 명령 export·임무 검사 입력을 반영했다. |
+| `uv run python scripts/dev.py test` + 위 임무/실제 입력/원문 채팅/300자 경계 4개 label (`--parallel 1`) | 수정 후 4개 성공(종료 0). |
+| NPC와 일반 물건이 동명인 말 걸기·방 힌트 / 기존 view lock 안내 | 관련 2개 성공(종료 0). NPC 전용 번호 집합으로 실제 입력 목적지를 확인했다. |
+| `uv run python scripts/dev.py test tests.test_environment.EnvironmentWebTemplateTests --parallel 1` | 1개 성공(종료 0). 새 `npc-dialogue-phase47` CSS/JS 캐시 버전 및 기존 환경 버튼을 확인했다. |
+| `uv run python -m evennia collectstatic --noinput` (`game`에서) | 성공(종료 0). 변경 정적 파일 2개 수집. 실 브라우저 검증은 #50으로 분리했다. |
+| 동일 상태에서 발급한 서로 다른 세션의 보고 토큰 2개 | 관련 1개 성공(종료 0). 바깥 커밋 전 두 번째 요청 거절, 커밋 뒤 XP/칩 각 100·성공 공개 발화 1회·개인 보상 분리를 확인했다. 실제 세션 경합 E2E는 #50에서 추가한다. |
+| `node --check game/web/static/webclient/js/primal.js` | 성공(종료 0). |
+| `node --test scripts/tests/test_web_prompt.cjs` | 12개 성공(종료 0). NPC 키워드 버튼/비활성/토큰 요청/Enter·Space/IME 이벤트·안전한 DOM·색상 대비와 기존 prompt를 확인했다. |
+
+초기 NPC 검사에서 fixture 전용 아이템의 획득 경로 검사, 발전기 수리 누락 보고 fixture, 상점 catalog의 dict/list 접근을 발견했다. 테스트 fixture와 실제 catalog 조회·보고 최종 조건을 정정하고 관련 범위를 재검증했다. 과거 실패를 성공으로 소급하지 않는다. 최종 코드 검사·문서 링크·diff 검사와 커밋 HEAD의 Quick/원격 CI 실제 결과·전체 SHA는 PR Validation에 기록하며 결과를 확인하기 전 완료로 기록하지 않는다.
+
+### PR #52의 최종 Quick 및 CI 보정
+
+- 커밋 `db5a41baa0b776ac9313821d3173c57a97d440b4`의 첫 로컬 Quick은 NPC·개인 메시징 성공 후 기존 시체 보호 요청에 대상 없음이 반환되어 종료 1이었다. 시체의 단축 수명은 10초이며 서버 예외는 없었다. 코드·설정·타이머·assertion 변경 없이 동일 HEAD 재실행은 전체 성공(종료 0, 109.732초)했다. 두 실행 모두 플레이 DB 해시·mtime·크기는 불변이며 실패 격리 DB/로그는 보존했다. 단축 관찰 창의 지연 가능성은 재발 시 별도 진단한다.
+- 이 성공 뒤 Push하고 [PR #52](https://github.com/wonmin82/primal-zone/pull/52)를 생성했다. [최초 CI 38059757263](https://github.com/wonmin82/primal-zone/actions/runs/38059757263)의 Smoke는 새 대화 시나리오 성공 뒤 기존 물리 전리품 배정 assertion에서 실패했다. 기존 검사는 모든 드롭의 배정자를 첫 참가자로 가정했으나 자원·special 독립 드롭은 두 아이템을 만들 수 있고 실제 규칙은 파티 가입 순서대로 번갈아 배정한다.
+- `scripts/smoke.py`의 기대값을 물리 entry 순서별 round-robin으로 정정했다. 파티원의 회수 권한·보호 상태 assertion과 실제 outsider 거절·부분 칩 분배는 유지한다. 게임 드롭·배정·가격·타이머 코드는 변경하지 않았다.
+- `uv run python scripts/dev.py test tests.test_loot.LootTests.test_party_round_robin_delivers_to_assignees tests.test_loot_entities.LootEntityTests.test_explicit_native_generation_reuses_round_robin_and_currency_allocation --parallel 1`: 두 아이템을 확정 드롭하는 기존 legacy/native 검사 2개 성공(종료 0, 5.860초). 새 커밋의 Quick 성공 전 추가 Push하지 않으며 최신 원격 CI 결과는 PR Validation에 확정한다.
+- 최초 원격 전체 `test`는 순수 223개 성공, 통합 687개 중 685개 성공·2개 실패(456.009초, 종료 1)였다. 의무관·정산관의 기존 웹 버튼 기대값에 신규 말 걸기 버튼이 없었다. 새 버튼을 정확한 기대 목록에 포함하고, 정산 검사는 마지막 버튼이라는 위치 가정 대신 실제 교환 명령을 선택했다. 기존 칩·자원 상태 검사와 먼 방의 비공개 서비스 노출 금지 검사는 유지했다.
+- `uv run python scripts/dev.py test tests.test_medical.MedicalCommandsTests.test_web_presentation_and_distant_privacy_use_real_objects tests.test_settlement.SettlementWorldTests.test_server_actions_resource_snapshot_and_settlement_push --parallel 1`: 실패 영역 2개 재검사 성공(종료 0, 9.779초). 새 테스트 커밋 HEAD의 Quick과 원격 전체 CI를 다시 확인한다. 로컬 전체 회귀는 실행하지 않았다.
+
+### 추가 수동 확인 범위
+
+#47의 자동 검사는 말/작은따옴표·에게 미발견 공개 fallback·복수/잘못된 번호 오류·300자/제어문자·문맥/만료/이동·원문 동일/수신자별 강조·조회 무부작용·행동 원자성·토큰·22개 NPC·비공개 메시지/차단/최근 상대·실제 CmdSet page/tell/whisper 제거·v13 원본 보존/묶음/간접 참조/충돌/멱등성을 확인한다. Quick은 실제 WebSocket으로 임무 조회·선택 토큰 수락·공개 fallback·개인 메시지/답장/차단과 기존 공유 전투/전리품을 연결한다.
+
+실 브라우저·OS 한글 IME·Tab/키보드/시각·좁은 화면·복수 플레이어/세션 경합·장기 서버 재시작·Cross-Issue 도움말/UI 종단 간 검증과 최종 통합 회귀는 #50에서 추가 수행한다. 해당 수동 검사는 이번 로컬 자동 검사/CI 성공으로 대신하지 않는다. #48 기능은 구현하지 않는다.
+
 ## PR #43 README·플레이 가이드 최종 문서 검증 (2026-10-10)
 
 아래는 [PR #43](https://github.com/wonmin82/primal-zone/pull/43)의 병합 전 문서 마감 기록이다. README는 204줄의 진입점, [gameplay](gameplay.md)는 494줄·15개 주제의 공식 플레이 안내다. 현재 개인 줄임말 v1.14·프로필 v11, 데이터 보존/migration·네트워크 보안·지원 환경 안내와 원본 유효 정보의 보존 위치를 대조했다. 이전 실행의 실패·미실행·당시 정책은 아래 historical 기록에 유지한다.
@@ -18,7 +104,7 @@
 
 ## 현재 안내와 PR #42 병합 결과
 
-플레이 방법은 [플레이 가이드](gameplay.md), 현재 자동 검사 명령은 [6절](#6-자동-테스트-실행)을 따른다. 개인 줄임말 v1.14의 현재 저장 프로필은 [v12](command-shortcuts.md#프로필-v12의-명령-어휘-이전)다. Issue #46의 Push/PR 업데이트 전에는 [전체 로컬 CI 정책](#issue-46-pr-51-리뷰-후-검증-정책-2026-10-10)을 추가로 적용한다. 아래 과거 실행의 버전·가격·미실행 결과를 현재 안내로 해석하지 않는다.
+플레이 방법은 [플레이 가이드](gameplay.md), 현재 자동 검사 명령은 [6절](#6-자동-테스트-실행)을 따른다. 개인 줄임말 v1.14의 현재 저장 프로필은 [v13](command-shortcuts.md#프로필-v13의-npc-대화-이전)이다. Issue #46의 Push/PR 업데이트 전에는 [전체 로컬 CI 정책](#issue-46-pr-51-리뷰-후-검증-정책-2026-10-10)을 추가로 적용한다. 아래 과거 실행의 버전·가격·미실행 결과를 현재 안내로 해석하지 않는다.
 
 [PR #42](https://github.com/wonmin82/primal-zone/pull/42)는 2026-10-10 12:49:53 KST에 merge commit `f50d940d6222e73eda4e5404c312d61b134f1ad4`로 병합되었다. 최종 문서 HEAD `ac1130c5d1f8d5f510799cc4921e2126b8fcdea1`의 [CI 38021535424](https://github.com/wonmin82/primal-zone/actions/runs/38021535424)와 병합 main의 [CI 38021936000](https://github.com/wonmin82/primal-zone/actions/runs/38021936000)는 성공했다. 2026-10-10 GitHub 조회로 재확인한 기존 결과이며 이번 문서 정리에서 게임 검사를 새로 실행한 결과가 아니다. 소스 브랜치의 로컬·원격 삭제도 완료 상태다.
 
@@ -844,7 +930,7 @@ Quick 53.424s와 Full 361.952s가 성공했다. Full은 시체 29.542s·respawn 
 
 자동 검사는 `world.test_vocabulary`·`tests.test_vocabulary`와 기존 parser/줄임말/의료/상점/승강기/본부 suite, 전체 check/test, Quick live smoke를 사용한다. Full은 production timer와 restart/progression의 수동 검증이며 이번 변경의 실제 실행 여부는 PR 검증 기록을 따른다.
 
-능력·경험치·Web 성장 화면에 숙련 XP/Rank가 없어야 한다. 현재 profile은 v11이며 여덟 기술은 모두 R1로 시작한다. 치료/힐/heal은 정신력 기술이고 붕대 사용은 독립 소모품이다. v7→v8의 과거 어휘 변환 이후에도 v10의 기술 환원·특성 예산 정규화가 적용되며 v11의 안전한 줄임말 이전과 기존 탐사·장비 데이터 보존을 함께 확인한다.
+능력·경험치·Web 성장 화면에 숙련 XP/Rank가 없어야 한다. 현재 profile은 v13이며 여덟 기술은 모두 R1로 시작한다. 치료/힐/heal은 정신력 기술이고 붕대 사용은 독립 소모품이다. v7→v8의 과거 어휘 변환 이후에도 v10의 기술 환원·특성 예산 정규화가 적용되며 v11의 안전한 줄임말 이전과 기존 탐사·장비 데이터 보존을 함께 확인한다.
 
 ## 현재 절차: 보급칩 경제
 
@@ -1044,7 +1130,7 @@ Set-Location -LiteralPath 'E:\Work\primal-zone'
 | 순서 | 입력 또는 조작 | 정상 결과 |
 | --- | --- | --- |
 | 1 | 가입 후 `상태`, `가방` | 위의 초기 상태와 장비·붕대가 표시됩니다. |
-| 2 | `남` → `서` → `윤대장 대화` | 출정 대기실에서 중앙홀·부두로 이동합니다. 통신탑 복구 임무를 받고 정비기록 조사 안내가 표시됩니다. |
+| 2 | `남` → `서` → `윤대장에게 임무 말` → `윤대장에게 수락 말` | 출정 대기실에서 중앙홀·부두로 이동합니다. 통신탑 복구 임무를 받고 정비기록 조사 안내가 표시됩니다. |
 | 3 | `북` | 바람 부는 초지로 이동하고 어린청소룡 사냥 버튼이 표시됩니다. |
 | 4 | `어린청소룡 공격` | 교전이 시작되며 약 2.5초 간격으로 기본 공격과 적의 공격이 진행됩니다. |
 | 5 | `강타` 후 승리할 때까지 기다리기 | 다음 차례에 강타가 적용됩니다. 추가 공격 명령 없이 전투가 이어집니다. |
@@ -1184,13 +1270,13 @@ game과 격리 서버의 정적 파일을 수집하고 실제 DOM의 JS `?v=hq-s
 
 첫 사냥 계정으로 이어서 진행한다. XP는 처치 시 지급되며 보급칩·실물은 `시체에서 모두 가져`로 회수한다. 같은 spawn은 기본 corpse 30초 + respawn 15초 후 재생성된다. 초지·수송차 등의 서로 다른 spawn을 오갈 수 있다. 모든 적이 일반 회수부품을 주는 것은 아니며 확정 drop·가격·catalog는 [final-content](final-content.md)를 따른다.
 
-`귀환` → `승강기` → `3층` → `북`으로 의무실의 `침대 휴식`을 이용한다. 기본 병기점에서 절단마체테 등 T1 무기, 기본 장비점에서 강화방호조끼 등 T1 착용 장비를 준비한다. T2 전초 상점은 통신탑 완료 출입증이 필요하므로 첫 보스 준비 조건으로 요구하지 않는다. 장비는 기존 물품을 해제한 뒤 `무장`/`착용`하고 실제 상태 수치를 비교한다. 총기는 full 표준 탄창 package로 구매하며 탄약 재충전 비용을 별도로 고려한다.
+`귀환` → `승강기` → `3층` → `동`으로 회복실의 `침대 휴식`을 이용한다. 기본 병기점에서 절단마체테 등 T1 무기, 기본 장비점에서 강화방호조끼 등 T1 착용 장비를 준비한다. T2 전초 상점은 통신탑 완료 출입증이 필요하므로 첫 보스 준비 조건으로 요구하지 않는다. 장비는 기존 물품을 해제한 뒤 `무장`/`착용`하고 실제 상태 수치를 비교한다. 총기는 full 표준 탄창 package로 구매하며 탄약 재충전 비용을 별도로 고려한다.
 
 수송차 보급상자에서 발전기용 **정비용 회수부품 총 3개**를 확보한다. 미수리 상태에서 부족분만 보충하고 이미 수리했다면 지급하지 않는다. 일반 회수부품은 별도의 경제 자원이다. 가격표와 장비 modifier를 이 절차에 중복 복사하지 않는다.
 
 ### 3-2. 탐험과 발전기 복구
 
-아래 경로는 부두에서 시작합니다. 아직 임무를 받지 않았다면 먼저 `윤대장 대화`을 입력합니다.
+아래 경로는 부두에서 시작합니다. 아직 임무를 받지 않았다면 먼저 `윤대장에게 수락 말`을 입력합니다.
 
 | 순서 | 입력 또는 조작 | 정상 결과 |
 | --- | --- | --- |
@@ -1217,8 +1303,8 @@ Lv.4에 필요한 누적 경험치는 240입니다. 부족하면 사냥과 휴�
 4. **“우두머리가 몸을 낮춘다”**는 예고가 나오면 다음 차례 전에 `견제`를 입력합니다. 그 차례에는 다른 행동을 덮어쓰지 않습니다.
 5. 돌진 대응 외의 차례에 체력이 부족하면 `붕대 사용` 또는 `치료`를 예약합니다. 회복 행동은 다음 차례의 기본 공격을 대신하며, 이후 적의 공격은 받습니다.
 6. 솔로 승리 시 경험치 130을 받고, `시체에서 모두 가져`로 보급칩 50개·우두머리송곳니를 회수합니다. 랜덤 장비·일반 회수부품 지급은 없습니다.
-7. `귀환` → `승강기` → `1층` → `서` → `윤대장 대화`로 보고합니다. 추가로 경험치 100, 보급칩 100개, 붕대 3개·전초 보급구역 출입증·능선포식자표식을 받습니다.
-8. `임무`에 **통신탑 복구 완료**가 표시되는지 확인합니다. 다시 `윤대장 대화`을 입력해도 보상이 늘어나지 않아야 합니다.
+7. `귀환` → `승강기` → `1층` → `서` → `윤대장에게 보고 말`로 보고합니다. 추가로 경험치 100, 보급칩 100개, 붕대 3개·전초 보급구역 출입증·능선포식자표식을 받습니다.
+8. `임무`에 **통신탑 복구 완료**가 표시되는지 확인합니다. 다시 `윤대장에게 보고 말`을 입력하면 조건 오류이며 보상이 늘어나지 않아야 합니다.
 
 **통과 기준:** 다른 이용자의 도움 없이 장비를 확보하고, 발전기를 복구하고, 보스를 처치하여 임무 보상을 한 번 받습니다.
 완료 후에도 자유 사냥과 장비 수집을 계속할 수 있습니다.
@@ -1254,7 +1340,7 @@ Lv.4에 필요한 누적 경험치는 240입니다. 부족하면 사냥과 휴�
 | Q-03 | 발전기를 복구한 뒤 같은 장소에서 다시 수리합니다. | 추가 부품 소모와 경험치 지급이 없습니다. |
 | Q-04 | 수송차에서 보급상자를 두 번 조사하고, 재접속한 뒤 한 번 더 조사합니다. | 해당 캐릭터는 최초의 붕대 2개·탐사인식표 1개와 미수리 정비부품 부족분만 받습니다. |
 | Q-05 | 보스 처치 전에 부두에서 윤대장에게 보고를 시도합니다. | 남은 목표를 안내하고 완료 보상을 주지 않습니다. |
-| Q-06 | 임무 보상을 받은 뒤 재접속하고 윤대장과 다시 대화합니다. | 완료 상태가 유지되며 경험치·크레딧·붕대를 중복 지급하지 않습니다. |
+| Q-06 | 임무 보상을 받은 뒤 재접속하고 `윤대장에게 진행 말`을 입력합니다. | 완료 상태가 유지되며 경험치·크레딧·붕대를 중복 지급하지 않습니다. |
 | Q-07 | 새 장소 방문 전후 `지도`를 확인합니다. | 방문한 장소만 이름이 표시되고, 연결된 미방문 장소는 미탐사로 표시됩니다. |
 
 ### 저장·재접속
@@ -1307,14 +1393,14 @@ Set-Location -LiteralPath 'E:\Work\primal-zone'
 
 | 순서 | 행동 | 기대 결과 |
 | --- | --- | --- |
-| 1 | 능선에서 `북`, 밀림 입구에서 `선발대 길잡이 대화` | 새 지역 진입과 두 번째 임무 시작. `지도`에서 두 지역이 구분된다. |
+| 1 | 능선에서 `북`, 밀림 입구에서 `선발대 길잡이에게 수락 말` | 새 지역 진입과 두 번째 임무 시작. `지도`에서 두 지역이 구분된다. |
 | 2 | `북` → `관측 표식 조사` | 관측소 단서가 기록된다. 관측소에서 `동`으로 거목 군락에 이를 수 있다. |
 | 3 | 거목 군락에서 `북` | 수위 표식을 아직 확인하지 않았다면 연구구역 진입이 거절된다. |
 | 4 | 거목 군락에서 `남` → `수위 표식 조사` → 다시 `수위 표식 조사` → `북` → `신호 장치 조사` → `가방` | 표식을 반복 조사해도 신호전지는 한 개만 지급된다. 신호 장치가 전지 한 개를 소비하고 문을 열며, 가방에는 전지가 남지 않는다. 문이 열린 뒤 수위 표식을 다시 조사해도 전지를 지급하지 않는다. 문이 닫힌 상태에서 전지를 잃었다면 표식을 다시 조사해 한 개를 확보할 수 있다. |
 | 5 | 밀림 입구에서 `서` → `늪지 보급품 조사` | 선택 분기에서 붕대 2개·정신안정모듈 1개를 한 번만 받는다. 그늘추적룡을 사냥할 수 있다. |
 | 6 | 거목 군락에서 `북` → `북` | 연구구역 외곽을 지나 포식자 둥지에 도착한다. |
 | 7 | `정글장도 무장`, `중장방호복 착용`, 붕대 준비 후 `밀림의포식자 공격` | 공용 보스의 공유 HP·4차례 도약·시체·보호 전리품이 기존 규칙대로 동작한다. 준비한 한 명만으로도 완료할 수 있다. |
-| 8 | 밀림 입구로 돌아가 `선발대 길잡이 대화`, `임무` | XP 120·보급칩 120개·붕대 3개·특수 보급구역 출입증·포식자비늘장식을 한 번만 받고 두 임무의 완료 상태가 보인다. |
+| 8 | 밀림 입구로 돌아가 `선발대 길잡이에게 보고 말`, `임무` | XP 120·보급칩 120개·붕대 3개·특수 보급구역 출입증·포식자비늘장식을 한 번만 받고 두 임무의 완료 상태가 보인다. |
 | 9 | 종료 후 재접속, 가능하면 서버 재시작 후 재접속 | 임무·발견·가방·방문 기록과 기존 파티·월드 객체가 유지된다. |
 
 데스크톱과 약 390px에서 신규 Room 문장, 순수 텍스트 방향도, SURROUNDINGS 이동 버튼, 적/NPC/객체 의미별 색, `지도`·`임무`, 시체·전리품을 확인한다. 클릭한 방향과 직접 입력한 같은 텍스트 방향 명령은 동일한 서버 제한을 적용해야 한다. 현재 플레이 DB를 지우지 말고 별도 일반 계정과 테스트 DB를 사용한다.
@@ -1727,7 +1813,7 @@ Compact 최종 자동 검증은 PR #3의 `064e616` 이후 추가 커밋과 동�
 
 아래 절차·검증 결과는 해당 단계 당시의 기록이다. 현재 명령·가격·native 저장 및 smoke 정책은 위 Phase 7A 기준선과 현재 플레이 절차를 따른다.
 
-1. 1층 중앙에서 `동` → `북`으로 보급품 상점에 들어간다. 보급관 보기·대화·상점·메뉴와 `붕대 구매`/`보급관에게 붕대 구매`를 비교한다. 보급품 5종만 표시되어야 한다.
+1. 1층 중앙에서 `동` → `북`으로 보급품 상점에 들어간다. `보급관 봐`·`보급관에게 보급 말`·`보급관 목록`과 `붕대 사`/`보급관에게 붕대 사`를 비교한다. 보급품 5종만 표시되어야 한다.
 2. `남` → `서` → `승강기` → `3층` → `내리기` → `동` → `북`으로 무기점에 들어간다. 무기상 메뉴에 무기 5종만 보이며 `강철마체테 구매`는 60C를 소비하고 1개를 지급해야 한다.
 3. 무기점에서 `남` → `서` → `서` → `북`으로 방어구점에 들어간다. 방어구상 상점에는 방어구 4종만 표시하며 `방어구상에게 강화조끼 구매`는 65C를 소비해야 한다.
 4. 실제 NPC를 다른 safe Room으로 옮기면 서비스가 따라가고 원래 시설에서는 사라지는지 확인한다. unsafe·전투·크레딧 부족·다른 catalog·구매 수량 모두 실패 시 profile 불변이어야 한다.

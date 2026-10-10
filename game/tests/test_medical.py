@@ -132,7 +132,7 @@ class MedicalCommandsTests(WorldCommandTest):
         self.char1.change(lambda p: p.update(hp=1, credits=1000))
         state = multiplayer_state(self.char1)
         self.assertEqual({action["command"] for obj in state["interactables"] if obj["name"] in ("의무관", "침대") for action in obj["actions"]},
-                         {"의무관 회복"})
+                         {"의무관 회복", "'의무관에게 안녕"})
         self.assertEqual(render(context_for(self.char1)), "의무관 회복")
         appearance = str(self.char1.location.return_appearance(self.char1))
         self.assertIn("의무관", appearance)
@@ -142,6 +142,7 @@ class MedicalCommandsTests(WorldCommandTest):
         self.char1.location = self.rooms["support_3f_c"]
         distant = self.command("북 봐")
         self.assertNotIn("의무관 회복", distant)
+        self.assertNotIn("'의무관에게 안녕", distant)
         self.assertNotIn("침대 휴식", distant)
         self.char1.location = self.rooms["dock"]
         before = deepcopy(self.char1.profile())
@@ -149,7 +150,7 @@ class MedicalCommandsTests(WorldCommandTest):
             self.assertIn("이용할 대상을 찾지", self.command(raw))
             self.assertEqual(self.char1.profile(), before)
         self.assertEqual({obj["name"] for obj in multiplayer_state(self.char1)["interactables"]}, {"윤대장"})
-        self.assertEqual(render(context_for(self.char1)), "윤대장 대화")
+        self.assertEqual(render(context_for(self.char1)), "'윤대장에게 안녕")
 
     def test_return_roof_elevator_medical_supply_purchase_and_expedition_paths(self):
         self.char1.location = self.rooms["grass"]

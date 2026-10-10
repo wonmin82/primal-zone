@@ -20,6 +20,8 @@ ANSI = {
     "success": "|g",
     "error": "|r",
     "critical": "|r|h",
+    "dialogue_topic": "|c",
+    "dialogue_action": "|y|h",
 }
 
 
@@ -46,6 +48,15 @@ def token(role, value):
     if role not in ANSI:
         raise ValueError("알 수 없는 텍스트 역할")
     return Text([{"text": literal(value), "role": role}])
+
+
+def dialogue_keyword(keyword, kind, selection=None):
+    """활성 키워드의 선택 권한은 서버 불투명 토큰만 전달한다."""
+    role = "dialogue_" + kind if selection else "text"
+    segment = {"text": literal(f"〈{keyword}〉"), "role": role}
+    if selection:
+        segment["dialogue_selection"] = selection
+    return Text([segment])
 
 
 def text(*parts, kind="event"):

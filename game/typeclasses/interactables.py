@@ -1,5 +1,7 @@
 """공통 행동을 받는 영속 콘텐츠 객체. 진행 상태는 개인 규칙으로 변경한다."""
 
+from functools import wraps
+
 from evennia.objects.objects import DefaultObject
 from world import rules
 from world import text as ft
@@ -7,6 +9,19 @@ from world.content import ENEMIES, ITEMS, ROOMS, SALVAGE_CREDIT_RATE, SHOP_CATAL
 from world.currency import format_currency
 from world.distant_presentation import DistantPresence, DistantPresenceMixin
 from world.progression import ATTRIBUTES, SKILLS
+
+
+def dialogue_appearance(method):
+    @wraps(method)
+    def appearance(self, looker, **kwargs):
+        result = method(self, looker, **kwargs)
+        from world.npc_dialogue import discovery, supports
+        from world.observation import can_perceive, context_for
+
+        if supports(self) and self.location == looker.location and self.access(looker, "view") and can_perceive(self, context_for(looker)):
+            return ft.text(result, "\n", discovery(self, looker))
+        return result
+    return appearance
 
 
 class ActionObject(DistantPresenceMixin, DefaultObject):
@@ -25,6 +40,7 @@ class ActionObject(DistantPresenceMixin, DefaultObject):
             "멀리 서 있다." if self.semantic_role == "npc" else "멀리 보인다.",
         )
 
+    @dialogue_appearance
     def return_appearance(self, looker, **kwargs):
         return ft.sheet(
             ft.token(self.semantic_role, self.key), self.description, "", ft.actions(self.actions)
@@ -41,7 +57,7 @@ class ActionObject(DistantPresenceMixin, DefaultObject):
         return [
             {"label": action, "command": target + " " + action}
             for action in (("봐",) if isinstance(self, Container) else self.actions)
-            if action in ("대화", "조사", "수리", "봐", "회복", "휴식")
+            if action in ("조사", "수리", "봐", "회복", "휴식")
             and (action not in ("회복", "휴식") or self.available(caller, observed_at=observed_at))
         ]
 
@@ -62,44 +78,7 @@ class Commander(ActionObject):
     semantic_role = "npc"
     presence = "낡은 지도를 펼쳐 놓고 탐사대를 기다리고 있다."
     description = "탐사대를 지휘하는 책임자다. 낡은 지도와 무전기를 늘 곁에 두고 있다."
-    actions = ("대화",)
-
-    def act(self, caller, action, args):
-        from world import presentation as view
-
-        before = caller.profile()
-        from world.credential_service import issuer_talk
-
-        result, granted, boss_granted = issuer_talk(caller, "outpost_supply_pass", rules.commander_talk)
-        after = caller.profile()
-        if result == "start":
-            body = ft.text(
-                "  장비를 마련하고 관리동의 ",
-                content_name("maintenance_log"),
-                "을 찾아보게. ",
-                content_name("generator"),
-                "를 복구하고 ",
-                ft.token("hostile", ENEMIES["alpha"]["name"]),
-                "를 처치하면 통신탑을 되찾을 수 있네.",
-            )
-        elif result == "complete":
-            body = ft.text(
-                ft.token("success", "첫 탐사를 완수했다."),
-                "\n통신탑에서 구조 신호가 퍼져 나간다.\n보고를 마치고 ",
-                ft.token("reward", f"경험치 {after['xp'] - before['xp']}"),
-                ", ",
-                ft.token("reward", format_currency(after["credits"] - before["credits"])),
-                ", ",
-                ft.item("bandage"),
-                " 3개를 받았다.",
-            )
-        else:
-            body = view.quest(after)
-        if granted:
-            body = ft.text(body, "\n", ft.item("outpost_supply_pass"), "을 받았다." if result == "complete" else "을 무료로 재발급받았다.")
-        if boss_granted:
-            body = ft.text(body, "\n", ft.item("ridge_predator_mark"), "을 받았다.")
-        caller.msg(ft.text(ft.token("npc", self.key), "\n\n", body))
+    actions = ()
 
 
 class Container(ActionObject):
@@ -259,20 +238,18 @@ class GrowthTrainer(ActionObject):
     def description(self):
         return self.db.description or "담당 분야의 훈련을 돕는 탐사대 교관이다."
 
+    @dialogue_appearance
     def return_appearance(self, looker, **kwargs):
         offer, commands = self.training_offer()
         return ft.sheet(ft.token("npc", self.key), self.description, "", offer, "",
                         ft.join([ft.usage(command, set(self.actions) | {"재훈련"}) for command in commands], "\n"))
 
     def act(self, caller, action, args):
-        if action == "대화":
-            caller.msg(ft.text(ft.token("npc", self.key), "\n\n", self.db.dialogue or "훈련에는 비용이 들지 않는다."))
-        else:
-            self.train(caller, action, args)
+        self.train(caller, action, args)
 
 
 class SkillTrainer(GrowthTrainer):
-    actions = ("대화", "배워")
+    actions = ("배워",)
 
     def training_offer(self):
         name = SKILLS[self.db.skill_id]["name"]
@@ -294,7 +271,7 @@ class SkillTrainer(GrowthTrainer):
 
 
 class AttributeTrainer(GrowthTrainer):
-    actions = ("대화", "배분")
+    actions = ("배분",)
 
     def training_offer(self):
         name = ATTRIBUTES[self.db.attribute_id]["name"]
@@ -319,7 +296,7 @@ class AttributeTrainer(GrowthTrainer):
 
 
 class TrainingManager(GrowthTrainer):
-    actions = ("대화", "재분배")
+    actions = ("재분배",)
 
     def training_offer(self):
         return "이 관리관에게서 특성이나 기술 투자를 다시 정리할 수 있다.", ("특성 재분배", "기술 재분배", "전체 재훈련")
@@ -352,6 +329,7 @@ class Doctor(ActionObject):
         return rules.treatment_quote(caller.profile_snapshot(), requested,
                                      safe=ROOMS.get(caller.zone, {}).get("safe", False))
 
+    @dialogue_appearance
     def return_appearance(self, looker, **kwargs):
         lines = [self.description]
         if self.available(looker):
@@ -421,6 +399,7 @@ class SettlementOfficer(ActionObject):
             actions.append({"label": resource + " 모두 교환", "command": target + "에게 " + resource + " 모두 교환"})
         return actions
 
+    @dialogue_appearance
     def return_appearance(self, looker, **kwargs):
         from world.targets import labels, room_objects
 
@@ -455,7 +434,7 @@ class Shopkeeper(ActionObject):
     detectability = "conspicuous"
     presence = "판매대에서 탐사 장비와 보급품을 정리하고 있다."
     description = "탐사자를 위한 물품을 보급칩으로 판매하는 상인이다."
-    actions = ("대화", "목록", "사", "가치", "팔아")
+    actions = ("목록", "사", "가치", "팔아")
 
     def available(self, caller, observed_at=None):
         return _service_available(self, caller, observed_at) and self.db.shop_id in SHOP_CATALOGS
@@ -480,6 +459,7 @@ class Shopkeeper(ActionObject):
                                 "command": f"{target}에게 {name} 모두 팔아"})
         return actions
 
+    @dialogue_appearance
     def return_appearance(self, looker, **kwargs):
         from world.targets import labels, room_objects
 
@@ -530,7 +510,7 @@ class Shopkeeper(ActionObject):
                                f" {result.quantity}개를 ", ft.token("reward", format_currency(result.proceeds)), "에 매입했다.",
                                f"\n잔탄 {result.rounds}발의 가치가 포함되었다." if result.rounds else ""))
         else:
-            caller.msg(ft.text(ft.token("npc", self.key), "\n\n필요한 물품과 구매 단위는 판매 목록을 살펴보세요."))
+            raise rules.RuleError("지원하지 않는 상점 행동입니다.")
 
 
 class Incinerator(ActionObject):
@@ -549,31 +529,7 @@ class Pathfinder(ActionObject):
     semantic_role = "npc"
     presence = "젖은 지도 위에 선발대의 이동 경로를 표시하고 있다."
     description = "밀림에서 돌아온 선발대 길잡이다. 두 갈래 탐사로의 표식을 찾고 있다."
-    actions = ("대화",)
-
-    def act(self, caller, action, args):
-        before = caller.profile()
-        from world.credential_service import issuer_talk
-
-        result, granted, boss_granted = issuer_talk(caller, "special_supply_pass", rules.jungle_talk)
-        after = caller.profile()
-        if result == "start":
-            body = "관측소와 수몰 도로의 표식을 확인해 주세요. 두 기록을 맞추면 거목의 신호 장치가 연구구역 길을 열 겁니다."
-        elif result == "complete":
-            body = ft.text(
-                ft.token("success", "밀림의 탐사를 마쳤다."), " 보고를 마치고 ",
-                ft.token("reward", f"경험치 {after['xp'] - before['xp']}"), ", ",
-                ft.token("reward", format_currency(after["credits"] - before["credits"])),
-                ", ", ft.item("bandage"), " 3개를 받았다.",
-            )
-        else:
-            from world import presentation as view
-            body = view.quest(after)
-        if granted:
-            body = ft.text(body, "\n", ft.item("special_supply_pass"), "을 받았다." if result == "complete" else "을 무료로 재발급받았다.")
-        if boss_granted:
-            body = ft.text(body, "\n", ft.item("predator_scale_charm"), "을 받았다.")
-        caller.msg(ft.text(ft.token("npc", self.key), "\n\n", body))
+    actions = ()
 
 
 class JungleMarker(ActionObject):

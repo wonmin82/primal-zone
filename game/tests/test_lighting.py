@@ -318,7 +318,7 @@ class LightingTests(WorldCommandTest):
         self.clear()
         self.char1.location = self.rooms["dock"]
         context = context_for(self.char1, observed_at=100)
-        self.assertEqual(room_hint(context), "윤대장 대화")
+        self.assertEqual(room_hint(context), "'윤대장에게 안녕")
         commander = next(obj for obj in context.room.contents if obj.tags.has("commander", category="primal_interactable"))
         commander.locks.add("view:false()")
         self.assertEqual(room_hint(context), "")

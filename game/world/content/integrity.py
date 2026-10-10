@@ -236,6 +236,16 @@ def errors(interactables):
                 definition = interactables.get(hint["target"], {})
                 if definition.get("room") != zone or hint["action"] not in definition.get("actions", ()):
                     issues.append(f"{zone}: 안내 대상의 장소 또는 행동이 유효하지 않습니다.")
+            elif set(hint) == {"target", "intent"}:
+                from world.dialogue_intents import intents_for
+
+                if not isinstance(hint["target"], str) or not isinstance(hint["intent"], str):
+                    issues.append(f"{zone}: 대화 안내의 대상과 Intent는 문자열이어야 합니다.")
+                    continue
+                definition = interactables.get(hint["target"], {})
+                if (definition.get("room") != zone or hint["intent"] not in
+                        {item.intent_id for item in intents_for(definition.get("typeclass"))}):
+                    issues.append(f"{zone}: 대화 안내 대상의 장소 또는 Intent가 유효하지 않습니다.")
             else:
                 issues.append(f"{zone}: 안내는 target/action 또는 text여야 합니다.")
         if room.get("exposure") not in EXPOSURES:
@@ -309,6 +319,9 @@ def errors(interactables):
                 or ITEMS.get(access.get("credential"), {}).get("item_type") != "credential"):
             issues.append(f"{zone}: 접근 가용성/출입증 정의가 올바르지 않습니다.")
     for identity, data in interactables.items():
+        from world.dialogue_intents import intent_errors
+
+        issues.extend(intent_errors(data.get("typeclass")))
         if data.get("room") in ROOF_ROOMS:
             issues.append(f"{identity}: 옥상 검증 Room {data['room']}에는 interactable/NPC를 배치할 수 없습니다.")
         if data["room"] not in ROOMS:
@@ -317,7 +330,7 @@ def errors(interactables):
             issues.append(f"{identity}: 상점 catalog가 없습니다.")
     for identity, shop_id in (("supply_shopkeeper", "supply"), ("weapon_shopkeeper", "weapon"), ("armor_shopkeeper", "armor"), ("outpost_weapon_shopkeeper", "outpost_weapon"), ("outpost_equipment_shopkeeper", "outpost_equipment")):
         data = interactables.get(identity, {})
-        if data.get("shop_id") != shop_id or tuple(data.get("actions", ())) != ("대화", "목록", "사", "가치", "팔아"):
+        if data.get("shop_id") != shop_id or tuple(data.get("actions", ())) != ("목록", "사", "가치", "팔아"):
             issues.append(f"{identity}: 상점 catalog/행동 정의가 올바르지 않습니다.")
     for identity, action in (("doctor", "회복"), ("infirmary_bed", "휴식")):
         if tuple(interactables.get(identity, {}).get("actions", ())) != (action,):

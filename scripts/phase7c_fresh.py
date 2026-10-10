@@ -117,7 +117,7 @@ class FreshScenario(Scenario):
                 for command in ("소지품", "장비", "상태"):
                     await player.act(command)
                 await travel_to(player, 'dock')
-            await first.act("윤대장 대화", lambda s: "정비기록" in s["quest"])
+            await first.act("윤대장에게 수락 말", lambda s: "정비기록" in s["quest"])
             await first.act(second.name + " 파티초대", lambda s: s["party"] is not None)
             await second.until(lambda s: s["invitation"] is not None)
             await second.act("파티수락", lambda s: s["party"] is not None)

@@ -204,13 +204,13 @@ class Closeout:
         await player.act('시체에서 모두 가져')
         await player.expect_text("북", "보고")
         await self.dock(player)
-        await player.act("윤대장 대화", lambda s: "선발대 길잡이" in s["quest"])
+        await player.act("윤대장에게 보고 말", lambda s: "선발대 길잡이" in s["quest"])
         self.scenario.report("quest", "정비기록/부품 3개 수리/첫 gate/alpha/윤대장 보고")
         await self.prepare_boss(advanced=True)
         await self.dock(player)
         await route(player, (("북", "grass"), ("북", "trail"), ("북", "marsh"),
                              ("북", "ridge"), ("북", "jungle_edge")))
-        await player.act("선발대 길잡이 대화", lambda s: "관측소" in s["quest"])
+        await player.act("선발대 길잡이에게 수락 말", lambda s: "관측소" in s["quest"])
         await route(player, (("북", "jungle_watch"),))
         await player.act("관측 표식 조사", lambda s: "수위 표식" in s["quest"])
         # Full은 실제 XP로 Lv7 준비를 만든다. 기능 E2E를 Lv6의 근소한 전투
@@ -234,7 +234,7 @@ class Closeout:
         await self.kill("밀림의포식자")
         await route(player, (("남", "jungle_gate"), ("남", "jungle_grove"),
                              ("남", "jungle_road"), ("서", "jungle_edge")))
-        await player.act("선발대 길잡이 대화", lambda s: s["quest"] == "깊은 밀림 조사를 마쳤습니다.")
+        await player.act("선발대 길잡이에게 보고 말", lambda s: s["quest"] == "깊은 밀림 조사를 마쳤습니다.")
         self.scenario.report("progression", "두 표식/신호전지/두 번째 gate/jungle apex/최종 보고 완료")
         await self.dock(player)
         await travel_to(player, 'hq_concourse')

@@ -20,7 +20,23 @@ def render(context):
             if clear:
                 rendered.append(hint["text"])
             continue
-        identity, action = hint["target"], hint["action"]
+        identity = hint["target"]
+        if "intent" in hint:
+            from world.dialogue_intents import intents_for
+            from world.npc_dialogue import supports
+            from world.targets import labels
+
+            dialogue_labels = labels([obj for obj in objects if supports(obj)
+                                      and obj.access(context.viewer, "view") and can_perceive(obj, context)])
+            for obj in objects:
+                if not obj.tags.has(identity, category="primal_interactable") or not can_perceive(obj, context):
+                    continue
+                intent = next((item for item in intents_for(INTERACTABLES[identity]["typeclass"])
+                               if item.intent_id == hint["intent"]), None)
+                if intent and obj.id in dialogue_labels:
+                    rendered.append(f"'{dialogue_labels[obj.id]}에게 {intent.keyword}")
+            continue
+        action = hint["action"]
         if any(obj.tags.has(identity, category="primal_interactable")
                and can_perceive(obj, context) and obj.supports_action(action)
                and (action not in ("회복", "휴식", "환율", "목록") or obj.available(context.viewer, observed_at=context.observed_at))

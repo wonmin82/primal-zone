@@ -27,7 +27,12 @@ class Element {
   addEventListener(name, callback) { this.events[name] = callback; }
   fire(name, event = {}) { this.events[name]?.({ preventDefault() {}, ...event }); }
   querySelectorAll() { return []; }
-  setAttribute() {}
+  setAttribute(name, value) { (this.attributes ||= {})[name] = value; }
+  closest(selector) {
+    if (selector === "[data-dialogue-selection]" && this.dataset.dialogueSelection) return this;
+    if (selector === "[data-command]" && this.dataset.command) return this;
+    return this.parent?.closest(selector) || null;
+  }
   showModal() { this.open = true; }
   close() { this.open = false; }
   focus() {}
@@ -69,8 +74,71 @@ function client() {
   const click = command => document.fire("click", {target:{closest:() => ({dataset:{command}})}});
   const arrow = key => { byId("command").fire("keydown", {key}); return byId("command").value; };
   state(full); prompt(full);
-  return {byId, log:byId("log"), socket, state, prompt, event, submit, click, arrow, intervals};
+  return {byId, log:byId("log"), socket, state, prompt, event, submit, click, arrow, intervals, receive, document};
 }
+
+test("NPC 키워드는 승인된 토큰만 버튼으로 렌더링하고 원문을 DOM text로 보존", () => {
+  const c = client();
+  c.receive("pz_log", {kind:"chat", segments:[
+    {role:"npc",text:"윤대장: "},
+    {role:"dialogue_topic",text:"〈임무〉",dialogue_selection:"opaque-topic"},
+    {role:"dialogue_action",text:"〈수락〉",dialogue_selection:"opaque-action"},
+    {role:"text",text:"〈보고〉",dialogue_selection:"unapproved"},
+    {role:"dialogue_topic",text:"〈만료〉"},
+    {role:"text",text:"<img src=x onerror=alert(1)>"},
+  ]});
+  const row = c.log.lastElementChild;
+  const topic = row.children[1], action = row.children[2];
+  assert.equal(topic.tagName, "button"); assert.equal(action.type, "button");
+  assert.equal(topic.attributes["aria-label"], "NPC 화제 질문: 〈임무〉");
+  assert.equal(action.attributes["aria-label"], "NPC 행동 실행: 〈수락〉");
+  assert.equal(row.children[3].tagName, "span"); assert.equal(row.children[4].tagName, "span");
+  assert.equal(row.children[3].dataset.dialogueSelection, undefined);
+  assert.equal(row.children[5].textContent, "<img src=x onerror=alert(1)>");
+  c.document.fire("click", {target:topic});
+  assert.deepEqual(c.socket.sent.at(-1), ["pz_dialogue",["opaque-topic"],{}]);
+  for (const key of ["Enter", " "]) {
+    let prevented = false;
+    c.document.fire("keydown", {target:action,key,preventDefault:()=>{prevented=true;}});
+    assert.equal(prevented, true);
+    assert.deepEqual(c.socket.sent.at(-1), ["pz_dialogue",["opaque-action"],{}]);
+  }
+  const sent = c.socket.sent.length;
+  c.document.fire("click", {target:row.children[3]});
+  c.document.fire("keydown", {target:row.children[4],key:"Enter"});
+  c.document.fire("keydown", {target:action,key:"Enter",isComposing:true});
+  assert.equal(c.socket.sent.length, sent);
+  const segments = [
+    {role:"muted",text:"현재 사용 가능: "},
+    {role:"command",text:"'윤대장에게 임무"},
+    {role:"text",text:" · "},
+    {role:"command",text:"'윤대장에게 <img src=x> |r진행|n"},
+  ];
+  c.receive("pz_log", {kind:"event", segments});
+  const guide = c.log.lastElementChild;
+  assert.equal(guide.className, "log-entry event");
+  assert.equal(guide.textContent, segments.map(part => part.text).join(""));
+  assert.deepEqual(guide.children.map(part => part.className),
+    ["semantic-muted", "semantic-command", "semantic-text", "semantic-command"]);
+  assert.ok(guide.children.every(part => part.tagName === "span"));
+  assert.equal(guide.children[3].textContent, segments[3].text);
+  c.document.fire("click", {target:guide.children[1]});
+  assert.equal(c.socket.sent.length, sent); // 명령 예시는 별도 NPC 선택 버튼이 아니다.
+});
+
+test("NPC 키워드 팔레트는 로그 배경과 4.5:1 이상 대비하고 포커스 표시 유지", () => {
+  const css = fs.readFileSync(path.join(__dirname, "../../game/web/static/webclient/css/primal.css"), "utf8");
+  const luminance = hex => {
+    const channels = hex.match(/\w\w/g).map(v => parseInt(v,16)/255).map(v => v <= .04045 ? v/12.92 : ((v+.055)/1.055)**2.4);
+    return channels[0]*.2126 + channels[1]*.7152 + channels[2]*.0722;
+  };
+  const background = luminance(css.match(/--bg:#([0-9a-f]{6})/)[1]);
+  for (const role of ["topic", "action"]) {
+    const foreground = luminance(css.match(new RegExp(`\\.semantic-dialogue_${role}\\{color:#([0-9a-f]{6})`))[1]);
+    assert.ok((foreground+.05)/(background+.05) >= 4.5);
+  }
+  assert.match(css, /button:focus-visible\{outline:2px/);
+});
 
 test("일반 명령은 마지막 대기 prompt와 같은 행, command semantic 유지", () => {
   const c = client(); const row = c.log.lastElementChild;
@@ -83,6 +151,20 @@ test("일반 명령은 마지막 대기 prompt와 같은 행, command semantic �
   c.event("상태 결과"); c.prompt(full);
   assert.equal(c.log.lastElementChild.dataset.awaitingInput, "true");
   assert.equal(row.textContent, "[ 60/60 · 40/40 ] > 상태");
+  const dialogue = client();
+  dialogue.submit("'윤대장에게 임무");
+  dialogue.receive("pz_log", {kind:"chat", segments:[
+    {role:"player",text:"탐사자"}, {role:"text",text:": "}, {role:"text",text:"윤대장에게 임무"},
+  ]});
+  dialogue.receive("pz_log", {kind:"chat", segments:[
+    {role:"npc",text:"윤대장"}, {role:"text",text:": "}, {role:"text",text:"임무를 안내합니다."},
+  ]});
+  assert.deepEqual(dialogue.log.children.map(entry => entry.textContent), [
+    "[ 60/60 · 40/40 ] > '윤대장에게 임무", "탐사자: 윤대장에게 임무", "윤대장: 임무를 안내합니다.",
+  ]);
+  assert.deepEqual(dialogue.log.children.slice(1).map(entry => entry.className), ["log-entry chat", "log-entry chat"]);
+  assert.deepEqual(dialogue.log.children.slice(1).map(entry => entry.children.map(part => part.className)),
+    [["semantic-player", "semantic-text", "semantic-text"], ["semantic-npc", "semantic-text", "semantic-text"]]);
 });
 test("자동 피해 메시지 뒤에는 과거 prompt 대신 최신 서버 state로 새 입력 행", () => {
   const c = client(); const old = c.log.lastElementChild;

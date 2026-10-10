@@ -21,6 +21,26 @@ def text(session, *args, **kwargs):
         return default_text(session, *args, **kwargs)
 
 
+def pz_dialogue(session, token=None, **kwargs):
+    """캐릭터 제어권 확인은 공통 서비스에서 수행한다. raw 명령 재파싱은 없다."""
+    from typeclasses.explorers import Explorer
+    from world import rules
+    from world import text as ft
+    from world.npc_dialogue import select_keyword
+
+    caller = session.get_puppet()
+    if not isinstance(caller, Explorer):
+        return
+    caller.begin_command_output(reconcile=False)
+    try:
+        select_keyword(caller, token, session)
+    except rules.RuleError as error:
+        caller.msg(ft.text(ft.token("error", str(error)), kind="error"), session=session)
+    finally:
+        caller.end_command_output()
+        session.update_session_counters()
+
+
 def pz_auth(session, payload=None, **kwargs):
     if session.account:
         return

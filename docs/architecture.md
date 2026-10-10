@@ -63,7 +63,7 @@ Web command echo는 별도 `› 명령` entry가 아니다. 마지막 entry가 �
 
 ## 보급칩 경제와 전리품 자산
 
-`world/content/economy.py`의 CURRENCY는 id=credits·이름=보급칩·단위=칩·별칭·설명의 SSOT다. `world/currency.py`의 format_currency는 127칩을 만들며 profile의 credits 숫자를 유지한다. 현재 profile version은 12이며 v10의 화폐 저장 방식을 유지한다. 화폐는 ITEMS나 inventory에 넣지 않는다. Web은 서버의 currency metadata/formatted/전리품 display_label과 take_command를 표시한다. take_target은 칩/칩 2 같은 명령 선택자, display_label은 8칩 같은 표시 문자열이며 화면 문자열을 재해석해 명령을 만들지 않는다.
+`world/content/economy.py`의 CURRENCY는 id=credits·이름=보급칩·단위=칩·별칭·설명의 SSOT다. `world/currency.py`의 format_currency는 127칩을 만들며 profile의 credits 숫자를 유지한다. 현재 profile version은 13이며 v10의 화폐 저장 방식을 유지한다. 화폐는 ITEMS나 inventory에 넣지 않는다. Web은 서버의 currency metadata/formatted/전리품 display_label과 take_command를 표시한다. take_target은 칩/칩 2 같은 명령 선택자, display_label은 8칩 같은 표시 문자열이며 화면 문자열을 재해석해 명령을 만들지 않는다.
 
 `world.loot_service`가 모델을 backend-neutral snapshot으로 제공한다. ItemEntity root와 LootClaim, CurrencyLoot/Share가 authoritative하며 legacy normalize_entry는 migration·historical 호환용이다. snapshot.as_entry의 eligible_players/remaining_shares는 share rows에서 파생한 pure 계산 입력이며 CurrencyLoot에 중복 저장하지 않는다. 조회는 DB를 변경하지 않는다.
 
@@ -156,7 +156,13 @@ bootstrap은 stable `primal_interactable` tag로 기존 객체를 찾아 DB ID�
 
 `rules.treatment_quote`는 안전 지역·비전투 조건과 요청량을 검증해 실제 회복 HP와 정수 비용을 계산한다. `Treat`는 읽기 전용 입력 경계 뒤 기존 `world_change` 직렬 잠금/DB transaction 안에서 대상을 확인하고 현재 프로필을 다시 읽고 기존 `save_profile`로 한 번 저장한다. 서비스 자체의 정신력 증가를 막기 위해 자연회복 checkpoint는 scheduler와 분리한다. `rules.treat`가 HP와 credits를 함께 변경하고 저장 실패 시 DB·Evennia attribute cache를 함께 복원한다. 정신력은 그대로며 `rules.rest`의 무료 HP·정신력 전체 회복은 독립적이다. 상세 경합·다중 서버 검증은 #50 범위다.
 
-profile v12는 기존 v8/v10/v11 의미 변환을 보존한 뒤 저장 정의의 동사와 새 이름 충돌을 이전한다. 장비 데이터·스키마·영속 ID를 바꾸지 않는다.
+profile v12는 기존 v8/v10/v11 의미 변환을 보존한 뒤 저장 정의의 동사와 새 이름 충돌을 이전했다. 현재 v13은 구형 NPC 대화의 방법 B 이전을 추가하며 장비 데이터·스키마·영속 ID를 바꾸지 않는다. 자세한 [NPC 대화·개인 메시지 계약](npc-dialogue.md)은 Intent, 공개 원문/개인 결과, 문맥, 선택 토큰, 메시징 Attribute를 설명한다.
+
+## 현재 NPC 대화와 개인 메시지 (#47)
+
+NPC 대화는 `actions`와 별도 지원 계약으로 처리한다. 기존 NPC `대화` Action은 제거했고 `world.state`가 대화 가능한 NPC에 별도 말 걸기 입력을 제공한다. 말 걸기·방 힌트의 번호는 NPC 후보 집합을 기준으로 하며 일반 객체와 동명이어도 선택이 틀어지지 않는다. 아래 Historical 본부 단계의 구 `대화` 행동 설명은 당시 계약이다.
+
+`말`/작은따옴표는 공통 Intent 서비스로 연결하고 NPC 원문을 방 전체에 공개한다. 수신자별 활성 키워드와 별도 개인 지급 알림은 분리한다. `대화`·`대답`·`대화거부`는 영속 ID 기반 개인 메시징 서비스다. 저장·접근·토큰·원자적 성공 발화와 방법 B는 [NPC 대화 설계](npc-dialogue.md)를 따른다.
 
 ## Historical 본부 4단계: 의료와 복귀·패배
 
@@ -222,7 +228,7 @@ DEFAULT는 구조적으로 행동을 지원하는 첫 대상을 선택한다. IN
 
 수치와 상태 규칙은 [장기 성장 설계](progression.md)에 정리한다. `world/progression.py`의 SKILLS와 순수 helper가 SSOT이고 `world.test_progression`이 대표 값·경계를 검증한다. 장비는 기존 외부 능력치 보정이며 별도 숙련은 없다. 레벨 cap은 기본 기술의 추가 Rank 합 +1로 도출한다.
 
-v10에서 도입해 현재 v11에서도 유지하는 `attributes`는 기본 10과 추가 투자, `skills`는 여덟 Rank다. 남은 포인트·훈련은 레벨과 투자량에서 도출하며 가변 잔액을 저장하지 않는다. migration은 옛 기술을 R1로 환원하고 proficiency/guard를 제거한다. 특성은 canonical 순서로 +20·레벨 예산을 제한하고 기존 XP·장비·소지품·임무·월드 진행을 유지한다. 현재 버전의 잘못된 Rank도 저장 전에 같은 정규화를 거친다. read-only snapshot은 입력과 DB를 바꾸지 않는다.
+v10에서 도입해 현재 v13에서도 유지하는 `attributes`는 기본 10과 추가 투자, `skills`는 여덟 Rank다. 남은 포인트·훈련은 레벨과 투자량에서 도출하며 가변 잔액을 저장하지 않는다. migration은 옛 기술을 R1로 환원하고 proficiency/guard를 제거한다. 특성은 canonical 순서로 +20·레벨 예산을 제한하고 기존 XP·장비·소지품·임무·월드 진행을 유지한다. 현재 버전의 잘못된 Rank도 저장 전에 같은 정규화를 거친다. read-only snapshot은 입력과 DB를 바꾸지 않는다.
 
 <a id="npc-소유-훈련과-지원동-시설"></a>
 
@@ -250,7 +256,7 @@ v10에서 도입해 현재 v11에서도 유지하는 `attributes`는 기본 10�
 
 parser는 마지막 token으로 행동만 찾는다. Command는 인자 문법·이름 검색·공통 검증을, 대상 객체는 콘텐츠별 동작을, rules는 순수 계산과 상태 변경을 담당한다. 공백을 제거한 이름 비교는 대상 검색에서 수행하며 parser가 특정 NPC나 성장 공식을 알지 않는다.
 
-`조사/대화/수리`는 현재 방의 ActionObject에서 이름과 supports_action을 검사하고 `perform_action(caller, action, args)`로 위임한다. `배워/배분/재분배`는 해당 서비스를 제공하는 현재 방의 객체를 찾아 위임한다. 윤대장, 정비기록, 보급상자, 발전기, 훈련관은 stable tag로 bootstrap하며 반복 실행해도 중복 생성하거나 개인 기록을 초기화하지 않는다. 다른 방의 객체에 직접 행동하는 것도 거부한다.
+`조사/수리`는 현재 방의 ActionObject에서 이름과 supports_action을 검사하고 `perform_action(caller, action, args)`로 위임한다. `배워/배분/재분배`는 해당 서비스를 제공하는 현재 방의 객체를 찾아 위임한다. 윤대장, 정비기록, 보급상자, 발전기, 훈련관은 stable tag로 bootstrap하며 반복 실행해도 중복 생성하거나 개인 기록을 초기화하지 않는다. 다른 방의 객체에 직접 행동하는 것도 거부한다.
 
 명령은 base, character, combat, inventory, party, social, world_actions, skills로 나누고 registry.COMMANDS에서 명시적으로 등록한다. gameplay는 기존 import 호환 경로만 남긴다. 각 명령의 category/usage/summary와 실제 aliases로 `도움말`을 생성한다. command discovery나 콘텐츠별 parser 분기는 없다.
 
@@ -346,7 +352,7 @@ Production 기본값은 world/timing.py, 실행 설정의 해석·사용은 worl
 
 ## 기존 데이터와 운영 범위
 
-현재 profile version은 12이며 `rules.migrate_profile()`은 과거 성장·임무·discovery·명령 설정을 사본에서 정규화하는 pure helper다. v10의 성장 정규화와 v11의 안전한 줄임말 문자열 이전을 유지한다. ItemEntity로 아이템을 생성하거나 world source를 전환하는 함수가 아니다. XP/HP/credits/quest와 성장 호환은 [성장 설계](progression.md)를 따르고, legacy item 필드는 별도 archive로 보존한다.
+현재 profile version은 13이며 `rules.migrate_profile()`은 과거 성장·임무·discovery·명령 설정을 사본에서 정규화하는 pure helper다. v10의 성장 정규화와 v11의 안전한 줄임말 문자열 이전을 유지한다. ItemEntity로 아이템을 생성하거나 world source를 전환하는 함수가 아니다. XP/HP/credits/quest와 성장 호환은 [성장 설계](progression.md)를 따르고, legacy item 필드는 별도 archive로 보존한다.
 
 구형 개인 교전의 적 HP는 공유 Enemy로 이관하지 않는다. 성장·장비·소지품·임무 기록의 보존과 개인 전투 상태의 호환은 profile 정규화와 명시적 아이템 migration의 경계를 구분해 처리한다.
 
@@ -383,7 +389,7 @@ Production 기본값은 world/timing.py, 실행 설정의 해석·사용은 worl
 | item | `#c7b4e6` | 소모품·재료·장비 |
 | remains | `#b9a5ac` | 시체·전리품 원천 |
 
-텍스트의 색은 클릭 기능이 아니다. SURROUNDINGS 버튼만 기존 명령을 전송하고 서버가 최종 허용 여부를 판단한다. 색이 없어도 대상 이름, 서술, `[착용]`, 임무의 `+ / > / -`, 위험 경고 문장으로 의미를 이해할 수 있다.
+일반 텍스트 색은 클릭 기능이 아니다. NPC의 활성 `〈키워드〉`만 `dialogue_topic`(청록색)/`dialogue_action`(황금색)과 서버 발급 선택 토큰을 가지며 별도 `pz_dialogue` 요청으로 원래 NPC·Intent를 실행한다. 비활성 키워드는 일반색·비클릭이다. SURROUNDINGS 버튼은 기존 명령을 전송하고 서버가 최종 허용 여부를 판단한다. 색이 없어도 대상 이름, 서술, `[착용]`, 임무의 `+ / > / -`, 위험 경고 문장으로 의미를 이해할 수 있다.
 
 ### 현재 방 보기와 원거리 관찰
 
@@ -613,6 +619,6 @@ v6부터 사용하는 `light_sources[item_id]`에는 on, power_source, charge_se
 
 아래는 성장/profile 호환을 설명하던 당시 기록이다. 현재 full-world item migration 경로는 위 explicit maintenance 계약을 따른다.
 
-당시 profile의 최신 버전은 10이었다. 현재 v11의 줄임말 이전은 위 개인 줄임말 절을 따른다. v9 이하는 여덟 기술의 기본 Rank와 재투자 가능 훈련으로 정규화하며 자세한 성장 호환은 [성장 설계](progression.md)를 따른다. v1/v2의 개인 encounter 제거·전투 입력 필드·성장 기본값 변환을 거친 뒤, v1~v3의 첫 임무 boolean을 `quests.radio_tower`의 진행 필드로 옮긴다. `cache_claimed`는 `discoveries.supply_cache`로 옮긴다. v1~v4에는 개인 보관 `storage={}`의 기본값을 추가한다. XP, HP, credits, inventory, equipment(명시적 None 포함), kills, 완료 여부와 visited 및 개인 전투 상태를 유지한다. 이미 받은 보상은 재지급하지 않는다. v1~v5에는 개인 광원 `light_sources={}`, v1~v6에는 개인 줄임말 `command_shortcuts={}`를 보완한다. v8 이하에는 현재 최대 정신력과 빈 recovery_effects를 추가하며 timestamp는 첫 mutable accrue에서 초기화한다. migration은 시간을 조회하지 않고 profile_snapshot은 사본만 변환한다.
+당시 profile의 최신 버전은 10이었다. 현재 v13까지의 줄임말 이전은 위 개인 줄임말 절을 따른다. v9 이하는 여덟 기술의 기본 Rank와 재투자 가능 훈련으로 정규화하며 자세한 성장 호환은 [성장 설계](progression.md)를 따른다. v1/v2의 개인 encounter 제거·전투 입력 필드·성장 기본값 변환을 거친 뒤, v1~v3의 첫 임무 boolean을 `quests.radio_tower`의 진행 필드로 옮긴다. `cache_claimed`는 `discoveries.supply_cache`로 옮긴다. v1~v4에는 개인 보관 `storage={}`의 기본값을 추가한다. XP, HP, credits, inventory, equipment(명시적 None 포함), kills, 완료 여부와 visited 및 개인 전투 상태를 유지한다. 이미 받은 보상은 재지급하지 않는다. v1~v5에는 개인 광원 `light_sources={}`, v1~v6에는 개인 줄임말 `command_shortcuts={}`를 보완한다. v8 이하에는 현재 최대 정신력과 빈 recovery_effects를 추가하며 timestamp는 첫 mutable accrue에서 초기화한다. migration은 시간을 조회하지 않고 profile_snapshot은 사본만 변환한다.
 
 변환은 기존 프로필의 복사본에서 첫 임무·보급 boolean을 새 구조로 옮기고 오래된 key를 제거한다. 기존 플레이어는 현재 레벨에 해당하는 포인트를 즉시 사용할 수 있고, 무료 기본 기술 Rank 1과 미투자 특성은 기존 전투 성능을 유지한다. Party·Enemy·Corpse·DroppedLoot는 profile 밖에 있으므로 migration이 수정하지 않는다. 기존 DB의 로드 시 점진적으로 변환하며 DB 삭제·교체는 필요 없다. 위의 서버 재시작/재접속 전투 정리 정책과 migration 자체의 보존 정책은 별개다.

@@ -69,7 +69,7 @@ async def run(harness):
         await b.act("승강기", lambda s: s["zone"] == "support_elevator")
         await b.act("1층", lambda s: s["zone"] == "hq_concourse")
         await travel_to(b, 'dock')
-        await b.act("윤대장 대화", lambda s: count_item(s, "outpost_supply_pass") == 1)
+        await b.act("윤대장에게 재발급 말", lambda s: count_item(s, "outpost_supply_pass") == 1)
         assert reward_before == (b.state["xp"], b.state["credits"], count_item(b.state, "bandage"), count_item(b.state, "ridge_predator_mark"))
         await travel_to(b, 'hq_concourse')
         await b.act("승강기", lambda s: s["zone"] == "support_elevator")
@@ -115,7 +115,7 @@ async def run(harness):
             (row["id"], row["sequence"], row["parent"], row["state"]) for row in old_tree]
         record("migrated loot", firearm_identity_tree_state_preserved=True, zero_share_trigger_paid=2)
         await a.act("탐사용손전등 켜")
-        await a.act("윤대장 대화")
+        await a.act("윤대장에게 수락 말")
         await route(a, (("북", "grass"), ("북", "trail"), ("동", "office")))
         await a.act("정비기록 조사")
         await route(a, (("동", "generator"),))

@@ -78,7 +78,7 @@ class IncineratorTests(CredentialConfirmationCases, Phase5Test):
         self.assertEqual(self.char1.profile()["quests"], before[0][0]["quests"])
         self.assertEqual(self.char1.profile()["credits"], before[0][0]["credits"])
         self.char1.location = self.rooms["dock"]
-        self.assertIn("재발급", self.command("윤대장 대화"))
+        self.assertIn("재발급", self.command("윤대장에게 재발급 말"))
         self.assertTrue(can_enter(self.char1, "outpost_weapon"))
 
     def test_same_room_and_visible_incinerator_required(self):

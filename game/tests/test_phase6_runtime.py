@@ -362,6 +362,8 @@ class Phase6RuntimeTests(WorldCommandTest):
         self.assertEqual(scrap.quantity, 7)
 
     def test_final_report_messages_only_announce_actual_unique_grants(self):
+        from world.npc_dialogue import say
+
         for quest, npc_id, credential in (("radio_tower", "commander", "outpost_supply_pass"),
                                           ("deep_jungle", "pathfinder", "special_supply_pass")):
             npc = self.obj(npc_id)
@@ -369,16 +371,17 @@ class Phase6RuntimeTests(WorldCommandTest):
             self.char1.change(lambda p: p["quests"][quest].update(started=True, boss_defeated=True, **({"generator_fixed": True} if quest == "radio_tower" else {})))
             identity = BOSS_REWARDS[quest]
             with patch.object(self.char1, "msg") as output:
-                npc.perform_action(self.char1, "대화")
+                say(self.char1, npc.key + "에게 보고")
                 message = str(output.call_args_list)
                 for token in (ITEMS[identity]["name"], ITEMS[credential]["name"], "경험치", "칩", "3개"):
                     self.assertIn(token, message)
                 output.reset_mock()
-                npc.perform_action(self.char1, "대화")
+                with self.assertRaises(rules.RuleError):
+                    say(self.char1, npc.key + "에게 보고")
                 self.assertNotIn(ITEMS[identity]["name"], str(output.call_args_list))
                 api.delete_item(api.items_owned_by(self.char1).get(definition_id=credential), operation="burn")
                 output.reset_mock()
-                npc.perform_action(self.char1, "대화")
+                say(self.char1, npc.key + "에게 재발급")
                 message = str(output.call_args_list)
                 self.assertIn("재발급", message)
                 self.assertNotIn(ITEMS[identity]["name"], message)
@@ -386,6 +389,8 @@ class Phase6RuntimeTests(WorldCommandTest):
 
 
     def test_existing_entitlements_do_not_repeat_cache_parts_or_report_credential(self):
+        from world.npc_dialogue import say
+
         cache = self.obj("supply_cache")
         self.char1.location = cache.location
         with patch.object(self.char1, "msg") as output:
@@ -398,7 +403,7 @@ class Phase6RuntimeTests(WorldCommandTest):
         commander = self.obj("commander")
         self.char1.location = commander.location
         with patch.object(self.char1, "msg") as output:
-            commander.perform_action(self.char1, "대화")
+            say(self.char1, commander.key + "에게 보고")
             message = str(output.call_args_list)
             self.assertIn("능선포식자표식", message)
             self.assertNotIn("전초 보급구역 출입증", message)

@@ -201,6 +201,14 @@ def select(candidates, selector):
     return [candidates[index - 1]]
 
 
+def strict_single(candidates, selector, action):
+    """모호한 기본 선택은 거절하며 공통 번호/ALL 규약을 재사용한다."""
+    require_single(selector, action)
+    if selector.mode == Mode.DEFAULT and len(candidates) > 1:
+        raise RuleError("대상이 여러 명입니다. 이름과 번호를 지정하세요.")
+    return select(candidates, selector)[0]
+
+
 def resolve(objects, selector, caller, action=None, supports=None, *, observed_at=None):
     from world.observation import can_perceive, context_for
 

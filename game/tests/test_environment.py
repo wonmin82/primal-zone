@@ -453,8 +453,8 @@ class EnvironmentTests(WorldCommandTest):
 class EnvironmentWebTemplateTests(SimpleTestCase):
     def test_fresh_assets_and_field_guide_weather_entry_use_existing_command(self):
         html = render_to_string("webclient/webclient.html")
-        self.assertIn("webclient/css/primal.css?v=lighting-firearms-phase3", html)
-        self.assertIn("webclient/js/primal.js?v=lighting-firearms-phase3", html)
+        self.assertIn("webclient/css/primal.css?v=npc-dialogue-phase47", html)
+        self.assertIn("webclient/js/primal.js?v=npc-dialogue-phase47", html)
         self.assertNotIn("webclient/js/primal.js?v=elevator", html)
         self.assertNotIn('webclient/js/primal.js?v=lighting"', html)
         self.assertNotIn("?v=compact", html)

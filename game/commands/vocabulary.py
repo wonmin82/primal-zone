@@ -154,6 +154,113 @@ def migrate_string_shortcuts(shortcuts):
     return result
 
 
+def migrate_dialogue_shortcuts(shortcuts):
+    """v12→v13 방법 B. 구형 NPC 동작과 공개 출력이 동등한 변환은 현재 없다."""
+    from copy import deepcopy
+
+    from world.rules import RuleError
+
+    from commands.aliases import ARGUMENT_SHORTCUTS, SHORTCUTS
+    from commands.shortcuts import MAX_NAME_CHARACTERS, parse_definition, parse_shortcut_definition
+
+    if not isinstance(shortcuts, dict) or any(not isinstance(key, str) for key in shortcuts):
+        return shortcuts
+    # v12의 실제 명령/고정 단축어가 개인 이름보다 우선한다. 이력 해석용이다.
+    actual = V12_RESERVED | frozenset({
+        "말", "say", "대화", "조사", "수리", "귀환", "home", "휴식", "rest", "임무", "퀘스트", "quest",
+        "상태", "상", "소지품", "소", "도움말", "help", "때려", "공격", "치료", "힐", "heal",
+        "강타", "간파", "견제", "호흡", "사용", "도망", "장비", "무장", "착용", "벗어", "해제",
+        "가져", "버려", "줘", "먹어", "마셔", "켜", "꺼", "확인", "넣어", "꺼내", "재장전", "채워",
+        "환율", "교환", "배워", "배분", "재분배", "재훈련", "기술", "능력", "경험치", "날씨", "지도",
+        "출구", "단축어", "줄임말", "해지", "종료", "quit", "exit", "@help", "정보", "가치",
+        "파티", "파티초대", "파티수락", "파티거절", "파티탈퇴", "파티추방", "파티위임", "전리품방식",
+        "소각", "소각 확정",
+    }) | frozenset(SHORTCUTS) | frozenset(ARGUMENT_SHORTCUTS)
+    normalized = {}
+    for key in shortcuts:
+        normalized.setdefault(key.casefold(), []).append(key)
+    occupied = set(normalized)
+    renamed = {}
+    for key in shortcuts:
+        if key.casefold() not in {"대화", "대답", "대화거부"}:
+            continue
+        index = 1
+        while True:
+            suffix = "_개인" + (str(index) if index > 1 else "")
+            candidate = key[:MAX_NAME_CHARACTERS - len(suffix)] + suffix
+            if candidate.casefold() not in occupied:
+                break
+            index += 1
+        renamed[key] = candidate
+        occupied.add(candidate.casefold())
+    graph, reasons, converted, preserve_invalid = {}, {}, {}, set()
+
+    def inspect(value, owner):
+        commands = parse_shortcut_definition(value)
+        rendered = []
+        for command in commands:
+            if command.startswith("'"):
+                rendered.append(command)
+                continue
+            parts = command.rsplit(None, 1)
+            verb = parts[-1].casefold()
+            if verb == "대화":
+                reasons[owner] = "구형 NPC 대화는 상태별 행동·개인 출력을 포함해 새 공개 Intent/개인 메시지와 동등하지 않습니다."
+            elif "$" in verb:
+                reasons[owner] = "변수로 생성하는 동사·간접 참조의 기존 대화 의미를 확정할 수 없습니다."
+            elif verb not in actual and verb in normalized:
+                refs = normalized[verb]
+                graph[owner].update(refs)
+                if len(refs) != 1:
+                    reasons[owner] = "정규화 이름이 충돌하는 개인 참조의 의미를 확정할 수 없습니다."
+                elif refs[0] in renamed:
+                    command = (parts[0] + " " if len(parts) == 2 else "") + renamed[refs[0]]
+            rendered.append(command)
+        return rendered[0] if len(rendered) == 1 else ", ".join(rendered) + " 해"
+
+    for key, value in shortcuts.items():
+        graph[key] = set()
+        if isinstance(value, dict):
+            reasons[key] = str(value.get("문제", "불명확한 구형 저장 정의"))
+            preserve_invalid.add(key)
+            converted[key] = deepcopy(value)
+            continue
+        try:
+            # v11에서 안전 변환되지 못한 목록은 원래 경계를 유지해 검사만 한다.
+            if isinstance(value, list):
+                if not value or any(not isinstance(command, str) for command in value):
+                    raise RuleError("불명확한 구형 저장 정의")
+                rendered = [inspect(command, key) for command in value]
+                converted[key] = value if rendered == value else rendered
+            elif isinstance(value, str):
+                parse_definition(value)
+                replacement = inspect(value, key)
+                converted[key] = value if replacement == value.strip() else replacement
+            else:
+                raise RuleError("불명확한 구형 저장 정의")
+        except RuleError as error:
+            reasons[key] = str(error)
+            converted[key] = deepcopy(value)
+            preserve_invalid.add(key)
+    changed = True
+    while changed:
+        changed = False
+        for key, refs in graph.items():
+            if key not in reasons and any(reference in reasons for reference in refs):
+                reasons[key] = "비활성 또는 불명확한 개인 줄임말을 간접 참조합니다."
+                changed = True
+    result = {}
+    for key, value in shortcuts.items():
+        if key in reasons and key not in preserve_invalid and not (isinstance(value, dict) and "문제" in value):
+            entry = {"원본": deepcopy(value), "문제": reasons[key]}
+            if key in renamed:
+                entry["원래이름"] = key
+        else:
+            entry = converted[key]
+        result[renamed.get(key, key)] = entry
+    return result
+
+
 # v11 이하 저장 입력에서만 해석하며 현재 runtime alias를 등록하지 않는다.
 V11_COMMANDS = {
     "보기": "봐", "look": "봐", "l": "봐", "둘러보기": "봐",
