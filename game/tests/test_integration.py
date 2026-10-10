@@ -170,7 +170,7 @@ class GameplayIntegrationTests(WorldCommandTest):
         self.assertEqual(self.char2.profile()["inventory"]["bandage"], 5)
 
     def test_korean_quest_sequence_and_reward(self):
-        self.call(gameplay.Talk(), "윤대장", "윤대장", caller=self.char1)
+        self.call(gameplay.Say(), "윤대장에게 수락", caller=self.char1)
         self.char1.location = self.rooms["office"]
         self.call(gameplay.Investigate(), "정비기록", "정비기록을 펼쳐", caller=self.char1)
         self.char1.change(lambda profile: profile["inventory"].update(generator_repair_part=3))
@@ -182,9 +182,9 @@ class GameplayIntegrationTests(WorldCommandTest):
         self.assertEqual(self.char1.profile()["xp"], 50)
         self.char1.change(lambda profile: profile["quests"]["radio_tower"].update(boss_defeated=True))
         self.char1.location = self.rooms["dock"]
-        self.call(gameplay.Talk(), "윤대장", "윤대장", caller=self.char1)
+        self.call(gameplay.Say(), "윤대장에게 보고", caller=self.char1)
         before = self.char1.profile()
-        self.call(gameplay.Talk(), "윤대장", "윤대장", caller=self.char1)
+        self.call(gameplay.Say(), "윤대장에게 보고", caller=self.char1)
         self.assertEqual(self.char1.profile(), before)
 
     def test_raw_commands_purchase_equip_and_quest(self):
@@ -196,7 +196,7 @@ class GameplayIntegrationTests(WorldCommandTest):
         self.char1.execute_cmd("절단마체테 WIELD")
         self.assertEqual(self.char1.profile()["equipment"]["weapon"], "cutting_machete")
         self.char1.location = self.rooms["dock"]
-        self.char1.execute_cmd("윤대장 대화")
+        self.char1.execute_cmd("윤대장에게 수락 말")
         self.assertTrue(self.char1.profile()["quests"]["radio_tower"]["started"])
         self.char1.location = self.rooms["office"]
         self.char1.execute_cmd("정비 기록 조사")

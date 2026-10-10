@@ -106,6 +106,8 @@ class Definition:
 
 
 def parse_definition(definition):
+    if isinstance(definition, dict) and "원본" in definition and "문제" in definition:
+        raise RuleError("비활성 개인 줄임말입니다: " + str(definition["문제"]) + " 원본을 확인한 뒤 현재 명령으로 재등록하세요.")
     segments, positions, all_arguments = [], set(), False
     for command in parse_shortcut_definition(definition):
         tokens, literal, index = [], [], 0

@@ -246,13 +246,13 @@ class GrowthReviewTests(WorldCommandTest):
         for obj in trainers:
             identity = obj.tags.get(category="primal_interactable")
             definition = INTERACTABLES[identity]
-            self.char1.location = obj.location
+            self.char1.location = self.char2.location = obj.location
             appearance = self.command(obj.key + " 봐")
             self.assertIn(definition["description"], appearance)
             for forbidden in ("남은 기술 훈련", "남은 특성 포인트", "R1/", "정신력", "피해 배율", "현재 지혜", "최대 정신력 +4"):
                 self.assertNotIn(forbidden, appearance)
             self.assertEqual(appearance, strip_ansi(str(obj.return_appearance(self.char2))))
-            dialogue = self.command(obj.key + " 대화")
+            dialogue = self.command(obj.key + "에게 훈련 말")
             self.assertIn(definition["dialogue"], dialogue)
             dialogues.add(definition["dialogue"])
             if type(obj) is SkillTrainer:
@@ -289,4 +289,4 @@ class GrowthReviewTests(WorldCommandTest):
             self.assertEqual(search_tag(enemy.db.spawn_id, category="primal_spawn")[0].id, enemy.id)
             self.assertEqual({obj.id for room in self.rooms.values() for obj in action_objects(room)}, old_ids)
             self.assertEqual(self.char1.profile(), before)
-            self.assertEqual(self.char1.profile()["version"], 12)
+            self.assertEqual(self.char1.profile()["version"], 13)

@@ -83,9 +83,9 @@ class CredentialTests(Phase5Test):
     def test_original_issuer_command_grants_and_reissues(self):
         self.prepare("radio_tower")
         self.char1.location = self.rooms["dock"]
-        self.assertIn("출입증", self.command("윤대장 대화"))
+        self.assertIn("출입증", self.command("윤대장에게 보고 말"))
         api.delete_item(credentials.credential_items(self.char1)[0], operation="burn")
-        self.assertIn("재발급", self.command("윤대장 대화"))
+        self.assertIn("재발급", self.command("윤대장에게 재발급 말"))
 
 
 class NativeCredentialTests(Phase5Test):

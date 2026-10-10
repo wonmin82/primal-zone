@@ -241,7 +241,7 @@ class RegionTests(WorldCommandTest):
         self.char1.change(lambda p: p["quests"]["radio_tower"].update(claimed=True))
         self.assertTrue(self.char1.move_to(self.rooms["jungle_edge"]))
         self.assertEqual(self.char1.zone, "jungle_edge")
-        self.char1.execute_cmd("선발대 길잡이 대화")
+        self.char1.execute_cmd("선발대 길잡이에게 수락 말")
         self.assertTrue(self.char1.profile()["quests"]["deep_jungle"]["started"])
         self.char1.execute_cmd("북")
         self.assertEqual(self.char1.zone, "jungle_watch")
@@ -337,10 +337,10 @@ class RegionTests(WorldCommandTest):
         take_loot(self.char2, now=106)
         self.assertEqual(sum(p.profile()["credits"] - 20 for p in (self.char1, self.char2, third)), 58)
         self.char1.location = self.rooms["jungle_edge"]
-        self.char1.execute_cmd("선발대 길잡이 대화")
+        self.char1.execute_cmd("선발대 길잡이에게 보고 말")
         self.assertTrue(self.char1.profile()["quests"]["deep_jungle"]["claimed"])
         before = deepcopy(self.char1.profile())
-        self.char1.execute_cmd("선발대 길잡이 대화")
+        self.char1.execute_cmd("선발대 길잡이에게 보고 말")
         self.assertEqual(self.char1.profile(), before)
 
     def test_jungle_normal_enemy_uses_shared_corpse_and_existing_loot(self):

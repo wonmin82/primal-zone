@@ -392,6 +392,8 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
 
         stop_execution(self, session)
         self.ndb.shortcut_delete_all_request = None
+        self.ndb.npc_dialogue_context = None
+        self.ndb.npc_dialogue_tokens = None
         if not self.sessions.count():
             self.cancel_pending_prompt()
             self.ndb.command_output_depth = 0
@@ -413,6 +415,8 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         stop_execution(self)
         self.cancel_pending_prompt()
         self.ndb.shortcut_delete_all_request = None
+        self.ndb.npc_dialogue_context = None
+        self.ndb.npc_dialogue_tokens = None
         self.reconcile_lights(time(), turn_off=True)
         self.leave_combat()
         if self.sessions.count():
@@ -484,6 +488,8 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             return False
 
     def at_post_move(self, source_location, move_type="move", **kwargs):
+        # 이동 성공 이후 옛 방의 문맥과 선택을 폐기한다. rollback 때는 전달하지 않는다.
+        after_change(self.clear_dialogue)
         self.leave_combat()
         if self.zone in ROOMS:
             profile = self.profile()
@@ -492,6 +498,10 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             self.save_profile(profile)
         # rollback 전에 도착 화면이나 내부 look을 실행하지 않는다.
         after_change(lambda: self.present_destination(source_location, move_type=move_type, **kwargs))
+
+    def clear_dialogue(self):
+        self.ndb.npc_dialogue_context = None
+        self.ndb.npc_dialogue_tokens = None
 
     def present_destination(self, source_location, **kwargs):
         # DefaultCharacter의 내부 look은 별도 사용자 입력이 아니다.

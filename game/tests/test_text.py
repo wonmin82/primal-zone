@@ -314,10 +314,17 @@ class SemanticTextTests(WorldCommandTest):
         commander = next(
             obj for obj in action_objects(self.rooms["dock"]) if isinstance(obj, Commander)
         )
+        from world.npc_dialogue import say
+
         with patch.object(self.char1, "msg") as message:
-            commander.perform_action(self.char1, "대화")
-        self.assertEqual(tokens(message.call_args.args[0], "npc"), [commander.key])
-        self.assertIn("발전기", tokens(message.call_args.args[0], "object"))
+            say(self.char1, "윤대장에게 임무")
+            say(self.char1, "윤대장에게 수락")
+            spoken = [call.args[0] for call in message.call_args_list
+                      if call.args and isinstance(call.args[0], ft.Text) and tokens(call.args[0], "npc")]
+        self.assertEqual(tokens(spoken[0], "npc"), [commander.key])
+        self.assertIn("발전기", str(spoken[0]))
+        self.assertIn("〈수락〉", str(spoken[0]))
+        self.assertTrue(self.char1.profile_snapshot()["quests"]["radio_tower"]["started"])
         self.char1.change(lambda p: p["quests"]["radio_tower"].update(record_read=True))
         self.char1.change(lambda p: p["inventory"].update(generator_repair_part=3))
         self.char1.location = self.rooms["generator"]

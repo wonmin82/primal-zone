@@ -104,7 +104,7 @@ class CommandOverhaulSmoke(NativeItemTest):
         self.assertEqual(converted["애매"], old["애매"])
         self.assertEqual(converted["정보조회"], "점수")
         self.assertEqual(converted, migrate_safe_shortcuts(converted, migrate_command_overhaul_shortcuts))
-        self.assertEqual(rules.PROFILE_VERSION, 12)
+        self.assertEqual(rules.PROFILE_VERSION, 13)
 
 
     def test_phase_b(self):

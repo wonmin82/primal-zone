@@ -28,9 +28,11 @@ from commands.party import PartyReject as PartyReject
 from commands.party import PartyTransfer as PartyTransfer
 from commands.registry import COMMANDS as COMMANDS
 from commands.settlement import Exchange as Exchange
+from commands.social import PrivateTalk as PrivateTalk
+from commands.social import RefuseTalk as RefuseTalk
+from commands.social import Reply as Reply
 from commands.social import Say as Say
 from commands.world_actions import Investigate as Investigate
 from commands.world_actions import Repair as Repair
 from commands.world_actions import Rest as Rest
 from commands.world_actions import Return as Return
-from commands.world_actions import Talk as Talk

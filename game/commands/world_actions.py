@@ -129,12 +129,6 @@ class TargetAction(GameCommand):
         resolve_action(self.caller, self.key, self.args).perform_action(self.caller, self.key)
 
 
-class Talk(TargetAction):
-    key = "대화"
-    usage = "윤대장 대화 · 탐사대 훈련관 대화"
-    summary = "주변 인물과 대화합니다."
-
-
 class Investigate(TargetAction):
     key = "조사"
     usage = "정비기록 조사 · 보급상자 조사"

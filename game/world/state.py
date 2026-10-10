@@ -86,6 +86,8 @@ def multiplayer_state(player, now=None):
     from typeclasses.interactables import ActionObject
 
     from world.lifecycle import reconcile_room
+    from world.npc_dialogue import accessible as dialogue_accessible
+    from world.npc_dialogue import supports as dialogue_supports
 
     reconcile_room(player.location, now)
     objects = room_objects(player, observed_at=now)
@@ -93,6 +95,7 @@ def multiplayer_state(player, now=None):
     corpses = [obj for obj in room_loot(player.location) if obj in objects]
     ground = [obj for obj in room_loot(player.location, corpse=False) if obj in objects]
     controls = labels(objects)
+    dialogue_controls = labels([obj for obj in objects if dialogue_supports(obj) and obj.access(player, "view")])
     loot = loot_controls(player, now, objects)
 
     party = party_for(player)
@@ -145,7 +148,10 @@ def multiplayer_state(player, now=None):
                 "name": obj.key,
                 "label": controls[obj.id],
                 "role": obj.semantic_role,
-                "actions": obj.web_actions(player, controls[obj.id], now),
+                "actions": obj.web_actions(player, controls[obj.id], now) + (
+                    [{"label": "말 걸기", "command": "'" + dialogue_controls[obj.id] + "에게 안녕"}]
+                    if dialogue_accessible(player, obj) else []
+                ),
                 "look_command": controls[obj.id] + " 봐",
             }
             for obj in objects

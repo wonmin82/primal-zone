@@ -205,7 +205,7 @@ class SettlementWorldTests(SettlementFixture, WorldCommandTest):
         self.assertEqual(self.char1.profile()["inventory"]["cutting_machete"], 1)
         for raw in ("남", "서", "승강기", "1층", "서"):
             self.command(raw)
-        self.command("윤대장 대화")
+        self.command("윤대장에게 수락 말")
         self.char1.change(lambda p: rules.add_item(p, "generator_repair_part", 3))
         self.char1.location = self.rooms["office"]
         self.command("정비 기록 조사")

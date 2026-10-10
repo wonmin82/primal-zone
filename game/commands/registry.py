@@ -56,8 +56,8 @@ from commands.party import (
 )
 from commands.settlement import Exchange, Rate
 from commands.skills import Allocate, Learn, Retrain
-from commands.social import Say
-from commands.world_actions import Investigate, Repair, Rest, Return, Talk, Treat
+from commands.social import PrivateTalk, RefuseTalk, Reply, Say
+from commands.world_actions import Investigate, Repair, Rest, Return, Treat
 
 COMMANDS = [
     Burn,
@@ -124,10 +124,12 @@ COMMANDS = [
     Exchange,
     Rate,
     Quest,
-    Talk,
     Investigate,
     Repair,
     Map,
     Say,
+    PrivateTalk,
+    Reply,
+    RefuseTalk,
     UnknownCommand,
 ]

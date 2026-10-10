@@ -70,7 +70,7 @@ class ServiceRelocationTests(WorldCommandTest):
         before = deepcopy(self.char1.profile())
         for raw in ("보관상자에 붕대 넣어", "보관상자에서 붕대 꺼내",
                     "개인 보관함에 붕대 넣어", "개인 보관함에서 붕대 꺼내",
-                    "강타 배워", "힘 1 배분", "전체 재훈련", "탐사대 훈련관 대화"):
+                    "강타 배워", "힘 1 배분", "전체 재훈련", "훈련관리관에게 힘 1 배분"):
             with self.subTest(command=raw):
                 output = self.command(raw)
                 self.assertTrue("대상" in output or "주변" in output or "교관이 없다" in output)
@@ -90,7 +90,7 @@ class ServiceRelocationTests(WorldCommandTest):
         for command in ("남", "동", "승강기", "4층", "서", "북"):
             self.command(command)
         self.assertEqual(self.char1.zone, "training_room")
-        self.assertIn(INTERACTABLES["trainer_strength"]["dialogue"], self.command("근력교관 대화"))
+        self.assertIn(INTERACTABLES["trainer_strength"]["dialogue"], self.command("근력교관에게 훈련 말"))
         self.assertTrue(self.state()["training_available"])
         self.command("힘 1 배분")
         self.assertEqual(self.char1.profile()["attributes"]["strength"]["allocated"], 1)

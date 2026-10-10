@@ -43,6 +43,7 @@ class Client:
         self.error = None
         self.closing = False
         self.received = []
+        self.semantic_logs = []
         self.connected = asyncio.Event()
 
     async def open(self):
@@ -73,6 +74,7 @@ class Client:
                         self.state = args[0]
                         self.revision += 1
                     elif kind == "pz_log":
+                        self.semantic_logs = (self.semantic_logs + [args[0]])[-100:]
                         if args[0].get("kind") == "prompt":
                             self.prompts.put_nowait(args[0])
                         self.messages.put_nowait(
@@ -210,7 +212,22 @@ class Scenario:
             self.report("prompt", "일반/계정/실패 명령과 빈·공백 Enter의 실제 semantic prompt")
             for player in self.players:
                 await route(player, (("남", "hq_concourse"), ("서", "dock")))
-            await first.act("윤대장 대화", lambda state: "정비기록" in state["quest"])
+            self.phase = "dialogue"
+            await first.expect_text("윤대장에게 임무 말", "〈수락〉")
+            token = next(part["dialogue_selection"] for message in reversed(first.semantic_logs)
+                         for part in message["segments"] if part["text"] == "〈수락〉"
+                         and "dialogue_selection" in part)
+            before = first.revision
+            await first.send("pz_dialogue", [token])
+            await first.until(lambda state: "정비기록" in state["quest"], after=before)
+            await second.expect_text("'윤대장에게 진행", "부두에서")
+            await first.expect_text("'없는NPC에게 안녕", "없는NPC에게 안녕")
+            await first.expect_text(second.name + " 연락 확인 대화", "[개인]")
+            await second.expect_text("알겠습니다 대답", "[개인]")
+            await first.expect_text(second.name + " 대화거부", "설정")
+            await second.expect_text(first.name + " 차단 확인 대화", "전달할 수 없습니다")
+            await first.expect_text(second.name + " 대화거부", "해제")
+            self.report("dialogue", "NPC 공개 조회/원래 NPC 선택 토큰 수락/미발견 원문 fallback/개인 대화·답장·차단")
             self.phase = "party"
             await first.act(second.name + " 파티초대", lambda state: state["party"] is not None)
             await second.until(lambda state: state["invitation"] is not None)

@@ -228,7 +228,7 @@ class HeadquartersTests(GameCommandTest):
         self.char1.change(lambda profile: profile.update(hp=1))
         self.char1.execute_cmd("휴식")
         self.assertEqual(self.char1.profile()["hp"], 1)
-        self.char1.execute_cmd("윤대장 대화")
+        self.char1.execute_cmd("윤대장에게 수락 말")
         self.assertTrue(self.char1.profile()["quests"]["radio_tower"]["started"])
         for zone in HQ_ROOMS:
             expected = [key for key, definition in INTERACTABLES.items() if definition["room"] == zone]

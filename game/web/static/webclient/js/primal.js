@@ -10,10 +10,17 @@
     entry.className = "log-entry " + kind;
     if (kind === "prompt") entry.dataset.awaitingInput = "true";
     if (segments) {
-      const roles = new Set(["text", "muted", "title", "hostile", "npc", "player", "object", "remains", "item", "command", "direction", "reward", "warning", "success", "error", "critical"]);
+      const roles = new Set(["text", "muted", "title", "hostile", "npc", "player", "object", "remains", "item", "command", "direction", "reward", "warning", "success", "error", "critical", "dialogue_topic", "dialogue_action"]);
       for (const part of segments) {
         if (!part || typeof part.text !== "string") continue;
-        const span = document.createElement("span");
+        const selectable = ["dialogue_topic", "dialogue_action"].includes(part.role) &&
+          typeof part.dialogue_selection === "string" && part.dialogue_selection.length <= 128;
+        const span = document.createElement(selectable ? "button" : "span");
+        if (selectable) {
+          span.type = "button";
+          span.dataset.dialogueSelection = part.dialogue_selection;
+          span.setAttribute("aria-label", (part.role === "dialogue_action" ? "NPC 행동 실행: " : "NPC 화제 질문: ") + part.text);
+        }
         span.textContent = part.text;
         if (roles.has(part.role)) span.className = "semantic-" + part.role;
         entry.append(span);
@@ -305,8 +312,20 @@
     socket.addEventListener("error", () => { byId("auth-error").textContent = "서버에 연결할 수 없습니다. 서버 실행 상태를 확인하세요."; });
   }
   document.addEventListener("click", (event) => {
+    const selection = event.target.closest("[data-dialogue-selection]");
+    if (selection?.dataset.dialogueSelection) {
+      if (playing) send("pz_dialogue", [selection.dataset.dialogueSelection]);
+      return;
+    }
     const target = event.target.closest("[data-command]");
     if (target) command(target.dataset.command);
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.isComposing || !["Enter", " "].includes(event.key)) return;
+    const selection = event.target.closest("[data-dialogue-selection]");
+    if (!selection?.dataset.dialogueSelection) return;
+    event.preventDefault(); // 기본 button click과 중복 요청을 생성하지 않는다.
+    if (playing) send("pz_dialogue", [selection.dataset.dialogueSelection]);
   });
   byId("auth-form").addEventListener("submit", (event) => {
     event.preventDefault();

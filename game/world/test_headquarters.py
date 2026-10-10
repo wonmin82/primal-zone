@@ -19,17 +19,19 @@ def content_targets():
     targets = {
         "shared_container": {"room": "storage_room", "actions": ["넣어", "꺼내"]},
         "personal_locker": {"room": "storage_room", "actions": ["넣어", "꺼내"]},
-        "instructor": {"room": "training_office", "typeclass": "TrainingManager", "actions": ["대화", "재분배"],
+        "instructor": {"room": "training_office", "typeclass": "TrainingManager", "actions": ["재분배"],
                        "presence": "훈련 기록을 정리하고 있다.", "description": "훈련 기록을 관리한다.", "dialogue": "투자 방향을 정리해 드립니다."},
         "salvage_officer": {"room": "salvage_office", "actions": ["환율", "교환"]},
     }
     for shop_id, room in (("supply", "supply_shop"), ("weapon", "weapon_shop"), ("armor", "armor_shop"), ("outpost_weapon", "outpost_weapon"), ("outpost_equipment", "outpost_equipment")):
-        targets[shop_id + "_shopkeeper"] = {"room": room, "typeclass": "Shopkeeper", "shop_id": shop_id, "actions": ["대화", "목록", "사", "가치", "팔아"]}
+        targets[shop_id + "_shopkeeper"] = {"room": room, "typeclass": "Shopkeeper", "shop_id": shop_id, "actions": ["목록", "사", "가치", "팔아"]}
     for zone, room in ROOMS.items():
         for hint in room.get("hints", []):
             if "target" in hint:
                 target = targets.setdefault(hint["target"], {"room": zone, "actions": []})
-                if hint["action"] not in target["actions"]:
+                if "intent" in hint:
+                    target["typeclass"] = "Commander" if hint["target"] == "commander" else "Pathfinder"
+                elif hint["action"] not in target["actions"]:
                     target["actions"].append(hint["action"])
     for quest in QUESTS.values():
         for _, target, role, _ in quest["steps"]:
@@ -171,3 +173,13 @@ class HeadquartersRulesTests(TestCase):
         self.assertEqual(migrated["visited"], ["dock", "grass"])
         self.assertEqual(migrated["credits"], 77)
         self.assertEqual(old, before)
+
+    def test_dialogue_hint_requires_support_room_and_string_schema(self):
+        targets = content_targets()
+        for hint in ({"target": "commander", "intent": "missing"},
+                     {"target": "pathfinder", "intent": "greeting"},
+                     {"target": "supply_cache", "intent": "greeting"},
+                     {"target": [], "intent": "greeting"},
+                     {"target": "commander", "intent": []}):
+            with self.subTest(hint=hint), patch.dict(ROOMS["dock"], hints=[hint]):
+                self.assertTrue(any("대화 안내" in issue for issue in errors(targets)))

@@ -65,7 +65,7 @@ ROOMS = {
         "enemies": [],
         "desc": "낡은 선착장 너머로 섬의 해안과 숲이 이어진다. 밧줄과 장비가 가지런히 놓여 있다.\n"
         "정박한 배 사이로 잔물결이 일고, 먼 숲에서 새소리가 들려온다.",
-        "hints": [{"target": "commander", "action": "대화"}],
+        "hints": [{"target": "commander", "intent": "greeting"}],
         "exits": {"북": "grass", "동": "hq_concourse"},
     },
     "grass": {

@@ -149,7 +149,7 @@ class MedicalCommandsTests(WorldCommandTest):
             self.assertIn("이용할 대상을 찾지", self.command(raw))
             self.assertEqual(self.char1.profile(), before)
         self.assertEqual({obj["name"] for obj in multiplayer_state(self.char1)["interactables"]}, {"윤대장"})
-        self.assertEqual(render(context_for(self.char1)), "윤대장 대화")
+        self.assertEqual(render(context_for(self.char1)), "'윤대장에게 안녕")
 
     def test_return_roof_elevator_medical_supply_purchase_and_expedition_paths(self):
         self.char1.location = self.rooms["grass"]

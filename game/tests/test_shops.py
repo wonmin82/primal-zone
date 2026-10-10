@@ -51,7 +51,7 @@ class ShopTests(WorldCommandTest):
                     self.assertEqual(bool(re.search(r"(?<![가-힣])" + re.escape(ITEMS[item]["name"]) + r" ·", output)), item in SHOP_CATALOGS[shop_id]["purchase_catalog"], item)
                 self.assertNotIn("회수부품", output)
             self.assertIn(seller.key + "에게 물건이름 사", self.command(seller.key + " 봐"))
-            self.assertIn("판매 목록", self.command(seller.key + " 대화"))
+            self.assertIn("판매 목록", self.command(seller.key + "에게 보급 말"))
 
     def test_bare_targeted_alias_purchases_and_infinite_catalog(self):
         for shop_id, item in (("supply", "bandage"), ("weapon", "cutting_machete"), ("armor", "reinforced_vest")):
@@ -84,7 +84,7 @@ class ShopTests(WorldCommandTest):
             self.assertIn("상인", self.command(raw))
             self.assertEqual(self.char1.profile(), before)
         self.assertEqual([obj["name"] for obj in multiplayer_state(self.char1)["interactables"]], ["윤대장"])
-        self.assertEqual(render(context_for(self.char1)), "윤대장 대화")
+        self.assertEqual(render(context_for(self.char1)), "'윤대장에게 안녕")
 
     def test_multiple_sellers_filter_by_item_and_use_common_number_selector(self):
         seller = self.sellers["supply"]
@@ -153,11 +153,11 @@ class ShopTests(WorldCommandTest):
             self.assertIn("1개를 받아", self.command(actions[1]["command"]))
         for zone, expected in (("storage_room", {"봐"}), ("training_room", {"힘 +1 배분"}),
                                ("infirmary", {"의무관 회복"}), ("recovery_room", {"휴식"}), ("survival_training_room", {"체질 +1 배분"}), ("salvage_office", {"환율", "봐"}),
-                               ("dock", {"대화"}), ("office", {"조사"}), ("generator", {"수리"})):
+                               ("dock", {"말 걸기"}), ("office", {"조사"}), ("generator", {"수리"})):
             self.char1.location = self.rooms[zone]
             if zone == "infirmary":
                 self.char1.change(lambda p: p.update(hp=1))
-            self.assertEqual({a["command"] if zone == "infirmary" else a["label"] for obj in multiplayer_state(self.char1)["interactables"] for a in obj["actions"]}, expected)
+            self.assertEqual({a["command"] if zone == "infirmary" else a["label"] for obj in multiplayer_state(self.char1)["interactables"] for a in obj["actions"] if a["label"] != "말 걸기" or zone == "dock"}, expected)
         self.char1.location = self.rooms["salvage_office"]
         self.char1.change(lambda p: p["inventory"].update(scrap=2))
         self.assertIn("회수부품 모두 교환", str(multiplayer_state(self.char1)))

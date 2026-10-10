@@ -64,7 +64,7 @@ ROOMS = {
         "light_profile": "filtered",
         "enemies": ["dartclaw"],
         "desc": "통신탑 뒤편 길이 빽빽한 밀림으로 이어진다. 선발대가 남긴 발자국이 젖은 흙 위에 남아 있다.",
-        "hints": [{"target": "pathfinder", "action": "대화"}],
+        "hints": [{"target": "pathfinder", "intent": "greeting"}],
         "exits": {"남": "ridge", "북": "jungle_watch", "동": "jungle_road", "서": "jungle_fen"},
         "requires": {
             "quest": "radio_tower",
