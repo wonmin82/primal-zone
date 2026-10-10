@@ -1,5 +1,15 @@
 # 원시구역 개발 작업 및 검증 이력
 
+## PR #43 — README·플레이 가이드 최종 마감 (2026-10-10, 병합 전 기록)
+
+- [PR #43](https://github.com/wonmin82/primal-zone/pull/43)의 README 재구성·[공식 플레이 가이드](gameplay.md) 분리·관련 설계/운영 문서 정합성 수정을 완료했다. 최종 README는 원본 496줄에서 204줄로 정리했고, gameplay는 494줄·15개 안내 절이다. 기존 정보 보존 표는 [최초 정리 기록](#원본-readme-정보-보존-대조)에 유지한다. 유효한 정보는 README·gameplay·연결된 상세 문서·historical 이력에서 확인할 수 있다.
+- 최종 변경 범위는 README, gameplay, 이 문서, playtest, architecture, equipment, final-content, installation, item-entities, game/README의 Markdown 10개다. 게임 소스·명령·콘텐츠·밸런스·DB schema·테스트 assertion·CI·의존성 변경은 없다. 현재 개인 줄임말 v1.14·프로필 v11과 native ItemEntity 정책을 유지하며, 과거 버전·가격·실패·미실행 기록은 당시 근거로 보존한다.
+- 대화 리뷰의 P2(하단에 모인 기존 앵커)와 P3(`개발` 위치)를 `fa8d6ff458c9de543650ac5c213430300b0bdd6b`에서 해결했다. 원본 주요 앵커 21개를 보존하고, 상세 플레이 앵커 13개는 이름과 해당 가이드 절 링크가 함께 있는 개별 표 행으로 연결한다. `현재-구현`·`실행`·`개발`·`기술과-데이터`는 대응 제목 바로 앞이다. `#개발`과 `#개발-및-테스트` 모두 개발·테스트 시작으로 연결된다.
+- 문서 마감 검증은 [PR #43 검증 기록](playtest.md#pr-43-readme플레이-가이드-최종-문서-검증-2026-10-10)을 따른다. Markdown 렌더링·상대경로·자동/명시적 앵커·기존 링크 호환성·목적지 의미·정보 보존·`git diff --check`를 확인했다. GitHub의 실제 렌더 HTML에서 README 자동 ID 11개·명시적 ID 17개, gameplay 자동 ID 29개와 안내 표 목적지를 확인했고 중복·충돌은 없다.
+- 마감 시작 시 source는 위 `fa8d6ff`, base main은 `f50d940d6222e73eda4e5404c312d61b134f1ad4`였다. 해당 source의 [CI 38026673678](https://github.com/wonmin82/primal-zone/actions/runs/38026673678)는 코드 검사·병렬 게임 테스트·smoke 모두 성공했다. 이 결과는 마감 문서 커밋 이전 HEAD의 CI이며, 새 HEAD의 성공으로 대신하지 않는다. 이번 로컬 전체 게임 검사·smoke·브라우저 클릭·OS IME·정적 수집은 문서 전용 변경으로 미실행했다. 명령·수치의 기존 정적 대조는 동일 코드/본문임을 확인해 재사용했다.
+- 병합 전 조회에서 PR은 OPEN·non-draft·MERGEABLE이며 GitHub 리뷰 및 미해결 스레드는 0개였다. main 보호 규칙은 최신 base 반영·필수 `test` 성공·대화 해결을 요구하고 필수 승인 수는 0개다. 최신 main을 이미 포함하며 미커밋·미푸시 변경이나 다른 worktree 사용은 없다. 확인된 미해결 문서 문제는 없다. PostgreSQL·multi-server·외부 production 운영과 macOS 실제 실행은 검증된 지원 범위가 아니다.
+- 사용자가 문서 마감 후 병합·소스 브랜치 삭제를 승인했다. 마감 커밋을 푸시하고 해당 최신 HEAD의 CI 성공·리뷰/보호 규칙·충돌·전체 diff·PR 본문을 다시 확인하면 병합한다. 저장소가 허용하는 기존 Merge commit 방식을 사용한다. **이 절은 병합 전 상태 기록이며 PR #43의 병합 SHA·시각·브랜치 삭제 완료를 선기록하지 않는다.** 실제 새 HEAD CI와 병합/main CI·정리 결과는 PR Validation 및 최종 보고에 기록한다.
+
 ## 현재 기준과 PR #42 병합 완료 (2026-10-10)
 
 - [PR #42](https://github.com/wonmin82/primal-zone/pull/42)는 2026-10-10 12:49:53 KST(03:49:53 UTC)에 merge commit `f50d940d6222e73eda4e5404c312d61b134f1ad4`로 병합되었다. 개인 줄임말 v1.14·프로필 v11이 현재 main의 계약이다. 아래 Closeout의 병합 조건·승인 대기 표현은 당시 기록이며 현재 미완료 작업이 아니다.
@@ -9,7 +19,7 @@
 
 ## README·플레이 문서 구조 정리 (2026-10-10)
 
-기준 main은 위 `f50d940`이며 별도 `codex/docs-readme-gameplay`에서 문서만 편집한다. 이번 PR은 생성 후 리뷰 대상으로 남기며 자동 병합하지 않는다. 게임 코드·콘텐츠·테스트 assertion·schema·CI·의존성은 변경하지 않는다.
+아래는 PR #43 최초 정리 시점의 범위·판단 기록이다. 기준 main은 위 `f50d940`이며 별도 `codex/docs-readme-gameplay`에서 문서만 편집했다. 당시에는 생성 후 리뷰 대상으로 남기고 자동 병합하지 않는 작업 범위였다. 현재 마감·병합 조건은 위 최종 마감 절을 따른다. 게임 코드·콘텐츠·테스트 assertion·schema·CI·의존성은 변경하지 않았다.
 
 ### 편집 전 정보 분류
 
@@ -26,7 +36,7 @@
 
 원본은 `f50d940:README.md` 496줄이다. 각 주요 절의 유효 정보는 아래 위치에서 접근할 수 있다. 중복 문장 제거는 정보 폐기가 아니며 과거 개발 완료·검증의 의미는 기존 audit·playtest·이 문서의 historical 기록에 유지한다.
 
-정리 후 README는 199줄, 신규 gameplay는 494줄·15개 안내 절이다. README에는 설치·대표 조작·개발·문서 탐색을 남기고 gameplay에는 실제 입력·조건·결과를 모았다. 공식·데이터 모델·migration·상세 줄임말 계약은 기존 설계 문서로 연결한다.
+최초 정리 후 README는 199줄, 신규 gameplay는 494줄·15개 안내 절이었다. 이후 앵커 호환성 보완으로 README는 204줄이 되었으며 기존 본문·목차·명령·수치·문서 링크는 유지했다. README에는 설치·대표 조작·개발·문서 탐색을 남기고 gameplay에는 실제 입력·조건·결과를 모았다. 공식·데이터 모델·migration·상세 줄임말 계약은 기존 설계 문서로 연결한다.
 
 | 원본 주요 절 | 처리 | 확인 위치 |
 | --- | --- | --- |

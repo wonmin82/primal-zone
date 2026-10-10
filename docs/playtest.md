@@ -1,3 +1,21 @@
+## PR #43 README·플레이 가이드 최종 문서 검증 (2026-10-10)
+
+아래는 [PR #43](https://github.com/wonmin82/primal-zone/pull/43)의 병합 전 문서 마감 기록이다. README는 204줄의 진입점, [gameplay](gameplay.md)는 494줄·15개 주제의 공식 플레이 안내다. 현재 개인 줄임말 v1.14·프로필 v11, 데이터 보존/migration·네트워크 보안·지원 환경 안내와 원본 유효 정보의 보존 위치를 대조했다. 이전 실행의 실패·미실행·당시 정책은 아래 historical 기록에 유지한다.
+
+| 검사 | 실제 확인 결과와 근거 |
+| --- | --- |
+| Markdown 문법·렌더링 | 일회성 문서 검사와 `gh api markdown`으로 PR 변경 Markdown 10개의 제목·표·코드 fence 렌더링 확인 성공. 마감 기록 추가 후 다시 검사했다. |
+| 상대경로·내부 링크 | 저장소 Markdown 48개 전체의 상대 링크 372개·앵커 링크 118개 검사 오류 0. README·gameplay 내부 링크 및 installation·game/README 등 다른 문서의 진입 링크도 포함한다. |
+| GitHub 자동·명시적 앵커 | `fa8d6ff458c9de543650ac5c213430300b0bdd6b`의 GitHub Contents API HTML에서 README 자동 ID 11개·명시적 ID 17개와 gameplay 자동 ID 29개 확인 성공. 마감 변경에서 두 파일은 불변이며 명시적/자동 ID 중복·충돌이 없다. |
+| 기존 README 호환성·의미 | 원본 주요 앵커 21개 보존. 상세 항목 13개의 앵커·항목 이름·정확한 가이드 절 링크가 같은 표 행에 있고, 나머지 명시적 앵커 4개는 관련 제목 바로 앞이다. P2/P3 해결 완료, `#개발`과 `#개발-및-테스트` 모두 개발·테스트 시작 위치다. |
+| 정보·문서 역할 보존 | 원본 주요 절의 유효 정보는 [보존 표](CODEX_TASK_STATE.md#원본-readme-정보-보존-대조)에서 README 유지·gameplay 이동·상세 문서 연결·정정·중복 통합으로 확인한다. 앵커 보완 전후의 기존 본문·제목·명령·수치·링크는 동일하다. |
+| 주요 명령 예시·구현 | 이전 `a42a794de015cce49925fc61129ac52a4eb8c3b0`에서 구현·기존 테스트 정적 대조와 DB 없는 순수 helper 확인 21개 그룹 성공. 첫 사냥/임무 경로·가격·회복/전리품/환경·등록 명령/Exit·CLI, README/가이드 코드 블록 15개/38개와 줄임말 예시 4개를 대조했다. 이후 코드·해당 본문이 동일해 재사용하며 실제 서버 명령 실행이나 이번 새 게임 테스트로 표현하지 않는다. |
+| 변경 범위·diff | 이번 마감은 CODEX_TASK_STATE·playtest만 수정했고 PR 전체는 Markdown 10개다. 게임 소스·콘텐츠·테스트 assertion·DB schema·CI·의존성 변경 없음. `git diff --check` 통과. |
+
+문서 검사는 저장소에 추가하지 않은 ignored 임시 Python 도구로 수행했다. `fa8d6ff` 시점의 링크 수는 상대경로 367개·앵커 115개였으며, 마감 기록의 링크 추가 후에는 전체 오류 여부를 다시 확인했다. 브라우저 클릭·화면·실제 OS IME와 로컬 `check`·전체 게임 테스트·Quick/Full smoke·정적 수집은 문서 전용 변경으로 미실행했다. 실제 서버·지원하지 않는 운영 환경을 새로 검증했다고 주장하지 않는다.
+
+확인된 기존 source `fa8d6ff`의 [GitHub Actions 38026673678](https://github.com/wonmin82/primal-zone/actions/runs/38026673678)는 코드 검사·`test --parallel 2`·smoke 성공이다. 이 결과는 마감 문서 커밋 이전 HEAD에 한정한다. 새 마감 HEAD의 CI 성공과 병합 후 main CI는 [PR #43 Validation](https://github.com/wonmin82/primal-zone/pull/43) 및 최종 보고에서 각각 확인하며, 성공 확인 전에는 병합하지 않는다. 현재 확인된 미해결 문서 문제는 없다.
+
 ## 현재 안내와 PR #42 병합 결과
 
 플레이 방법은 [플레이 가이드](gameplay.md), 현재 자동 검사 명령은 [6절](#6-자동-테스트-실행)을 따른다. 현재 개인 줄임말은 [v1.14·프로필 v11](command-shortcuts.md)이며 아래 과거 실행의 버전·가격·미실행 결과를 현재 안내로 해석하지 않는다.
