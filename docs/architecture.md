@@ -252,21 +252,35 @@ parser는 마지막 token으로 행동만 찾는다. Command는 인자 문법·�
 
 방향 정의의 shortcut에서 여덟 방향을 파생하고 정보 단축어와 합성한다. 글로벌 단축어와 개인 줄임말은 별도다. 현재 치료/힐/heal은 활성 플레이어 기술이며 붕대 사용과 분리한다. Doctor 진료(treat)는 HP, Bed 휴식(rest)은 HP·정신력을 무료로 채운다. generic item heal field는 일반 회복량 데이터이며 skill ID heal과 다른 문맥이다. profile v10에서 숙련은 제거한다.
 
-`commands/help_pages.py`의 명시적 여섯 분류 순서·query·대표 명령과 각 command의 help-only `category`가 root/분류/detail을 구성한다. 입력할 수 없는 '8방향 이동'은 text role이다. query는 casefold → 글로벌 단축어 → 실제 command key/alias → 방향/영문 alias → category/topic 순서로 판정한다. 파티 detail이 category보다 우선하며 parser 상세는 `입력 도움말`로 분리했다. 승강기 내부 명령은 registry에 넣지 않고 이동 분류에서 현재 stop SSOT로 안내한다.
+`commands/help_pages.py`의 명시적 여섯 분류 순서·query·대표 명령과 각 command의 help-only `category`가 root/분류/detail을 구성한다. 입력할 수 없는 '8방향 이동'은 text role이다. query는 casefold → 글로벌 단축어 → 실제 command key/alias → 방향/영문 alias → category/topic 순서로 판정한다. 파티 detail이 category보다 우선하며 parser 상세는 `입력 도움말`로 분리했다. 실제 승강기 층별 Exit는 registry 명령과 별개이며 이동 분류와 공통 출구 정보로 안내한다.
 
 과거 v8 migration은 `skills.heal → firstaid` Rank와 `queued_action`을 보존한다. pure `commands/vocabulary.py`는 저장 정의의 실제 명령 위치만 canonical로 변환하고 새 글로벌/command/미래 예약 이름과 충돌한 개인 key를 `_개인[번호]`로 보존한다. exact 중첩 참조만 갱신하며 채팅·대상 문자열은 유지한다. 상세 계약은 [command-shortcuts.md](command-shortcuts.md)에 있다.
 
 새 authentication 이후 `Account.puppet_object()`가 호출하는 `Explorer.at_pre_puppet()`은 `staging_room`을 배치한 뒤 기본 hook을 수행한다. Evennia 6.1의 `ServerSession.at_sync()`는 live-session reload의 `puid`를 기존 Object에 직접 연결하고 puppet hook을 호출하지 않아 위치를 보존한다. 실제 두 lifecycle 경로를 integration에서 검증한다. `home=dock`, 일반 귀환/패배 위치, profile 진행은 별개 계약으로 유지한다.
 
-승강기 선택/수동 하차는 단일 `world_change()` 안의 `_disembark()`를 공유한다. 층과 이동 실패는 rollback하며 승강기 이동의 도착 화면은 `after_change()` 이후 전송한다. Web 버튼·NPC action·hint는 새 서버 canonical 명령을 보내며 client가 진료/상품/서비스 권한을 위치로 추론하지 않는다. asset 공통 query는 `long-term-growth`다.
+계단·승강기는 실제 Exit의 공통 이동 트랜잭션과 성공 이후 알림 경로를 사용한다. Web 버튼·NPC action·hint는 새 서버 canonical 명령을 보내며 client가 진료/상품/서비스 권한을 위치로 추론하지 않는다. asset 공통 query는 `long-term-growth`다.
 
 ## 개인 줄임말과 묶음 명령
 
-`해`의 인자에서만 콤마를 구분자로 사용하며 일반 채팅은 바꾸지 않는다. 순수 `commands/shortcuts.py`가 정의 parsing·재귀 flatten·cycle/depth/count/size 검증·전체 삭제 fingerprint/TTL을 담당하고, `commands/command_shortcuts.py`가 관리와 기존 dispatcher의 순차 호출을 연결한다. parser는 실제 명령·lock·시스템 shortcut을 먼저 처리한 뒤 입력 전체가 개인 이름일 때만 `profile_snapshot()`으로 조회한다. 설정 등록은 `줄임말 추가 이름 정의`의 명시적인 전치형이다.
+순수 `commands/shortcuts.py`는 단일/묶음 경계·변수 토큰·한 번 치환·로컬 문법·fingerprint를 담당한다. 신규 `profile.command_shortcuts`는 dict[str, str] 원본 정의다. 후치형 `이름 정의 줄임말`·`이름 해지`를 사용하고 등록은 다른 정의·참조 그래프를 검사하지 않는다. 프로필 v11은 기존 v8/v10 변환에 안전한 항목만 전달하고 경계가 재현되는 리스트만 문자열로 이전한다. 비활성·충돌·손상 저장값을 임의 복구하지 않는다. 읽기 전용 snapshot은 DB를 저장하지 않는다.
 
-실행 전 전체 flat 목록을 확정한 뒤 각 `execute_cmd()` Deferred 완료를 기다린다. Evennia 6.1은 일반 `func`의 Deferred 반환을 기다리지 않으므로 dispatch는 `at_post_cmd`에서 수행한다. 시작 시점 merged cmdset에서 식별되는 generator/coroutine 명령은 사전 거절한다. 앞 명령이 새 CmdSet을 활성화한 뒤 등장하는 progressive command는 예측하지 않으며 현재 gameplay에는 해당 command가 없다. game command failure는 이후 실행을 막지 않는다. 전체 묶음은 transaction이 아니다. 실행 중 새로 등록된 정의는 같은 묶음에서 재확장하지 않는다.
+`commands/shortcut_execution.py`의 캐릭터별 Execution은 개인 정의를 한 번 snapshot하고 불변 조상 경로를 가진 대기 항목을 처리한다. 매 단계 Evennia의 현재 CmdSet 합성 → 공통 `select_command()` → 선택한 Command의 `cmdhandler(cmdobj=...)` 실행을 사용하며 문자열 재파싱을 하지 않는다. 실제 명령의 문법 일치를 권한 검사 전에 확인해 잠긴 명령을 개인 정의로 우회하지 않는다. 일반 명령·Exit·채팅·관리·unknown도 실행량에 포함한다. 구조 오류는 남은 실행만 중단하고 완료된 동작을 되돌리지 않는다.
 
-`profile.command_shortcuts`는 캐릭터별 영구 설정이다. 과거 v8 migration의 응급처치 ID·저장 명령·예약 이름 변환 이후, 현재 v10은 제거된 행동과 새 기술 이름 충돌을 변환한다. 전체 삭제 요청과 확인은 각각 별개의 top-level 직접 입력만 허용하며 `primal_sequence_leaf` 간접 실행은 pending을 건드리기 전에 거절한다. 캐릭터 ndb의 60초 요청과 목록 fingerprint를 검증한 경우에만 한 번 저장한다. 확인 단독 입력·만료·목록 변경·로그아웃/종료 후에는 삭제하지 않는다. 콤마 segment·동적 CmdSet preflight의 한계와 향후 후보는 [개인 줄임말과 묶음 명령](command-shortcuts.md)을 따른다.
+동일 캐릭터의 두 세션도 하나의 ACTIVE/STOPPING/FINISHED 컨텍스트를 공유한다. 원래 세션·계정·puppet 소유권을 단계 전후 확인하고 logout/unpuppet/shutdown과 늦은 callback은 재개하지 않는다. 일반 명령은 잠그지 않는다. 엔진이 기다리는 pre/parse/post Deferred는 유지하지만 func generator/coroutine·입력 대기·완료 불명확 명령은 실제 선택 시 거절한다. engine help의 paging과 사용자 정의 명령의 완료 계약도 검사한다. PromptLifecycle은 인스턴스 hook도 보존하며 정상 최상위 입력의 완료 프롬프트를 한 번만 출력하고 취소 시 출력 깊이를 정리한다.
+
+정의의 BoundSegment는 치환 토큰과 바인딩 값만 불변으로 보유한다. 실행 직전에 예상 크기를 합산한 후 생성 중에도 검사하여 중간 호출 문자열을 2,021자(인자2,000+이름20+공백1) 이내로 제한한다. 실제 leaf는 별도의 누적1,000자 예산을 디스패치 전에 검사한다. 아직 대기 중인 세그먼트를 문자열로 치환하지 않아 다음 세그먼트의 길이 오류가 앞선 동작을 사전 취소하지 않는다.
+
+### 새 명령의 완료 계약
+
+순차 내부의 `func()`는 동기적으로 끝나야 한다. 비동기 pre/parse/post hook은 완료를 나타내는 Deferred를 반환하고 이후 작업까지 그 Deferred에 연결해야 한다. Progressive는 실행 후 사용자 선택·응답을 기다리거나 generator로 진행하는 명령이며 일반적인 대상 인자를 의미하지 않는다. 다음 명령은 클래스 또는 인스턴스에 `shortcut_completion_guaranteed = False`를 선언한다: helper 안에서 별도 Deferred/타이머 작업을 시작하는 명령, 메뉴·편집·선택 응답을 기다리는 명령, 반환 후에도 핵심 작업이 계속되는 명령. 이 값은 `func()` 실행 전에 검사하며 알려진 위험 동작을 True로 우회할 수 없다.
+
+직접 generator/coroutine·위험 함수 참조 검사는 보조 방어이며 임의 helper 내부의 모든 비동기 작업을 증명하지 않는다. 개발자는 helper를 변경할 때도 완료 계약을 재검토하고, 차단 시 `func()`·helper가 전혀 호출되지 않는 테스트, 허용 hook의 완료 순서, 세션 종료 뒤 늦은 callback이 다음 명령·프롬프트를 재개하지 않는 테스트를 추가한다. 숨겨진 helper의 Deferred/generator/coroutine 실제 반환은 `func()` 호출 후 감지하며 남은 실행을 중단하고 generator/coroutine 프레임을 닫는다. helper 호출 자체와 선행 부작용은 취소하지 않는다. 예상 밖 반환 후 중단은 사전 안전성의 증거로 취급하지 않는다.
+
+간접 실행의 다중 매칭은 기본 Evennia SystemMultimatch의 후보 안내만 허용한다. 사용자 정의 다중 매칭 핸들러의 임의 선택/입력 대기는 최종 선택과 완료를 보장할 수 없어 실행 전에 거절한다. 선행 명령이 `CMD_MULTIMATCH`를 추가·교체해도 다음 단계의 갱신된 CmdSet에서 처리기를 선택하고 같은 완료 계약을 적용한다. 차단 시 핸들러와 후보의 `func()`는 호출하지 않으며 완료한 앞선 동작은 유지한다. 실제 단일 일반 Command 선택은 허용하고 단일 Sequence 선택은 새 묶음으로 거절한다. 후보 목록에 Sequence가 존재하는 것만으로 일반 후보 안내를 차단하지 않으며 최상위 직접 입력의 다중 매칭은 유지한다.
+
+편의 네 명령은 클래스의 `help_sections`를 help_pages의 공통 분기로 출력한다. summary는 기능 설명, 나머지는 사용법·예시·실행 규칙·제한·관련 도움말로 분리한다. 기존 semantic Text와 compact 제목을 사용하고 일반 게임 명령의 도움말 렌더링은 기존 분기를 유지한다.
+
+전체 삭제는 `모두 삭제 줄임말`과 `모두 삭제 확인 줄임말`의 각각 직접 입력만 허용한다. 최종 문자열 플래그 대신 파서가 발급한 Invocation과 컨텍스트로 출처를 구분한다. JSON 호환 혼합값 전체의 fingerprint와 요청 후 60초가 지나기 전인지(`0 <= elapsed < 60`)를 한 저장 트랜잭션에서 확인한다. 간접 요청·확인은 pending을 건드리지 않고 직접 확인은 성공·실패 모두 소비한다. 상세 사용법·한도·정보 보존·엔진 우선순위 경계는 [개인 줄임말과 묶음 명령](command-shortcuts.md)을 따른다.
 
 ## Party의 단일 상태
 
@@ -577,6 +591,6 @@ v6부터 사용하는 `light_sources[item_id]`에는 on, power_source, charge_se
 
 아래는 성장/profile 호환을 설명하던 당시 기록이다. 현재 full-world item migration 경로는 위 explicit maintenance 계약을 따른다.
 
-profile의 최신 버전은 10이다. v9 이하는 여덟 기술의 기본 Rank와 재투자 가능 훈련으로 정규화하며 자세한 성장 호환은 [성장 설계](progression.md)를 따른다. v1/v2의 개인 encounter 제거·전투 입력 필드·성장 기본값 변환을 거친 뒤, v1~v3의 첫 임무 boolean을 `quests.radio_tower`의 진행 필드로 옮긴다. `cache_claimed`는 `discoveries.supply_cache`로 옮긴다. v1~v4에는 개인 보관 `storage={}`의 기본값을 추가한다. XP, HP, credits, inventory, equipment(명시적 None 포함), kills, 완료 여부와 visited 및 개인 전투 상태를 유지한다. 이미 받은 보상은 재지급하지 않는다. v1~v5에는 개인 광원 `light_sources={}`, v1~v6에는 개인 줄임말 `command_shortcuts={}`를 보완한다. v8 이하에는 현재 최대 정신력과 빈 recovery_effects를 추가하며 timestamp는 첫 mutable accrue에서 초기화한다. migration은 시간을 조회하지 않고 profile_snapshot은 사본만 변환한다.
+당시 profile의 최신 버전은 10이었다. 현재 v11의 줄임말 이전은 위 개인 줄임말 절을 따른다. v9 이하는 여덟 기술의 기본 Rank와 재투자 가능 훈련으로 정규화하며 자세한 성장 호환은 [성장 설계](progression.md)를 따른다. v1/v2의 개인 encounter 제거·전투 입력 필드·성장 기본값 변환을 거친 뒤, v1~v3의 첫 임무 boolean을 `quests.radio_tower`의 진행 필드로 옮긴다. `cache_claimed`는 `discoveries.supply_cache`로 옮긴다. v1~v4에는 개인 보관 `storage={}`의 기본값을 추가한다. XP, HP, credits, inventory, equipment(명시적 None 포함), kills, 완료 여부와 visited 및 개인 전투 상태를 유지한다. 이미 받은 보상은 재지급하지 않는다. v1~v5에는 개인 광원 `light_sources={}`, v1~v6에는 개인 줄임말 `command_shortcuts={}`를 보완한다. v8 이하에는 현재 최대 정신력과 빈 recovery_effects를 추가하며 timestamp는 첫 mutable accrue에서 초기화한다. migration은 시간을 조회하지 않고 profile_snapshot은 사본만 변환한다.
 
 변환은 기존 프로필의 복사본에서 첫 임무·보급 boolean을 새 구조로 옮기고 오래된 key를 제거한다. 기존 플레이어는 현재 레벨에 해당하는 포인트를 즉시 사용할 수 있고, 무료 기본 기술 Rank 1과 미투자 특성은 기존 전투 성능을 유지한다. Party·Enemy·Corpse·DroppedLoot는 profile 밖에 있으므로 migration이 수정하지 않는다. 기존 DB의 로드 시 점진적으로 변환하며 DB 삭제·교체는 필요 없다. 위의 서버 재시작/재접속 전투 정리 정책과 migration 자체의 보존 정책은 별개다.

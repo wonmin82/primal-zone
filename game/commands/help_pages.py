@@ -12,7 +12,7 @@ HELP_CATEGORIES = {
     "아이템·보급": {"query": "아이템", "examples": ("소지품", "장비", "가져", "상품")},
     "성장": {"query": "성장", "examples": ("상태", "능력", "경험치", "기술")},
     "파티·교류": {"query": "교류", "examples": ("파티", "파티초대", "말")},
-    "편의": {"query": "편의", "examples": ("해", "줄임말", "단축어")},
+    "편의": {"query": "편의", "examples": ("해", "줄임말", "해지", "단축어")},
 }
 
 
@@ -86,8 +86,19 @@ def help_page(query, commands):
     query = SHORTCUTS.get(query, query)
     selected = next((cls for cls in commands if query in {name.casefold() for name in (cls.key, *cls.aliases)}), None)
     if selected:
+        sections = getattr(selected, "help_sections", ())
+        if sections:
+            lines = [selected.summary]
+            for title, entries in sections:
+                lines.extend(["", ft.token("title", title)])
+                if title in ("사용법", "예시", "관련 도움말"):
+                    lines.extend(ft.token("command", entry) for entry in entries)
+                else:
+                    lines.extend(ft.text("- ", entry) for entry in entries)
+            return ft.compact(ft.token("command", selected.key), *lines)
         lines = [selected.summary, ft.text("사용법: ", ft.usage(getattr(selected, "usage", "") or selected.key,
                                                             {selected.key, *selected.aliases}))]
+        lines.extend(getattr(selected, "help_details", ()))
         if selected.aliases:
             lines.append(ft.text("별칭: ", commands_text(selected.aliases)))
         shortcuts = [source for source, target in SHORTCUTS.items() if target == selected.key]

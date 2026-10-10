@@ -85,10 +85,10 @@ class VocabularyTests(WorldCommandTest):
 
     def test_reserved_names_and_released_ga_shortcut(self):
         for name in ("소", "ㅂㄷ", "ㄴㄷ", "ㄴㅅ", "ㅂㅅ", "치료", "힐", "heal"):
-            self.raw(f"줄임말 추가 {name} 상태")
+            self.raw(f"{name} 상태 줄임말")
             self.assertEqual(self.char1.profile_snapshot()["command_shortcuts"], {})
-        self.raw("줄임말 추가 가 상태")
-        self.assertEqual(self.char1.profile_snapshot()["command_shortcuts"], {"가": ["상태"]})
+        self.raw("가 상태 줄임말")
+        self.assertEqual(self.char1.profile_snapshot()["command_shortcuts"], {"가": "상태"})
         self.assertIn("체력", self.raw("가"))
 
     def test_healing_is_active_and_defense_is_passive(self):
@@ -156,6 +156,6 @@ class VocabularyTests(WorldCommandTest):
             snapshot = self.char1.profile_snapshot()
             save.assert_not_called()
         self.assertEqual(deserialize(self.char1.db.profile), old)
-        self.assertEqual(snapshot["command_shortcuts"], {"소_개인": ["소지품"], "연결": ["소_개인"]})
+        self.assertEqual(snapshot["command_shortcuts"], {"소_개인": "소지품", "연결": "소_개인"})
         self.char1.profile()
         self.assertEqual(deserialize(self.char1.db.profile), snapshot)

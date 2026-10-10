@@ -31,11 +31,11 @@ class UnknownCommand(Command):
     read_only = True
 
     def at_pre_cmd(self):
-        if hasattr(self.caller, "begin_command_output"):
+        if not getattr(self, "primal_prompt_context", False) and hasattr(self.caller, "begin_command_output"):
             self.caller.begin_command_output(reconcile=not self.read_only)
 
     def at_post_cmd(self):
-        if hasattr(self.caller, "end_command_output"):
+        if not getattr(self, "primal_prompt_context", False) and hasattr(self.caller, "end_command_output"):
             self.caller.end_command_output()
 
     def func(self):

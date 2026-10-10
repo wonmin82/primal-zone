@@ -80,7 +80,7 @@ class ProgressionTests(TestCase):
         before = deepcopy(old)
         migrated = rules.migrate_profile(old)
         self.assertEqual(old, before)
-        self.assertEqual(migrated["version"], 10)
+        self.assertEqual(migrated["version"], 11)
         self.assertNotIn("proficiencies", migrated)
         self.assertNotIn("guard_until", migrated)
         self.assertEqual(set(migrated["skills"].values()), {1})
@@ -88,7 +88,7 @@ class ProgressionTests(TestCase):
         self.assertLessEqual(rules.point_pools(migrated)["attribute_spent"], pg.attribute_points(37))
         for field in ("xp", "credits", "equipment", "inventory", "quests", "visited", "discoveries"):
             self.assertEqual(migrated[field], old[field])
-        self.assertEqual(migrated["command_shortcuts"], {"호흡_개인": ["붕대 사용"], "점검": ["호흡_개인", "견제", "방어 말"]})
+        self.assertEqual(migrated["command_shortcuts"], {"호흡_개인": "붕대 사용", "점검": "호흡_개인, 견제, 방어 말 해"})
         self.assertEqual(rules.migrate_profile(migrated), migrated)
         broken = at_level(1)
         broken["skills"] = {"heavy": 999, "attack": -3, "heal": "bad"}

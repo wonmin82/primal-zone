@@ -1,3 +1,44 @@
+## PR #42 — v1.14 최종 문서 Closeout (2026-10-10)
+
+- 개인 줄임말 v1.14 구현·코드 리뷰·최종 방어 테스트를 완료했다. 확인된 미해결 P0/P1/P2는 없다. [PR #42](https://github.com/wonmin82/primal-zone/pull/42)는 최종 문서 검증을 마쳤으며 새 문서 HEAD의 필수 CI 성공 확인을 병합 조건으로 둔다. 병합 결과 SHA·main CI·브랜치 정리는 실제 실행 후 최종 보고에 기록한다.
+- 재확인한 source HEAD는 `baf817213a1436a8d6367e4fe67cd6609f1fdeb4`, base main은 `f09c40f4ef9cee9390ddff93bbb01c5845df5ba5`다. 해당 exact-head [Game checks 38020408849](https://github.com/wonmin82/primal-zone/actions/runs/38020408849)는 check PASS, test SUCCESS(순수215개/1.276초·통합665개/414.740초), smoke SUCCESS(Quick44.298초)다. 이후 Closeout 변경은 문서만 포함한다.
+- 최종 두 회귀는 실행 도중 custom `CMD_MULTIMATCH` 추가·교체 후 실제 다중 후보를 처리하는 경계와 숨겨진 helper의 Deferred/generator/coroutine 반환 방어를 검증한다. 갱신된 처리기 선택·간접 핸들러/후보 미실행·앞선 동작 보존·컨텍스트/프롬프트 정리를 확인했다. 관련88개/79.780초 PASS와 직접 시스템 Command 프롬프트 fixture 실패·보정은 [검증 이력](playtest.md#pr-42-최종-방어-테스트-보강-2026-10-10)에 보존한다.
+- 원본 문자열·변수 행동 이름·최신 CmdSet/잠긴 명령 우선·순차 부분 실행·중첩5·명령10·최종1,000자·전체 삭제 직접 입력·프로필v11 계약을 유지한다. 완료 미보장False는 실행 전에 거절하지만 숨겨진 helper의 예상 밖 반환 방어는 호출 후 탐지이며 선행 부작용을 되돌리지 않는다. 상세는 [현재 계약](command-shortcuts.md)과 [개발자 완료 계약](architecture.md#새-명령의-완료-계약)을 따른다.
+- 브라우저·실제 한글 IME·Telnet 수동 확인은 이번 Closeout 요청에서 사용자가 완료한 것으로 확인했다. Codex의 자동 검사 또는 직접 재실행 결과와 구분한다. 로컬 전체 테스트·Quick·Full은 문서-only 변경으로 반복하지 않으며, 이번 Closeout에서 Full PASS를 주장하지 않는다.
+
+아래는 각 작업 당시의 historical 실행 기록이다. 과거 미검증·실패·병합 미실행 방침은 그 시점의 사실로 유지한다.
+
+## PR #42 — 치환·선택 경계 및 도움말 리뷰 수정 (2026-10-10)
+
+- 시작 source HEAD는 `18f61fb7f453ae263a029a369ceab151deee90ac`, base main은 `f09c40f4ef9cee9390ddff93bbb01c5845df5ba5`다. 기존 `codex/shortcut-v114-lazy-execution`에서 작업하며 제거된 도움말 다섯 commit은 복원하지 않았다. PR은 [#42](https://github.com/wonmin82/primal-zone/pull/42)를 갱신하고 자동 병합하지 않는다.
+- P1: `BoundSegment`가 변수 토큰과 인자 참조만 보관하고 현재 세그먼트만 치환한다. 반복 생성 없이 예상 길이를 계산하고 축적 중에도 상한을 검사한다. 중간 개인 호출은 인자2,000자·이름20자·공백을 포함한 2,021자 보호를 사용하며 실제 leaf의 누적1,000자·10회 제한과 구분한다. 앞선 완료 동작과 11번째 직전 중단 정책을 유지한다. 인자형 전역 정의도 같은 경로를 사용한다.
+- P2: 명시적인 `shortcut_completion_guaranteed=False`는 helper나 `func()` 실행 전에 거절한다. 엔진이 기다리는 pre/post Deferred는 유지한다. 기본 다중 매칭의 후보 안내는 허용하지만 최종 선택·완료를 증명하지 못하는 사용자 정의 핸들러는 간접 실행 전에 거절한다. 실제로 선택된 일반 명령은 정상 실행하고 단일 `Sequence`는 차단한다. 임의 Python helper의 비동기 완료를 모두 정적으로 증명하지 않으며 개발자 계약과 회귀 기준은 [구조 문서](architecture.md#새-명령의-완료-계약)에 기록했다.
+- `해`·`줄임말`·`해지`·`단축어` 도움말은 기능 설명 뒤 사용법·예시·실행 규칙·제한·관련 도움말을 같은 순서로 출력한다. 일반 게임 도움말의 사용법·별칭·단축어 형식은 유지한다. 전체 삭제는 요청 후 60초가 지나기 전에 별도 직접 입력으로 확인한다. 실제 WebSocket 도움말 출력은 [텍스트 예시](text-examples.md#편의-상세-도움말-실제-출력)에 발췌했다.
+- 수정 commit: `3feb2f456cebf990a958c6c7aeb88a7f671a5a9b`(치환·선택 경계), `47c44477f8b803531fb1919c40c4003f5bdd1e49`(도움말·출력 회귀). 이 두 commit의 코드와 이어지는 문서-only 수정 범위에서 최종 검사를 수행했다.
+- 재현 실패→수정→검증 이력은 [이번 리뷰 검증](playtest.md#pr-42-치환선택-경계와-도움말-리뷰-검증-2026-10-10)을 따른다. P1 직접 영향4개/14.940초, 다중 후보·동적 CmdSet2개/9.472초, 관련 통합102개/89.535초 PASS. `scripts/dev.py check` PASS.
+- 최종 `scripts/dev.py test --parallel 2`: 순수215개/4.445초·통합663개/807.136초 PASS(runner820.507초), failure0/error0·DB teardown 포함 exit0. 각 선별 실행의 수를 전체 수에 더하지 않는다. 이 검사 후 실행 코드 변경은 없다.
+- 문서23개·상대 링크/앵커267개·code fence 오류0, `git diff --check` PASS. 현재 사용법·한도·완료 계약과 실제 출력 발췌를 대조하고 과거 검증 결과는 보존했다.
+- 실제 격리 Portal/Server·WebSocket35단계/93.787초 PASS: 네 상세 도움말과 일반 도움말 형식, 대용량 거절·부분 실행, 기존 변수·snapshot·Exit·전체 삭제·restart/relogin. 소유 프로세스 종료와 성공 fixture 정리 완료. 플레이 DB SHA256 `b1318296f505b9b7522fcbdedff7642a06cf055e9de72802198c70e6b8a7f700`·size733184·mtime_ns1790080153765082800 불변.
+- 수동 브라우저·모바일 폭·Telnet·OS IME는 미검증이며 실제 서버 WebSocket과 자동 semantic/ANSI 출력 검사를 해당 수동 검사로 대체하지 않는다. JS·CSS·정적 자산·밸런스·타이머 변경이 없어 Full·Node·정적 수집은 반복하지 않았다. 최신 exact-head CI는 PR Validation에 별도로 기록한다.
+
+아래 v1.14 최초 구현 및 이전 PR 기록은 각 실행 시점의 historical 검증이다. 이번 수정의 결과로 과거 실패나 미검증 기록을 소급 변경하지 않는다.
+
+## 개인 줄임말 확장 v1.14 — 구현·검증 (2026-10-09)
+
+- 기준 main: `f09c40f4ef9cee9390ddff93bbb01c5845df5ba5`. 작업 branch: `codex/shortcut-v114-lazy-execution`. 단일 PR로 제출하며 자동 병합하지 않는다.
+- Phase 1: 원본 정의의 순수 경계/변수 파서와 로컬 검증을 구현했다. `$1~$9`·`$*`·`$$`, 행동 이름 변경·재치환 금지·인자 부족/초과를 검사한다.
+- Phase 2: 후치형 조회·등록·수정·해지, 원본 문자열·100개 제한·혼합 구형 값·bounded 출력·정규화 충돌·전체 삭제 fingerprint를 구현했다. 프로필 v11은 기존 v8/v10 정상 변환을 보존하고 안전한 리스트만 문자열로 옮긴다. 읽기 전용 조회는 저장하지 않는다.
+- Phase 3: 전체 사전 flatten과 참조 그래프를 순차 지연 확장으로 교체했다. 개인 정의는 한 번 snapshot하고 실제 CmdSet은 매 단계 합성한다. 잠긴 실제 명령도 개인 정의보다 우선하며 선택 Command만 cmdobj로 실행한다. 불변 조상 경로·depth5·실행10·최종합계1000·부분 실행·새 묶음 금지·동일 캐릭터 소유권·비동기 완료·프롬프트 정리를 검사한다.
+- 직접 입력 출처는 typed Invocation과 ContextVar로 유지한다. 내부 dispatcher 재진입도 전체 삭제 직접 입력 자격을 얻지 않는다. 별개 세션/일반 입력은 실행 컨텍스트를 상속하지 않는다.
+- 관련 통합 87개/76.168초 PASS 후 paging·출처 재진입을 보강했고, 실행/프롬프트 관련 72개/67.968초 PASS. 순수 마이그레이션/어휘/성장 40개/0.237초 PASS. 다단어 추가 보강 전 check PASS, 전체 순수213개/2.632초·통합651개/613.216초(runner623.737초), total864개·failure0/error0·teardown 포함 exit0 PASS. 최신 exact-head CI는 PR Validation에서 대조한다.
+- 실제 격리 서버/WebSocket 26단계 PASS/114.739초: 캐릭터 격리·치환·스냅샷·부분 실행·Exit 이동·간접 전체 삭제 거절·재시작 pending 무효·재로그인 문자열 복원. 기존 Quick PASS/137.657초. 두 실행의 owned process 종료·성공 fixture 정리 완료. 이후 raw 제어문자·instance hook·custom Exit/관리 경계 보강은 직접 회귀·최종 전체 검사로 확인했다. 정상 입력·Harness·타이머가 동일한 해당 실제 서버 근거는 재사용한다.
+- Node 문법 PASS, 웹 프롬프트 10개 PASS. JS/정적 파일/웹 레이아웃은 변경하지 않았다. Full·브라우저·OS IME는 미실행이며 timer/balance/UI 변경이 없어 반복하지 않았다. 자동 입력을 실제 IME 확인으로 취급하지 않는다.
+- 플레이 DB SHA256 `b1318296f505b9b7522fcbdedff7642a06cf055e9de72802198c70e6b8a7f700`, 크기 733184: 격리 검증 전후 동일. 실제 플레이 DB는 이전/초기화하지 않았다.
+- 명세 경계: `look 도움 → @help look` 예시는 실제 엔진 `look` 우선 요구와 충돌한다. 실제 명령 우선 정책을 유지하고 충돌하지 않는 `장비 도움` 또는 직접 엔진 입력을 사용한다. 페이지 입력 가능 help는 내부에서 거절한다. 사용자 정의 helper의 별도 대기는 `shortcut_completion_guaranteed=False` 계약이 필요하다. 범용 Python 부수 작업 증명·엔진 merge cache 우회는 범위 밖이다.
+- 검증 운영 실패도 보존했다: Windows 병렬 suite 두 실행의 clone 파일 정리 충돌은 본문 PASS여도 exit1이므로 성공에서 제외하고 DB 검사를 직렬화해 최종 전체 run을 통과했다.
+- 추가 자체 리뷰: 첫 PR HEAD의 Game checks37932812711은 성공했지만 인자 없는 정확한 다단어 행동 별칭의 개인 fallback을 1FAIL로 재현했다. 실제 별칭 정확 일치도 권한 검사 전에 선택하도록 보강했고 관련106개/52.885초·check PASS 후 전체 순수213개/2.523초 PASS, 통합652개/580.477초 중 대각선 보기 fixture1FAIL을 확인했다. 차이는 정상 회복 10초 경계의 timestamp/boundary뿐이었다. 전체 profile assertion을 유지하고 관찰 시각만 고정한 뒤 관련117개/63.655초·check PASS를 확인했다. test-only 시각 고정 뒤 로컬 전체 검사는 반복하지 않고 최종 HEAD의 전체 test/smoke CI를 PR Validation에서 대조한다.
+- 현재 계약: [개인 줄임말](command-shortcuts.md). 이전 PR #41 및 V1 기록은 아래 historical 실행 기록으로 보존한다.
+
 ## PR #41 — 문서 Closeout·최종 검증 완료 (2026-10-09)
 
 - 기획안 v1.5 FINAL의 Phase A/B와 리뷰 P2-1/P2-2/P3-1 구현·검증을 완료했다. 본부52 Room·계단6개·기존 승강기 identity·독립 승객 이동, 공통 Exit 인자 경계·cmd/traverse·방문/관찰 공개 정책이 현재 계약이다. 상세 구조는 [본부 개편](headquarters-redesign.md), 기술 정책은 architecture를 따른다.

@@ -93,6 +93,8 @@ public 전투에는 여러 파티와 솔로가 동시에 참여하므로 파티 
 
 ## 기존 캐릭터 호환성
 
+현재 프로필 버전은 11이다. 아래 v10 성장 정규화는 유지하며 v11은 안전한 줄임말 문자열 이전만 추가한다. 상세는 [줄임말 이전](command-shortcuts.md#프로필-v11과-구형-데이터)을 따른다.
+
 profile v10은 XP(따라서 레벨), equipment/inventory/quests/발견·방문·월드 진행·보관·광원·개인 줄임말을 보존한다. legacy proficiency와 guard는 제거해 새 공식에서 참조하지 않는다. legacy R1~3 기술을 비례 확대하지 않고 새 여덟 기술 R1로 되돌려 해당 레벨의 총 훈련을 다시 투자한다.
 
 특성은 힘→민첩→체질→지혜의 canonical 순서로 각+20과 현재 레벨 예산 내 투자만 보존한다. 초과분은 새 공식에서 사용하지 않는다. queued action·간파·치료 대상은 reset하고 기존 절대 cooldown은 보존한다. v10 재적용은 추가 초기화하지 않으며 read-only snapshot은 원본·DB를 변경하지 않는다. 개인 줄임말의 옛 붕대 행동과 active guard는 새 command로 옮기고 새 명령 충돌은 deterministic `_개인[번호]`로 보존한다.

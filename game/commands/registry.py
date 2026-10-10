@@ -15,7 +15,7 @@ from commands.character import (
     Weather,
 )
 from commands.combat import Attack, Breathe, Flee, Heal, Heavy, Insight, Shooting, Suppress, Use
-from commands.command_shortcuts import Sequence, Shortcuts
+from commands.command_shortcuts import DeleteShortcut, Sequence, Shortcuts
 from commands.firearms import FillMagazine, LoadMagazine, Reload
 from commands.incinerator import Burn
 from commands.inventory import (
@@ -87,6 +87,7 @@ COMMANDS = [
     GlobalShortcuts,
     Sequence,
     Shortcuts,
+    DeleteShortcut,
     Status,
     Inventory,
     Wield,

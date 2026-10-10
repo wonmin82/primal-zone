@@ -31,7 +31,7 @@ class VocabularyTests(TestCase):
         before = deepcopy(old)
         migrated = rules.migrate_profile(old)
         self.assertEqual(migrated["command_shortcuts"], {
-            "힐_개인3": ["소지품"], "힐_개인": ["장비"], "힐_개인2": ["상태"],
+            "힐_개인3": "소지품", "힐_개인": "장비", "힐_개인2": "상태",
             "생존": ["힐_개인3", "힐 보기", "힐 말", "'힐, 회복", "진료", "붕대 사용"],
         })
         self.assertEqual(old, before)
@@ -69,8 +69,8 @@ class VocabularyTests(TestCase):
         self.assertNotIn("firstaid", migrated["skills"])
         self.assertEqual(migrated["queued_action"], "attack")
         self.assertEqual(migrated["command_shortcuts"], {
-            "점검": ["상태", "장비", "소지품"], "인사": ["회복 말", "'상점, 치료"],
-            "쇼핑": ["무기상 상품", "붕대 구매", "의무관에게 진료", "소지품", "붕대 사용", "내려"]})
+            "점검": "상태, 장비, 소지품 해", "인사": ["회복 말", "'상점, 치료"],
+            "쇼핑": "무기상 상품, 붕대 구매, 의무관에게 진료, 소지품, 붕대 사용, 내려 해"})
         for key in old.keys() - {"version", "skills", "queued_action", "command_shortcuts", "skill_ready_at"}:
             self.assertEqual(migrated[key], old[key], key)
         self.assertEqual(rules.migrate_profile(migrated), migrated)
