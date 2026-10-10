@@ -6,6 +6,20 @@
 
 개발 중 직접 영향을 받는 순수·격리 기능·콘텐츠·웹 자동 테스트만 실행한다. 실제 Push할 커밋 HEAD에서 `uv run python scripts/dev.py smoke`의 격리 Quick을 통과한 뒤 Push한다. 실행 코드·테스트 변경 후에는 새 HEAD에서 다시 Quick을 수행한다. 실패·미실행이면 Push하지 않는다. 로컬 전체 회귀를 중복 실행하지 않으며, Push 후 최신 HEAD의 GitHub Actions 전체 `test`·`smoke`를 확인한다. Issue #46의 사전 전체 로컬 CI 정책은 #46 당시의 별도 기록이다.
 
+### PR #52 최종 문서 마감 (2026-10-11)
+
+마감 시작 HEAD `7f6db0e332a865fbb56e1e0b5950b339ff6de479`의 실제 결과를 재확인했다. 아래 이전 경량 검사·실패·수정 기록은 당시 결과로 유지한다. 이번 문서 마감에는 작업 상태/마감 기록과 줄임말 문서 서두의 현행 v13 정정만 포함하며 실행 코드·테스트·UI·가격·퀘스트·저장 규칙은 변경하지 않는다.
+
+| 구분 | 실제 결과와 실행 시점 |
+| --- | --- |
+| 개발 중 관련 검사 | 동일한 코드·테스트의 `7f6db0e` 커밋 직전 NPC/Text 25개·Node 웹 12개 및 코드 검사 성공. 전체 명령·123.900초 결과는 [출력 형식 기록](#pr-52-대화-출력-형식-검증-2026-10-11)에 보존한다. 문서만 추가되어 이번에 게임 검사를 반복하지 않으며 새 실행으로 합산하지 않는다. |
+| 시작 HEAD 로컬 Quick | `uv run python scripts/dev.py smoke`, 정확한 `7f6db0e`에서 103.335초·종료 0. 기존 격리 SQLite/fixture/실제 WebSocket·scheduler를 사용했고 플레이 DB SHA256·mtime·크기는 불변이었다. |
+| 시작 HEAD GitHub 전체 CI | [Game checks 38092369126](https://github.com/wonmin82/primal-zone/actions/runs/38092369126), `7f6db0e` 대상 test·smoke 성공. Ubuntu/Python 3.13.16, 코드 검사·순수 223개/1.285초·통합 697개/501.392초(총 920개), 원격 Quick 55.688초. |
+| 새 문서 마감 검증 | Markdown/GFM 렌더링·상대 링크/앵커 검사 오류 0, 현행 명령/출력/버전과 historical 기록의 구분 확인, `git diff --check` 종료 0. 상세 결과는 PR Closeout에 기록한다. |
+| 새 문서 HEAD Push 게이트 | 커밋 후 정확한 HEAD의 `uv run python scripts/dev.py smoke` 성공·종료 0 확인 뒤에만 Push한다. 새 HEAD의 GitHub test·smoke를 다시 확인하며 SHA·실행 결과·링크는 [PR #52 Closeout](https://github.com/wonmin82/primal-zone/pull/52)에 별도로 확정한다. 위 시작 HEAD의 성공은 새 HEAD의 성공이 아니다. |
+
+로컬 전체 회귀·실 브라우저·OS 한글 IME·비색상 터미널 수동 접근성·실제 복수 플레이어/세션 경합·장기 재시작·production Full timing은 이번 마감에서 미실행이다. #50의 Cross-Issue·도움말/UI 종단 간·수동 통합 범위와 자동 검사 성공을 구분한다. 실제 병합 결과·main CI·브랜치 삭제는 Merge 후 PR/Issue 진행 기록에 남기며 선기록하지 않는다. Issue #47은 열린 상태로 유지한다.
+
 ### 실제 개발 중 검사
 
 #### PR #52 대화 출력 형식 검증 (2026-10-11)
