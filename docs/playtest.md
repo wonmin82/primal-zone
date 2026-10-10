@@ -1,3 +1,13 @@
+## PR #42 최종 문서 Closeout 검증 (2026-10-10)
+
+- 시작 source `baf817213a1436a8d6367e4fe67cd6609f1fdeb4`와 base `f09c40f4ef9cee9390ddff93bbb01c5845df5ba5`를 원격에서 재확인했다. 예상 밖 커밋·미해결 리뷰 스레드는 없다. v1.14 현재 계약·도움말·프로필v11과 README·architecture·command-shortcuts·text-examples·progression·작업 상태를 대조했다.
+- 최종 방어 테스트 HEAD의 [Game checks 38020408849](https://github.com/wonmin82/primal-zone/actions/runs/38020408849)는 순수215개/1.276초·통합665개/414.740초 PASS, check PASS, Quick44.298초 PASS다. 아래 관련88개 로컬 결과와 합산하지 않는다. 문서 HEAD의 CI와 병합 후 main CI는 PR Validation 및 최종 보고에서 별도로 확인한다.
+- 브라우저·실제 한글 IME·Telnet은 사용자가 이번 Closeout 요청에서 수동 확인 완료로 알려 주었다. Codex 자동 테스트·WebSocket 결과 또는 이번 직접 수동 실행으로 기록하지 않는다. 당시 미검증 기록은 아래에 그대로 유지한다.
+- 이번 수정은 문서만 포함한다. 숨겨진 helper 반환의 사후 탐지와 명시적 완료 미보장의 사전 차단을 구분하고 동적 처리기 회귀를 개발자 계약에 반영했다. 로컬 게임 검사·Quick/Full·브라우저·정적 파일 수집은 반복하지 않는다. Full의 신규 성공 결과는 없다.
+- 문서 검사: README와 docs의 Markdown23개·상대 링크/앵커270개·code fence·기재한 소스 경로를 확인했고 오류0이었다. `git diff --check` PASS이며 변경 파일은 문서5개뿐이다.
+
+아래는 각 실행 시점의 historical 검증이며 실패·기대값 보정·미실행 기록을 소급 변경하지 않는다.
+
 ## PR #42 최종 방어 테스트 보강 (2026-10-10)
 
 기준 HEAD `37f9fe9c2bda0f5df0fbad5daed29ca911d67a6e`, branch `codex/shortcut-v114-lazy-execution`. 실행 구현·정책은 변경하지 않고 `tests.test_command_shortcuts`에 두 회귀 메서드를 추가했다. 아래 기존 리뷰 결과는 당시 검증 이력으로 유지한다.

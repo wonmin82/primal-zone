@@ -1,3 +1,13 @@
+## PR #42 — v1.14 최종 문서 Closeout (2026-10-10)
+
+- 개인 줄임말 v1.14 구현·코드 리뷰·최종 방어 테스트를 완료했다. 확인된 미해결 P0/P1/P2는 없다. [PR #42](https://github.com/wonmin82/primal-zone/pull/42)는 최종 문서 검증을 마쳤으며 새 문서 HEAD의 필수 CI 성공 확인을 병합 조건으로 둔다. 병합 결과 SHA·main CI·브랜치 정리는 실제 실행 후 최종 보고에 기록한다.
+- 재확인한 source HEAD는 `baf817213a1436a8d6367e4fe67cd6609f1fdeb4`, base main은 `f09c40f4ef9cee9390ddff93bbb01c5845df5ba5`다. 해당 exact-head [Game checks 38020408849](https://github.com/wonmin82/primal-zone/actions/runs/38020408849)는 check PASS, test SUCCESS(순수215개/1.276초·통합665개/414.740초), smoke SUCCESS(Quick44.298초)다. 이후 Closeout 변경은 문서만 포함한다.
+- 최종 두 회귀는 실행 도중 custom `CMD_MULTIMATCH` 추가·교체 후 실제 다중 후보를 처리하는 경계와 숨겨진 helper의 Deferred/generator/coroutine 반환 방어를 검증한다. 갱신된 처리기 선택·간접 핸들러/후보 미실행·앞선 동작 보존·컨텍스트/프롬프트 정리를 확인했다. 관련88개/79.780초 PASS와 직접 시스템 Command 프롬프트 fixture 실패·보정은 [검증 이력](playtest.md#pr-42-최종-방어-테스트-보강-2026-10-10)에 보존한다.
+- 원본 문자열·변수 행동 이름·최신 CmdSet/잠긴 명령 우선·순차 부분 실행·중첩5·명령10·최종1,000자·전체 삭제 직접 입력·프로필v11 계약을 유지한다. 완료 미보장False는 실행 전에 거절하지만 숨겨진 helper의 예상 밖 반환 방어는 호출 후 탐지이며 선행 부작용을 되돌리지 않는다. 상세는 [현재 계약](command-shortcuts.md)과 [개발자 완료 계약](architecture.md#새-명령의-완료-계약)을 따른다.
+- 브라우저·실제 한글 IME·Telnet 수동 확인은 이번 Closeout 요청에서 사용자가 완료한 것으로 확인했다. Codex의 자동 검사 또는 직접 재실행 결과와 구분한다. 로컬 전체 테스트·Quick·Full은 문서-only 변경으로 반복하지 않으며, 이번 Closeout에서 Full PASS를 주장하지 않는다.
+
+아래는 각 작업 당시의 historical 실행 기록이다. 과거 미검증·실패·병합 미실행 방침은 그 시점의 사실로 유지한다.
+
 ## PR #42 — 치환·선택 경계 및 도움말 리뷰 수정 (2026-10-10)
 
 - 시작 source HEAD는 `18f61fb7f453ae263a029a369ceab151deee90ac`, base main은 `f09c40f4ef9cee9390ddff93bbb01c5845df5ba5`다. 기존 `codex/shortcut-v114-lazy-execution`에서 작업하며 제거된 도움말 다섯 commit은 복원하지 않았다. PR은 [#42](https://github.com/wonmin82/primal-zone/pull/42)를 갱신하고 자동 병합하지 않는다.

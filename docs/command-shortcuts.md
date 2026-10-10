@@ -111,7 +111,7 @@
 
 원래 세션·계정·puppet 제어권을 매 단계와 비동기 hook 완료 후 확인한다. 로그아웃·unpuppet·세션 종료·소유권 상실은 남은 실행을 취소한다. 다른 세션으로 이전하지 않는다. 늦은 완료 콜백도 재개하지 않는다. 출력 깊이를 정리하고 살아 있는 정상 최상위 입력에는 최종 프롬프트를 한 번만 보내며 종료된 세션에는 새 프롬프트를 보내지 않는다.
 
-Evennia 6.1.0은 pre/parse/post Deferred를 기다리지만 `func()`의 Deferred나 progressive generator 전체 수명을 기다리지 않는다. 일반 동기 명령과 엔진이 완료를 기다리는 비동기 hook만 지원한다. 선택된 generator/coroutine, 입력 대기·제어권 전환, 직접 Deferred 반환, 완료 보장이 없는 명령은 실행 전에 거절한다. 엔진 도움말은 페이지 입력 가능 모드에서 거절하고, 페이지 없는 모드 또는 웹 help popup의 즉시 출력은 허용한다.
+Evennia 6.1.0은 pre/parse/post Deferred를 기다리지만 `func()`의 Deferred나 progressive generator 전체 수명을 기다리지 않는다. 일반 동기 명령과 엔진이 완료를 기다리는 비동기 hook만 지원한다. generator/coroutine 함수, 알려진 입력 대기·제어권 전환·직접 Deferred 참조, 명시적으로 완료 미보장을 선언한 명령은 실행 전에 거절한다. 정적 검사에서 드러나지 않은 helper가 Deferred/generator/coroutine을 실제 반환하면 `func()` 호출 후 방어적으로 남은 실행을 중단한다. 이는 helper의 선행 부작용을 막거나 되돌린다는 보장이 아니다. 엔진 도움말은 페이지 입력 가능 모드에서 거절하고, 페이지 없는 모드 또는 웹 help popup의 즉시 출력은 허용한다.
 
 사용자 정의 명령이 숨겨진 helper에서 별도 대기를 시작한다면 `shortcut_completion_guaranteed = False`로 완료 계약을 명시해야 한다. 알려진 입력/편집/메뉴 호출과 직접 비동기 참조도 검사하며, 예상하지 못한 비동기 반환은 방어적으로 남은 실행을 취소한다. 임의 Python 함수의 모든 부수 작업을 정적으로 증명하는 범용 분석기는 만들지 않는다. 단독 progressive 실행은 기존 엔진 수명을 따른다.
 
