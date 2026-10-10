@@ -43,16 +43,19 @@ class MedicalCommandsTests(WorldCommandTest):
         return str(output.call_args_list)
 
     def test_bare_targeted_particles_alias_and_independent_rules(self):
-        for raw in ("진료", "의무관 진료", "의무관에게 진료", "의사에게 진료", "의사 treat",
+        for raw in ("회복", "의무관 회복", "의무관에게 회복", "의사에게 회복", "의사 회복",
                     "휴식", "침대 휴식", "침대에서 휴식", "병상에서 휴식", "병상 rest"):
             with self.subTest(command=raw):
-                self.char1.change(lambda p: p.update(hp=1))
+                self.char1.location = self.doctor.location if "회복" in raw else self.bed.location
+                self.char1.change(lambda p: p.update(hp=1, credits=1000))
                 before = deepcopy(self.char1.profile())
-                other = "rest" if "진료" in raw or "treat" in raw else "treat"
+                other = "rest" if "회복" in raw else "treat"
                 with patch.object(rules, other) as separate, patch.object(rules, "use_bandage") as bandage:
-                    self.assertIn("체력을 모두 회복" if other == "rest" else "체력과 정신력을 모두 회복", self.command(raw))
+                    self.assertIn("HP 59 회복" if other == "rest" else "체력과 정신력을 모두 회복", self.command(raw))
                     separate.assert_not_called()
                     bandage.assert_not_called()
+                if "회복" in raw:
+                    before["credits"] -= rules.treatment_quote(before, safe=True)[1]
                 before["hp"] = rules.stats(before)["max_hp"]
                 self.assertEqual(self.char1.profile(), before)
 
@@ -60,8 +63,9 @@ class MedicalCommandsTests(WorldCommandTest):
         for target in (None, 999):
             self.char1.change(lambda p: p.update(combat_target=target))
             before = deepcopy(self.char1.profile())
-            for raw in ("진료", "침대 휴식"):
-                expected = "전투 중입니다" if target else "이미 체력이 가득" if raw == "진료" else "이미 체력과 정신력이 가득"
+            for raw in ("회복", "침대 휴식"):
+                self.char1.location = self.doctor.location if raw == "회복" else self.bed.location
+                expected = "전투 중입니다" if target else "이미 체력이 가득" if raw == "회복" else "이미 체력과 정신력이 가득"
                 self.assertIn(expected, self.command(raw))
                 self.assertEqual(self.char1.profile(), before)
             if target:
@@ -69,23 +73,25 @@ class MedicalCommandsTests(WorldCommandTest):
                 self.assertEqual(render(context_for(self.char1)), "")
 
     def test_bare_ambiguity_hidden_objects_and_explicit_selector(self):
-        for cls, original, action in ((Doctor, self.doctor, "진료"), (Bed, self.bed, "휴식")):
+        for cls, original, action in ((Doctor, self.doctor, "회복"), (Bed, self.bed, "휴식")):
+            self.char1.location = original.location
             extra = create_object(cls, key=original.key, location=self.char1.location)
-            self.char1.change(lambda p: p.update(hp=1))
+            self.char1.change(lambda p: p.update(hp=1, credits=1000))
             before = deepcopy(self.char1.profile())
             self.assertIn("대상이 여러 개", self.command(action))
             self.assertEqual(self.char1.profile(), before)
             self.command(f"{original.key} 2 {action}")
             self.assertEqual(self.char1.profile()["hp"], 60)
             extra.locks.add("view:false()")
-            self.char1.change(lambda p: p.update(hp=1))
+            self.char1.change(lambda p: p.update(hp=1, credits=1000))
             self.command(action)
             self.assertEqual(self.char1.profile()["hp"], 60)
             extra.delete()
 
     def test_hidden_and_removed_medical_objects_are_not_services_or_hints(self):
-        self.char1.change(lambda p: p.update(hp=1))
-        for obj, action in ((self.doctor, "진료"), (self.bed, "휴식")):
+        self.char1.change(lambda p: p.update(hp=1, credits=1000))
+        for obj, action in ((self.doctor, "회복"), (self.bed, "휴식")):
+            self.char1.location = obj.location
             obj.locks.add("view:false()")
             before = deepcopy(self.char1.profile())
             for raw in (action, f"{obj.key} {action}"):
@@ -97,7 +103,7 @@ class MedicalCommandsTests(WorldCommandTest):
         self.bed.locks.add("view:all()")
         self.doctor.location = self.rooms["support_roof"]
         self.bed.location = self.rooms["support_roof"]
-        for action in ("진료", "휴식"):
+        for action in ("회복", "휴식"):
             self.assertIn("이용할 대상을 찾지", self.command(action))
         self.assertEqual({obj["name"] for obj in multiplayer_state(self.char1)["interactables"]}, set())
         self.assertEqual(render(context_for(self.char1)), "")
@@ -107,8 +113,8 @@ class MedicalCommandsTests(WorldCommandTest):
             self.char1.location = self.rooms[zone]
             self.doctor.location = self.char1.location
             self.bed.location = self.char1.location
-            for action in ("진료", "휴식"):
-                self.char1.change(lambda p: p.update(hp=1))
+            for action in ("회복", "휴식"):
+                self.char1.change(lambda p: p.update(hp=1, credits=1000))
                 before = deepcopy(self.char1.profile())
                 with patch("world.observation.can_perceive", return_value=True):
                     output = self.command(action)
@@ -116,27 +122,30 @@ class MedicalCommandsTests(WorldCommandTest):
                                 if obj["name"] in ("의무관", "침대")]
                 if ROOMS[zone].get("safe", False):
                     self.assertEqual(self.char1.profile()["hp"], 60)
-                    self.assertTrue(all(obj["actions"] for obj in services))
+                    self.assertTrue(any(obj["actions"] for obj in services))
                 else:
                     self.assertIn("안전한 곳", output)
                     self.assertEqual(self.char1.profile(), before)
                     self.assertTrue(all(not obj["actions"] for obj in services))
 
     def test_web_presentation_and_distant_privacy_use_real_objects(self):
+        self.char1.change(lambda p: p.update(hp=1, credits=1000))
         state = multiplayer_state(self.char1)
         self.assertEqual({action["command"] for obj in state["interactables"] if obj["name"] in ("의무관", "침대") for action in obj["actions"]},
-                         {"의무관 진료", "침대 휴식"})
-        self.assertEqual(render(context_for(self.char1)), "의무관 진료 · 침대 휴식")
+                         {"의무관 회복"})
+        self.assertEqual(render(context_for(self.char1)), "의무관 회복")
         appearance = str(self.char1.location.return_appearance(self.char1))
         self.assertIn("의무관", appearance)
-        self.assertIn("침대", appearance)
+        self.assertNotIn("침대", appearance)
+        self.char1.location = self.rooms["recovery_room"]
+        self.assertEqual(render(context_for(self.char1)), "침대 휴식")
         self.char1.location = self.rooms["support_3f_c"]
         distant = self.command("북 봐")
-        self.assertNotIn("의무관 진료", distant)
+        self.assertNotIn("의무관 회복", distant)
         self.assertNotIn("침대 휴식", distant)
         self.char1.location = self.rooms["dock"]
         before = deepcopy(self.char1.profile())
-        for raw in ("휴식", "진료"):
+        for raw in ("휴식", "회복"):
             self.assertIn("이용할 대상을 찾지", self.command(raw))
             self.assertEqual(self.char1.profile(), before)
         self.assertEqual({obj["name"] for obj in multiplayer_state(self.char1)["interactables"]}, {"윤대장"})
@@ -150,8 +159,8 @@ class MedicalCommandsTests(WorldCommandTest):
         for raw in ("승강기", "3층", "북"):
             self.command(raw)
         self.assertEqual(self.char1.zone, "infirmary")
-        self.char1.change(lambda p: p.update(hp=1))
-        self.command("휴식")
+        self.char1.change(lambda p: p.update(hp=1, credits=1000))
+        self.command("회복")
         self.assertEqual(self.char1.profile()["hp"], 60)
         for raw in ("남", "승강기", "2층", "북"):
             self.command(raw)
@@ -175,7 +184,7 @@ class MedicalCommandsTests(WorldCommandTest):
             for identity, obj in (("doctor", self.doctor), ("infirmary_bed", self.bed)):
                 current = search_tag(identity, category="primal_interactable")
                 self.assertEqual([o.id for o in current], [obj.id])
-                self.assertEqual(current[0].location, self.rooms["infirmary"])
+                self.assertEqual(current[0].location, self.rooms["infirmary" if identity == "doctor" else "recovery_room"])
                 self.assertEqual(current[0].aliases.all(), INTERACTABLES[identity]["aliases"])
         self.assertEqual(stale_definitions(), [])
         self.assertEqual(errors(INTERACTABLES), [])

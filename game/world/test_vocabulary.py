@@ -69,8 +69,8 @@ class VocabularyTests(TestCase):
         self.assertNotIn("firstaid", migrated["skills"])
         self.assertEqual(migrated["queued_action"], "attack")
         self.assertEqual(migrated["command_shortcuts"], {
-            "점검": "상태, 장비, 소지품 해", "인사": ["회복 말", "'상점, 치료"],
-            "쇼핑": "무기상 상품, 붕대 구매, 의무관에게 진료, 소지품, 붕대 사용, 내려 해"})
+            "점검": "점수, 장비, 가진거 해", "인사": ["회복 말", "'상점, 치료"],
+            "쇼핑": "무기상 목록, 붕대 사, 의무관에게 회복, 가진거, 붕대 사용, 내려 해"})
         for key in old.keys() - {"version", "skills", "queued_action", "command_shortcuts", "skill_ready_at"}:
             self.assertEqual(migrated[key], old[key], key)
         self.assertEqual(rules.migrate_profile(migrated), migrated)

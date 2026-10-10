@@ -42,14 +42,14 @@ class ShortcutHelpTests(WorldCommandTest):
                 self.assertEqual(strip_ansi(page.ansi()), page)
                 self.assertTrue(all(any(part["role"] == "title" and part["text"] == title
                                         for part in page.segments) for title in titles))
-                self.assertIn("줄임말 도움말" if name != "줄임말" else "해 도움말",
+                self.assertIn("줄임말 도움" if name != "줄임말" else "해 도움",
                               [part["text"] for part in page.segments if part["role"] == "command"])
 
     def test_sequence_help_explains_partial_execution_and_progressive_not_arguments(self):
         page = self.page("해")
         for value in ("두 개 이상", "북, 봐 해", "실행 직전", "새 장소", "실패 시", "계속",
                       "중단", "되돌리지", "10개", "1,000자", "2,000자", "추가 응답", "북 봐",
-                      "하나", "줄임말 도움말"):
+                      "하나", "줄임말 도움"):
             self.assertIn(value, page)
 
     def test_personal_help_contains_management_variables_limits_and_priority(self):
@@ -58,7 +58,7 @@ class ShortcutHelpTests(WorldCommandTest):
                       "모두 삭제 확인 줄임말", "$1~$9", "$*", "$$", "행동 이름", "잠긴 명령",
                       "엔진", "새로운 묶음", "100개", "1~20자", "원본 정의 최대 2,000자",
                       "호출 인자 최대 2,000자", "10개", "1,000자", "5단계", "60초가 지나기 전에",
-                      "구형 비활성", "해지 도움말", "단축어 도움말"):
+                      "구형 비활성", "해지 도움", "단축어 도움"):
             self.assertIn(value, page)
         self.assertNotIn("look 도움", page)
 

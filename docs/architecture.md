@@ -63,7 +63,7 @@ Web command echo는 별도 `› 명령` entry가 아니다. 마지막 entry가 �
 
 ## 보급칩 경제와 전리품 자산
 
-`world/content/economy.py`의 CURRENCY는 id=credits·이름=보급칩·단위=칩·별칭·설명의 SSOT다. `world/currency.py`의 format_currency는 127칩을 만들며 profile의 credits 숫자를 유지한다. 현재 profile version은 11이며 v10의 화폐 저장 방식을 유지한다. 화폐는 ITEMS나 inventory에 넣지 않는다. Web은 서버의 currency metadata/formatted/전리품 display_label과 take_command를 표시한다. take_target은 칩/칩 2 같은 명령 선택자, display_label은 8칩 같은 표시 문자열이며 화면 문자열을 재해석해 명령을 만들지 않는다.
+`world/content/economy.py`의 CURRENCY는 id=credits·이름=보급칩·단위=칩·별칭·설명의 SSOT다. `world/currency.py`의 format_currency는 127칩을 만들며 profile의 credits 숫자를 유지한다. 현재 profile version은 12이며 v10의 화폐 저장 방식을 유지한다. 화폐는 ITEMS나 inventory에 넣지 않는다. Web은 서버의 currency metadata/formatted/전리품 display_label과 take_command를 표시한다. take_target은 칩/칩 2 같은 명령 선택자, display_label은 8칩 같은 표시 문자열이며 화면 문자열을 재해석해 명령을 만들지 않는다.
 
 `world.loot_service`가 모델을 backend-neutral snapshot으로 제공한다. ItemEntity root와 LootClaim, CurrencyLoot/Share가 authoritative하며 legacy normalize_entry는 migration·historical 호환용이다. snapshot.as_entry의 eligible_players/remaining_shares는 share rows에서 파생한 pure 계산 입력이며 CurrencyLoot에 중복 저장하지 않는다. 조회는 DB를 변경하지 않는다.
 
@@ -147,6 +147,16 @@ Integrity는 승강기 Room·headquarters 소속, default·정류 층 ID/label/�
 bootstrap은 stable `primal_interactable` tag로 기존 객체를 찾아 DB ID를 유지한 채 위치·이름·alias 목록을 갱신한다. 다중 alias도 목록으로 전달해 각 이름을 보존한다. 공용 `db.items`와 각 탐사자의 `profile.storage`, 장비·성장·방문 기록에는 쓰지 않으며 profile migration도 없다. 반복 실행은 객체를 중복 생성하지 않는다. integrity는 세 서비스의 본부 배치를 검사하며 실제 사용 권한은 이 정적 배치 검사와 독립적이다.
 
 <a id="본부-4단계-의료와-복귀패배"></a>
+
+## 현재 명령 어휘·아이템 정보·유료 회복 (#46)
+
+현재 정식 명령·별칭은 [명령 어휘 기준](commands.md), 플레이 사용법은 [플레이 가이드](gameplay.md)를 따른다. `쏴`는 내부 shooting ID·Rank·modifier·다음 자동 공격 예약을 유지하며 즉시 피해를 생성하지 않는다. 독립 `정보`는 공통 ItemEntity 선택기·장비/탄창/광원 snapshot과 처분 정책을 재사용하는 읽기 전용 공개 조회다. 웹 정보 버튼도 같은 명령을 보낸다.
+
+의무관 `doctor`는 `infirmary`에 남고 `infirmary_bed`는 같은 ID·Bed Typeclass로 `recovery_room`에 이동한다. bootstrap의 기존 stable tag 재사용으로 위치만 갱신하며 반복 생성하지 않는다. 아래 Historical 4단계의 무료 진료와 의무실 침대 배치는 당시 기록이다.
+
+`rules.treatment_quote`는 안전 지역·비전투 조건과 요청량을 검증해 실제 회복 HP와 정수 비용을 계산한다. `Treat`는 읽기 전용 입력 경계 뒤 기존 `world_change` 직렬 잠금/DB transaction 안에서 대상을 확인하고 현재 프로필을 다시 읽고 기존 `save_profile`로 한 번 저장한다. 서비스 자체의 정신력 증가를 막기 위해 자연회복 checkpoint는 scheduler와 분리한다. `rules.treat`가 HP와 credits를 함께 변경하고 저장 실패 시 DB·Evennia attribute cache를 함께 복원한다. 정신력은 그대로며 `rules.rest`의 무료 HP·정신력 전체 회복은 독립적이다. 상세 경합·다중 서버 검증은 #50 범위다.
+
+profile v12는 기존 v8/v10/v11 의미 변환을 보존한 뒤 저장 정의의 동사와 새 이름 충돌을 이전한다. 장비 데이터·스키마·영속 ID를 바꾸지 않는다.
 
 ## Historical 본부 4단계: 의료와 복귀·패배
 
@@ -336,7 +346,7 @@ Production 기본값은 world/timing.py, 실행 설정의 해석·사용은 worl
 
 ## 기존 데이터와 운영 범위
 
-현재 profile version은 11이며 `rules.migrate_profile()`은 과거 성장·임무·discovery·명령 설정을 사본에서 정규화하는 pure helper다. v10의 성장 정규화와 v11의 안전한 줄임말 문자열 이전을 유지한다. ItemEntity로 아이템을 생성하거나 world source를 전환하는 함수가 아니다. XP/HP/credits/quest와 성장 호환은 [성장 설계](progression.md)를 따르고, legacy item 필드는 별도 archive로 보존한다.
+현재 profile version은 12이며 `rules.migrate_profile()`은 과거 성장·임무·discovery·명령 설정을 사본에서 정규화하는 pure helper다. v10의 성장 정규화와 v11의 안전한 줄임말 문자열 이전을 유지한다. ItemEntity로 아이템을 생성하거나 world source를 전환하는 함수가 아니다. XP/HP/credits/quest와 성장 호환은 [성장 설계](progression.md)를 따르고, legacy item 필드는 별도 archive로 보존한다.
 
 구형 개인 교전의 적 HP는 공유 Enemy로 이관하지 않는다. 성장·장비·소지품·임무 기록의 보존과 개인 전투 상태의 호환은 profile 정규화와 명시적 아이템 migration의 경계를 구분해 처리한다.
 

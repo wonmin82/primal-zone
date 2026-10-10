@@ -142,14 +142,17 @@ class ShortcutMigrationV11Tests(TestCase):
                        storage={"scrap": 3}, visited=["dock", "ridge"], hp=30, mental=25)
             before = deepcopy(old)
             migrated = rules.migrate_profile(old)
-            self.assertEqual(migrated["version"], 11)
+            self.assertEqual(migrated["version"], 12)
             self.assertEqual(old, before)
             for key in ("xp", "credits", "storage", "visited", "hp", "mental", "quests", "inventory", "equipment"):
                 baseline = rules.migrate_profile({**before, "command_shortcuts": {}})
                 self.assertEqual(migrated[key], baseline[key], (version, key))
             expected = deepcopy(shortcuts)
             if version < 11:
-                expected.update(장확="장비", 정찰="북 보기, 상태 해")
+                expected.update(장확="장비", 정찰="북 봐, 점수 해")
+            else:
+                expected.update(정찰=["북 봐", "점수"])
+            expected.update(대화=["안녕, 반가워 말", "점수"], 변수="$1 봐")
             self.assertEqual(migrated["command_shortcuts"], expected, version)
             self.assertEqual(rules.migrate_profile(migrated), migrated)
 
@@ -159,8 +162,8 @@ class ShortcutMigrationV11Tests(TestCase):
             old.update(version=7, command_shortcuts=value, credits=83)
             migrated = rules.migrate_profile(old)
             self.assertEqual(migrated["credits"], 83)
-            self.assertEqual(migrated["version"], 11)
-            expected = {"정상": "상태", "비활성": None} if isinstance(value, dict) and "정상" in value else value
+            self.assertEqual(migrated["version"], 12)
+            expected = {"정상": "점수", "비활성": None} if isinstance(value, dict) and "정상" in value else value
             self.assertEqual(migrated["command_shortcuts"], expected)
 
     def test_v8_v10_safe_transform_reserves_abnormal_original_keys(self):
@@ -168,7 +171,7 @@ class ShortcutMigrationV11Tests(TestCase):
         old.update(version=7, command_shortcuts={"소": ["가방"], "소_개인": None,
                    "사격": ["붕대"], "사격_개인": [], "참조": ["소", "사격"], "붕대": None})
         result = rules.migrate_profile(old)["command_shortcuts"]
-        self.assertEqual(result, {"소_개인": None, "소_개인2": "소지품", "사격_개인": [],
+        self.assertEqual(result, {"소_개인": None, "소_개인2": "가진거", "사격_개인": [],
                                  "사격_개인2": "붕대 사용", "참조": "소_개인2, 사격_개인2 해", "붕대": None})
 
     def test_v11_does_not_retry_lists_or_rename_old_names(self):
@@ -180,10 +183,10 @@ class ShortcutMigrationV11Tests(TestCase):
         old = rules.new_profile()
         old.update(version=7, command_shortcuts={"표시": "가방", "전투": "붕대", "잘못": [None]})
         self.assertEqual(rules.migrate_profile(old)["command_shortcuts"],
-                         {"표시": "소지품", "전투": "붕대 사용", "잘못": [None]})
+                         {"표시": "가진거", "전투": "붕대 사용", "잘못": [None]})
 
     def test_historical_rename_does_not_collide_with_abnormal_casefold_key(self):
         old = rules.new_profile()
         old.update(version=7, command_shortcuts={"HEAL": ["가방"], "heal_개인": None, "오류": "$10"})
         self.assertEqual(rules.migrate_profile(old)["command_shortcuts"],
-                         {"HEAL_개인2": "소지품", "heal_개인": None, "오류": "$10"})
+                         {"HEAL_개인2": "가진거", "heal_개인": None, "오류": "$10"})

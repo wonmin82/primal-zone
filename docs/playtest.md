@@ -1209,7 +1209,7 @@ game과 격리 서버의 정적 파일을 수집하고 실제 DOM의 JS `?v=hq-s
 
 첫 보스는 **Lv.4 이상, 획득 가능한 T1 무기·방호복, 체력·정신력 회복, 충분한 붕대**를 준비한다. 이는 수동 확인 준비 조건이며 실제 build별 소요·회복·탄약 경제의 평가와 최소 조정 결과는 [Phase 7C 분석](phase7c-balance-analysis.md)을 따른다.
 Lv.4에 필요한 누적 경험치는 240입니다. 부족하면 사냥과 휴식을 반복합니다.
-비전투 상태로 귀환하면 옥상입니다. 의무실의 진료·휴식으로 회복하고 본부 5층 기본점에서 장비를 준비한 뒤 승강기 1층→중앙 로비→부두로 돌아갑니다.
+비전투 상태로 귀환하면 옥상입니다. 의무실의 유료 회복 또는 회복실 침대의 무료 휴식으로 회복하고 본부 5층 기본점에서 장비를 준비한 뒤 승강기 1층→중앙 로비→부두로 돌아갑니다.
 
 1. 부두에서 `북` → `북` → `북` → `북`으로 이동합니다. 초지 → 오솔길 → 물안개 습지 → 통신탑 능선 경로입니다.
 2. `능선의우두머리 공격`로 보스전을 시작합니다.
@@ -1823,3 +1823,13 @@ Version3 cache_claimed=true fixture의 dry-run은 tag1개 entitlement를 계획�
 - 이번 문서 마감은 실행 코드·schema·의존성을 변경하지 않는다. 기존 로컬 pure46개/0.515초·migration/runtime/regions53개/66.853초·shortcut22개/14.637초 결과를 유지하고 게임 테스트·browser·local smoke를 재실행하지 않는다. 문서의 명령·링크·cache 정책·운영 절차를 대조하고 `git diff --check`를 확인한다.
 - 실제 production/play DB migration은 미실행이다. 백업→서버 정지→dry-run→apply→verify→cutover→서버 시작 절차는 별도 maintenance 작업이며 PR 병합만으로 데이터 변환을 실행하지 않는다.
 - 사용자 병합 승인에 따른 문서 마감 최신 HEAD와 병합 main의 CI는 각각 PR Validation과 최종 보고에 별도 run/SHA로 기록한다. 과거 성공 결과를 새 HEAD 검사로 대신하지 않는다. 이전 실패·재실행 이력과 Phase 7 미검증 항목은 유지한다.
+
+## Issue #46 명령·정보·유료 회복 최소 검증 (2026-10-10)
+
+- 기준: 최신 main `f7a9a30b3d25cd3928f8e9e3b213e7f7da670b49`에서 시작한 `feat/46-command-overhaul`. 46-A `cefb03c`, 46-B `fc5ba00` 이후 46-C 미커밋 변경을 포함한 격리 fixture 검사다. 기존 플레이 DB를 초기화하거나 변경하지 않았다.
+- 실행: `.venv/Scripts/python.exe scripts/dev.py test tests.test_command_overhaul.CommandOverhaulSmoke.test_phase_a --parallel 1`, 같은 경로의 `test_phase_b`, `test_phase_c`: 각 1개 성공. 최종 `.venv/Scripts/python.exe scripts/dev.py test tests.test_command_overhaul --parallel 1`: 대표 3개 성공. 이후 원본 보존 보완에 직접 영향을 받는 C 1개 재검사도 성공했다.
+- A: 실제 CmdSet을 통해 새 명령·대표 별칭·상점 거래·수직 방향·시체 번호/보호 권한·개인 정의·도움말을 확인했다. `쏴`의 shooting 예약에서 HP·탄약·다음 공격 시각이 즉시 바뀌지 않음을 확인했다. 전역 고정/인자형 도움말은 정식 페이지로 연결된다.
+- B: 소지/장착 무기·동명 번호·실제 탄창 잔탄·손전등·붕대 조회와 `정보 도움`을 확인했다. 조회 전후 저장 프로필과 ItemEntity 상태가 동일했다.
+- C: 전량·부분 HP, 공식의 레벨 10/50/99/100 사례, 부족 잔액·잘못된 수량·저장 예외의 rollback, SP 불변, 동일 Stable ID 침대의 회복실 이전과 반복 bootstrap, 무료 HP/SP 휴식을 확인했다. v7/v11→v12의 응급처치/의료/사격 구분, 불명확한 정의의 원본 보존과 버전별 멱등성을 확인했다.
+- 문서: GitHub GFM Markdown API로 변경 문서의 제목·표·코드 블록을 렌더링하고 저장소 Markdown 상대경로·앵커 및 기존 README 참조를 검사했다. 상세 결과는 작업 scratch의 보고서와 PR Validation에 기록하며, 명령·가격·배치 설명은 구현과 대조했다. 과거 버전의 진료/침대/어휘 기록은 과거 정책으로 표시하고 보존했다.
+- 미실행: 로컬 전체 회귀, 실 서버 Quick/Full smoke, 다중 세션 경합, 재시작 장기 검증, 실제 브라우저·한글 IME·시각/출력 전수 검사. 사용자 지정 범위에 따라 #50에서 검증한다. 자동 GitHub CI는 로컬 최소 Smoke와 구분해 최신 PR HEAD 결과를 PR에 기록한다.

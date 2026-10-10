@@ -342,7 +342,7 @@ class CommandShortcutsTests(WorldCommandTest):
 
     def test_reserved_names_and_invalid_local_syntax_do_not_replace_data(self):
         self.register("a", "b")
-        for name in ("상태", "공격", "해", "줄임말", "ㅂ", "look", "quit", "connect", "n", "2층", "4층", "5층", "계단", "emit",
+        for name in ("상태", "공격", "해", "줄임말", "ㅂ", "봐", "준말", "집", "quit", "connect", "n", "2층", "4층", "5층", "계단", "emit",
                      "북동", "남동", "남서", "북서", "ne", "se", "sw", "nw"):
             before = self.saved()
             self.run_raw(f"{name} 소지품 줄임말")

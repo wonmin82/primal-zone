@@ -104,7 +104,7 @@ class Closeout:
         # Lv.1 has no earned upgrade. Training becomes available after real XP gains.
         await player.expect_text("강타 배워", "남은 기술 훈련")
         await travel_to(player, 'infirmary')
-        await player.act("의무관 진료", lambda s: s["hp"] == s["max_hp"])
+        await player.act("의무관 회복", lambda s: s["hp"] == s["max_hp"])
         self.scenario.phase = "defeat"
         outsider = self.outsider
         await route(outsider, (("북", "trail"),))
@@ -113,6 +113,7 @@ class Closeout:
         await outsider.until(lambda s: s["zone"] == "infirmary" and s["combat_target"] is None,
                              self.scenario.timeouts.combat)
         assert outsider.state["hp"] == 1 and outsider.state["credits"] == before - min(before, 10)
+        await travel_to(outsider, "recovery_room")
         await outsider.act("침대 휴식", lambda s: s["hp"] == s["max_hp"] and s["mental"] == s["max_mental"])
         self.scenario.report("defeat", "actual enemy → infirmary / HP 1 / 최대 10칩 / Bed HP·정신력 full")
         self.scenario.phase = "hq-closeout"
@@ -186,6 +187,7 @@ class Closeout:
         await self.floor(player, "3층", "support_3f_c")
         await travel_to(player, 'infirmary')
         if player.state['hp'] < player.state['max_hp'] or player.state['mental'] < player.state['max_mental']:
+            await travel_to(player, 'recovery_room')
             await player.act('침대 휴식', lambda s: s['hp'] == s['max_hp'] and s['mental'] == s['max_mental'])
         self.scenario.report('expedition-recovery', '연속 사냥 후 실제 3층 침대 회복 / 전투 수치·fixture 변경 없음')
         await self.dock(player)
@@ -311,6 +313,7 @@ class Closeout:
                              f"{'T2' if advanced else 'T1'} 실제 구매/장착·교관 배분·강타 훈련 / "
                              f"Lv.{player.state['level']} HP {player.state['max_hp']}")
         await travel_to(player, 'infirmary')
+        await travel_to(player, 'recovery_room')
         await player.act('침대 휴식', lambda s: s['hp'] == s['max_hp'] and s['mental'] == s['max_mental'])
 
     async def restart(self):

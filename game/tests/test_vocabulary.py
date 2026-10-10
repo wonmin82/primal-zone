@@ -41,15 +41,15 @@ class VocabularyTests(WorldCommandTest):
         # 제거된 명령의 불변성을 실제 10초 자연회복 경계와 분리한다.
         self.enterContext(patch("typeclasses.explorers.time", return_value=100))
         self.char1.reconcile_recovery(emit_prompt=False)
-        outputs = [self.raw(command) for command in ("소지품", "가방", "가진거", "i", "인벤토리", "소")]
+        outputs = [self.raw(command) for command in ("가진거", "가진", "소지", "소지품", "소")]
         self.assertEqual(len(set(outputs)), 1)
-        self.assertIn("소지품", outputs[0])
+        self.assertIn("가진거", outputs[0])
         self.char1.location = self.rooms["weapon_shop"]
-        for old in ("상점", "메뉴", "shop", "도주", "회복", "응급치료", "firstaid", "붕대", "방어", "guard", "내리기"):
+        for old in ("상점", "shop", "도주", "응급치료", "firstaid", "붕대", "방어", "guard", "내리기"):
             before = self.char1.profile_snapshot()
             self.assertIn("명령을 확인", self.raw(old), old)
             self.assertEqual(self.char1.profile_snapshot(), before)
-        for command in ("상품", "무기상 상품"):
+        for command in ("목록", "무기상 메뉴"):
             self.assertIn("절단마체테", self.raw(command))
 
     def test_healing_aliases_bandage_and_medical_services(self):
@@ -65,17 +65,24 @@ class VocabularyTests(WorldCommandTest):
         self.raw('붕대 사용')
         self.assertEqual(self.char1.profile_snapshot()['inventory']['bandage'], 2)
         self.char1.location = self.rooms['infirmary']
-        for command in ('진료', '의무관 진료', '의무관에게 진료', 'treat', '휴식', '침대 휴식', '침대에서 휴식', 'rest'):
-            self.char1.change(lambda p: p.update(hp=1))
+        for command in ('회복', '의무관 회복', '의무관에게 회복', '휴식', '침대 휴식', '침대에서 휴식', 'rest'):
+            self.char1.location = self.rooms['infirmary'] if '회복' in command else self.rooms['recovery_room']
+            self.char1.change(lambda p: p.update(hp=1, credits=1000))
             before = self.char1.profile_snapshot()
             output = self.raw(command)
-            self.assertIn('진료를 받고' if command in ('진료', '의무관 진료', '의무관에게 진료', 'treat') else '휴식하며', output)
+            self.assertIn('HP 59 회복' if command in ('회복', '의무관 회복', '의무관에게 회복', 'treat') else '휴식하며', output)
             self.assertGreater(self.char1.profile_snapshot()['hp'], 1)
-            for field in ('credits', 'inventory', 'skills'):
+            if '회복' in command:
+                self.assertEqual(self.char1.profile_snapshot()['credits'], before['credits'] - 12)
+            else:
+                self.assertEqual(self.char1.profile_snapshot()['credits'], before['credits'])
+            for field in ('inventory', 'skills'):
                 self.assertEqual(self.char1.profile_snapshot()[field], before[field])
 
     def test_jamo_direction_shortcuts_traverse_roof_round_trips(self):
         for source, direction in DIRECTION_SHORTCUTS.items():
+            if direction not in ROOF_SIDES:
+                continue  # 수직 실제 이동은 Issue #46 단계 A Smoke에서 확인한다.
             self.char1.location = self.rooms["support_roof"]
             self.raw(source)
             self.assertEqual(self.char1.zone, ROOF_SIDES[direction])
@@ -92,7 +99,7 @@ class VocabularyTests(WorldCommandTest):
         self.assertIn("체력", self.raw("가"))
 
     def test_healing_is_active_and_defense_is_passive(self):
-        for query in ('치료', '힐', 'heal', '진료', '휴식', '사용'):
+        for query in ('치료', '힐', 'heal', '회복', '휴식', '사용'):
             self.assertIn('사용법', self.raw(query + ' 도움말'))
         registered = {name for cls in COMMANDS for name in (cls.key, *cls.aliases)}
         self.assertTrue({'치료', '힐', 'heal'}.issubset(registered))
@@ -115,7 +122,7 @@ class VocabularyTests(WorldCommandTest):
             self.assertIn("이동·탐사", self.raw(query + " 도움말"))
         self.assertTrue(set(data["alias"] for data in DIRECTIONS.values()).issubset(
             set(tokens(category_page("이동·탐사", commands), "direction"))))
-        self.assertIn("소지품", self.raw("소 도움말"))
+        self.assertIn("가진거", self.raw("소 도움말"))
         self.assertIn("소속 파티", self.raw("파티"))
         self.assertIn("사용법", self.raw("파티 도움말"))
         self.assertIn("묶음 실행", self.raw("입력 도움말"))
@@ -156,6 +163,6 @@ class VocabularyTests(WorldCommandTest):
             snapshot = self.char1.profile_snapshot()
             save.assert_not_called()
         self.assertEqual(deserialize(self.char1.db.profile), old)
-        self.assertEqual(snapshot["command_shortcuts"], {"소_개인": "소지품", "연결": "소_개인"})
+        self.assertEqual(snapshot["command_shortcuts"], {"소_개인": "가진거", "연결": "소_개인"})
         self.char1.profile()
         self.assertEqual(deserialize(self.char1.db.profile), snapshot)

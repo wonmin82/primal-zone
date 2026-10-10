@@ -41,8 +41,8 @@ class ActionObject(DistantPresenceMixin, DefaultObject):
         return [
             {"label": action, "command": target + " " + action}
             for action in (("봐",) if isinstance(self, Container) else self.actions)
-            if action in ("대화", "조사", "수리", "봐", "진료", "휴식")
-            and (action not in ("진료", "휴식") or self.available(caller, observed_at=observed_at))
+            if action in ("대화", "조사", "수리", "봐", "회복", "휴식")
+            and (action not in ("회복", "휴식") or self.available(caller, observed_at=observed_at))
         ]
 
     def perform_action(self, caller, action, args=None):
@@ -343,18 +343,47 @@ class TrainingManager(GrowthTrainer):
 class Doctor(ActionObject):
     semantic_role = "npc"
     detectability = "conspicuous"
-    presence = "탐사자의 상태를 살피며 진료를 준비하고 있다."
-    description = "탐사자의 부상을 살피고 치료하는 의무관이다."
-    actions = ("진료",)
+    presence = "탐사자의 부상을 살피며 회복을 준비하고 있다."
+    description = "보급칩을 받고 부족한 HP를 회복하는 의무관이다. 정신력은 회복하지 않는다."
+    actions = ("회복",)
     available = _service_available
 
+    def quote(self, caller, requested=None):
+        return rules.treatment_quote(caller.profile_snapshot(), requested,
+                                     safe=ROOMS.get(caller.zone, {}).get("safe", False))
+
     def return_appearance(self, looker, **kwargs):
-        return ft.sheet(ft.token(self.semantic_role, self.key), self.description, "",
-                        ft.actions(self.actions if self.available(looker) else ()))
+        lines = [self.description]
+        if self.available(looker):
+            try:
+                restored, cost = self.quote(looker)
+                lines.append(f"현재 HP {restored} 전체 회복 예상 비용: {cost}칩 (실행 시 재계산)")
+            except rules.RuleError as error:
+                lines.append(str(error))
+            lines.append("회복 · 20 회복 · 의무관에게 20 회복 / 회복실 침대 휴식은 무료")
+        return ft.sheet(ft.token(self.semantic_role, self.key), *lines)
+
+    def web_actions(self, caller, target, observed_at=None):
+        if not self.available(caller, observed_at):
+            return []
+        try:
+            restored, cost = self.quote(caller)
+        except rules.RuleError:
+            return []
+        return [{"label": f"HP {restored} 회복 · 예상 {cost}칩", "command": target + " 회복"}]
 
     def act(self, caller, action, args):
-        caller.change(lambda profile: rules.treat(profile, safe=ROOMS.get(caller.zone, {}).get("safe", False)))
-        caller.msg("의무관의 진료를 받고 체력을 모두 회복했습니다.")
+        quoted_hp, quoted_cost = self.quote(caller, args)
+        caller.msg(f"요청 HP {quoted_hp} 회복 예상 비용: {quoted_cost}칩 (실행 시 재계산)")
+        from world.multiplayer import world_change
+
+        # 유료 서비스는 SP 자연회복 checkpoint와 분리한다. 조회/실패/성공 모두
+        # 요청 자체가 정신력을 증가시키지 않으며 scheduler의 회복은 독립적이다.
+        with world_change():
+            profile = caller.profile()
+            restored, cost = rules.treat(profile, args, safe=ROOMS.get(caller.zone, {}).get("safe", False))
+            caller.save_profile(profile)
+        caller.msg(f"HP {restored} 회복 · 비용 {cost}칩을 지불했습니다. 정신력은 회복하지 않습니다.")
 
 
 class Bed(ActionObject):
@@ -644,7 +673,7 @@ INTERACTABLES = {
     "armor_shopkeeper": {"room": "armor_shop", "typeclass": "Shopkeeper", "name": "방어구상", "aliases": ["방어구 상인"], "shop_id": "armor"},
     "salvage_officer": {"room": "salvage_office", "typeclass": "SettlementOfficer", "name": "자원 정산관", "aliases": ["정산관"]},
     "doctor": {"room": "infirmary", "typeclass": "Doctor", "name": "의무관", "aliases": ["의사"]},
-    "infirmary_bed": {"room": "infirmary", "typeclass": "Bed", "name": "침대", "aliases": ["병상"]},
+    "infirmary_bed": {"room": "recovery_room", "typeclass": "Bed", "name": "침대", "aliases": ["병상"]},
     "emergency_light_cache": {"room": "wreck", "typeclass": "EmergencyLightCache", "name": "비상장비함", "aliases": ["비상함", "장비함"]},
     "shared_container": {"room": "storage_room", "typeclass": "Container", "name": "보관상자", "aliases": []},
     "personal_locker": {"room": "storage_room", "typeclass": "PersonalLocker", "name": "개인 보관함", "aliases": ["보관함"]},

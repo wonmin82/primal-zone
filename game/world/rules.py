@@ -16,7 +16,7 @@ from world.progression import ATTRIBUTES, SKILLS
 from world.quests import progress_defaults
 
 MAX_LEVEL = pg.MAX_LEVEL
-PROFILE_VERSION = 11
+PROFILE_VERSION = 12
 DEFEAT_RECOVERY_HP = 1
 
 
@@ -414,12 +414,29 @@ def _medical_maximum(profile, safe):
     return maximum
 
 
-def treat(profile, *, safe=False):
+MAX_TREAT_HP = 1_000_000
+
+
+def treatment_quote(profile, requested=None, *, safe=False):
+    """실제 부족 HP와 실행 시점 레벨의 정수 비용. 실패 시 상태를 바꾸지 않는다."""
+    if requested is not None and (type(requested) is not int or not 1 <= requested <= MAX_TREAT_HP):
+        raise RuleError("회복량은 1~1,000,000 사이의 정수로 입력하세요.")
     maximum = _medical_maximum(profile, safe)
-    restored = maximum - profile["hp"]
-    profile["hp"] = maximum
+    missing = maximum - profile["hp"]
+    restored = min(requested, missing) if requested is not None else missing
+    level = stats(profile)["level"]
+    price = 2 * restored + (level if level < 100 else 2 * level)
+    return restored, max(1, (price + 9) // 10)
+
+
+def treat(profile, requested=None, *, safe=False):
+    restored, cost = treatment_quote(profile, requested, safe=safe)
+    if profile["credits"] < cost:
+        raise RuleError(f"보급칩이 부족합니다. HP {restored} 회복 예상 비용: {cost}칩.")
+    profile["credits"] -= cost
+    profile["hp"] += restored
     recovery.clamp(profile, stats(profile))
-    return restored
+    return restored, cost
 
 
 def rest(profile, *, safe=False):
@@ -572,6 +589,10 @@ def migrate_profile(profile):
         from commands.vocabulary import migrate_string_shortcuts
 
         result["command_shortcuts"] = migrate_string_shortcuts(result.get("command_shortcuts", {}))
+    if version < 12:
+        from commands.vocabulary import migrate_command_overhaul_shortcuts, migrate_safe_shortcuts
+
+        result["command_shortcuts"] = migrate_safe_shortcuts(result.get("command_shortcuts", {}), migrate_command_overhaul_shortcuts)
     normalize_growth(result)
     recovery.clamp(result, stats(result))
     return result

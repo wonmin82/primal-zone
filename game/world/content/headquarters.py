@@ -259,8 +259,7 @@ ROOMS = {
         "desc": "밝은 타일로 마감된 넓은 공간이다. 벽의 수납장은 비어 있고 남쪽 문은 본부 3층 복도로 이어진다.",
         "exits": {"남": "support_3f_c"},
         "hints": [
-            {"target": "doctor", "action": "진료"},
-            {"target": "infirmary_bed", "action": "휴식"},
+            {"target": "doctor", "action": "회복"},
         ],
         "recovery": {"hp_per_minute": 6, "mental_per_minute": 2},
         "safe": True,
@@ -270,7 +269,8 @@ ROOMS = {
     },
     "recovery_room": {
         "name": "회복실",
-        "desc": "조용한 방 안에 회복을 기다리는 탐사자들을 위한 자리가 마련되어 있다. 남쪽 문은 본부 3층 복도로 이어진다.",
+        "hints": [{"target": "infirmary_bed", "action": "휴식"}],
+        "desc": "조용한 방 안에 무료로 몸을 눕히고 체력과 정신력을 회복할 침대가 마련되어 있다. 남쪽 문은 본부 3층 복도로 이어진다.",
         "exits": {"남": "support_3f_e1"},
         "safe": True,
         "enemies": [],

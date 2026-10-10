@@ -44,7 +44,7 @@ def category_page(category, commands):
                       "실제 출구 이름만 입력해 이동합니다. 계단실은 위·아래·나가기, 승강기 안은 층별 출구로 연결됩니다."])
     elif category == "전투·회복":
         lines.extend(["", "치료는 정신력을, 붕대 사용은 소지한 붕대 하나를 사용합니다. 방어는 패시브 기술입니다.",
-                      "진료는 의무관에게 받습니다. 휴식은 의무실 침대에서 이용합니다."])
+                      "회복은 의무실 의무관에게 보급칩을 지불해 HP만 회복합니다. 휴식은 회복실 침대에서 무료로 HP·정신력을 회복합니다."])
     elif category == "아이템·보급":
         lines.append(ft.text("대상은 ", ft.token("command", "봐"), "로 확인할 수 있습니다."))
         lines.extend(["보급칩은 칩 단위로 옮기며, 판매는 장착하지 않은 물건만 취급합니다.",
@@ -94,7 +94,7 @@ def help_page(query, commands):
         from commands.shortcuts import parse_definition
 
         values = parse_definition(ARGUMENT_SHORTCUTS[query]).segments
-        if len(values) == 1 and isinstance(values[0][-1], str):
+        if len(values) == 1 and isinstance(values[0][-1], str) and values[0][-1].strip():
             target = values[0][-1].rsplit(None, 1)[-1].casefold()
             selected = next((cls for cls in commands if target in {cls.key.casefold(), *[a.casefold() for a in cls.aliases]}), None)
     if selected:
@@ -105,6 +105,8 @@ def help_page(query, commands):
                 lines.extend(["", ft.token("title", title)])
                 if title in ("사용법", "예시", "관련 도움말"):
                     lines.extend(ft.token("command", entry) for entry in entries)
+                    if title == "사용법" and selected.aliases:
+                        lines.append(ft.text("별칭: ", commands_text(selected.aliases)))
                 else:
                     lines.extend(ft.text("- ", entry) for entry in entries)
             return ft.compact(ft.token("command", selected.key), *lines)

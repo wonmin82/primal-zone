@@ -59,12 +59,27 @@ class CommandOverhaulSmoke(NativeItemTest):
         self.char1.leave_combat()
         self.char1.location = self.rooms["supply_shop"]
         corpses = [create_object("typeclasses.loot.Corpse", key="시험 시체", location=self.char1.location) for _ in range(2)]
-        for corpse in corpses:
+        from world import loot_service
+        from world.item_entities import api
+
+        self.char2.location = self.char1.location
+        for corpse, owner in zip(corpses, (self.char2, self.char1), strict=True):
             corpse.db.decay_at = 1000
-        self.assertNotIn("명령을 확인", self.raw("시2"))
+            loot_service.populate_source(corpse, [])
+            row = api.create_item("bandage", quantity=2, location_kind="corpse_loot", owner_object=corpse)
+            loot_service.create_claim(row, reserved_player=owner, assigned_player=owner, protection_until=1000)
+        inventory = dict(self.char1.profile_snapshot()["inventory"])
+        self.raw("시")
+        self.assertEqual(inventory, self.char1.profile_snapshot()["inventory"])
+        self.raw("시2")
+        self.assertEqual(self.char1.profile_snapshot()["inventory"].get("bandage"), 2)
         self.assertIn("추가했습니다", self.raw("사냥준비 점수, 장비 해 준말"))
         self.assertIn("체력", self.raw("사냥준비"))
         self.assertIn("사용법", self.raw("보 도움"))
+        from commands.aliases import ARGUMENT_SHORTCUTS
+        with patch.dict(ARGUMENT_SHORTCUTS, {"회수": "$* 가져"}):
+            self.assertEqual(help_page("회수", COMMANDS), help_page("가져", COMMANDS))
+        self.assertEqual(help_page("시2", COMMANDS), help_page("가져", COMMANDS))
         titles = ["사용법", "예시", "실행 규칙", "제한", "관련 도움말"]
         for cls in COMMANDS:
             if cls.key in ("봐", "출구", "도움", "점수", "가진거", "때려", "목록", "사", "팔아", "쏴", "지도", "경험치", "장비", "착용", "벗어", "가져", "줄임말", "가치"):
@@ -79,7 +94,7 @@ class CommandOverhaulSmoke(NativeItemTest):
         self.assertEqual(converted["애매"], old["애매"])
         self.assertEqual(converted["정보조회"], "점수")
         self.assertEqual(converted, migrate_safe_shortcuts(converted, migrate_command_overhaul_shortcuts))
-        self.assertEqual(rules.PROFILE_VERSION, 11)
+        self.assertEqual(rules.PROFILE_VERSION, 12)
 
 
     def test_phase_b(self):
@@ -100,3 +115,77 @@ class CommandOverhaulSmoke(NativeItemTest):
         self.assertNotIn("레벨·HP/SP", self.raw("정보 도움"))
         self.assertIn("대상", self.raw("정찰권총 3 정보"))
         self.assertEqual(before, self.atomic_state())
+
+
+    def test_phase_c(self):
+        from evennia import search_tag
+        from typeclasses.interactables import INTERACTABLES
+        from world.content.integrity import errors
+
+        self.char1.location = self.rooms["infirmary"]
+        maximum = rules.stats(self.char1.profile_snapshot())["max_hp"]
+        self.char1.change(lambda p: p.update(hp=maximum - 20, credits=100, mental=10))
+        self.assertIn("예상 비용", self.raw("의무관 봐"))
+        with patch("typeclasses.explorers.time", return_value=200):
+            self.assertIn("HP 20 회복", self.raw("회복"))
+        self.assertEqual((self.char1.profile_snapshot()["hp"], self.char1.profile_snapshot()["credits"], self.char1.profile_snapshot()["mental"]), (maximum, 95, 10))
+        self.char1.change(lambda p: p.update(hp=maximum - 30, credits=100))
+        self.assertIn("HP 20 회복", self.raw("의무관에게 20 회복"))
+        self.assertEqual((self.char1.profile_snapshot()["hp"], self.char1.profile_snapshot()["credits"]), (maximum - 10, 95))
+        self.char1.change(lambda p: p.update(credits=0))
+        before = deepcopy(self.atomic_state())
+        self.assertIn("부족", self.raw("20 회복"))
+        self.assertEqual(before, self.atomic_state())
+        for raw in ("0 회복", "-2 회복", "1.5 회복", "99999999999999999999 회복", "의무관에게 x 회복"):
+            self.assertIn("정수", self.raw(raw))
+            self.assertEqual(before, self.atomic_state())
+        self.char1.change(lambda p: p.update(credits=100))
+        before = deepcopy(self.atomic_state())
+        original = self.char1.save_profile
+        def fail_save(profile):
+            original(profile)
+            raise RuntimeError("저장 실패")
+        from commands.world_actions import Treat
+        command = Treat()
+        command.caller, command.args = self.char1, "20"
+        with patch.object(self.char1, "save_profile", side_effect=fail_save), self.assertRaises(RuntimeError):
+            command.run()
+        self.assertEqual(before, self.atomic_state())
+        bed = search_tag("infirmary_bed", category="primal_interactable")[0]
+        stable = bed.pk
+        # 구 DB 위치에서 반복 bootstrap을 수행해 같은 객체만 이동함을 확인한다.
+        bed.location = self.rooms["infirmary"]
+        for _ in range(2):
+            build_world()
+            self.assertEqual([obj.pk for obj in search_tag("infirmary_bed", category="primal_interactable")], [stable])
+            self.assertEqual(bed.location, self.rooms["recovery_room"])
+        from world.content import ITEMS
+        with patch.dict(ITEMS, {key: value for key, value in ITEMS.items() if key != "test_pistol"}, clear=True):
+            self.assertEqual(errors(INTERACTABLES), [])
+        self.char1.location = self.rooms["recovery_room"]
+        credits = self.char1.profile_snapshot()["credits"]
+        self.assertIn("체력과 정신력을 모두 회복", self.raw("휴식"))
+        profile = self.char1.profile_snapshot()
+        self.assertEqual((profile["hp"], profile["mental"], profile["credits"]), (maximum, rules.stats(profile)["max_mental"], credits))
+        self.assertIn("2*H", self.raw("회복 도움"))
+        self.assertIn("명령을 확인", self.raw("진료"))
+        old = rules.new_profile()
+        old.update(version=7, command_shortcuts={"응급": ["회복"], "의료": ["진료"], "전투": ["사격"], "인사": ["진료 사격 말"]})
+        migrated = rules.migrate_profile(old)
+        self.assertEqual(migrated["command_shortcuts"], {"응급": "붕대 사용", "의료": "회복", "전투": "쏴", "인사": "진료 사격 말"})
+        self.assertEqual(rules.migrate_profile(migrated), migrated)
+        v11 = rules.new_profile()
+        v11.update(version=11, command_shortcuts={"응급": "회복", "애매": "붕대 정보", "의료": "진료"})
+        moved = rules.migrate_profile(v11)["command_shortcuts"]
+        self.assertEqual(moved["응급"], "붕대 사용")
+        self.assertEqual(moved["의료"], "회복")
+        self.assertEqual(moved["애매"]["원본"], "붕대 정보")
+        self.assertIn("재등록", moved["애매"]["문제"])
+        migrated["command_shortcuts"]["의료"] = "회복"
+        self.assertEqual(rules.migrate_profile(migrated)["command_shortcuts"]["의료"], "회복")
+        for level, expected in ((10, 5), (50, 9), (99, 14), (100, 24)):
+            profile = rules.new_profile()
+            profile.update(xp=rules.xp_threshold(level), hp=1)
+            self.assertEqual(rules.treatment_quote(profile, 20, safe=True), (20, expected))
+        profile.update(xp=rules.xp_threshold(10))
+        self.assertEqual(rules.treatment_quote(profile, 5, safe=True), (5, 2))
