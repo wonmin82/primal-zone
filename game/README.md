@@ -23,7 +23,7 @@ To start the server, stand in this directory and run
 
     evennia start
 
-프로젝트의 실제 설치·실행 절차는 [루트 README](../README.md#실행)를 따른다.
+프로젝트의 빠른 실행은 [루트 README](../README.md#빠른-시작), 설치·서버 운영은 [설치 안내](../docs/installation.md)를 따른다.
 기본 Telnet은 TCP 8700, 게임 Web 화면은 `http://localhost:8701/webclient/`다.
 접속 서비스는 모든 IPv4 인터페이스에 bind하므로 LAN 접근과 키 관리 정책도 해당 안내를 확인한다.
 

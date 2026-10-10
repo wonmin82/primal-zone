@@ -1,4 +1,78 @@
+# 원시구역 개발 작업 및 검증 이력
+
+## PR #43 — README·플레이 가이드 최종 마감 (2026-10-10, 병합 전 기록)
+
+- [PR #43](https://github.com/wonmin82/primal-zone/pull/43)의 README 재구성·[공식 플레이 가이드](gameplay.md) 분리·관련 설계/운영 문서 정합성 수정을 완료했다. 최종 README는 원본 496줄에서 204줄로 정리했고, gameplay는 494줄·15개 안내 절이다. 기존 정보 보존 표는 [최초 정리 기록](#원본-readme-정보-보존-대조)에 유지한다. 유효한 정보는 README·gameplay·연결된 상세 문서·historical 이력에서 확인할 수 있다.
+- 최종 변경 범위는 README, gameplay, 이 문서, playtest, architecture, equipment, final-content, installation, item-entities, game/README의 Markdown 10개다. 게임 소스·명령·콘텐츠·밸런스·DB schema·테스트 assertion·CI·의존성 변경은 없다. 현재 개인 줄임말 v1.14·프로필 v11과 native ItemEntity 정책을 유지하며, 과거 버전·가격·실패·미실행 기록은 당시 근거로 보존한다.
+- 대화 리뷰의 P2(하단에 모인 기존 앵커)와 P3(`개발` 위치)를 `fa8d6ff458c9de543650ac5c213430300b0bdd6b`에서 해결했다. 원본 주요 앵커 21개를 보존하고, 상세 플레이 앵커 13개는 이름과 해당 가이드 절 링크가 함께 있는 개별 표 행으로 연결한다. `현재-구현`·`실행`·`개발`·`기술과-데이터`는 대응 제목 바로 앞이다. `#개발`과 `#개발-및-테스트` 모두 개발·테스트 시작으로 연결된다.
+- 마감 커밋 `20e165117239326858d0734107bad8f3364bfea5`의 실제 GitHub HTML 추가 검사에서 playtest의 기존 `계단승강기와-출구-인터페이스-통합-2026-10-09` 명시적 ID와 자동 제목 ID 충돌 1건을 발견했다. main·이전 source에도 있던 중복이며, 병합을 보류하고 중복 명시적 앵커만 제거했다. 같은 ID의 자동 제목 앵커가 기존 참조를 유지하고 과거 실행 본문은 변경하지 않는다. 새 수정 HEAD의 문서·CI 검증을 병합 조건으로 둔다.
+- 문서 마감 검증은 [PR #43 검증 기록](playtest.md#pr-43-readme플레이-가이드-최종-문서-검증-2026-10-10)을 따른다. Markdown 렌더링·상대경로·자동/명시적 앵커·기존 링크 호환성·목적지 의미·정보 보존·`git diff --check`를 확인했다. GitHub의 실제 렌더 HTML에서 README 자동 ID 11개·명시적 ID 17개, gameplay 자동 ID 29개와 안내 표 목적지를 확인했고 중복·충돌은 없다.
+- 마감 시작 시 source는 위 `fa8d6ff`, base main은 `f50d940d6222e73eda4e5404c312d61b134f1ad4`였다. 해당 source의 [CI 38026673678](https://github.com/wonmin82/primal-zone/actions/runs/38026673678)는 코드 검사·병렬 게임 테스트·smoke 모두 성공했다. 이 결과는 마감 문서 커밋 이전 HEAD의 CI이며, 새 HEAD의 성공으로 대신하지 않는다. 이번 로컬 전체 게임 검사·smoke·브라우저 클릭·OS IME·정적 수집은 문서 전용 변경으로 미실행했다. 명령·수치의 기존 정적 대조는 동일 코드/본문임을 확인해 재사용했다.
+- 병합 전 조회에서 PR은 OPEN·non-draft·MERGEABLE이며 GitHub 리뷰 및 미해결 스레드는 0개였다. main 보호 규칙은 최신 base 반영·필수 `test` 성공·대화 해결을 요구하고 필수 승인 수는 0개다. 최신 main을 이미 포함하며 미커밋·미푸시 변경이나 다른 worktree 사용은 없다. 확인된 미해결 문서 문제는 없다. PostgreSQL·multi-server·외부 production 운영과 macOS 실제 실행은 검증된 지원 범위가 아니다.
+- 사용자가 문서 마감 후 병합·소스 브랜치 삭제를 승인했다. 마감 커밋을 푸시하고 해당 최신 HEAD의 CI 성공·리뷰/보호 규칙·충돌·전체 diff·PR 본문을 다시 확인하면 병합한다. 저장소가 허용하는 기존 Merge commit 방식을 사용한다. **이 절은 병합 전 상태 기록이며 PR #43의 병합 SHA·시각·브랜치 삭제 완료를 선기록하지 않는다.** 실제 새 HEAD CI와 병합/main CI·정리 결과는 PR Validation 및 최종 보고에 기록한다.
+
+## 현재 기준과 PR #42 병합 완료 (2026-10-10)
+
+- [PR #42](https://github.com/wonmin82/primal-zone/pull/42)는 2026-10-10 12:49:53 KST(03:49:53 UTC)에 merge commit `f50d940d6222e73eda4e5404c312d61b134f1ad4`로 병합되었다. 개인 줄임말 v1.14·프로필 v11이 현재 main의 계약이다. 아래 Closeout의 병합 조건·승인 대기 표현은 당시 기록이며 현재 미완료 작업이 아니다.
+- 최종 source `ac1130c5d1f8d5f510799cc4921e2126b8fcdea1`의 [CI 38021535424](https://github.com/wonmin82/primal-zone/actions/runs/38021535424)와 merge main의 [CI 38021936000](https://github.com/wonmin82/primal-zone/actions/runs/38021936000)는 모두 success다. 2026-10-10 GitHub API/CLI로 재확인한 기존 결과이며 이번 문서 작업에서 실행한 로컬 검사로 표현하지 않는다.
+- 시작 시 `git fetch origin --prune` 후 local main·origin/main·GitHub main은 위 merge SHA로 일치했다. 작업 트리는 clean, local branch는 main만, worktree는 하나, 열린 PR은 0개였다. `codex/shortcut-v114-lazy-execution`은 local/remote 모두 삭제 완료다. 완료된 병합·검증·브랜치 삭제를 반복하지 않았다.
+- 플레이 안내는 [gameplay](gameplay.md), 현재 기술 계약은 [architecture](architecture.md), 개발·검증 실행 방법은 [playtest](playtest.md)를 따른다. 아래 과거의 미지원·실패·당시 수치·PR OPEN·병합 미실행 방침은 각 실행 시점의 사실로 보존한다.
+
+## README·플레이 문서 구조 정리 (2026-10-10)
+
+아래는 PR #43 최초 정리 시점의 범위·판단 기록이다. 기준 main은 위 `f50d940`이며 별도 `codex/docs-readme-gameplay`에서 문서만 편집했다. 당시에는 생성 후 리뷰 대상으로 남기고 자동 병합하지 않는 작업 범위였다. 현재 마감·병합 조건은 위 최종 마감 절을 따른다. 게임 코드·콘텐츠·테스트 assertion·schema·CI·의존성은 변경하지 않았다.
+
+### 편집 전 정보 분류
+
+| 분류 | 판단과 처리 |
+| --- | --- |
+| README 유지 | 소개·대표 기능·실행·기본 입력·개발 명령·지원 환경·데이터 보존·글꼴 출처 |
+| gameplay 이동 | 첫 사냥·선택자·회수·의료·정신력·성장·보관·경제·광원·본부·임무 경로 |
+| 기존 상세 문서 연결 | 줄임말 v1.14 제한·완료 계약, 저장/migration, 장비 modifier, 콘텐츠 가격, 테스트 격리·Quick/Full·CI 이력 |
+| 기존 문서 보완 | PR #42 실제 병합 결과·현재 v11 표기, README 정보의 보존 위치, 당시 슬롯 설계의 historical 구분 |
+| 중복 통합 | 여러 곳의 ItemEntity migration·정산소 경로·단축어·의료·상품 설명을 주제별 안내로 통합 |
+| 구현 재검증 | 초기 출구 경로·관찰/시야, 기술·총기·전리품 제한, 교관·의무실·상점 배치, 가격·명령 별칭 |
+
+### 원본 README 정보 보존 대조
+
+원본은 `f50d940:README.md` 496줄이다. 각 주요 절의 유효 정보는 아래 위치에서 접근할 수 있다. 중복 문장 제거는 정보 폐기가 아니며 과거 개발 완료·검증의 의미는 기존 audit·playtest·이 문서의 historical 기록에 유지한다.
+
+최초 정리 후 README는 199줄, 신규 gameplay는 494줄·15개 안내 절이었다. 이후 앵커 호환성 보완으로 README는 204줄이 되었으며 기존 본문·목차·명령·수치·문서 링크는 유지했다. README에는 설치·대표 조작·개발·문서 탐색을 남기고 gameplay에는 실제 입력·조건·결과를 모았다. 공식·데이터 모델·migration·상세 줄임말 계약은 기존 설계 문서로 연결한다.
+
+| 원본 주요 절 | 처리 | 확인 위치 |
+| --- | --- | --- |
+| 소개·V1 Phase 완료·미지원 범위 | 유지·기존 문서 연결 | README 소개/주요 기능, [Phase 7 audit](phase7-final-integration-audit.md), 아래 V1 이력 |
+| 현재 구현 | 유지·중복 통합 | README 기능 6범주, gameplay의 각 시스템·본부/지역 개요 |
+| 실행 | 유지·기존 문서 연결 | README 빠른 시작, installation의 포트·키·admin·데이터 보관, item-migration |
+| 명령과 도움말 | 유지·이동 | README 대표 입력, gameplay 명령·도움말·단축어·채팅 |
+| 첫 사냥 | 유지·이동 | README 첫 사냥, gameplay 첫 사냥·전투·본부·총기·착탈 |
+| 여러 명령과 개인 줄임말 | 유지·이동·기존 문서 연결 | README 대표 예, gameplay 사용·제한, command-shortcuts 전체 계약 |
+| 대상 선택과 전리품 회수 | 이동 | gameplay 입력/번호·탐색·전리품, loot-claims 저장 계약 |
+| 화폐와 회수 자원 정산 | 이동·중복 통합 | gameplay 칩 전달/부분 회수·상점/정산, final-content·architecture |
+| 본부 NPC 상점 | 이동 | gameplay 경제·본부, final-content catalog/가격, credentials-access-shops |
+| 출입증과 소각 | 이동 | gameplay 소각·출입증, credentials-access-shops |
+| 의료와 복귀 | 이동·중복 통합 | gameplay 체력/정신력/회복·귀환/패배 경로 |
+| 정신력과 자연회복 | 이동·기존 문서 연결 | gameplay 회복/재접속, progression·architecture 회복/prompt 계약 |
+| 성장과 재훈련 | 이동·기존 문서 연결 | gameplay 성장/교관/재훈련, progression의 수치·v10 정규화, command-shortcuts의 v11 |
+| 물건 사용과 보관 | 이동 | gameplay 장비/보관·회복, architecture 이전/소비/보관 |
+| 장비와 획득 경로 | 이동·기존 문서 연결 | gameplay 착탈/주무기/획득 안내, final-content 확정 표·equipment |
+| 두 번째 탐사 지역 | 이동 | gameplay 스포일러 표시 임무 경로·지도·신호전지, final-content·playtest |
+| 개발 | 유지·기존 문서 연결 | README 주요 명령·정적 수집, playtest 병렬/격리/Quick/Full/fixture/실패 기록 |
+| 기술과 데이터 | 유지·기존 문서 연결 | README 스택/글꼴/운영 경계, installation·architecture·PostgreSQL 계획 |
+| 탐사 기록과 정보 조회 | 이동·기존 문서 연결 | gameplay 조회/화면·기본 조작, architecture 색상/compact/prompt, text-examples |
+| 동적 환경·탐사 광원과 시설 조명 | 이동 | gameplay 환경/광원·발견, lighting-firearms·architecture 환경 계약 |
+
+### 현재 설명과 historical 구분
+
+- equipment·item-entities·architecture의 현재 프로필 v10 표기를 v11로 정정한다. Phase 2/3/6 및 성장 v10의 당시 정책은 별도 historical 문단·연결로 유지한다.
+- architecture의 현재 액티브 방어·고정 강타 cooldown·Telnet 비활성·legacy 두 슬롯 합산·스택 저장 설명을 실제 패시브/Rank·네트워크·ItemEntity snapshot/instance 계약과 맞춘다. 초기 슬롯별 설계 본문은 historical 절로 보존한다.
+- final-content의 현재 package 비교 표에서 5.56mm 20발 직접 구매값을 60→40칩으로 바로잡는다. Phase 6의 3칩/발 측정과 후속 2칩/발 조정 이력은 수정하지 않는다. 실제 가격·package·콘텐츠는 변경하지 않는다.
+- playtest의 현재 v11·3층 의무실·5층 병기점·교관 배치·실제 승강기 Exit·55/27칩 절단마체테·5칩 붕대 매입 안내를 바로잡는다. 옛 본부 연결·숙련/유료 학습·초기 장비 절차는 historical임을 표시하고 당시 실패·검증 결과는 보존한다.
+- installation·game README의 진입 링크는 실제 새 안내로 갱신하고 README의 이전 주요 앵커는 이동 안내와 함께 남긴다. Markdown 검증·명령 대조·이번 최종 HEAD CI의 실제 결과는 PR Validation에 기록한다. 문서-only이므로 로컬 전체 게임 테스트·smoke·브라우저·OS IME·정적 수집은 반복하지 않는다.
+
 ## PR #42 — v1.14 최종 문서 Closeout (2026-10-10)
+
+아래는 병합 전 시점의 Closeout 기록이다. 당시의 병합 조건·후속 확인 계획은 위 현재 결과로 완료되었다.
 
 - 개인 줄임말 v1.14 구현·코드 리뷰·최종 방어 테스트를 완료했다. 확인된 미해결 P0/P1/P2는 없다. [PR #42](https://github.com/wonmin82/primal-zone/pull/42)는 최종 문서 검증을 마쳤으며 새 문서 HEAD의 필수 CI 성공 확인을 병합 조건으로 둔다. 병합 결과 SHA·main CI·브랜치 정리는 실제 실행 후 최종 보고에 기록한다.
 - 재확인한 source HEAD는 `baf817213a1436a8d6367e4fe67cd6609f1fdeb4`, base main은 `f09c40f4ef9cee9390ddff93bbb01c5845df5ba5`다. 해당 exact-head [Game checks 38020408849](https://github.com/wonmin82/primal-zone/actions/runs/38020408849)는 check PASS, test SUCCESS(순수215개/1.276초·통합665개/414.740초), smoke SUCCESS(Quick44.298초)다. 이후 Closeout 변경은 문서만 포함한다.

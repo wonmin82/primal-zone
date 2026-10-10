@@ -4,7 +4,7 @@ Phase 6 현재 상태: cutover 후 일반 gameplay는 native ItemEntity만 사�
 
 ## 계산과 저장 경계
 
-`world.equipment_service`가 ItemEntity/Explorer Attribute를 조회하고, frozen `EquipmentItem`·`EquipmentSnapshot`을 제공한다. `world.equipment`, `world.modifiers`, `world.rules`, `world.progression`, `world.recovery`는 ORM·Evennia·네트워크를 import하지 않는다. `EquipmentProfile`은 한 작업에서 같은 snapshot을 사용하는 일시적인 dict context이며 저장할 때 일반 dict로 바꾼다. profile version은 10이고 profile schema migration은 없다. Phase 3의 ItemEntity magazine socket 제약 migration은 [영속 기반](item-entities.md)에 별도로 기록한다.
+`world.equipment_service`가 ItemEntity/Explorer Attribute를 조회하고, frozen `EquipmentItem`·`EquipmentSnapshot`을 제공한다. `world.equipment`, `world.modifiers`, `world.rules`, `world.progression`, `world.recovery`는 ORM·Evennia·네트워크를 import하지 않는다. `EquipmentProfile`은 한 작업에서 같은 snapshot을 사용하는 일시적인 dict context이며 저장할 때 일반 dict로 바꾼다. 현재 profile version은 11이며 [v11 줄임말 이전](command-shortcuts.md#프로필-v11과-구형-데이터)은 장비 저장 구조를 바꾸지 않는다. 장비 Phase 2 당시의 profile은 v10이었고 해당 단계에는 profile schema migration이 없었다. Phase 3의 ItemEntity magazine socket 제약 migration은 [영속 기반](item-entities.md)에 별도로 기록한다.
 
 현재 장비 authority는 native ItemEntity의 equipment 위치다. `equipment_snapshot()`과 active weapon UUID를 stats/combat/recovery/presentation/Web이 함께 사용한다. Archive profile equipment는 gameplay에서 읽거나 쓰지 않는다. 새 Explorer는 native로 직접 생성하고 기존 DB는 explicit maintenance migration 후에만 시작한다. Legacy adapter는 historical fixture/audit용이며 사용자 backend 전환·자동 변환·dual-write는 없다.
 

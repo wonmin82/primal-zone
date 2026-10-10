@@ -85,9 +85,9 @@ multiply modifier의 1.02는 +2%, penetration/reduction의 add 0.01은 +1%p다. 
 | 총기 | package | body 매입 | 표준 빈 탄창 매입 | 포함 ammo 매입 | 포함 ammo 직접 구매 |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | 정찰권총 | 108 | 30 | 12 | 12 | 24 |
-| 경비카빈 | 200 | 47 | 22 | 20 | 60 |
+| 경비카빈 | 200 | 47 | 22 | 20 | 40 |
 | 전술권총 | 143 | 47 | 12 | 12 | 24 |
-| 탐사카빈 | 245 | 70 | 22 | 20 | 60 |
+| 탐사카빈 | 245 | 70 | 22 | 20 | 40 |
 | 중량소총 | 257 | 87 | 25 | 16 | 32 |
 
 전 총기에 package > body resale + empty-mag resale + ammo resale와 package − body resale − empty-mag resale ≥ ammo direct purchase를 검증한다.
