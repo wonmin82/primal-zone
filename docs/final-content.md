@@ -144,7 +144,7 @@ world.test_final_content와 관련 pure regressions, tests.test_phase6_runtime/t
 
 정비용 회수부품은 stack/max_stack3, transferable=false, submit-only이며 shop 구매·매입·가치·drop·give·store·burn·consume 대상이 아니다. Alias는 정비부품/발전기부품이다. 획득처는 fixed discovery와 명시적인 미수리 migration entitlement다.
 
-Boss unique의 store=true는 개인 보관에만 유효하다. Shared Container는 다른 owner이므로 owner-changing transfer의 transferable 검사를 통과해야 한다. 내부 tree의 귀속 물품도 검사한다. First final report 메시지는 실제 신규 지급한 unique 이름을 표시하며 반복 대화나 Credential 재발급에서 unique 지급을 다시 안내하지 않는다.
+Boss unique의 store=true는 개인 보관에만 유효하다. Shared Container는 다른 owner이므로 owner-changing transfer의 transferable 검사를 통과해야 한다. 내부 tree의 귀속 물품도 검사한다. First final report 메시지는 실제 신규 지급한 unique 이름을 표시하며 반복 `보고` 요청이나 Credential `재발급`에서 unique 지급을 다시 안내하지 않는다.
 
 기존 supply/jungle cache 완료 캐릭터의 탐사인식표/정신안정모듈은 owner tree에 없을 때 Explorer migration source transaction에서 소급한다. 이미 보유한 UUID/sequence를 유지한다. Full/idle alive 적은 콘텐츠 max HP 변경 시 새 max 기준 full을 유지하고 damaged/combat 상태는 기존 HP를 clamp한다. Boss scaling 참가자 수와 확정 수치는 변경하지 않는다.
 

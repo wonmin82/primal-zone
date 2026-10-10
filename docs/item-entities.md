@@ -2,7 +2,7 @@
 
 ## Current Runtime Contract
 
-Phase 6 cutover 이후 일반 아이템의 runtime SSOT는 `world.item_entities.models.ItemEntity`다. 전리품은 ItemEntity/LootClaim과 CurrencyLoot/Share, 접근은 Credential Entity를 사용한다. legacy profile/blob은 운영 변환 후 보존하되 gameplay의 fallback/read/write 대상이 아니다. [운영 migration](item-migration.md), [최종 정의·가격·획득](final-content.md), [장비](equipment.md), [광원·총기](lighting-firearms.md)를 함께 따른다. 현재 profile version은 11이며 [v11 줄임말 이전](command-shortcuts.md#프로필-v11과-구형-데이터)은 아이템 schema를 바꾸지 않는다. Phase 6 당시의 profile은 v10이었고 해당 단계의 새 schema는 migration ledger/global marker였다.
+Phase 6 cutover 이후 일반 아이템의 runtime SSOT는 `world.item_entities.models.ItemEntity`다. 전리품은 ItemEntity/LootClaim과 CurrencyLoot/Share, 접근은 Credential Entity를 사용한다. legacy profile/blob은 운영 변환 후 보존하되 gameplay의 fallback/read/write 대상이 아니다. [운영 migration](item-migration.md), [최종 정의·가격·획득](final-content.md), [장비](equipment.md), [광원·총기](lighting-firearms.md)를 함께 따른다. 현재 profile version은 13이며 [v13 NPC 대화 이전](command-shortcuts.md#프로필-v13의-npc-대화-이전)은 아이템 schema를 바꾸지 않는다. Phase 6 당시의 profile은 v10이었고 해당 단계의 새 schema는 migration ledger/global marker였다.
 
 ## 정의와 모델
 

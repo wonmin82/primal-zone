@@ -1,5 +1,13 @@
 # 원시구역 개발 작업 및 검증 이력
 
+## Issue #47 — NPC 공개 대화·개인 메시지 구현
+
+- 구현 기준은 [Issue #47 v3.5 FINAL](https://github.com/wonmin82/primal-zone/issues/47)이다. Phase 47-A~E의 Intent SSOT·말/작은따옴표·엄격한 NPC 선택·공개 대사/개인 결과·3분 문맥·22개 NPC 발견 안내·웹 토큰/접근성·개인 메시지/차단·방법 B profile v13·도움말/문서를 반영했다. 기존 퀘스트·성장·장비·가격·회복·파티·전리품 규칙은 유지한다.
+- 현재 프로필 v13은 [구형 NPC 대화 이전](command-shortcuts.md#프로필-v13의-npc-대화-이전)을 추가한다. 구형 개인 NPC 안내와 공개 발화는 출력 의미가 달라 자동 동등 변환을 승인하지 않았다. 원본·비활성 이유·묶음/정적 참조 위험 전파·새 이름 충돌을 보존한다. v13 새 개인 `대화` 의미와 런타임 부분 완료 제한은 유지한다.
+- 실제 개발 중 검사·실패 및 보정은 [검증 기록](playtest.md#issue-47-npc-대화개인-메시지-검증)을 따른다. 최종 커밋 HEAD의 격리 Quick 통과 후 Push/PR 생성, 최신 HEAD 원격 전체 CI 확인을 필수 조건으로 둔다. 이 기록은 소스 마감 시점이며 미발생한 Push/CI 성공·병합·Issue 종료를 선기록하지 않는다. 실제 SHA·결과·CI 링크는 PR Validation에 남긴다.
+- 사용자 플레이 입력은 [gameplay](gameplay.md), 내부 서비스·이전 행동 전환표·공개/개인 저장 계약은 [npc-dialogue](npc-dialogue.md)에 모았다. 기존 문서의 역사적 NPC 대화·프로필 v10/v11/v12·실패·미실행 기록은 당시 근거로 유지한다. 아래 “현재 기준” 등은 각 과거 기록 시점의 표현이다.
+- PR을 병합하거나 브랜치/Issue를 정리하지 않는다. #48은 착수하지 않으며 실 브라우저·OS IME·Cross-Issue·다중 세션 수동 E2E·장기 재시작 검증은 #50에 남긴다.
+
 ## PR #43 — README·플레이 가이드 최종 마감 (2026-10-10, 병합 전 기록)
 
 - [PR #43](https://github.com/wonmin82/primal-zone/pull/43)의 README 재구성·[공식 플레이 가이드](gameplay.md) 분리·관련 설계/운영 문서 정합성 수정을 완료했다. 최종 README는 원본 496줄에서 204줄로 정리했고, gameplay는 494줄·15개 안내 절이다. 기존 정보 보존 표는 [최초 정리 기록](#원본-readme-정보-보존-대조)에 유지한다. 유효한 정보는 README·gameplay·연결된 상세 문서·historical 이력에서 확인할 수 있다.
