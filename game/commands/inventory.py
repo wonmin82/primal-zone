@@ -171,3 +171,30 @@ class ActiveWeapon(GameCommand):
         item = resolve_item(self.caller, self.args, self.key)
         set_active_weapon(self.caller, item)
         self.caller.msg("주무기를 지정했다.")
+
+
+class ItemInformation(GameCommand):
+    key = "정보"
+    aliases = []
+    category = "아이템·보급"
+    input_style = "target"
+    read_only = True
+    usage = "정찰권총 정보 · 정찰권총 2 정보 · 붕대 정보"
+    summary = "소지·장착 중인 실제 아이템의 공개 속성과 현재 상태를 조회합니다."
+    help_sections = (
+        ("사용법", (usage,)),
+        ("예시", ("정찰권총 정보", "정찰권총 2 정보", "탐사용손전등 정보", "붕대 정보")),
+        ("실행 규칙", ("본인의 ItemEntity만 읽기 전용으로 조회합니다. 이름·번호로 하나를 선택합니다.",
+                      "정의된 기준 가격·장비 modifier·탄창 잔탄·광원 상태·거래 제한을 표시합니다.")),
+        ("제한", ("타인의 소지품·내부 관리 ID·숨겨진 임무 조건은 공개하지 않습니다.",
+                "조회는 프로필·수량·장비·보급칩·잔탄·배터리를 변경하지 않습니다. 실제 거래가는 가치·얼마로 확인하세요.")),
+        ("관련 도움말", ("봐 도움", "장비 도움", "가치 도움")),
+    )
+
+    def func(self):
+        from world.item_information import item_information
+
+        try:
+            self.caller.msg(item_information(self.caller, self.args))
+        except rules.RuleError as error:
+            self.caller.msg(ft.token("error", str(error)))

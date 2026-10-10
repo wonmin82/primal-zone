@@ -214,7 +214,8 @@ def inventory_rows(profile):
         active = selected.active is not None and (
             selected.active.identity == item.identity if selected.source == "item_entities"
             else selected.active.definition_id == item.definition_id)
-        rows.append({"id": item.definition_id, "name": item.name, "selector": selected.label(item),
+        rows.append({"information_command": selected.label(item) + " 정보" if selected.source == "item_entities" else None,
+                     "id": item.definition_id, "name": item.name, "selector": selected.label(item),
                      "count": item.quantity, "slot": item.slot or data.get("slot"),
                      "equip_action": item.equip_action if item.slot else None,
                      "remove_action": item.remove_action if item.slot else None,

@@ -80,3 +80,23 @@ class CommandOverhaulSmoke(NativeItemTest):
         self.assertEqual(converted["정보조회"], "점수")
         self.assertEqual(converted, migrate_safe_shortcuts(converted, migrate_command_overhaul_shortcuts))
         self.assertEqual(rules.PROFILE_VERSION, 11)
+
+
+    def test_phase_b(self):
+        gun = firearm_service.create_firearm("scout_pistol", owner_object=self.char1, mode="partial", rounds=7)
+        equipment_service.equip_item(self.char1, gun, "weapon")
+        firearm_service.create_firearm("scout_pistol", owner_object=self.char1, mode="empty")
+        self.create("bandage", quantity=2)
+        self.create("flashlight")
+        before = deepcopy(self.atomic_state())
+        saved = deepcopy(dict(self.char1.db.profile))
+        for raw, expected in (("정찰권총 정보", "7/12"), ("정찰권총 2 정보", "0/12"),
+                              ("9mm 표준탄창 정보", "잔탄 7발"), ("붕대 정보", "기준 구매가"),
+                              ("탐사용손전등 정보", "꺼짐")):
+            self.assertIn(expected, self.raw(raw))
+            self.assertEqual(before, self.atomic_state())
+            self.assertEqual(saved, dict(self.char1.db.profile))
+        self.assertIn("아이템", self.raw("정보 도움"))
+        self.assertNotIn("레벨·HP/SP", self.raw("정보 도움"))
+        self.assertIn("대상", self.raw("정찰권총 3 정보"))
+        self.assertEqual(before, self.atomic_state())

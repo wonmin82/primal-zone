@@ -214,7 +214,7 @@ class Status(GameCommand):
     usage = "점수"
     summary = "레벨·체력·전투 수치·특성을 확인합니다."
     key = "점수"
-    aliases = ["상태", "상", "점", "정보"]
+    aliases = ["상태", "상", "점"]
 
     def run(self):
         self.caller.msg(view.status(self.caller.key, self.caller.profile()))

@@ -236,6 +236,7 @@
       } else if (item.equip_action) row.append(button(item.equip_action, selector + " " + item.equip_action));
       else if (item.consume_action) row.append(button(item.consume_action, item.name + " " + item.consume_action));
       else if (item.id === "bandage") row.append(button("사용", "붕대 사용"));
+      if (item.information_command) row.append(button("정보", item.information_command));
       if (item.light_source) {
         const active = observation?.light_source?.name === selector && observation.light_source.active;
         row.append(button(active ? "끄기" : "켜기", selector + (active ? " 꺼" : " 켜")), button("확인", selector + " 확인"));
