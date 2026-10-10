@@ -63,7 +63,7 @@ Web command echo는 별도 `› 명령` entry가 아니다. 마지막 entry가 �
 
 ## 보급칩 경제와 전리품 자산
 
-`world/content/economy.py`의 CURRENCY는 id=credits·이름=보급칩·단위=칩·별칭·설명의 SSOT다. `world/currency.py`의 format_currency는 127칩을 만들며 profile의 credits 숫자를 유지한다. 최신 profile version은 10이다. 화폐는 ITEMS나 inventory에 넣지 않는다. Web은 서버의 currency metadata/formatted/전리품 display_label과 take_command를 표시한다. take_target은 칩/칩 2 같은 명령 선택자, display_label은 8칩 같은 표시 문자열이며 화면 문자열을 재해석해 명령을 만들지 않는다.
+`world/content/economy.py`의 CURRENCY는 id=credits·이름=보급칩·단위=칩·별칭·설명의 SSOT다. `world/currency.py`의 format_currency는 127칩을 만들며 profile의 credits 숫자를 유지한다. 현재 profile version은 11이며 v10의 화폐 저장 방식을 유지한다. 화폐는 ITEMS나 inventory에 넣지 않는다. Web은 서버의 currency metadata/formatted/전리품 display_label과 take_command를 표시한다. take_target은 칩/칩 2 같은 명령 선택자, display_label은 8칩 같은 표시 문자열이며 화면 문자열을 재해석해 명령을 만들지 않는다.
 
 `world.loot_service`가 모델을 backend-neutral snapshot으로 제공한다. ItemEntity root와 LootClaim, CurrencyLoot/Share가 authoritative하며 legacy normalize_entry는 migration·historical 호환용이다. snapshot.as_entry의 eligible_players/remaining_shares는 share rows에서 파생한 pure 계산 입력이며 CurrencyLoot에 중복 저장하지 않는다. 조회는 DB를 변경하지 않는다.
 
@@ -298,7 +298,7 @@ Enemy가 HP/max HP, alive/respawning 상태, respawn_at, claim, claim_last_activ
 
 각 탐사자의 공격은 자신의 타이머로 약 2.5초마다 실행된다. Enemy도 별도 타이머 하나로 약 2.5초마다 한 명을 공격한다. 탐사자 수나 공격 명령 반복에 따라 적의 반격 횟수가 증가하지 않는다. 타이머 중복 방지와 영속 next_attack_at 검사로 입력 반복이나 지연된 콜백의 추가 공격을 막는다. 밀린 차례를 한꺼번에 실행하지 않는다.
 
-위협도는 실제 깎은 HP만큼 증가한다. 적은 같은 방·접속 중·해당 적을 공격 중인 탐사자 중 위협도가 가장 높은 사람을 선택하고 동률은 캐릭터 ID 순서로 해결한다. 강타는 7.5초 재사용 대기시간, 회복은 다음 개인 공격을 대체하며, 방어는 개인 공격을 유지하고 다음 공격 간격 동안 받는 피해를 줄인다.
+위협도는 실제 깎은 HP만큼 증가한다. 적은 같은 방·접속 중·해당 적을 공격 중인 탐사자 중 위협도가 가장 높은 사람을 선택하고 동률은 캐릭터 ID 순서로 해결한다. 강타의 재사용 대기는 Rank에 따라 7.5/7/6.5초다. 전투 중 치료·호흡·붕대·간파는 다음 개인 공격을 대체하며 방어는 패시브다. 액티브 방어는 제공하지 않는다. 기술별 계약은 [성장·전투 설계](progression.md#기술-공식과-행동-기회)를 따른다.
 
 보스의 예고/돌진은 공유 enemy_round를 따른다. 능선 보스는 2·5차례에 예고하고 3·6차례에 돌진하며 밀림 보스는 3·7차례에 예고하고 4·8차례에 돌진한다. 주기는 Enemy 정의의 `special_period`를 사용한다. 도망·패배·접속 종료·장소 이탈 시 전투 소속과 위협도·기여도를 정리한다. 일반 이동은 전투 중 거부하며, 강제 이동도 이동 후 정리한다. 패배 시 장비·경험치·소지품·진행은 보존하고 최대 10칩을 잃으며 의무실에서 체력 1로 의식을 되찾는다. 일반 치료·휴식은 이후 플레이어가 직접 사용한다.
 
@@ -336,7 +336,9 @@ Production 기본값은 world/timing.py, 실행 설정의 해석·사용은 worl
 
 ## 기존 데이터와 운영 범위
 
-profile version은 10이며 `rules.migrate_profile()`은 과거 성장·임무·discovery·명령 설정을 사본에서 정규화하는 pure helper다. ItemEntity로 아이템을 생성하거나 world source를 전환하는 함수가 아니다. XP/HP/credits/quest와 성장 호환은 [성장 설계](progression.md)를 따르고, legacy item 필드는 별도 archive로 보존한다.
+현재 profile version은 11이며 `rules.migrate_profile()`은 과거 성장·임무·discovery·명령 설정을 사본에서 정규화하는 pure helper다. v10의 성장 정규화와 v11의 안전한 줄임말 문자열 이전을 유지한다. ItemEntity로 아이템을 생성하거나 world source를 전환하는 함수가 아니다. XP/HP/credits/quest와 성장 호환은 [성장 설계](progression.md)를 따르고, legacy item 필드는 별도 archive로 보존한다.
+
+구형 개인 교전의 적 HP는 공유 Enemy로 이관하지 않는다. 성장·장비·소지품·임무 기록의 보존과 개인 전투 상태의 호환은 profile 정규화와 명시적 아이템 migration의 경계를 구분해 처리한다.
 
 기존 DB의 inventory/equipment/storage/container/loot/currency/light/reference/entitlement 전환은 versioned `item_migration`의 explicit maintenance workflow다. 전체 source apply/verify 이후 cutover해야 일반 gameplay를 시작할 수 있다. Profile 정규화가 로그인 시 item lazy migration이나 legacy gameplay fallback을 허용하지 않는다. 정확한 source 범위·ledger·retry는 [item-migration](item-migration.md)을 따른다.
 
@@ -358,7 +360,7 @@ profile version은 10이며 `rules.migrate_profile()`은 과거 성장·임무·
 
 웹 경로는 `Explorer.msg(Text)` → `pz_log` → 허용된 role의 `<span>` → `textContent`다. 이름·대사·아이템·입력의 내용은 항상 텍스트이며 링크나 HTML로 해석하지 않는다. raw 전송으로 Evennia inline function 치환도 차단한다. 일반 인증·관리 출력은 기존 `text`/`plainText()` 경로를 유지한다. 기존 inert template는 웹으로 받은 레거시 출력에서 문자만 추출하며 live DOM에 넣지 않는다. command echo는 입력 전체를 기존 스타일로 보여주고 클라이언트 명령 parser를 추가하지 않는다.
 
-웹 팔레트는 `primal.css`의 `--semantic-*` 변수 한 곳에서 관리한다. semantic role과 실제 색상은 1:1이 아니며 플레이어/행동/성공, 객체/보상/경고는 같은 색을 공유한다. 장비도 일반 아이템과 같은 색을 쓰고 `[착용]`으로 상태를 구분한다. 비웹 세션은 같은 조각을 이스케이프한 후 ANSI 근사색으로 변환한다. 사용자 ESC 제어문자는 제거하고 `|`는 literal로 처리한다. 기본 서버 설정은 Telnet을 비활성화한 상태다.
+웹 팔레트는 `primal.css`의 `--semantic-*` 변수 한 곳에서 관리한다. semantic role과 실제 색상은 1:1이 아니며 플레이어/행동/성공, 객체/보상/경고는 같은 색을 공유한다. 장비도 일반 아이템과 같은 색을 쓰고 `[착용]`으로 상태를 구분한다. 비웹 세션은 같은 조각을 이스케이프한 후 ANSI 근사색으로 변환한다. 사용자 ESC 제어문자는 제거하고 `|`는 literal로 처리한다. 현재 기본 설정은 Telnet 8700을 활성화하며 평문·네트워크 노출 정책은 [설치 안내](installation.md#네트워크와-자동-생성-키)를 따른다.
 
 | 역할 | 실제 웹 색 | 의미 |
 | --- | --- | --- |
@@ -401,15 +403,15 @@ Room `requires.message`는 이동 실패 안내, optional `requires.observe_mess
 
 ### 슬롯별 무장과 착용
 
-`ITEMS[id].slot`이 장비 종류의 단일 출처다. `EQUIPMENT_ACTIONS`는 슬롯을 행동에 대응하며 `weapon → 무장`, `armor → 착용`이다. `Wield`와 `Equip`은 같은 구현을 사용하고 `rules.equip(profile, item_id, expected_slot)`에 기대 슬롯만 전달한다. 모든 검증은 저장 전에 끝나며 다른 슬롯·소지 수량·진행 상태는 바꾸지 않는다. 내부 규칙 호출은 expected_slot 생략 시 기존 공통 장착을 지원하지만 사용자 `equip` 별칭은 제거했다. parser는 변경하지 않았다.
+정의의 `equipment_properties`가 최종 슬롯·손 사용량·역할을 소유한다. 사용자 행동은 weapon → `무장`, shield/offhand 및 착용 장비 → `착용`이다. `Wield`와 `Equip`은 같은 명령 구현에서 실제 instance를 선택하고 `equipment_service.equip_item()`에 기대 종류를 전달한다. 공통 Entity API가 소유권·슬롯·손 조합을 검증하고 같은 아이템을 equipment 위치로 옮긴다. 자동 교체는 없고 사용자 `equip` 별칭은 지원하지 않는다.
 
-대상 보기와 `pz_state.inventory[].equip_action`도 이 슬롯 대응을 사용한다. 웹은 전달된 행동을 기존 텍스트 명령 버튼으로 전송하며 장비 이름 목록을 따로 관리하지 않는다. `stats()`와 장비 화면은 양쪽 슬롯의 공격·방어를 모두 합산하므로 사냥창의 방어와 경량전술조끼의 공격도 적용된다.
+대상 보기와 `pz_state.inventory[].equip_action`도 같은 종류 대응을 사용한다. 웹은 전달된 행동을 텍스트 명령 버튼으로 전송하며 장비 이름 목록을 따로 관리하지 않는다. `stats()`·전투·장비 화면은 같은 EquipmentSnapshot을 사용한다. 기본 무기 공격은 주무기 하나만 적용하고 equipped 범위의 passive modifier는 다른 장착품도 적용한다. 상세 계산과 주무기 선택은 [장비 계약](equipment.md)을 따른다.
 
-장비 수치·보급칩 구매·드롭 경로는 [README 장비 표](../README.md#장비와-획득-경로)를 따른다. 두 번째 지역도 기존 장비를 활용하며 새 무기·방어구를 추가하지 않는다. 기존 장비 ID와 획득 경로를 유지한다.
+현재 장비 수치·보급칩 구매·드롭 경로는 [최종 콘텐츠](final-content.md)를 따른다. 초기 두 지역이 같은 legacy 장비를 활용하던 기록은 아래 Historical 경계이며 최종 T0/T1/T2 콘텐츠를 제한하지 않는다. 실제 착탈·보관 입력은 [플레이 가이드](gameplay.md#장비아이템보관)에 정리한다.
 
 ## 아이템 이전·소비·보관
 
-소지품과 보관 공간은 `item_id → quantity` 스택이다. `world.targets.stack_selector()`는 기존 DEFAULT/ALL을 재사용하고 inventory INDEX와 숫자 수량을 거절한다. `parse_relation()`이 `에게`/`에`/`에서`의 경계를 추출한 뒤 기존 selector와 room ordering으로 플레이어/상자 하나를 선택한다. 여러 플레이어·상자 동시 이전은 지원하지 않는다.
+소지품과 보관의 일반 실물은 ItemEntity이며 stack 수량과 개별 instance를 구분한다. native transfer는 공통 DEFAULT/INDEX/ALL로 기본 한 개·번호 지정·같은 종류 전부를 선택한다. `parse_relation()`이 `에게`/`에`/`에서`의 경계를 추출한 뒤 같은 방의 플레이어/상자 하나를 선택한다. 여러 플레이어·상자 동시 이전은 지원하지 않는다. `N개`는 정산·스택 판매·소각 문법이며 이전·보관에는 적용하지 않는다. legacy `item_id → quantity`와 stack_selector는 아래 historical adapter 경계다.
 
 `world.item_transfer_native`는 공통 Entity API/world_change를 사용해 사용자 버리기·give·personal/shared storage를 처리한다. operation policy를 유지하고 owner-changing transfer에는 root와 descendants의 transferable=true를 요구한다. 같은 owner 개인 보관은 ownership transfer가 아니므로 Boss unique는 개인 보관 가능, 공용 보관/give는 불가하다. 실패 시 row·profile·참조·회복과 Evennia 캐시를 rollback한다. legacy rules.move_item은 정상 gameplay SSOT가 아니다.
 
@@ -527,6 +529,16 @@ Restart는 harness가 소유한 foreground Portal과 Server를 모두 종료하�
 ## Historical Phase 1~5 implementation notes
 
 아래는 당시 구현 범위와 결정의 기록이다. 현재 backend·가격·획득·설치 판단은 위 현재 계약과 final-content/item-migration을 따른다. 당시의 미구현·후속 단계 표현은 현재 미구현 상태를 뜻하지 않는다.
+
+### Historical 슬롯별 무장과 착용
+
+아래는 최종 ItemEntity 장비·T0/T1/T2 콘텐츠 이전의 설계 기록이다. 당시 두 슬롯 계산과 예시 이름·획득 정책을 보존하며 현재 장비 계약을 제한하지 않는다.
+
+`ITEMS[id].slot`이 장비 종류의 단일 출처다. `EQUIPMENT_ACTIONS`는 슬롯을 행동에 대응하며 `weapon → 무장`, `armor → 착용`이다. `Wield`와 `Equip`은 같은 구현을 사용하고 `rules.equip(profile, item_id, expected_slot)`에 기대 슬롯만 전달한다. 모든 검증은 저장 전에 끝나며 다른 슬롯·소지 수량·진행 상태는 바꾸지 않는다. 내부 규칙 호출은 expected_slot 생략 시 기존 공통 장착을 지원하지만 사용자 `equip` 별칭은 제거했다. parser는 변경하지 않았다.
+
+대상 보기와 `pz_state.inventory[].equip_action`도 이 슬롯 대응을 사용한다. 웹은 전달된 행동을 기존 텍스트 명령 버튼으로 전송하며 장비 이름 목록을 따로 관리하지 않는다. `stats()`와 장비 화면은 양쪽 슬롯의 공격·방어를 모두 합산하므로 사냥창의 방어와 경량전술조끼의 공격도 적용된다.
+
+장비 수치·보급칩 구매·드롭 경로는 당시 README 장비 표를 따른다. 두 번째 지역도 기존 장비를 활용하며 새 무기·방어구를 추가하지 않는다. 기존 장비 ID와 획득 경로를 유지한다.
 
 ## Phase 5 출입증·접근·거래 경계
 
