@@ -46,7 +46,7 @@ class ServiceRelocationTests(WorldCommandTest):
         state = multiplayer_state(self.char1)
         self.assertEqual({obj["name"] for obj in state["interactables"]}, {"보관상자", "개인 보관함"})
         for name in ("보관상자", "개인 보관함"):
-            self.assertIn(name, self.command("보기"))
+            self.assertIn(name, self.command("봐"))
             self.command(f"{name}에 붕대 넣어")
             self.command(f"{name}에서 붕대 꺼내")
         self.assertEqual(self.char1.profile()["inventory"]["bandage"], 3)

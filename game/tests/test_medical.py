@@ -131,7 +131,7 @@ class MedicalCommandsTests(WorldCommandTest):
         self.assertIn("의무관", appearance)
         self.assertIn("침대", appearance)
         self.char1.location = self.rooms["support_3f_c"]
-        distant = self.command("북 보기")
+        distant = self.command("북 봐")
         self.assertNotIn("의무관 진료", distant)
         self.assertNotIn("침대 휴식", distant)
         self.char1.location = self.rooms["dock"]
@@ -156,7 +156,7 @@ class MedicalCommandsTests(WorldCommandTest):
         for raw in ("남", "승강기", "2층", "북"):
             self.command(raw)
         self.assertEqual(self.char1.zone, "supply_shop")
-        self.command("붕대 구매")
+        self.command("붕대 사")
         self.assertEqual(self.char1.profile()["inventory"]["bandage"], 4)
         for raw in ("남", "승강기", "1층", "서", "북"):
             self.command(raw)

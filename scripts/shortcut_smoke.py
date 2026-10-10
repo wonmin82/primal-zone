@@ -34,7 +34,7 @@ async def scenario(harness, report):
             titles = ("사용법", "예시", "실행 규칙", "제한", "관련 도움말")
             assert [line for line in output.splitlines() if line in titles] == list(titles)
             assert "\n\n\n" not in output
-        for name in ("공격", "보기", "상태"):
+        for name in ("공격", "봐", "상태"):
             await command(first, name + " 도움말", "사용법:")
         await command(first, "증폭 " + "$*" * 1000 + " 줄임말", "추가했습니다")
         before = first.state["zone"]
@@ -45,7 +45,7 @@ async def scenario(harness, report):
         await command(second, "장확 줄임말", "찾을 수 없습니다")
         await command(first, "동작 남 $1 줄임말", "추가했습니다")
         before = first.state["zone"]
-        await command(first, "보기 동작", "중앙 로비")
+        await command(first, "봐 동작", "중앙 로비")
         assert first.state["zone"] == before
         await command(first, "실행 $* 줄임말", "추가했습니다")
         await command(first, "상태 실행", "상태")

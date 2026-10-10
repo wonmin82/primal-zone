@@ -38,7 +38,7 @@ def status(name, profile):
         else f"{profile['xp']} (최고 등급)"
     )
     return ft.compact(
-        "상태",
+        "점수",
         f"체력 {profile['hp']}/{values['max_hp']} · 정신력 {profile['mental']}/{values['max_mental']}",
         f"공격 {values['attack']} · 방어 {values['defense']}",
         f"경험치 {xp} · 보급칩 {format_currency(profile['credits'])} · 처치 {profile['kills']}",
@@ -109,7 +109,7 @@ def inventory(profile):
                                     f" · {row['state_summary']}" if row["state_summary"] else "",
                                     " [장전]" if row["location"] == "inside" else ""))
     lines = [ft.text(f"[{title}] ", ft.join(entries, " · ")) for title, entries in groups.items() if entries]
-    return ft.compact("소지품", "", *(lines or ["비어 있다."]), summary=format_currency(profile["credits"]))
+    return ft.compact("가진거", "", *(lines or ["비어 있다."]), summary=format_currency(profile["credits"]))
 
 
 def shop(shop_id, seller):
@@ -122,7 +122,7 @@ def shop(shop_id, seller):
     lines.append(
         ft.text(
             "물건이름 ",
-            ft.token("command", "구매"),
+            ft.token("command", "사"),
             " (표시된 구매 단위)",
         )
     )

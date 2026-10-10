@@ -47,7 +47,7 @@ class CommandShortcutsTests(WorldCommandTest):
     def test_purchase_then_wield_and_location_specific_commands_run_sequentially(self):
         self.char1.location = self.rooms["weapon_shop"]
         self.char1.change(lambda p: p.update(credits=100))
-        self.run_raw("절단마체테 구매, 탐사용 벌목도 해제, 절단마체테 무장 해")
+        self.run_raw("절단마체테 사, 탐사용 벌목도 해제, 절단마체테 무장 해")
         profile = self.char1.profile_snapshot()
         self.assertEqual(profile["inventory"]["cutting_machete"], 1)
         self.assertEqual(profile["equipment"]["weapon"], "cutting_machete")
@@ -565,9 +565,9 @@ class CommandShortcutsTests(WorldCommandTest):
 
 
     def test_postfix_management_preserves_original_and_help_priority(self):
-        self.run_raw("정찰   $1 보기,  상태 해   줄임말")
-        self.assertEqual(self.saved(), {"정찰": "$1 보기,  상태 해"})
-        self.assertIn("$1 보기,  상태 해", self.run_raw("정찰 줄임말"))
+        self.run_raw("정찰   $1 봐,  상태 해   줄임말")
+        self.assertEqual(self.saved(), {"정찰": "$1 봐,  상태 해"})
+        self.assertIn("$1 봐,  상태 해", self.run_raw("정찰 줄임말"))
         self.run_raw("정찰 장비 줄임말")
         self.assertEqual(self.saved(), {"정찰": "장비"})
         for raw in ("줄임말 도움말", "해지 도움말"):
@@ -675,7 +675,7 @@ class CommandShortcutsTests(WorldCommandTest):
         self.register("혼합", "$1에게 $* 말")
         self.register("달러", "$$You() $$1 $$* 말")
         self.assertIn("체력", self.run_raw("상태 실행"))
-        self.assertNotIn("대상 뒤에 행동", self.run_raw("보기 동작"))
+        self.assertNotIn("대상 뒤에 행동", self.run_raw("봐 동작"))
         self.assertEqual(self.char1.zone, "dock")
         before = deepcopy(self.char1.profile_snapshot())
         self.assertIn("새 묶음", self.run_raw("귀환, 상태 해 실행"))
@@ -688,7 +688,7 @@ class CommandShortcutsTests(WorldCommandTest):
                 self.assertIn(expected, str(other.call_args_list))
 
     def test_argument_errors_abort_remainder_but_prior_effects_remain(self):
-        self.register("인자", "$1 보기")
+        self.register("인자", "$1 봐")
         self.register("없음", "상태")
         for raw in ("인자", "a b 인자", "a 없음", "x" * 2001 + " 인자"):
             before = deepcopy(self.char1.profile_snapshot())
@@ -1052,7 +1052,7 @@ class CommandShortcutsTests(WorldCommandTest):
         self.assertEqual(select.call_count, 3)  # 최상위 wrapper + 실제 두 세그먼트. 재선택 없음.
 
     def test_recoverable_command_errors_continue_but_dispatch_errors_stop_and_cleanup(self):
-        self.assertIn("체력", self.run_raw("없는대상 보기, 상태 해"))
+        self.assertIn("체력", self.run_raw("없는대상 봐, 상태 해"))
         calls = []
         class Broken(Command):
             key = "오류검사"
@@ -1286,7 +1286,7 @@ class CommandShortcutsTests(WorldCommandTest):
         self.assertEqual(self.saved(), {})
 
     def test_direction_argument_shortcut_is_not_mistaken_for_exit_with_arguments(self):
-        self.register("정찰", "$1 보기, 상태 해")
+        self.register("정찰", "$1 봐, 상태 해")
         before = deepcopy(self.char1.profile_snapshot())
         for argument in ("북", "n"):
             output = self.run_raw(argument + " 정찰")

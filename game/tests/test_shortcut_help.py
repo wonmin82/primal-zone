@@ -47,8 +47,8 @@ class ShortcutHelpTests(WorldCommandTest):
 
     def test_sequence_help_explains_partial_execution_and_progressive_not_arguments(self):
         page = self.page("해")
-        for value in ("두 개 이상", "북, 보기 해", "실행 직전", "새 장소", "실패 시", "계속",
-                      "중단", "되돌리지", "10개", "1,000자", "2,000자", "추가 응답", "북 보기",
+        for value in ("두 개 이상", "북, 봐 해", "실행 직전", "새 장소", "실패 시", "계속",
+                      "중단", "되돌리지", "10개", "1,000자", "2,000자", "추가 응답", "북 봐",
                       "하나", "줄임말 도움말"):
             self.assertIn(value, page)
 
@@ -68,17 +68,17 @@ class ShortcutHelpTests(WorldCommandTest):
                       "별도로 직접 입력", "60초가 지나기 전에"):
             self.assertIn(value, page)
         page = self.page("단축어")
-        for value in ("전역 줄임말", "상 → 상태", "장 → 장비", "정확하게 일치", "한 번만",
+        for value in ("전역 줄임말", "상 → 점수", "장 → 장비", "정확하게 일치", "한 번만",
                       "개인 줄임말보다 우선", "등록·수정·삭제할 수 없습니다"):
             self.assertIn(value, page)
 
     def test_general_help_keeps_usage_alias_shortcut_and_category_layout(self):
-        for name in ("공격", "보기", "상태"):
+        for name in ("공격", "봐", "상태"):
             page = self.page(name)
-            self.assertIn("사용법: ", page)
-            self.assertNotIn("\n실행 규칙\n", page)
-        self.assertIn("단축어: 상", self.page("상태"))
-        self.assertIn("별칭:", self.page("보기"))
+            self.assertIn("사용법\n", page)
+            self.assertIn("\n실행 규칙\n", page)
+        self.assertEqual(self.page("상"), self.page("점수"))
+        self.assertEqual(self.page("보"), self.page("봐"))
         self.assertIn("묶음 실행", self.page("입력"))
         self.assertIn("해지", self.page("편의"))
         self.assertIn("해지", root_page())

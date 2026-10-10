@@ -24,7 +24,7 @@ def content_targets():
         "salvage_officer": {"room": "salvage_office", "actions": ["환율", "교환"]},
     }
     for shop_id, room in (("supply", "supply_shop"), ("weapon", "weapon_shop"), ("armor", "armor_shop"), ("outpost_weapon", "outpost_weapon"), ("outpost_equipment", "outpost_equipment")):
-        targets[shop_id + "_shopkeeper"] = {"room": room, "typeclass": "Shopkeeper", "shop_id": shop_id, "actions": ["대화", "상품", "구매", "가치", "판매"]}
+        targets[shop_id + "_shopkeeper"] = {"room": room, "typeclass": "Shopkeeper", "shop_id": shop_id, "actions": ["대화", "목록", "사", "가치", "팔아"]}
     for zone, room in ROOMS.items():
         for hint in room.get("hints", []):
             if "target" in hint:

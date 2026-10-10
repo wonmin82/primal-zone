@@ -137,7 +137,7 @@ def item_selector(value, collection, action):
 
     known = [name for key, data in collection.items() for name in (key, data["name"], *data.get("aliases", []))]
     selector = parse_selector(value, known)
-    if action != "보기":
+    if action != "봐":
         require_single(selector, action)
     identity = find_id(collection, selector.name)
     if not identity:

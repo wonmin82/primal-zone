@@ -42,7 +42,7 @@ class ShopRulesTests(TestCase):
             self.assertTrue(any("중복" in issue for issue in shop_errors()))
         with patch.dict(SHOP_CATALOGS, supply={**SHOP_CATALOGS["supply"], "purchase_catalog": ()}):
             self.assertTrue(any("비었습니다" in issue for issue in shop_errors()))
-        for field, value in (("room", "dock"), ("shop_id", "missing"), ("actions", ["구매"])):
+        for field, value in (("room", "dock"), ("shop_id", "missing"), ("actions", ["사"])):
             targets = content_targets()
             targets["supply_shopkeeper"][field] = value
             self.assertTrue(any("supply_shopkeeper" in issue for issue in errors(targets)))

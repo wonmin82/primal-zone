@@ -203,7 +203,7 @@ class Scenario:
                 assert player.state["party"] is None and player.state["combat_target"] is None
                 assert player.state["max_mental"] == 40 and 10 <= player.state["mental"] <= 40
             self.report("auth", "fixture login / 출정 대기실")
-            for raw in ("상태", "", "   ", "없는명령", "접속자"):
+            for raw in ("상태", "", "   ", "없는명령", "누구"):
                 prompt = await first.expect_prompt(raw)
                 assert prompt["kind"] == "prompt"
                 assert "".join(part["text"] for part in prompt["segments"]).endswith(" ] >")
@@ -288,19 +288,19 @@ class Scenario:
             await route(first, (("동", "support_5f_e1"),
                                 ("북", "weapon_shop")))
             assert any(obj["name"] == "무기상" for obj in first.state["interactables"])
-            await first.expect_text("무기상 상품", "55칩")
+            await first.expect_text("무기상 목록", "55칩")
             before_credits = first.state["credits"]
             # RNG drop은 남겨 둔 ground에서 outsider만 회수한다. 구매 결과는 미리 지급하지 않는다.
             assert count_item(first.state, "cutting_machete") == 0
-            await first.act("무기상에게 절단마체테 구매", lambda state: count_item(state, "cutting_machete") == 1)
+            await first.act("무기상에게 절단마체테 사", lambda state: count_item(state, "cutting_machete") == 1)
             assert first.state["credits"] == before_credits - 55
             await first.expect_text("절단마체테 가치", "매입가는 27칩")
             single_sale = next(action for obj in first.state["interactables"] for action in obj["actions"]
-                               if action["label"] == "절단마체테 · 27칩 판매")
-            assert single_sale["command"].endswith("절단마체테 판매")
+                               if action["label"] == "절단마체테 · 27칩 팔아")
+            assert single_sale["command"].endswith("절단마체테 팔아")
             await first.act(single_sale["command"], lambda state: count_item(state, "cutting_machete") == 0)
             assert first.state["credits"] == before_credits - 28
-            await first.act("무기상에게 절단마체테 구매", lambda state: count_item(state, "cutting_machete") == 1)
+            await first.act("무기상에게 절단마체테 사", lambda state: count_item(state, "cutting_machete") == 1)
             self.report("shop", "옥상 귀환 / 승강기 / 가치·구매·판매 / 재구매")
             self.phase = "persistence"
             saved = {key: first.state[key] for key in
@@ -315,7 +315,7 @@ class Scenario:
             assert saved == {key: first.state[key] for key in saved}
             assert all(value <= first.state[key] <= first.state["max_" + key]
                        for key, value in saved_resources.items())
-            await first.expect_prompt("접속자")
+            await first.expect_prompt("누구")
             # 빠른 CI에서는 전체 흐름이 첫 지급 전에 끝날 수 있다. 부분 경계의
             # 소수 기여까지 쌓여 정수가 지급되는 실제 상태를 두 경계 안에서 기다린다.
             await first.until(lambda state: state["mental"] > 10,

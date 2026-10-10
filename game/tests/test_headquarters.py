@@ -90,7 +90,7 @@ class HeadquartersTests(GameCommandTest):
                 self.assertEqual(self.char1.profile(), before)
                 self.assertNotIn(direction, {exit_obj.key for exit_obj in self.rooms[zone].exits})
         self.char1.location = self.rooms["support_5f_c"]
-        for command in ("s", "S", "ㄴ", "남 보기", "s 봐"):
+        for command in ("s", "S", "ㄴ", "남 봐", "s 봐"):
             with self.subTest(command=command), patch.object(self.char1, "msg") as output:
                 self.char1.execute_cmd(command)
                 self.assertIn("남쪽 출입문은 현재 폐쇄되어 있다.", str(output.call_args_list))
@@ -129,7 +129,7 @@ class HeadquartersTests(GameCommandTest):
         with patch.object(self.rooms["infirmary"], "return_distant_appearance") as appearance:
             self.char1.execute_cmd("남")
             self.assertEqual(self.char1.location, source)
-            self.char1.execute_cmd("남 보기")
+            self.char1.execute_cmd("남 봐")
             appearance.assert_not_called()
         build_world()
         build_world()
@@ -220,7 +220,7 @@ class HeadquartersTests(GameCommandTest):
             self.assertNotEqual(search_tag(key, category="primal_interactable")[0].location, self.rooms["dock"])
         self.assertIsNone(instructor_for(self.char1))
         before = self.char1.profile()
-        for raw in ("상품", "붕대 구매", "절단마체테 구매", "강화방호조끼 구매"):
+        for raw in ("목록", "붕대 사", "절단마체테 사", "강화방호조끼 사"):
             self.char1.execute_cmd(raw)
             self.assertEqual(self.char1.profile(), before)
         self.char1.execute_cmd("개인 보관함에 붕대 넣어")

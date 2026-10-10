@@ -49,7 +49,7 @@ class PromptTests(WorldCommandTest):
         return messages
 
     def test_commands_errors_exits_and_sequence_finish_once(self):
-        for raw in ("상태", "의무관 진료", "침대 휴식", "붕대 사용", "없는대상 보기", "날아"):
+        for raw in ("상태", "의무관 진료", "침대 휴식", "붕대 사용", "없는대상 봐", "날아"):
             with self.subTest(raw=raw):
                 self.char1.change(lambda p: p.update(hp=10, mental=10))
                 self.assertGreater(len(self.one_final_prompt(raw)), 1)
@@ -182,7 +182,7 @@ class PromptTests(WorldCommandTest):
     def test_account_command_and_real_relogin_clear_output_context(self):
         self.account.puppet_object(self.session, self.char1)
         # 실제 MuxAccountCommand.parse는 caller를 Character에서 Account로 바꾼다.
-        self.one_final_prompt("접속자")
+        self.one_final_prompt("누구")
         self.assertEqual(self.char1.ndb.command_output_depth, 0)
         self.char1.ndb.command_output_depth = 1  # logout으로 중단된 progressive 입력
         self.char1.push_prompt.reset_mock()

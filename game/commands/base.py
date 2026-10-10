@@ -49,8 +49,8 @@ class UnknownCommand(Command):
             self.caller.msg(ft.text(ft.token("warning", message)))
             return
         self.caller.msg(
-            "명령을 확인하세요. 대상 뒤에 행동을 입력합니다: 어린청소룡 공격 · 윤대장 대화\n"
-            "채팅: 안녕하세요 말 또는 '안녕하세요 · 전체 안내: 도움말"
+            "명령을 확인하세요. 대상 뒤에 행동을 입력합니다: 어린청소룡 때려 · 윤대장 대화\n"
+            "채팅: 안녕하세요 말 또는 '안녕하세요 · 전체 안내: 도움"
         )
 
 

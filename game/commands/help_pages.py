@@ -3,14 +3,14 @@
 from world import text as ft
 from world.content.directions import DIRECTION_ALIASES, DIRECTION_ORDER, DIRECTION_SHORTCUTS
 
-from commands.aliases import INFORMATION_SHORTCUTS, SHORTCUTS
+from commands.aliases import ARGUMENT_SHORTCUTS, INFORMATION_SHORTCUTS, LOOT_SHORTCUTS, SHORTCUTS
 
 # 표시 순서, 접근 query, 대표 명령을 함께 관리한다. 전체 소속은 class.category다.
 HELP_CATEGORIES = {
-    "이동·탐사": {"query": "이동", "examples": ("보기", "출구", "지도", "임무")},
-    "전투·회복": {"query": "전투", "examples": ("공격", "강타", "사격", "치료", "도망")},
-    "아이템·보급": {"query": "아이템", "examples": ("소지품", "장비", "가져", "상품")},
-    "성장": {"query": "성장", "examples": ("상태", "능력", "경험치", "기술")},
+    "이동·탐사": {"query": "이동", "examples": ("봐", "출구", "지도", "임무")},
+    "전투·회복": {"query": "전투", "examples": ("때려", "강타", "쏴", "치료", "도망")},
+    "아이템·보급": {"query": "아이템", "examples": ("가진거", "장비", "가져", "목록")},
+    "성장": {"query": "성장", "examples": ("점수", "능력", "경험치", "기술")},
     "파티·교류": {"query": "교류", "examples": ("파티", "파티초대", "말")},
     "편의": {"query": "편의", "examples": ("해", "줄임말", "해지", "단축어")},
 }
@@ -27,11 +27,11 @@ def root_page():
         if category == "이동·탐사":
             examples = ft.text("8방향 이동 · ", examples)
         lines.append(ft.text(category, " | ", examples))
-    queries = [data["query"] + " 도움말" for data in HELP_CATEGORIES.values()]
+    queries = [data["query"] + " 도움" for data in HELP_CATEGORIES.values()]
     lines.extend(["", "분류:", commands_text(queries[:3]), commands_text(queries[3:]),
-                  "", "개별 명령:", commands_text(["공격 도움말", "상품 도움말", "줄임말 도움말"]),
-                  "", "입력 규칙:", commands_text(["입력 도움말"])])
-    return ft.compact("도움말", *lines)
+                  "", "개별 명령:", commands_text(["때려 도움", "목록 도움", "줄임말 도움"]),
+                  "", "입력 규칙:", commands_text(["입력 도움"])])
+    return ft.compact("도움", *lines)
 
 
 def category_page(category, commands):
@@ -46,30 +46,31 @@ def category_page(category, commands):
         lines.extend(["", "치료는 정신력을, 붕대 사용은 소지한 붕대 하나를 사용합니다. 방어는 패시브 기술입니다.",
                       "진료는 의무관에게 받습니다. 휴식은 의무실 침대에서 이용합니다."])
     elif category == "아이템·보급":
-        lines.append(ft.text("대상은 ", ft.token("command", "보기"), "로 확인할 수 있습니다."))
+        lines.append(ft.text("대상은 ", ft.token("command", "봐"), "로 확인할 수 있습니다."))
         lines.extend(["보급칩은 칩 단위로 옮기며, 판매는 장착하지 않은 물건만 취급합니다.",
                       commands_text(["철수에게 20칩 줘", "20칩 버려", "시체에서 20칩 가져",
-                                     "절단마체테 가치", "절단마체테 판매"])])
-    lines.extend(["", ft.text("상세: ", ft.token("command", "명령이름 도움말"))])
+                                     "절단마체테 가치", "절단마체테 팔아"])])
+    lines.extend(["", ft.text("상세: ", ft.token("command", "명령이름 도움"))])
     return ft.compact(category, *lines)
 
 
 def input_page():
     return ft.compact("입력", "기본", "대상이름 행동",
-                      ft.usage("어린청소룡 공격 · 윤대장 대화", {"공격", "대화"}),
+                      ft.usage("어린청소룡 때려 · 윤대장 대화", {"때려", "대화"}),
                       "", "선택", "대상 2 · 대상 모두", "",
                       "전리품", commands_text(["시체에서 모두 가져", "모든 시체에서 회수부품 모두 가져"]),
                       "", "보급칩", commands_text(["철수에게 20칩 줘", "20칩 버려", "시체에서 20칩 가져"]),
                       "", "관계", "플레이어에게 · 보관함에 · 보관함에서", "",
-                      "묶음 실행", commands_text(["상태, 장비, 소지품 해"]),
-                      "", "개인 설정", commands_text(["줄임말 도움말"]),
+                      "묶음 실행", commands_text(["점수, 장비, 가진거 해"]),
+                      "", "개인 설정", commands_text(["줄임말 도움"]),
                       "", "기본 단축어", commands_text(["단축어"]))
 
 
 def shortcut_page():
     lines = []
     for label, shortcuts, role in (("이동", DIRECTION_SHORTCUTS, "direction"),
-                                   ("정보", INFORMATION_SHORTCUTS, "command")):
+                                   ("정보", INFORMATION_SHORTCUTS, "command"),
+                                   ("전리품", LOOT_SHORTCUTS, "command")):
         lines.append(label)
         entries = [ft.text(ft.token("command", source), " → ", ft.token(role, target))
                    for source, target in shortcuts.items()]
@@ -83,8 +84,19 @@ def shortcut_page():
 def help_page(query, commands):
     """실제 명령 > 방향 > 분류/topic. 개인 줄임말을 help query로 확장하지 않는다."""
     query = query.strip().casefold()
-    query = SHORTCUTS.get(query, query)
     selected = next((cls for cls in commands if query in {name.casefold() for name in (cls.key, *cls.aliases)}), None)
+    if selected is None and query in SHORTCUTS:
+        target = SHORTCUTS[query].rsplit(None, 1)[-1].casefold()
+        selected = next((cls for cls in commands if target == cls.key.casefold()), None)
+        if selected is None:
+            query = SHORTCUTS[query]
+    if selected is None and query in ARGUMENT_SHORTCUTS:
+        from commands.shortcuts import parse_definition
+
+        values = parse_definition(ARGUMENT_SHORTCUTS[query]).segments
+        if len(values) == 1 and isinstance(values[0][-1], str):
+            target = values[0][-1].rsplit(None, 1)[-1].casefold()
+            selected = next((cls for cls in commands if target in {cls.key.casefold(), *[a.casefold() for a in cls.aliases]}), None)
     if selected:
         sections = getattr(selected, "help_sections", ())
         if sections:

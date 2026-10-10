@@ -31,6 +31,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         Populates the cmdset
         """
         super().at_cmdset_creation()
+        for name in ("look", "inventory", "help"):
+            self.remove(name)
         from commands.registry import COMMANDS
 
         for command in COMMANDS:
@@ -59,6 +61,8 @@ class AccountCmdSet(default_cmds.AccountCmdSet):
         Populates the cmdset
         """
         super().at_cmdset_creation()
+        for name in ("who", "look", "help"):
+            self.remove(name)
         from commands.account_commands import Quit, Who
 
         self.add(Quit())

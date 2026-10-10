@@ -200,7 +200,7 @@ def errors(interactables):
             issues.append(f"{identity}: 본부 서비스는 {room}에 배치해야 합니다.")
     for identity, definition in FACILITIES.items():
         if not isinstance(identity, str) or not identity.strip() or not isinstance(definition, dict):
-            issues.append(f"{identity}: 시설 상태 정의가 유효하지 않습니다.")
+            issues.append(f"{identity}: 시설 점수 정의가 유효하지 않습니다.")
         elif type(definition.get("default")) is not bool:
             issues.append(f"{identity}: 시설 기본 상태는 참/거짓이어야 합니다.")
     if len(ENEMIES) != sum(len(enemies) for enemies in REGION_ENEMIES.values()):
@@ -317,7 +317,7 @@ def errors(interactables):
             issues.append(f"{identity}: 상점 catalog가 없습니다.")
     for identity, shop_id in (("supply_shopkeeper", "supply"), ("weapon_shopkeeper", "weapon"), ("armor_shopkeeper", "armor"), ("outpost_weapon_shopkeeper", "outpost_weapon"), ("outpost_equipment_shopkeeper", "outpost_equipment")):
         data = interactables.get(identity, {})
-        if data.get("shop_id") != shop_id or tuple(data.get("actions", ())) != ("대화", "상품", "구매", "가치", "판매"):
+        if data.get("shop_id") != shop_id or tuple(data.get("actions", ())) != ("대화", "목록", "사", "가치", "팔아"):
             issues.append(f"{identity}: 상점 catalog/행동 정의가 올바르지 않습니다.")
     for identity, action in (("doctor", "진료"), ("infirmary_bed", "휴식")):
         if tuple(interactables.get(identity, {}).get("actions", ())) != (action,):

@@ -182,7 +182,7 @@
       const title = document.createElement("p"); title.className = "loot-label";
       title.replaceChildren(semantic("remains", corpse.label), " · ", semantic("remains", corpse.name));
       actions.push(title);
-      actions.push(button(corpse.label + " 보기", corpse.look_command));
+      actions.push(button(corpse.label + " 봐", corpse.look_command));
       if (corpse.loot.length) {
         const all = button(corpse.label + " 전리품 회수", corpse.take_command);
         all.disabled = !corpse.loot.some((item) => item.can_take); actions.push(all);
@@ -259,7 +259,7 @@
     byId("inventory").replaceChildren(...rows);
     const encounter = state.combat_target;
     byId("encounter").hidden = !encounter;
-    if (encounter) byId("encounter").replaceChildren(semantic("hostile", encounter.name), " · 공유 체력 " + encounter.hp + "/" + encounter.max_hp + " · 적 " + encounter.round + "차례" + (encounter.telegraph ? " · 다음 돌진! 견제와 치료를 준비하세요." : " · 강타 / 사격 / 견제 / 치료"));
+    if (encounter) byId("encounter").replaceChildren(semantic("hostile", encounter.name), " · 공유 체력 " + encounter.hp + "/" + encounter.max_hp + " · 적 " + encounter.round + "차례" + (encounter.telegraph ? " · 다음 돌진! 견제와 치료를 준비하세요." : " · 강타 / 쏴 / 견제 / 치료"));
   }
   function connect() {
     if (socket && [WebSocket.OPEN, WebSocket.CONNECTING].includes(socket.readyState)) return;

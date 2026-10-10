@@ -89,7 +89,7 @@ class LightingTests(WorldCommandTest):
     def test_local_prose_selector_web_and_attack_share_perception(self):
         enemy = room_enemies(self.char1.location)[0]
         self.assertNotIn(enemy, room_objects(self.char1, observed_at=100))
-        self.assertNotIn(enemy.key, self.command("보기"))
+        self.assertNotIn(enemy.key, self.command("봐"))
         self.assertEqual(multiplayer_state(self.char1, 100)["enemies"], [])
         with self.assertRaises(rules.RuleError):
             resolve([enemy], TargetSelector(enemy.key), self.char1, "공격")
@@ -243,7 +243,7 @@ class LightingTests(WorldCommandTest):
     def test_dock_safe_lighting_and_normal_containers_visible_in_dark(self):
         self.char1.location = self.rooms["dock"]
         self.assertEqual(snapshot_for(self.char1.location, 100).ambient_light, "bright")
-        self.assertIn("윤대장", self.command("보기"))
+        self.assertIn("윤대장", self.command("봐"))
         self.assertFalse(any(isinstance(obj, Container) for obj in room_objects(self.char1, observed_at=100)))
         self.char1.location = self.rooms["storage_room"]
         self.assertEqual(snapshot_for(self.char1.location, 100).ambient_light, "normal")
@@ -388,7 +388,7 @@ class LightingTests(WorldCommandTest):
     def test_light_look_combines_description_and_live_status_without_power(self):
         self.char1.change(lambda p: p["inventory"].update(flashlight=1))
         before = deepcopy(self.char1.profile())
-        output = self.command("손전등 보기")
+        output = self.command("손전등 봐")
         self.assertIn(ITEMS["flashlight"]["description"], output)
         self.assertIn("상태 꺼짐", output)
         self.assertIn("전원 없음", output)
@@ -398,7 +398,7 @@ class LightingTests(WorldCommandTest):
     def test_light_look_status_and_web_share_timestamp_and_rounding(self):
         self.powered()
         with patch("commands.character.time", return_value=700), patch("commands.items.time", return_value=700):
-            look = self.command("손전등 보기")
+            look = self.command("손전등 봐")
             self.char1.push_state.assert_called_with(observed_at=700)
             quick = self.command("손전등 확인")
         status = lighting.status(self.char1.profile_snapshot(), "flashlight", 700)
@@ -410,7 +410,7 @@ class LightingTests(WorldCommandTest):
         self.assertEqual(msg.call_args.kwargs["pz_state"][0][0]["observation"]["light_source"]["remaining_minutes"], 20)
         self.char1.change(lambda p: lighting.switch(p, "flashlight", False, 700))
         with patch("commands.character.time", return_value=1300):
-            off = self.command("손전등 보기")
+            off = self.command("손전등 봐")
         self.assertIn("상태 꺼짐", off)
         self.assertIn("잔량 약 20분", off)
 
@@ -420,7 +420,7 @@ class LightingTests(WorldCommandTest):
         self.char1.change(lambda p: p["inventory"].update(battery=1))
         for identity in ("battery", "explorer_machete", "expedition_workwear", "bandage"):
             with self.subTest(identity=identity):
-                self.assertIn(str(item_appearance(identity)), self.command(ITEMS[identity]["name"] + " 보기"))
+                self.assertIn(str(item_appearance(identity)), self.command(ITEMS[identity]["name"] + " 봐"))
 
     def test_shared_power_event_only_on_first_activation_and_scoped_rooms(self):
         for player in (self.char1, self.char2):

@@ -206,7 +206,7 @@ class EconomyTests(WorldCommandTest):
         state = multiplayer_state(self.char1)
         entry = state["ground_loot"][0]["loot"][0]
         self.assertEqual((entry["kind"], entry["amount_label"], entry["take_command"]), ("currency", "1칩", "칩 가져"))
-        self.assertIn("식별 표식", self.command("보급칩 보기"))
+        self.assertIn("식별 표식", self.command("보급칩 봐"))
 
     def test_value_sale_and_server_actions_preserve_equipped_copy(self):
         # 실패 원자성 비교 도중 실제 회복 경계가 넘어가는 영향을 제거한다.
@@ -218,14 +218,14 @@ class EconomyTests(WorldCommandTest):
         self.assertIn("55칩", self.command("무기상에게 절단마체테 가치"))
         self.assertIn("27칩", self.command("절단마체테 value"))
         actions = multiplayer_state(self.char1)["interactables"][0]["actions"]
-        single = next(a for a in actions if a["label"] == "절단마체테 · 27칩 판매")
-        self.assertTrue(single["command"].endswith("절단마체테 판매"))
-        bulk = next(a for a in actions if a["label"] == "절단마체테 모두 판매 · 총 54칩")
+        single = next(a for a in actions if a["label"] == "절단마체테 · 27칩 팔아")
+        self.assertTrue(single["command"].endswith("절단마체테 팔아"))
+        bulk = next(a for a in actions if a["label"] == "절단마체테 모두 팔아 · 총 54칩")
         command = bulk["command"]
         self.assertIn("54칩", self.command(command))
         self.assertEqual((self.char1.profile()["credits"], self.char1.profile()["inventory"]["cutting_machete"]), (74, 1))
         before = self.char1.profile()
-        for raw in ("절단마체테 판매", "회수부품 판매", "붕대 판매", "절단마체테 3개 판매"):
+        for raw in ("절단마체테 팔아", "회수부품 팔아", "붕대 팔아", "절단마체테 3개 팔아"):
             self.command(raw)
             self.assertEqual(self.char1.profile(), before)
         seller = search_tag("weapon_shopkeeper", category="primal_interactable")[0]
@@ -245,14 +245,14 @@ class EconomyTests(WorldCommandTest):
         self.char1.location = self.rooms["supply_shop"]
         seller = search_tag("supply_shopkeeper", category="primal_interactable")[0]
         actions = seller.web_actions(self.char1, seller.key)
-        single = next(a for a in actions if a["label"] == "붕대 · 5칩 판매")
-        bulk = next(a for a in actions if a["label"] == "붕대 모두 판매 · 총 15칩")
-        self.assertTrue(single["command"].endswith("붕대 판매"))
-        self.assertTrue(bulk["command"].endswith("붕대 모두 판매"))
+        single = next(a for a in actions if a["label"] == "붕대 · 5칩 팔아")
+        bulk = next(a for a in actions if a["label"] == "붕대 모두 팔아 · 총 15칩")
+        self.assertTrue(single["command"].endswith("붕대 팔아"))
+        self.assertTrue(bulk["command"].endswith("붕대 모두 팔아"))
         self.command(single["command"])
         self.assertEqual((self.char1.profile()["inventory"]["bandage"], self.char1.profile()["credits"]), (2, 25))
         actions = seller.web_actions(self.char1, seller.key)
-        bulk = next(a for a in actions if a["label"] == "붕대 모두 판매 · 총 10칩")
+        bulk = next(a for a in actions if a["label"] == "붕대 모두 팔아 · 총 10칩")
         self.command(bulk["command"])
         self.assertNotIn("bandage", self.char1.profile()["inventory"])
         self.assertEqual(self.char1.profile()["credits"], 35)
@@ -262,12 +262,12 @@ class EconomyTests(WorldCommandTest):
         self.char1.change(lambda p: p["inventory"].update(flashlight=2, battery=1))
         self.command("손전등에 건전지 넣어")
         device = deepcopy(self.char1.profile()["light_sources"]["flashlight"])
-        self.command("탐사용손전등 판매")
+        self.command("탐사용손전등 팔아")
         self.assertEqual(self.char1.profile()["light_sources"]["flashlight"], device)
-        self.command("탐사용손전등 판매")
+        self.command("탐사용손전등 팔아")
         self.assertNotIn("flashlight", self.char1.profile()["inventory"])
         self.assertNotIn("flashlight", self.char1.profile()["light_sources"])
-        self.command("탐사용손전등 구매")
+        self.command("탐사용손전등 사")
         self.assertIn("전원이 없습니다", self.command("탐사용손전등 켜"))
         self.assertNotIn("flashlight", self.char1.profile()["light_sources"])
 
@@ -344,5 +344,5 @@ class EconomyTests(WorldCommandTest):
         self.char1.location = self.rooms["supply_shop"]
         self.char1.change(lambda p: p["inventory"].update(bandage=1))
         actions = multiplayer_state(self.char1)["interactables"][0]["actions"]
-        self.assertIn({"label": "붕대 · 5칩 판매", "command": "보급관에게 붕대 판매"}, actions)
-        self.assertFalse(any(a["command"].endswith("붕대 모두 판매") for a in actions))
+        self.assertIn({"label": "붕대 · 5칩 팔아", "command": "보급관에게 붕대 팔아"}, actions)
+        self.assertFalse(any(a["command"].endswith("붕대 모두 팔아") for a in actions))

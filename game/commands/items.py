@@ -18,6 +18,7 @@ from world.targets import (
 )
 
 from commands.base import GameCommand
+from commands.help_contracts import command_sections
 
 
 class Drop(GameCommand):
@@ -242,9 +243,10 @@ class Drink(Eat):
 
 
 class RemoveArmor(GameCommand):
+    help_sections = command_sections('벗어')
     equipment_change = True
     key = UNEQUIP_ACTIONS["armor"]
-    aliases = ["remove"]
+    aliases = ["벗"]
     expected_slot = "armor"
     category = "아이템·보급"
     input_style = "target"

@@ -65,7 +65,7 @@ class StairsTests(WorldCommandTest):
     def test_postfix_look_shortcuts_and_sequence_keep_common_exit_policy(self):
         self.char1.location = self.rooms["dock"]
         before = deepcopy(self.char1.profile_snapshot())
-        for command in ("북 보기", "북 봐", "n 보기", "n 잘못된인자"):
+        for command in ("북 봐", "북 봐", "n 봐", "n 잘못된인자"):
             self.char1.execute_cmd(command)
             self.assertEqual(self.char1.zone, "dock")
             self.assertEqual(self.char1.profile_snapshot(), before)

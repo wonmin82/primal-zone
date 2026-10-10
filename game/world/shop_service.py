@@ -56,8 +56,8 @@ def resale(item):
 
 
 def resolve_sale(character, value):
-    return (resolve_item(character, value, "판매") if entity_runtime(character)
-            else item_selector(value, ITEMS, "판매"))
+    return (resolve_item(character, value, "팔아") if entity_runtime(character)
+            else item_selector(value, ITEMS, "팔아"))
 
 
 def can_accept(shop_id, item):
@@ -130,7 +130,7 @@ def sell(character, shop, value, quantity=1):
 
 
 def shop_snapshot(character, shop, observed_at=None):
-    """Web과 상품 목록의 구매 후보/매입 후보를 분리한다. 조회로 아이템을 만들지 않는다."""
+    """Web과 목록의 구매 후보/매입 후보를 분리한다. 조회로 아이템을 만들지 않는다."""
     from world.equipment import context, inventory_rows
 
     catalog = SHOP_CATALOGS[shop.db.shop_id]["purchase_catalog"]
