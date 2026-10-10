@@ -61,7 +61,9 @@ class Treat(GameCommand):
         value = self.args.strip()
         requested = None
         with world_change():
-            if any(word.endswith("에게") for word in value.split()):
+            if value.endswith("에게"):
+                doctor = resolve_medical(self.caller, self.key, value)
+            elif any(word.endswith("에게") for word in value.split()):
                 doctors = [obj for obj in room_objects(self.caller) if isinstance(obj, Doctor)]
                 selector, quantity = parse_relation(value, "에게", [n for obj in doctors for n in names(obj)])
                 doctor = resolve(doctors, selector, self.caller, self.key)[0]

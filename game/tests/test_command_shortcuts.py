@@ -315,7 +315,7 @@ class CommandShortcutsTests(WorldCommandTest):
         output = self.run_raw("점검")
         self.assertIn("체력", output)
         self.assertIn("장비", output)
-        self.assertIn("소지품", output)
+        self.assertIn("가진거", output)
         self.run_raw("출발")
         self.assertEqual(self.char1.zone, "support_roof")
         self.run_raw("점검, 승강기, 2층 해")
@@ -856,7 +856,7 @@ class CommandShortcutsTests(WorldCommandTest):
             with patch.object(self.char2, "msg") as other:
                 self.run_raw("안녕, 상태 해 gvar")
             self.assertIn("안녕, 상태 해", str(other.call_args_list))
-        with patch.dict(SHORTCUTS, {"once": "상"}):
+        with patch.dict(SHORTCUTS, {"once": "again", "again": "점수"}):
             output = self.run_raw("once, 상태 해")
             self.assertEqual(output.count("체력"), 1)
         with patch.dict(ARGUMENT_SHORTCUTS, {"gvar": "$*"}):
@@ -1162,12 +1162,12 @@ class CommandShortcutsTests(WorldCommandTest):
     def test_engine_help_waiting_for_pages_is_selected_but_never_started(self):
         from evennia.commands.default.help import CmdHelp
 
-        self.register("도움", "@help $1")
+        self.register("엔진조회", "@help $1")
         with patch.object(CmdHelp, "help_more", True), patch.object(CmdHelp, "func") as function:
-            self.assertIn("직접 실행", self.run_raw("장비 도움"))
+            self.assertIn("직접 실행", self.run_raw("장비 엔진조회"))
             function.assert_not_called()
         with patch.object(CmdHelp, "help_more", False), patch.object(CmdHelp, "func") as function:
-            self.run_raw("장비 도움")
+            self.run_raw("장비 엔진조회")
             function.assert_called_once()
         self.assertIsNone(self.char1.ndb.shortcut_execution)
         self.assertEqual(self.char1.ndb.command_output_depth, 0)
@@ -1290,7 +1290,7 @@ class CommandShortcutsTests(WorldCommandTest):
         before = deepcopy(self.char1.profile_snapshot())
         for argument in ("북", "n"):
             output = self.run_raw(argument + " 정찰")
-            self.assertIn("상태", output)
+            self.assertIn("점수", output)
             self.assertEqual(self.char1.zone, "dock")
             self.assertEqual(self.char1.profile_snapshot(), before)
         self.register("방향실행", "$*")

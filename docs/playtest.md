@@ -1841,3 +1841,10 @@ Version3 cache_claimed=true fixture의 dry-run은 tag1개 entitlement를 계획�
 - 실패한 `world.test_economy.EconomyRulesTests.test_wallet_display_with_and_without_inventory`, `world.test_vocabulary.VocabularyTests.test_global_shortcuts_follow_direction_ssot_and_canonical_inventory`, `world.test_vocabulary.VocabularyTests.test_v7_hil_name_collision_preserves_data_and_exact_references`, `world.test_smoke.SmokeRestartTests.test_full_boss_purchase_accepts_boots_previously_obtained_by_drop`만 `scripts/dev.py test ... --parallel 1`로 실행해 4개 성공했다. 전체 로컬 회귀는 실행하지 않았다.
 - 새 방어구 도움말을 무기 해제가 잘못 상속하지 않도록 분리하고, 삭제된 보기 입력을 안내하던 정산 오류를 수정했다. 이후 자동 CI는 새 PR HEAD에서 별도 확인한다.
 - 무기 해제 도움말 분리를 포함한 `tests.test_command_overhaul.CommandOverhaulSmoke.test_phase_a --parallel 1`: 대표 Smoke 1개 성공. `ruff check game scripts`, `git diff --check` 성공.
+
+### Issue #46 의료 대상·엔진 도움 호환 보완
+
+- `850de16`의 [Game checks 38041875963](https://github.com/wonmin82/primal-zone/actions/runs/38041875963): 자동 Quick smoke 성공, pure 215개 성공, integration 668개에서 17개 기대 비교 실패. 현재 제목·profile v12·별칭 정렬/실제 명령 우선순위의 구 기대값 외에 수량 없는 `의무관에게 회복`과 엔진 페이지 도움 경로가 포함됐다.
+- 수량 없는 의료 대상/조사는 전량 HP 회복으로 처리하고 의무관 상세의 행동 토큰을 유지했다. `도움`·영문 help와 분리한 `@help`만 엔진 완료 계약의 호환 예외로 등록했다. 추가 페이지 입력을 받는 간접 실행 거절은 기존 guard를 유지한다. 본부 관찰 예시와 현재/과거 의료 안내를 구분하고 일반 시설 상태 오류 문구를 복원했다.
+- 해당 변경의 A/C 대표 Smoke만 `.venv/Scripts/python.exe scripts/dev.py test tests.test_command_overhaul.CommandOverhaulSmoke.test_phase_a tests.test_command_overhaul.CommandOverhaulSmoke.test_phase_c --parallel 1`로 실행해 2개 성공했다. `사` 직접 실행, 엔진 페이지 간접 실행 거절, `의사에게 회복` 전량/비용도 포함한다. B 조회·거래 가격·전투 주기·schema·CI 설정은 이 보완에서 바꾸지 않았다.
+- 로컬 전체 회귀는 여전히 미실행이며 이후 자동 CI는 새 HEAD에 대해 PR Validation에 기록한다. 앞선 CI 실패·수정 근거와 #50의 경합·장기·브라우저 검증 공백은 유지한다.

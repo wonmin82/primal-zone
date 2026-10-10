@@ -138,7 +138,7 @@ class EquipmentTests(WorldCommandTest):
         for action, aliases in (("무장", ["wield"]), ("착용", ["입어", "입"])):
             registered = [c for c in COMMANDS if c.key == action]
             self.assertEqual(len(registered), 1)
-            self.assertEqual(list(registered[0].aliases), aliases)
+            self.assertCountEqual(registered[0].aliases, aliases)
             command = Help()
             command.caller, command.args = self.char1, action
             with patch.object(self.char1, "msg") as message:

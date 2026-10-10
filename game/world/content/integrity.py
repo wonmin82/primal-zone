@@ -200,7 +200,7 @@ def errors(interactables):
             issues.append(f"{identity}: 본부 서비스는 {room}에 배치해야 합니다.")
     for identity, definition in FACILITIES.items():
         if not isinstance(identity, str) or not identity.strip() or not isinstance(definition, dict):
-            issues.append(f"{identity}: 시설 점수 정의가 유효하지 않습니다.")
+            issues.append(f"{identity}: 시설 상태 정의가 유효하지 않습니다.")
         elif type(definition.get("default")) is not bool:
             issues.append(f"{identity}: 시설 기본 상태는 참/거짓이어야 합니다.")
     if len(ENEMIES) != sum(len(enemies) for enemies in REGION_ENEMIES.values()):

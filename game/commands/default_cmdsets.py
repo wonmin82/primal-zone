@@ -39,10 +39,11 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             self.add(command())
         from evennia.commands.default.syscommands import SystemMultimatch
 
-        from commands.base import NoInput
+        from commands.base import EngineHelp, NoInput
         from commands.prompt import with_prompt
 
         self.add(NoInput())
+        self.add(EngineHelp())
         self.add(with_prompt(SystemMultimatch()))
 
 

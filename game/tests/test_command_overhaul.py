@@ -41,6 +41,8 @@ class CommandOverhaulSmoke(NativeItemTest):
         self.assertEqual(self.char1.profile_snapshot()["inventory"]["bandage"], 1)
         self.raw("붕대 팔아")
         self.assertNotIn("bandage", self.char1.profile_snapshot()["inventory"])
+        self.assertIn("1개를 받아", self.raw("붕대 사"))
+        self.raw("붕대 팔아")
         self.char1.location = self.rooms["hq_stairs_3f"]
         self.raw("ㅇ")
         self.assertEqual(self.char1.zone, "hq_stairs_4f")
@@ -84,6 +86,11 @@ class CommandOverhaulSmoke(NativeItemTest):
         weapon_help = self.raw("해제 도움")
         self.assertIn("강철 마체테 해제", weapon_help)
         self.assertNotIn("방어구 벗어", weapon_help)
+        from evennia.commands.default.help import CmdHelp
+        self.assertIn("추가했습니다", self.raw("엔진조회 @help $1 줄임말"))
+        with patch.object(CmdHelp, "help_more", True), patch.object(CmdHelp, "func") as function:
+            self.assertIn("직접 실행", self.raw("장비 엔진조회"))
+            function.assert_not_called()
         for cls in COMMANDS:
             if cls.key in ("봐", "출구", "도움", "점수", "가진거", "때려", "목록", "사", "팔아", "쏴", "지도", "경험치", "장비", "착용", "벗어", "가져", "줄임말", "가치"):
                 self.assertEqual([title for title, _ in cls.help_sections], titles, cls.key)
@@ -135,7 +142,10 @@ class CommandOverhaulSmoke(NativeItemTest):
         self.char1.change(lambda p: p.update(hp=maximum - 30, credits=100))
         self.assertIn("HP 20 회복", self.raw("의무관에게 20 회복"))
         self.assertEqual((self.char1.profile_snapshot()["hp"], self.char1.profile_snapshot()["credits"]), (maximum - 10, 95))
-        self.char1.change(lambda p: p.update(credits=0))
+        self.char1.change(lambda p: p.update(hp=maximum - 5, credits=100))
+        self.assertIn("HP 5 회복", self.raw("의사에게 회복"))
+        self.assertEqual((self.char1.profile_snapshot()["hp"], self.char1.profile_snapshot()["credits"]), (maximum, 98))
+        self.char1.change(lambda p: p.update(hp=maximum - 10, credits=0))
         before = deepcopy(self.atomic_state())
         self.assertIn("부족", self.raw("20 회복"))
         self.assertEqual(before, self.atomic_state())

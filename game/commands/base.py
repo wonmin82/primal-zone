@@ -2,8 +2,16 @@
 
 from evennia import Command
 from evennia.commands.cmdhandler import CMD_NOINPUT, CMD_NOMATCH
+from evennia.commands.default.help import CmdHelp
 from world import rules
 from world import text as ft
+
+
+class EngineHelp(CmdHelp):
+    """엔진 페이지 입력 계약용 별도 이름. 사용자 도움/영문 help와 분리한다."""
+
+    key = "@help"
+    aliases = []
 
 
 class GameCommand(Command):

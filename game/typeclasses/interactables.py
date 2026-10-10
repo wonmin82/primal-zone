@@ -361,6 +361,7 @@ class Doctor(ActionObject):
             except rules.RuleError as error:
                 lines.append(str(error))
             lines.append("회복 · 20 회복 · 의무관에게 20 회복 / 회복실 침대 휴식은 무료")
+            lines.append(ft.actions(self.actions))
         return ft.sheet(ft.token(self.semantic_role, self.key), *lines)
 
     def web_actions(self, caller, target, observed_at=None):

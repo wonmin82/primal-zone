@@ -11,7 +11,7 @@ from commands.help_contracts import command_sections
 class Attack(GameCommand):
     help_sections = command_sections('때려')
     category = "전투·회복"
-    usage = "어린청소룡 때려 · 갈퀴사냥룡 2 때려"
+    usage = "대상이름 때려 · 대상 2 때려"
     summary = "공유 적에게 2.5초 간격으로 기본 공격합니다."
     input_style = "target"
     key = "때려"
