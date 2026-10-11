@@ -4,7 +4,7 @@ from time import time
 
 from typeclasses.enemies import room_enemies
 from typeclasses.loot import can_take_entry, room_loot
-from typeclasses.parties import invitation_for, online, party_for, request_for
+from typeclasses.parties import invitation_for, online, party_for, request_for, sessions_ready
 
 from world.content import ENEMIES
 from world.currency import currency_names, format_currency
@@ -101,7 +101,6 @@ def multiplayer_state(player, now=None):
     party = party_for(player)
     party_data = None
     if party:
-        party.reconcile(now)
         state = party.state()
         from typeclasses.explorers import Explorer
 
@@ -127,18 +126,20 @@ def multiplayer_state(player, now=None):
             "max_size": 4,
             "leader_online": leader_online,
             "leader_offline_since": state["leader_offline_since"],
-            "can_succeed": online(player) and state["leader"] != player.pk and not leader_online,
+            "can_succeed": sessions_ready() and online(player) and state["leader"] != player.pk and not leader_online,
             "defender": {"id": defender.pk, "name": defender.key, "online": online(defender), "active": active} if defender else None,
             "join_requests": [{"id": key, "name": player_name(key), "label": player_controls.get(key, player_name(key)),
-                               "expires_at": value["expires_at"]} for key, value in state["join_requests"].items()],
+                               "expires_at": value["expires_at"]} for key, value in state["join_requests"].items()
+                              if now < value["expires_at"]],
             "invitations": [{"id": key, "name": player_name(key), "expires_at": value["expires_at"]}
-                            for key, value in state["invitations"].items()],
+                            for key, value in state["invitations"].items() if now < value["expires_at"]],
             "confirm_dissolve": bool(confirmation and now < confirmation["expires_at"]
                                      and confirmation["snapshot"] == (party.pk, state["leader"], tuple(state["members"]))),
         }
-    invited, invitation = invitation_for(player, now)
-    requested, request = request_for(player, now)
+    invited, invitation = invitation_for(player, now, reconcile=False)
+    requested, request = request_for(player, now, reconcile=False)
     return {
+        "server_now": now,
         "enemies": [
             {
                 "id": enemy.id,

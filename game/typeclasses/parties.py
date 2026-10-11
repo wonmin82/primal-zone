@@ -62,22 +62,24 @@ def in_combat(character):
                 and character.id in (enemy.db.combatants or []) and enemy.location == character.location)
 
 
-def invitation_for(character, now=None):
+def invitation_for(character, now=None, *, reconcile=True):
     now = time() if now is None else now
     for party in Party.objects.all():
-        party.reconcile(now)
+        if reconcile:
+            party.reconcile(now)
         invitation = party.state()["invitations"].get(character.id)
-        if invitation:
+        if invitation and now < invitation["expires_at"]:
             return party, invitation
     return None, None
 
 
-def request_for(character, now=None):
+def request_for(character, now=None, *, reconcile=True):
     now = time() if now is None else now
     for party in Party.objects.all():
-        party.reconcile(now)
+        if reconcile:
+            party.reconcile(now)
         request = party.state()["join_requests"].get(character.id)
-        if request:
+        if request and now < request["expires_at"]:
             return party, request
     return None, None
 

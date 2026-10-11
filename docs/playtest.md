@@ -49,6 +49,16 @@ Windows, Python 3.13.15, uv 0.12.13. 저장소 루트의 uv 환경과 settings_t
 
 RT-47의 실 브라우저·한글 IME·좁은 화면/접근성·복수 실제 세션·장기 reload/restart·Cross-Issue 및 최종 통합은 #50에서 수행한다. #49 문/열쇠 기능은 이번에 구현하지 않는다. 플레이 DB를 테스트로 초기화하거나 변경하지 않는다.
 
+### PR #53 최종 리뷰 보완
+
+기준 `8e49f964c72554a81b032fb40667bd270f3a2165`의 [CI 38109881214](https://github.com/wonmin82/primal-zone/actions/runs/38109881214)는 성공이었다. 이 결과를 아래 새 변경 HEAD의 성공으로 대신하지 않는다. 테스트 환경은 위 Windows/Python/uv 및 격리 settings_test DB를 유지했다.
+
+- `uv run python scripts/dev.py test tests.test_party_overhaul tests.test_web_state world.test_party_migration tests.test_loot_entities tests.test_loot --parallel 2`: 90개 통과, 종료 0 (테스트 51.891초, runner 61.128초). 실제 Native/Legacy 수령 API의 보호·지분·부분 지급·중복 차단·만료·해체/수령 롤백과 승계 세션·읽기 전용 상태·TTL/UI 정리를 확인했다. 권한·지급 계산을 Mock으로 대체하지 않았다.
+- 앞선 직접 검사 17개는 Legacy fixture 2개 오류였다. 시체 선택 문법을 기존 공통 문법으로 맞추고 초기 관찰이 가짜 시각의 시체를 만료시키지 않도록 fixture 생성 순서를 보정했다. Legacy 재검사 3개 통과 후 위 90개를 실행했다. 이는 게임 지급 결함 수정이 아니며 지급 정책은 유지한다.
+- `node --test scripts/tests/test_web_prompt.cjs`: 15개 통과, 종료 0. 서버 수신 시각의 잔여 시간·정확한 만료·새 상태·극단적인 로컬 시계 차이·승계 버튼/설명·기존 입력 경로를 확인했다. 실시간 카운트다운 대신 수신 기준 스냅샷을 사용하며 추가 interval은 없다.
+- `node --check game/web/static/webclient/js/primal.js`, `uv run python scripts/dev.py check`, `git diff --check`: 통과. 문서 보완 후 GitHub GFM 렌더링·상대 링크·앵커 검사도 오류 0으로 통과했다.
+- 이 기록은 커밋 전 실제 검사다. 최종 Push HEAD의 Quick/Smoke·GitHub 전체 CI는 아직 선기록하지 않으며 커밋 이후 PR Validation에 실제 SHA·종료 코드·실행 URL을 확정한다. 로컬 전체 회귀·OS 브라우저/IME·복수 세션 수동 E2E는 미실행이며 RT-47/#50 범위를 유지한다.
+
 ## Issue #47 NPC 대화·개인 메시지 검증
 
 [Issue #47 v3.5 FINAL](https://github.com/wonmin82/primal-zone/issues/47)의 개발·검증 기록이다. 현재 사용자 입력은 [플레이 가이드](gameplay.md#npc-대화와-개인-메시지), 기술 계약은 [NPC 대화 설계](npc-dialogue.md)를 따른다. 아래 과거 PR/Phase 기록의 NPC `대화`·프로필 버전·당시 테스트 결과는 역사적 근거로 유지한다.

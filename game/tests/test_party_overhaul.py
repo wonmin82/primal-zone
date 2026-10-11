@@ -340,6 +340,220 @@ class PartyLootRightsTests(NativeLootTest):
         self.assertIsNotNone(object_by_id(party.pk))
 
 
+    def test_rt15_rt16_native_item_actual_pickup_after_dissolve_and_rollback(self):
+        from typeclasses.parties import invite, respond
+        from world import loot_service
+        from world.item_entities.models import ItemEntity
+        from world.loot_entities.models import LootClaim
+        from world.multiplayer import world_change
+
+        party = invite(self.char1, self.char2)
+        respond(self.char2, True)
+        root = self.loot_item(quantity=10, party=party, assigned=self.char2)
+        party.dissolve(self.char1, now=100)
+        party.dissolve(self.char1, True, now=101)
+        selected = self.entry(root)
+        before = self.all_state()
+        with self.assertRaises(RuleError):
+            loot_service.pickup(self.source, selected, self.char1, 10, now=102)
+        self.assertEqual(self.all_state(), before)
+        with self.assertRaises(RuntimeError), world_change():
+            loot_service.pickup(self.source, selected, self.char2, 10, now=102)
+            raise RuntimeError("회수 커밋 실패")
+        self.assertEqual(self.all_state(), before)
+        received = loot_service.pickup(self.source, selected, self.char2, 10, now=103)
+        self.assertEqual(received, [(self.char2, "ammo_9", 10)])
+        row = ItemEntity.objects.get(pk=root.pk)
+        self.assertEqual((row.owner_object_id, row.location_kind, row.quantity), (self.char2.pk, "inventory", 10))
+        self.assertFalse(LootClaim.objects.filter(item_entity_id=root.pk).exists())
+        self.assertEqual(loot_service.loot_snapshot(self.source).entries, ())
+        after = self.all_state()
+        with self.assertRaises(RuleError):
+            loot_service.pickup(self.source, selected, self.char2, 10, now=104)
+        self.assertEqual(self.all_state(), after)
+
+    def test_rt15_rt16_native_currency_actual_split_receipts_and_rollback(self):
+        from typeclasses.parties import invite, respond
+        from world import loot_service
+        from world.loot_entities.models import CurrencyLoot
+        from world.multiplayer import world_change
+
+        outsider = create_object(Explorer, key="권리없는탐사자", location=self.char1.location)
+        outsider_wallet = outsider.profile()["credits"]
+        party = invite(self.char1, self.char2)
+        respond(self.char2, True)
+        currency = loot_service.create_currency(self.source, 20, reserved_party=party, protection_until=300,
+                                               shares={self.char1: 6, self.char2: 14})
+        party.dissolve(self.char1, now=100)
+        party.dissolve(self.char1, True, now=101)
+        wallets = [obj.profile()["credits"] for obj in (self.char1, self.char2)]
+        selected = self.entry(currency)
+        before = self.all_state()
+        with self.assertRaises(RuleError):
+            loot_service.pickup(self.source, selected, outsider, 10, now=102)
+        self.assertEqual(outsider.profile()["credits"], outsider_wallet)
+        with self.assertRaises(RuntimeError), world_change():
+            loot_service.pickup(self.source, selected, self.char1, 10, now=102)
+            raise RuntimeError("회수 커밋 실패")
+        self.assertEqual(self.all_state(), before)
+        first = loot_service.pickup(self.source, selected, self.char1, 10, now=103)
+        self.assertEqual([(obj.pk, amount) for obj, _, amount in first], [(self.char1.pk, 3), (self.char2.pk, 7)])
+        row = CurrencyLoot.objects.get(pk=currency.pk)
+        self.assertEqual(row.quantity, 10)
+        self.assertEqual(dict(row.shares.values_list("player_id", "remaining_amount")), {self.char1.pk: 3, self.char2.pk: 7})
+        unchanged = self.all_state()
+        with self.assertRaises(RuleError):
+            loot_service.pickup(self.source, selected, self.char1, 10, now=104)  # 이전 수량 스냅샷 재사용 금지
+        self.assertEqual(self.all_state(), unchanged)
+        second = loot_service.pickup(self.source, self.entry(row), self.char2, 10, now=105)
+        self.assertEqual(sum(amount for _, _, amount in first + second), 20)
+        self.assertEqual([obj.profile()["credits"] - old for obj, old in zip((self.char1, self.char2), wallets)], [6, 14])
+        self.assertFalse(CurrencyLoot.objects.filter(pk=currency.pk).exists())
+        with self.assertRaises(RuleError):
+            loot_service.pickup(self.source, selected, self.char2, 10, now=106)
+
+    def test_rt15_native_reserved_player_and_expiry_actual_receipts(self):
+        from typeclasses.parties import invite, respond
+        from world import loot_service
+        from world.loot_entities.models import LootClaim
+
+        party = invite(self.char1, self.char2)
+        respond(self.char2, True)
+        root = self.loot_item(party=party, assigned=self.char2)
+        LootClaim.objects.filter(item_entity=root).update(reserved_player=self.char1)
+        expired = self.loot_item("bandage", quantity=2, party=party, assigned=self.char2, deadline=103)
+        currency = loot_service.create_currency(self.source, 8, reserved_party=party, protection_until=103,
+                                               shares={self.char1: 3, self.char2: 5})
+        party.dissolve(self.char1, now=100)
+        party.dissolve(self.char1, True, now=101)
+        self.assertEqual(LootClaim.objects.get(item_entity=root).reserved_player_id, self.char1.pk)
+        self.assertEqual(loot_service.pickup(self.source, self.entry(root), self.char1, 10, now=102),
+                         [(self.char2, "ammo_9", 10)])
+        with self.assertRaises(RuleError):
+            loot_service.pickup(self.source, self.entry(expired), self.char1, 2, now=102.999)
+        self.assertEqual(loot_service.pickup(self.source, self.entry(expired), self.char1, 2, now=103),
+                         [(self.char1, "bandage", 2)])
+        self.assertEqual(loot_service.pickup(self.source, self.entry(currency), self.char2, 8, now=104),
+                         [(self.char2, "credits", 8)])
+
+
+class PartyLegacyLootRightsTests(WorldCommandTest):
+    character_typeclass = Explorer
+
+    def setUp(self):
+        super().setUp()
+        from typeclasses.loot import Corpse
+        from typeclasses.parties import invite, respond
+        self.enterContext(patch("typeclasses.explorers.time", return_value=100))
+        self.enterContext(patch("typeclasses.loot.time", return_value=100))
+        self.enterContext(patch("world.lifecycle.time", return_value=100))
+        for module in ("explorers", "loot", "enemies"):
+            self.enterContext(patch(f"typeclasses.{module}.delay"))
+        for obj in (self.char1, self.char2):
+            obj.location = self.world_rooms()["grass"]
+            obj.push_state = Mock()
+            self.connect_character(obj)
+        self.party = invite(self.char1, self.char2, now=100)
+        respond(self.char2, True, now=100)
+        self.source = create_object(Corpse, key="구형 수령 시체", location=self.char1.location)
+        self.source.db.decay_at = 1000
+        self.source.db.entries = [
+            {"kind": "item", "id": "bandage", "quantity": 2, "assigned_player": self.char2.pk,
+             "reserved_party": self.party.pk, "protection_until": 300},
+            {"kind": "currency", "id": "credits", "quantity": 20, "reserved_party": self.party.pk,
+             "eligible_players": [self.char1.pk, self.char2.pk], "remaining_shares": {self.char1.pk: 6, self.char2.pk: 14},
+             "protection_until": 300},
+        ]
+
+    def dissolve(self):
+        self.party.dissolve(self.char1, now=100)
+        self.party.dissolve(self.char1, True, now=101)
+
+    def take(self, caller, target, now=102):
+        from typeclasses.loot import take_loot
+        from world.targets import parse_loot
+        return take_loot(caller, now=now, request=parse_loot("시체에서 " + target))
+
+    def snapshot(self):
+        from copy import deepcopy
+        return deepcopy((list(self.source.db.entries), self.char1.profile(), self.char2.profile()))
+
+    def test_rt15_rt16_legacy_actual_item_currency_protection_and_conservation(self):
+        outsider = create_object(Explorer, key="비권리자")
+        outsider.location = self.char1.location
+        self.dissolve()
+        before = self.snapshot()
+        for caller, target in ((self.char1, "붕대 모두"), (outsider, "붕대 모두"), (outsider, "칩 모두")):
+            with self.assertRaises(RuleError):
+                self.take(caller, target)
+            self.assertEqual(self.snapshot(), before)
+        with self.assertRaises(RuntimeError):
+            from world.multiplayer import world_change
+            with world_change():
+                self.take(self.char2, "붕대 모두")
+                self.take(self.char1, "10칩")
+                raise RuntimeError("회수 커밋 실패")
+        self.assertEqual(self.snapshot(), before)
+        item, currency = before[0]
+        self.assertEqual(item["assigned_player"], self.char2.pk)
+        self.assertIsNone(item["reserved_party"])
+        self.assertEqual(currency["eligible_players"], [self.char1.pk, self.char2.pk])
+        self.assertEqual(currency["remaining_shares"], {self.char1.pk: 6, self.char2.pk: 14})
+        self.take(self.char2, "붕대 모두")
+        self.assertEqual(self.char2.profile()["inventory"]["bandage"] - before[2]["inventory"]["bandage"], 2)
+        with self.assertRaises(RuleError):
+            self.take(self.char2, "붕대 모두")
+        self.take(self.char1, "10칩")
+        remaining = dict(self.source.db.entries[0])
+        self.assertEqual((remaining["quantity"], dict(remaining["remaining_shares"])),
+                         (10, {self.char1.pk: 3, self.char2.pk: 7}))
+        self.take(self.char2, "칩 모두")
+        self.assertEqual([obj.profile()["credits"] - old["credits"]
+                          for obj, old in zip((self.char1, self.char2), before[1:])], [6, 14])
+        self.assertEqual(list(self.source.db.entries), [])
+        after = self.snapshot()
+        with self.assertRaises(RuleError):
+            self.take(self.char1, "칩 모두")
+        self.assertEqual(self.snapshot(), after)
+
+    def test_rt15_legacy_reserved_player_and_expiry_receipts(self):
+        entries = list(self.source.db.entries)
+        entries[0]["reserved_player"] = self.char1.pk
+        entries[0]["protection_until"] = entries[1]["protection_until"] = 103
+        self.source.db.entries = entries
+        self.dissolve()
+        before = self.snapshot()
+        self.assertEqual(self.source.db.entries[0]["reserved_player"], self.char1.pk)
+        self.take(self.char1, "붕대", now=102)
+        self.assertEqual(self.char2.profile()["inventory"]["bandage"] - before[2]["inventory"]["bandage"], 1)
+        self.take(self.char1, "붕대", now=103)
+        self.assertEqual(self.char1.profile()["inventory"]["bandage"] - before[1]["inventory"]["bandage"], 1)
+        self.take(self.char1, "칩 모두", now=104)
+        self.assertEqual(self.char1.profile()["credits"] - before[1]["credits"], 20)
+        self.assertEqual(self.char2.profile()["credits"], before[2]["credits"])
+        self.assertEqual(list(self.source.db.entries), [])
+
+    def test_rt16_legacy_invalid_share_stops_dissolve_and_rolls_back(self):
+        from copy import deepcopy
+
+        original = deepcopy(list(self.source.db.entries))
+        cases = [deepcopy(original) for _ in range(3)]
+        cases[0][1]["remaining_shares"][self.char2.pk] = 13
+        cases[1][0]["assigned_player"] = 999999
+        cases[2][0]["assigned_player"] = None
+        for entries in cases:
+            with self.subTest(entries=entries):
+                self.source.db.entries = entries
+                before = self.snapshot()
+                self.party.dissolve(self.char1, now=100)
+                with self.assertRaises(RuleError):
+                    self.party.dissolve(self.char1, True, now=101)
+                self.assertEqual(self.snapshot(), before)
+                self.assertEqual(self.char1.db.party_id, self.party.pk)
+                self.assertEqual(self.char2.db.party_id, self.party.pk)
+                self.assertIsNotNone(object_by_id(self.party.pk))
+
+
 class PartyChatTests(PartyFixture):
     def test_rt28_rt29_private_members_cross_rooms_and_validation(self):
         from world import private_messaging

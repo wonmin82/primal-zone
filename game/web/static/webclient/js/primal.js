@@ -147,6 +147,13 @@
     }));
     ["reset-attributes", "reset-skills", "reset-all"].forEach((id, index) => { const action = controls.reset?.[index]; byId(id).disabled = !action; byId(id).dataset.command = action?.command || ""; });
   }
+  // 로컬 시계 차이와 추가 타이머 없이 서버가 관측한 수신 시점의 TTL을 표시한다.
+  function pendingTime(entry, serverNow) {
+    if (!Number.isFinite(entry?.expires_at) || !Number.isFinite(serverNow)) return {label:"남은 시간 재확인 필요", expired:false};
+    const remaining = Math.max(0, Math.ceil(entry.expires_at - serverNow));
+    return {label:remaining ? remaining + "초 남음 (수신 기준)" : "만료됨", expired:remaining === 0};
+  }
+
   function render(state) {
     if (Array.isArray(state.resource_prompt?.segments)) latestPrompt = state.resource_prompt.segments;
     playing = true;
@@ -212,7 +219,7 @@
     }
     renderGrowth(state);
     const party = state.party;
-    byId("party-state").textContent = party ? "일행 #" + party.id + " · 리더: " + party.leader_name + (party.is_leader ? " (나)" : "") + " · " + (party.leader_online ? "온라인" : "오프라인 · 승계 가능") + " · 전리품: 순번 분배" : "소속 일행 없음";
+    byId("party-state").textContent = party ? "일행 #" + party.id + " · 리더: " + party.leader_name + (party.is_leader ? " (나)" : "") + " · " + (party.leader_online ? "온라인" : party.can_succeed ? "오프라인 · 승계 가능" : "오프라인 · 승계 불가") + " · 전리품: 순번 분배" : "소속 일행 없음";
     byId("party-members").replaceChildren(...(party?.members || []).map((member) => {
       const row = document.createElement("li"); row.append(semantic("player", member.name), member.id === party.leader ? " · 리더" : "", member.online ? " · 온라인" : " · 오프라인");
       if (party.is_leader) {
@@ -224,13 +231,14 @@
     const defender = party?.defender;
     byId("party-tactics").textContent = party ? "구성원 " + party.members.length + "/" + (party.max_size || 4) + " · 방어 담당: " + (defender ? defender.name + (defender.online ? " (온라인)" : " (오프라인)") + (defender.active ? " · 효과 활성" : " · 효과 비활성 (지정 유지)") : "없음") : "";
     byId("party-pending").replaceChildren(...(party?.join_requests || []).map((request) => {
-      const row = document.createElement("li"); row.append(semantic("player", request.name), " · 가입 요청 (60초)");
-      if (party.is_leader) row.append(button("허락", request.label + " 일행허락"), button("거절", request.label + " 일행거절"));
+      const status = pendingTime(request, state.server_now);
+      const row = document.createElement("li"); row.append(semantic("player", request.name), " · 가입 요청 · " + status.label);
+      if (party.is_leader && !status.expired) row.append(button("허락", request.label + " 일행허락"), button("거절", request.label + " 일행거절"));
       return row;
     }), ...(party?.invitations || []).map((invite) => {
-      const row = document.createElement("li"); row.textContent = invite.name + " · 초청 대기 (60초)"; return row;
+      const row = document.createElement("li"); row.textContent = invite.name + " · 초청 대기 · " + pendingTime(invite, state.server_now).label; return row;
     }));
-    byId("party-outgoing").textContent = state.join_request ? "가입 요청: 일행 #" + state.join_request.party_id + " (60초)" : "";
+    byId("party-outgoing").textContent = state.join_request ? "가입 요청: 일행 #" + state.join_request.party_id + " · " + pendingTime(state.join_request, state.server_now).label : "";
     const partyActions = [button("일행 조회", "일행")];
     if (!party) partyActions.push(button("일행 만들기", "일행모으기"));
     else {
@@ -250,8 +258,8 @@
     byId("party-request").hidden = !!party;
     byId("party-chat-form").hidden = !party;
     const invitation = state.invitation;
-    byId("party-invitation").hidden = !invitation;
-    byId("party-inviter").textContent = invitation ? invitation.inviter + "의 일행 초청 (60초 이내 합류)" : "";
+    byId("party-invitation").hidden = !invitation || pendingTime(invitation, state.server_now).expired;
+    byId("party-inviter").textContent = invitation ? invitation.inviter + "의 일행 초청 · " + pendingTime(invitation, state.server_now).label : "";
     for (const object of state.interactables) for (const action of object.actions) {
       const el = button(object.label + " " + action.label, action.command);
       el.replaceChildren(semantic(object.role, object.label), " ", semantic("command", action.label));

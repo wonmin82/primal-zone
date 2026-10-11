@@ -106,6 +106,93 @@ class WebStateTests(WorldCommandTest):
         self.assertFalse(snapshot["ground_loot"][0]["loot"][0]["protected"])
         json.dumps(snapshot)
 
+    def test_rt23_rt45_succession_snapshot_rebinding_sessions_and_read_only(self):
+        from copy import deepcopy
+
+        from evennia.server.models import ServerConfig
+        from typeclasses.parties import party_for
+        from world.rules import RuleError
+
+        party = invite(self.char1, self.char2, now=100)
+        respond(self.char2, True, now=101)
+        before = deepcopy(party.state())
+        leader_sessions = list(self.char1.sessions.all()) * 2
+        with patch.object(self.char1.sessions, "all", side_effect=lambda: leader_sessions), \
+                patch.object(self.char1.sessions, "count", side_effect=lambda: len(leader_sessions)):
+            self.assertFalse(multiplayer_state(self.char2, now=102)["party"]["can_succeed"])
+            leader_sessions.pop()
+            self.assertFalse(multiplayer_state(self.char2, now=102)["party"]["can_succeed"])
+            leader_sessions.clear()
+            self.assertTrue(multiplayer_state(self.char2, now=102)["party"]["can_succeed"])
+            self.assertFalse(multiplayer_state(self.char1, now=102)["party"]["can_succeed"])
+            ServerConfig.objects.conf("server_restart_mode", "reload")
+            self.assertFalse(multiplayer_state(self.char2, now=102)["party"]["can_succeed"])
+            with self.assertRaises(RuleError):
+                party.succeed(self.char2, now=102)
+            ServerConfig.objects.conf("server_restart_mode", delete=True)
+            self.assertTrue(multiplayer_state(self.char2, now=102)["party"]["can_succeed"])
+            leader_sessions.append(self.char2.sessions.all()[0])
+            # 다른 캐릭터를 제어하는 세션은 리더의 실제 puppet 세션이 아니다.
+            self.assertTrue(multiplayer_state(self.char2, now=102)["party"]["can_succeed"])
+            leader_sessions[:] = [self.connect_character(self.char1)]
+            self.assertFalse(multiplayer_state(self.char2, now=102)["party"]["can_succeed"])
+        self.assertEqual(party.state(), before)
+        self.assertIsNone(party.state()["leader_offline_since"])
+        self.char2.db.party_id = None
+        self.assertIsNone(party_for(self.char2))
+        self.assertIsNone(multiplayer_state(self.char2, now=102)["party"])
+
+    def test_rt45_pending_server_time_boundaries_cleanup_and_stale_ttl(self):
+        from copy import deepcopy
+
+        from evennia import create_object
+        from typeclasses.parties import request_join
+        from world.rules import RuleError
+
+        third = create_object(Explorer, key="가입요청자", location=self.char1.location)
+        self.connect_character(third)
+        third.push_state = Mock()
+        party = invite(self.char1, self.char2, now=100)
+        request_join(third, self.char1, now=100)
+        invite(self.char1, self.char2, now=120)
+        request_join(third, self.char1, now=120)
+        before = deepcopy(party.state())
+        for now in (100, 118, 159.999):
+            incoming = multiplayer_state(self.char2, now=now)
+            outgoing = multiplayer_state(third, now=now)
+            leader = multiplayer_state(self.char1, now=now)
+            self.assertEqual(incoming["server_now"], now)
+            self.assertEqual(incoming["invitation"]["expires_at"], 160)
+            self.assertEqual(outgoing["join_request"]["expires_at"], 160)
+            self.assertEqual(leader["party"]["invitations"][0]["expires_at"], 160)
+            self.assertEqual(leader["party"]["join_requests"][0]["expires_at"], 160)
+        for now in (160, 161):
+            self.assertIsNone(multiplayer_state(self.char2, now=now)["invitation"])
+            self.assertIsNone(multiplayer_state(third, now=now)["join_request"])
+            leader = multiplayer_state(self.char1, now=now)["party"]
+            self.assertEqual(leader["invitations"], [])
+            self.assertEqual(leader["join_requests"], [])
+        self.assertEqual(party.state(), before)  # 조회는 TTL 정리조차 저장하지 않는다.
+        with self.assertRaises(RuleError):
+            respond(self.char2, True, now=160)
+        with self.assertRaises(RuleError):
+            party.answer_request(self.char1, third, True, now=160)
+        invite(self.char1, self.char2, now=170)
+        respond(self.char2, False, now=171)
+        self.assertIsNone(multiplayer_state(self.char2, now=171)["invitation"])
+        request_join(third, self.char1, now=170)
+        party.answer_request(self.char1, third, False, now=171)
+        self.assertIsNone(multiplayer_state(third, now=171)["join_request"])
+        invite(self.char1, self.char2, now=172)
+        request_join(self.char2, self.char1, now=172)
+        respond(self.char2, True, now=173)
+        snapshot = multiplayer_state(self.char2, now=173)
+        self.assertIsNone(snapshot["invitation"])
+        self.assertIsNone(snapshot["join_request"])
+        request_join(third, self.char1, now=174)
+        party.answer_request(self.char1, third, True, now=175)
+        self.assertIsNone(multiplayer_state(third, now=175)["join_request"])
+
     def test_growth_web_state_matches_rules_and_training_location(self):
         from world import rules
 

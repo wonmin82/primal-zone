@@ -18,6 +18,12 @@
 
 [정책·구현 경계](party-and-tactics.md), [전체 RT 추적](issue48-requirement-tests.md), [실제 검사·실패/보정](playtest.md#issue-48-일행과-전술-검증)을 연결한다. 단계별 경량 검사 및 직접 영향 재검사를 통과했으며 최종 커밋의 격리 Quick 성공 후 Push/단일 PR 생성, 그 SHA의 원격 전체 CI 확인이 남은 제출 조건이다. 미발생한 Push·CI·Merge 결과를 이 문서에 미리 기록하지 않는다. 실제 PR URL/HEAD/Quick/CI 결과는 PR Validation과 최종 보고에 확정한다.
 
+### PR #53 최종 리뷰 보완 상태
+
+[PR #53](https://github.com/wonmin82/primal-zone/pull/53)의 `8e49f964c72554a81b032fb40667bd270f3a2165`를 기준으로 P2 세 건을 보완했다. Native/Legacy 실제 실물·화폐 수령과 권한·만료·보존·롤백 회귀 검사를 추가했고 지급 정책/구현은 변경하지 않았다. 웹 승계 조건에는 세션 재바인딩 완료 조건을 반영했으며 상태 조회를 읽기 전용으로 분리했다. 초청·요청은 서버 시각 기반 수신 기준 잔여 시간을 표시하며 기존 TTL을 연장하지 않는다.
+
+직접 영향 통합 검사 90개, 웹 자동 검사 15개 및 코드/문법/diff 검사를 통과했다. [RT-15/16/23/45 추가 추적](issue48-requirement-tests.md#pr-53-최종-리뷰-추가-검증)과 [실패 보정·실제 검증 기록](playtest.md#pr-53-최종-리뷰-보완)을 연결한다. 기존 구현/검증 기록과 v2.2 FREEZE는 유지한다. 이 기록 커밋 이후 정확한 HEAD의 Quick/Smoke 성공을 확인한 뒤 기존 PR에 Push하고 최신 GitHub 전체 CI를 확인한다. 실제 SHA·Quick/CI는 PR Validation에 확정하며 Merge·브랜치 삭제·Issue 종료는 승인 대기다.
+
 RT-47의 수동 브라우저·IME·복수 세션·Cross-Issue·장기 운영 검증은 #50에 남긴다. #49 문/열쇠는 미착수다. 사용자 승인 전 PR Merge·소스 브랜치 삭제·Issue #48 종료를 수행하지 않는다.
 
 

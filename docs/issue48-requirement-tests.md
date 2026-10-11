@@ -61,3 +61,16 @@
 - RT-15/16은 Native/Legacy 개인 참조·지분·보호 만료, 공동 회수 종료와 비정상 데이터 중단/롤백을 확인한다. XP·가격·전리품 수량·분배 공식은 변경하지 않는다.
 - RT-43/44는 동사만 변환·변수/묶음/간접 참조·충돌·원본 보존·멱등 및 기존 잠긴 명령 우회 금지를 연결한다. 기존 v13 비활성 저장과 이미 잘못된 이전 프로필 입력의 원본도 보존한다.
 - RT-45는 실제 서버 상태 스냅샷과 기존 DOM/명령 전달 자동 테스트, 정식 명령/Alias 도움 전수 검사다. 화면·색상·좁은 폭·OS IME 수동 확인은 RT-47이며 이번에 통과했다고 주장하지 않는다.
+
+## PR #53 최종 리뷰 추가 검증
+
+기존 RT ID와 v2.2 FREEZE를 유지한다. 아래 추가 검사는 저장 필드 보존에 더해 실제 지급 및 웹 상태 경계를 확인한다. 기존 테스트와 실패 기록은 삭제하지 않는다.
+
+| RT / Decision | 실제 테스트·구현 경로 | 추가 확인 및 결과 |
+| --- | --- | --- |
+| RT-15/16 · DIS-05/06 | `game/tests/test_party_overhaul.py`의 `PartyLootRightsTests.test_rt15_rt16_native_item_actual_pickup_after_dissolve_and_rollback`, `test_rt15_rt16_native_currency_actual_split_receipts_and_rollback`, `test_rt15_native_reserved_player_and_expiry_actual_receipts`; 실제 `game/world/loot_service.py` | Native 배정/예약 실물·화폐 지분 실제 수령, 비권리자 차단·공동 권한 종료·부분 지급 보존·만료 경계·중복 방지·수령 롤백 통과 |
+| RT-15/16 · DIS-05/06 | 같은 파일의 `PartyLegacyLootRightsTests.test_rt15_rt16_legacy_actual_item_currency_protection_and_conservation`, `test_rt15_legacy_reserved_player_and_expiry_receipts`, `test_rt16_legacy_invalid_share_stops_dissolve_and_rolls_back`; 실제 `game/typeclasses/loot.py` | Legacy 실제 수령·예약 수령인·남은 지분·수량 보존·만료·중복·수령 롤백 및 잘못된 수령인/지분 해체 중단 통과 |
+| RT-23/45 · LEAD-07, UX | `game/tests/test_web_state.py`의 `test_rt23_rt45_succession_snapshot_rebinding_sessions_and_read_only`; `game/world/state.py`, `game/typeclasses/parties.py` | 실제 puppet 0/1/2개·재바인딩 전/후·리더 재접속·리더/비멤버 거절·조회 시 Party 불변 통과 |
+| RT-45 · UX-01~04 | 같은 파일의 `test_rt45_pending_server_time_boundaries_cleanup_and_stale_ttl`; `scripts/tests/test_web_prompt.cjs`의 서버 시각 TTL 및 재바인딩 스냅샷 검사 | 최초/만료 직전/정확한 만료/이후·시계 차이·새 상태·반복 TTL 불변·승인/거절/가입 정리·오래된 UI의 서버 거절·추가 타이머 없음 통과 |
+
+실행 결과는 [최종 리뷰 검사 기록](playtest.md#pr-53-최종-리뷰-보완)에 모은다. 최종 커밋 Quick 및 해당 HEAD의 GitHub CI는 커밋 이후 PR Validation에서 확인한다. RT-47의 실제 OS 브라우저·IME·복수 실제 세션 수동 검증은 #50에 남긴다.
