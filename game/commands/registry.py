@@ -44,16 +44,7 @@ from commands.items import (
     Store,
     Unwield,
 )
-from commands.party import (
-    PartyAccept,
-    PartyCommand,
-    PartyInvite,
-    PartyKick,
-    PartyLeave,
-    PartyLootMode,
-    PartyReject,
-    PartyTransfer,
-)
+from commands.party import PARTY_COMMANDS
 from commands.settlement import Exchange, Rate
 from commands.skills import Allocate, Learn, Retrain
 from commands.social import PrivateTalk, RefuseTalk, Reply, Say
@@ -73,14 +64,7 @@ COMMANDS = [
     Allocate,
     Retrain,
     Take,
-    PartyLootMode,
-    PartyCommand,
-    PartyInvite,
-    PartyAccept,
-    PartyReject,
-    PartyLeave,
-    PartyKick,
-    PartyTransfer,
+    *PARTY_COMMANDS,
     Look,
     Exits,
     Weather,

@@ -4,7 +4,7 @@ from commands.base import GameCommand
 
 
 class Say(GameCommand):
-    category = "파티·교류"
+    category = "일행·교류"
     usage = "내용 말 · '내용"
     summary = "같은 방에 공개 발화하고 NPC의 화제·행동 키워드를 사용합니다."
     read_only = True
@@ -42,7 +42,7 @@ class PrivateTalk(GameCommand):
     aliases = []
     input_style = "chat"
     read_only = True
-    category = "파티·교류"
+    category = "일행·교류"
     usage = "플레이어 내용 대화"
     summary = "온라인 플레이어 한 명에게 비공개 메시지를 보냅니다."
     help_sections = (
@@ -68,7 +68,7 @@ class Reply(GameCommand):
     aliases = []
     input_style = "chat"
     read_only = True
-    category = "파티·교류"
+    category = "일행·교류"
     usage = "내용 대답"
     summary = "최근 성공적으로 개인 메시지를 주고받은 상대에게 답장합니다."
     help_sections = (
@@ -92,7 +92,7 @@ class RefuseTalk(GameCommand):
     aliases = []
     input_style = "target"
     read_only = True
-    category = "파티·교류"
+    category = "일행·교류"
     usage = "플레이어 대화거부 · 대화거부"
     summary = "상대별 개인 메시지 수신 차단을 전환하거나 목록을 확인합니다."
     help_sections = (
