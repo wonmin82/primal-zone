@@ -41,6 +41,10 @@ Windows, Python 3.13.15, uv 0.12.13. 저장소 루트의 uv 환경과 settings_t
 
 ### 최종 Push 및 원격 검증 기록
 
+첫 [PR #53 CI 38109537219](https://github.com/wonmin82/primal-zone/actions/runs/38109537219)는 `ed4690d03b27102ee7177c50e967ac2b018ce534`에서 코드 검사와 Quick smoke가 성공했으나 순수 227개 중 경제 검사의 현재 프로필 버전 기대값이 v13으로 남아 1개 실패했다. Issue #48의 확정 v14 전환에 맞게 경제 검사와 같은 기대값이 남은 #46 명령 검사를 v14로 정정했다. 가격·보급칩·이전 변환 원본·명령 동작 assertion은 유지하며 게임 구현을 바꾸지 않았다. 보정 후 실제 경량 검사와 새 HEAD의 Quick 및 CI 결과를 아래/PR Validation에 구분해 기록한다.
+
+보정 후 `game`에서 `uv run python -m unittest discover -s world -p 'test_*.py'`: 실패한 순수 검사 단계 전체 227개 성공·종료 0 (2.562초). 저장소 루트의 `uv run python scripts/dev.py test tests.test_command_overhaul --parallel 1`: 5개 성공·종료 0 (36.381초, runner 45.546초). 코드 검사·Markdown 렌더링/링크/앵커·diff 검사도 통과했다. 전체 로컬 게임 통합 검사는 실행하지 않았으며 새 HEAD의 Quick과 원격 CI는 이 기록 커밋 이후 별도로 확인한다.
+
 이 문서 커밋 시점에는 최종 HEAD의 Quick/Smoke와 원격 CI를 아직 성공으로 확정하지 않는다. 커밋 후 정확한 SHA에서 Quick을 실행하며, 실제 명령·종료 코드·소요 시간·SHA와 최신 GitHub Actions 전체 CI URL/결과는 구현 PR의 Validation에 기록한다. 검사 이후 실행 코드/테스트 변경이 있으면 새 HEAD에서 다시 Quick을 통과해야 한다.
 
 RT-47의 실 브라우저·한글 IME·좁은 화면/접근성·복수 실제 세션·장기 reload/restart·Cross-Issue 및 최종 통합은 #50에서 수행한다. #49 문/열쇠 기능은 이번에 구현하지 않는다. 플레이 DB를 테스트로 초기화하거나 변경하지 않는다.
