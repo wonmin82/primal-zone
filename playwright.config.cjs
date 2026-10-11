@@ -8,13 +8,12 @@ module.exports = defineConfig({
   testMatch: '*.spec.cjs',
   workers: 1,
   retries: 0,
+  // 로컬 음성 검사는 의도된 실패 하나만 실행한다. 기본/CI 수용 검사는 모두 유지한다.
+  grep: process.env.PRIMAL_BROWSER_FAILURE_PROBE === '1' ? /TEST-P2-02-D / : undefined,
   timeout: 45000,
   expect: { timeout: 15000 },
   outputDir: path.join(process.env.PRIMAL_BROWSER_RESULTS, 'screenshots'),
-  reporter: [
-    ['list'],
-    ['json', { outputFile: path.join(process.env.PRIMAL_BROWSER_RESULTS, 'results.json') }],
-  ],
+  reporter: [['./scripts/browser/reporter.cjs']],
   use: {
     browserName: 'chromium', channel: 'chromium',
     baseURL: process.env.PRIMAL_BROWSER_URL,

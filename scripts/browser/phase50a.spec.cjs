@@ -1,4 +1,4 @@
-const { test, expect, sessions } = require('./fixtures.cjs');
+const { test, expect, sessions, finishActors } = require('./fixtures.cjs');
 
 test('TEST-50A-01 실제 Chromium HTTP·WebSocket·인증·초기 상태', async ({ actors, browser }, testInfo) => {
   const a = await actors.create(0);
@@ -15,7 +15,7 @@ test('TEST-50A-02 점수 Enter 전송·실제 출력·최신 Prompt·중복 없�
   await a.command('점수');
   await expect.poll(() => a.revision).toBeGreaterThan(before);
   await expect(a.page.locator('#log .sheet').last()).toContainText('점수');
-  expect(a.sent.filter(text => text === '점수')).toHaveLength(1);
+  expect(a.sentCount).toBe(1);
   expect(a.errors).toEqual([]);
 });
 
@@ -29,6 +29,11 @@ test('TEST-50A-03 서로 다른 Account·독립 Context·실제 Puppet', async (
   await a.command('점수');
   await expect(b.page.locator('#player-name')).toHaveText(b.name);
   expect(a.errors.concat(b.errors)).toEqual([]);
+  const bIds = sessions()[b.name];
+  await actors.close(a);
+  expect([...a.ownedSessionIds].every(id => !sessions()[a.name].includes(id))).toBe(true);
+  expect(sessions()[b.name]).toEqual(bIds);
+  await b.command('점수');
 });
 
 test('TEST-50A-04 같은 방 공개 메시지·동일 원문·HTML 안전성', async ({ actors }) => {
@@ -44,6 +49,8 @@ test('TEST-50A-04 같은 방 공개 메시지·동일 원문·HTML 안전성', a
     await expect(player.page.locator('#player-name')).toHaveText(player.name);
     expect(player.errors).toEqual([]);
   }
+  expect(JSON.stringify(a.diagnostic()).includes(text)).toBe(false);
+  expect(a.lastAction.category).toBe('chat');
 });
 
 test('TEST-50A-05 실제 종료·재연결·재인증·세션 중복 없음', async ({ actors }) => {
@@ -77,7 +84,65 @@ test('TEST-50A-06 Desktop/Narrow 구조·입력·버튼 이름·스크린샷 증
     await a.command('점수');
     await expect(a.page.locator('#log .sheet').last()).toContainText('점수');
     expect(a.errors).toEqual([]);
-    await a.page.screenshot({ path: testInfo.outputPath(`viewport-${viewport.width}.png`), fullPage: true });
-    await a.page.context().close();
+    const path = testInfo.outputPath(`safe-viewport-${viewport.width}.png`);
+    // 레이아웃만 증거로 남긴다. 로그/입력/인증 UI는 원문을 수집하지 않는다.
+    await a.page.screenshot({ path, fullPage: true, mask: [a.page.locator('#log'), a.page.locator('#command'), a.page.locator('#auth-dialog')] });
+    await testInfo.attach(`safe-viewport-${viewport.width}`, { path, contentType: 'image/png' });
+    await actors.close(a);
+    expect(a.detached).toBe(true);
+    expect(sessions()[a.name]).toEqual([]);
+  }
+});
+
+test('TEST-P2-02-A 개인 메시지는 실제 전달하되 진단에 원문 비수집', async ({ actors }) => {
+  const a = await actors.create(0), b = await actors.create(1);
+  const privateText = 'PRIVATE-FIXTURE-' + Date.now();
+  const command = b.name + ' ' + privateText + ' 대화';
+  await a.command(command);
+  await expect.poll(async () => (await b.page.locator('#log').textContent()).includes(privateText)).toBe(true);
+  expect(a.lastAction).toEqual({ kind: 'command', category: 'chat', length: command.length });
+  expect(JSON.stringify(a.diagnostic()).includes(privateText)).toBe(false);
+  expect(a.pendingCommand).toBeNull();
+});
+
+test('TEST-P2-02-D 실제 Assertion 실패·첨부 실패에도 안전한 증거와 Context 정리', async ({ actors }, testInfo) => {
+  const a = await actors.create(0), b = await actors.create(1);
+  const text = 'FAILURE-PRIVATE-FIXTURE-' + Date.now();
+  await a.command(b.name + ' ' + text + ' 대화');
+  if (process.env.PRIMAL_BROWSER_FAILURE_PROBE === '1') {
+    // 잡지 않은 실제 Assertion 실패와 정상 Fixture teardown의 증거 경계를 검증한다.
+    expect(await a.page.locator('#command').isEnabled()).toBe(false);
+  }
+  let assertion;
+  try { expect(await a.page.locator('#command').isEnabled()).toBe(false); }
+  catch (error) { assertion = error; }
+  expect(!!assertion).toBe(true);
+  // 실패 보고서가 오류 원문을 수집하지 않는지는 reporter 계약 테스트도 검사한다.
+  await finishActors([a, b], testInfo);
+  expect(a.detached && b.detached).toBe(true);
+  expect(JSON.stringify(a.diagnostic()).includes(text)).toBe(false);
+  const c = await actors.create(0);
+  let cleanup;
+  try { await finishActors([c], { attach: async () => { throw new Error('controlled-attach-failure'); } }); }
+  catch (error) { cleanup = error; }
+  expect(cleanup instanceof AggregateError).toBe(true);
+  expect(c.detached).toBe(true);
+  expect(sessions()[c.name]).toEqual([]);
+});
+
+test('TEST-P2-03-D Probe 실패·Timeout은 실패로 구분하고 실제 Context는 정리', async ({ actors }) => {
+  for (const mode of ['probe', 'timeout']) {
+    const a = await actors.create(0);
+    const owned = [...a.ownedSessionIds];
+    let cleanup;
+    try { await a.close({ timeout: 0, probe: () => {
+      if (mode === 'probe') throw new Error('controlled-probe-failure');
+      return { [a.name]: owned };
+    } }); } catch (error) { cleanup = error; }
+    expect(cleanup instanceof AggregateError).toBe(true);
+    expect(cleanup.errors.some(error => error.message === 'puppet-detach: ' + (mode === 'probe' ? 'probe-failed' : 'timeout'))).toBe(true);
+    expect(a.page.isClosed()).toBe(true);
+    await actors.close(a); // 실제 읽기 전용 Probe로 종료를 재확인한다.
+    expect(a.detached).toBe(true);
   }
 });
