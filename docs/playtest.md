@@ -37,6 +37,8 @@ Windows, Python 3.13.15, uv 0.12.13. 저장소 루트의 uv 환경과 settings_t
 
 추가 저장 검토에서 실행 불가능한 v13 목록을 새 동사로 부분 변환하지 않고 전체 원문/이유를 보존하도록 보강했다. game에서 `uv run python -m unittest world.test_party_migration world.test_command_shortcuts world.test_dialogue_migration` 24개 통과·종료 0 (0.088초). 직전 `429166505e5494a0b173a6929dcc00653a01fc7c` Quick은 104.028초·종료 0이며, 마지막 저장 변환 변경 후 새 HEAD에서 다시 Quick을 수행한다.
 
+실제 명령·별칭 우선권을 v13 등록 어휘 전체와 전수 대조했다. 첫 스냅샷 검사에서 상속된 장착 명령/별칭과 내부 fallback 10개 누락을 발견해 보완했으며, `uv run python scripts/dev.py test tests.test_party_overhaul.PartyCommandContractTests world.test_party_migration world.test_command_shortcuts --parallel 2` 23개 통과·종료 0이다. 위험한 동명 개인 정의가 실제 명령 호출을 비활성화하지 않는지 모든 기존 명령/별칭으로 검사했다. 직전 `8ffebbaaca49956163aa41bd1beab255e4d3a213` Quick은 102.513초·종료 0이며 이 변경 이후 최종 HEAD에서 Quick을 다시 실행한다.
+
 ### 최종 Push 및 원격 검증 기록
 
 이 문서 커밋 시점에는 최종 HEAD의 Quick/Smoke와 원격 CI를 아직 성공으로 확정하지 않는다. 커밋 후 정확한 SHA에서 Quick을 실행하며, 실제 명령·종료 코드·소요 시간·SHA와 최신 GitHub Actions 전체 CI URL/결과는 구현 PR의 Validation에 기록한다. 검사 이후 실행 코드/테스트 변경이 있으면 새 HEAD에서 다시 Quick을 통과해야 한다.

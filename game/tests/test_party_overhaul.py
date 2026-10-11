@@ -21,7 +21,9 @@ class PartyCommandContractTests(GameCommandTest):
     character_typeclass = Explorer
 
     def test_rt01_all_sixteen_commands_aliases_help_and_old_verbs_absent(self):
-        from commands.vocabulary import V14_PARTY_NAMES
+        from commands.vocabulary import V13_RUNTIME_NAMES, V14_PARTY_NAMES
+        self.assertSetEqual(set(V13_RUNTIME_NAMES), {name for cls in COMMANDS if cls not in PARTY_COMMANDS
+                                            for name in (cls.key, *cls.aliases)})
         self.assertEqual(V14_PARTY_NAMES, {name for cls in PARTY_COMMANDS for name in (cls.key, *cls.aliases)})
         expected = {
             "일행": ["무리", "그룹"], "일행모으기": ["그룹만들기", "그룹모으기"],

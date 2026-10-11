@@ -4,7 +4,7 @@ from copy import deepcopy
 from unittest import TestCase
 
 from commands.shortcuts import parse_definition
-from commands.vocabulary import migrate_party_shortcuts
+from commands.vocabulary import V13_RUNTIME_NAMES, migrate_party_shortcuts
 
 from world import rules
 
@@ -55,3 +55,9 @@ class PartyMigrationTests(TestCase):
         fresh = rules.new_profile()
         fresh['command_shortcuts'] = {'무': '점수', '메시지': '철수 안녕 대화'}
         self.assertEqual(rules.migrate_profile(fresh), fresh)
+
+    def test_rt44_every_existing_real_command_alias_beats_unsafe_personal_name(self):
+        for name in V13_RUNTIME_NAMES:
+            with self.subTest(name=name):
+                changed = migrate_party_shortcuts({name:'$*', '안전호출':name})
+                self.assertEqual(changed['안전호출'], name)

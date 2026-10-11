@@ -159,6 +159,25 @@ def migrate_dialogue_shortcuts(shortcuts):
     return _migrate_protected_shortcuts(shortcuts)
 
 
+# v13의 등록된 실제 명령/별칭. 향후 명령 추가를 과거 의미에 소급하지 않는다.
+V13_RUNTIME_NAMES = frozenset({
+    '__nomatch_command', '`', 'breathing', 'drink', 'drop', 'eat', 'exchange', 'exits',
+    'flee', 'give', 'heal', 'heavy', 'home', 'insight', 'quest', 'rate',
+    'rest', 'retrieve', 'say', 'store', 'suppress', 'unwield', 'wield', '가져',
+    '가진', '가진거', '가치', '간파', '강타', '견제', '경', '경험치',
+    '공격', '교환', '구입', '귀환', '기술', '꺼', '꺼내', '날씨',
+    '넣어', '능력', '단축어', '대답', '대화', '대화거부', '도망', '도움',
+    '도움말', '때려', '마셔', '말', '먹어', '메뉴', '목', '목록',
+    '무장', '배분', '배워', '버려', '벗', '벗어', '보', '본',
+    '봐', '사', '사용', '상', '상태', '소', '소각', '소각 확정',
+    '소지', '소지품', '수리', '쏴', '얼마', '임무', '입', '입어',
+    '장', '장비', '장전', '재분배', '재장전', '재훈련', '점', '점수',
+    '정보', '조사', '주무기', '준말', '줄임말', '줘', '지', '지도',
+    '집', '착용', '채워', '쳐', '출구', '치료', '켜', '퀘스트',
+    '판', '팔', '팔아', '품', '품목', '해', '해제', '해지',
+    '호흡', '확인', '환경', '환율', '회복', '휴식', '힐',
+})
+
 V13_PARTY_COMMANDS = {
     "파티": "일행", "파티초대": "일행초청", "파티수락": "일행합류", "파티거절": "일행거절",
     "파티탈퇴": "일행탈퇴", "파티제외": "일행제외", "파티장위임": "일행리더", "파티분배": "일행분배",
@@ -199,7 +218,7 @@ def _migrate_protected_shortcuts(shortcuts, *, party=False):
         "소각", "소각 확정",
     }) | frozenset(SHORTCUTS) | frozenset(ARGUMENT_SHORTCUTS)
     if party:
-        actual = (actual - {"파티추방", "파티위임", "전리품방식"}) | frozenset(V13_PARTY_COMMANDS) | frozenset({"대답", "대화거부"})
+        actual = V13_RUNTIME_NAMES | frozenset(V13_PARTY_COMMANDS) | frozenset(SHORTCUTS) | frozenset(ARGUMENT_SHORTCUTS)
     reserved = V14_PARTY_NAMES if party else {"대화", "대답", "대화거부"}
     normalized = {}
     for key in shortcuts:
