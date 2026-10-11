@@ -1,5 +1,44 @@
 # 테스트와 검증
 
+## Issue #50 Phase 50-A
+
+2026-10-12, 최신 main `7afc09d064ea0e45dc68f77ab7ede6c5e7237202`에서 `codex/issue-50-integration-validation`로 시작했다. v1.2 DESIGN FREEZE 및 선행 #46~49/#54의 실제 PR HEAD·Merge·CI를 감사했다. 아래 최초 구현·실패·병합 전 이력은 삭제하지 않는다. 이번 범위는 50-A 기반이며 50-B~F와 최종 RELEASE를 완료했다고 표현하지 않는다.
+
+### 실제 실행과 결과
+
+Windows 10, Python 3.13.15, uv 0.12.13, Node 24.19.0, npm 11.17.0, Playwright 1.64.0 / Chromium 156.0.8078.4 (revision 1248). 성공 실행은 착수 HEAD + 미커밋 코드 기준이며 이후 `f63a12756346aae5dc841b208bacc3113267436d`와 코드가 동일하다. 이후 문서만 바뀌므로 같은 검사를 반복하지 않는다. 최종 Push HEAD Quick/Smoke와 원격 CI는 실제 실행 후 PR Validation 및 Issue #50 진행 구역에 별도 SHA·URL로 확정한다.
+
+| 실제 명령 | 결과·시간 |
+| --- | --- |
+| `npm ci` | Lockfile 설치 성공, 취약점 0 |
+| `npx playwright install --no-shell chromium` | 성공, 실제 Chromium 설치. 첫 CDN 인증서 오류는 아래 기록 |
+| `npm run test:browser` | TEST-50A-01~06 6개 PASS, 0 skip/flaky, Playwright 41.921초 / 전체 89.154초 |
+| `npm run test:contracts` | 기존 Node DOM/프로토콜 16개 PASS, 0.486초 |
+| `uv run python -m unittest discover -s scripts/tests -p test_browser_runner.py` | 신규 격리·비밀 제거 3개 PASS, 최종 0.173초 |
+| `uv run python scripts/dev.py test world.test_smoke tests.test_smoke_infrastructure --parallel 2` | 기존 18개 PASS, 테스트 12.545초 / runner 27.741초 |
+| `uv run python scripts/dev.py check` | PASS, 종료 0 |
+| `node --check playwright.config.cjs` 및 `scripts/browser/fixtures.cjs`, `scripts/browser/phase50a.spec.cjs` | 모두 PASS, 종료 0 |
+| `git diff --check` | PASS |
+
+실제 UI 로그인·Enter 점수 1회·서버 sheet/Prompt·독립 두 Account/Context/WS·공개 메시지 각 1회·HTML 안전성·Puppet 1→0→1 재접속·두 Viewport 구조/입력을 검사했다. [각 테스트 시간과 Gate 추적](issue50-integration-matrix.md), [실행 구조·Artifact 보안](issue50-browser-validation.md), [성능 기록](issue50-test-performance.md)을 연결한다.
+
+`work/browser-e2e/run-8m2ki8dx`의 JSON·로그·Desktop 1366×768 / Narrow 390×844 PNG를 확인했다. 최초 PNG는 리뷰 증거이며 승인 Visual Baseline이 아니다. 총 실행 시간은 DB/Fixture/정적 파일 준비 및 종료를 포함한다. 성공 후 소유 Portal/Server가 종료되고 격리 DB 디렉터리가 제거됐다. 실제 플레이 DB hash/mtime/size는 실행 전후 같았다. 업로드 대상에는 DB/인증 파일/secret 설정/Trace/영상이 없다.
+
+### 개발 중 실패와 수정 이력
+
+- Chromium 설치의 첫 CDN에서 `SELF_SIGNED_CERT_IN_CHAIN`이 발생했다. 공식 대체 CDN의 Chromium/FFmpeg/Winldd와 `--no-shell` 설치로 성공했으며 TLS 검증을 끄지 않았다.
+- 첫 실제 브라우저 실행은 Playwright Worker에 전달한 stdin이 비어 인증 Fixture JSON 읽기에 실패했다(1개 실패/5개 미실행). 비공개 임시 파일로 전달하고 Node 종료 후 삭제하도록 고쳤다.
+- 다음 실행은 실제 인증 성공 후 WS URL의 브라우저 정규화(`/`) 때문에 6개 실패했다. URL을 같은 방식으로 정규화해 비교하며 실제 WS 확인은 유지했다.
+- 다음 실행은 기존 `/favicon.ico` 404만 Console 오류 검사에 걸렸다(6개 실패). 이 비차단 리소스 경고는 원 URL과 내용을 증거에 보존하고 다른 Console/JS 오류는 계속 실패로 처리한다. 리소스 누락의 정리는 50-E에서 평가하며 게임 코드에 섞지 않는다.
+- 다음 실행은 5개 성공/1개 실패였다. Narrow CSS가 원래 숨기는 탐사 수첩 버튼을 검사했고, 닫힌 Page에서 실패 스크린샷을 만들려다 부수 오류가 발생했다. 실제 공유 실행/전투 버튼과 모든 노출 버튼의 접근 가능한 이름을 검사하고 실패 증거 수집은 닫힌 Page를 구분한다. 기존 CSS와 수용 조건은 바꾸지 않았다.
+- 격리 SQLite Probe 단위 검사 첫 실행은 연결 context가 DB 연결 자체를 닫지 않아 Windows 임시 파일 정리가 실패했다. `closing()`으로 연결 종료를 보장한 후 3개 성공했다.
+
+### CI 및 미실행 범위
+
+기존 `test`/`smoke`는 그대로 유지한다. 새 `browser-e2e`는 실제 Chromium/production 타이머 Harness·3개 격리 검사를 실행하고, `contracts`는 실제 기존 Node 16개를 실행한다. 공식 Actions SHA를 고정했다. 저장소 Actions 허용목록은 사용자 승인 후 기존 checkout/setup-uv에 setup-node/upload-artifact 두 항목만 추가했다. 브랜치 보호를 변경하지 않았다. 성공 증거 14일/실패 30일이며 cleanup·비밀 제거를 완료한 디렉터리만 업로드한다.
+
+로컬 전체 Python 회귀는 게임·공통 Harness 코드가 동일해 반복하지 않았다. 최종 원격 `test`가 기존 전체 회귀를 실행한다. 50-B 전수 계약, 50-C E2E-01~14, 50-D 실제 60초/600초·정상 서버 재시작, 50-E 기능 결함 Closeout, 50-F RELEASE/Issue 종료는 NOT RUN이다. OS 한글 IME는 기존 사용자 수동 성공 PRIOR VERIFIED이며 신규 PASS 합산·재검증 대상이 아니다. PR 제출 후 Merge·브랜치 삭제·Issue Close는 수행하지 않는다.
+
 ## Issue #49 문과 열쇠 검증
 
 ### PR #56 D13 장애 격리 P1 보완

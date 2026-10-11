@@ -1,5 +1,23 @@
 # 원시구역 개발 작업 및 검증 이력
 
+## Issue #50 — Phase 50-A 자동 브라우저 기반 (제출 전 기록)
+
+[Issue #50 v1.2 DESIGN FREEZE](https://github.com/wonmin82/primal-zone/issues/50)의 50-A만 구현했다. 착수 main `7afc09d064ea0e45dc68f77ab7ede6c5e7237202`, Source `codex/issue-50-integration-validation`, 코드 커밋 `f63a12756346aae5dc841b208bacc3113267436d`. 선행 #46~49/#54와 PR #51~53/#55/#56의 병합·최종 PR 및 main CI를 재조회했다. 아래 역사적 병합 전·실패 기록은 당시 사실로 보존한다.
+
+| 작업 | 실제 구현 |
+| --- | --- |
+| 50-A-01 | Node 24·Playwright 1.64.0·Chromium·npm Lockfile·최소 JS 설정 |
+| 50-A-02 | 기존 Harness('full') production 타이머·동적 포트·격리 DB·소유 프로세스 cleanup |
+| 50-A-03~05 | 실제 DOM 인증/명령 Helper·독립 Account/Context·WS 관찰·읽기 전용 Puppet Probe |
+| 50-A-06 | 기존 test/smoke 유지·실제 browser-e2e/contracts·비밀 제거 후 증거·성공14/실패30일 |
+| 50-A-07 | 통합 매트릭스·브라우저/성능·실행/실패 기록·README 실행 안내 |
+
+최소 E2E 6개, 신규 격리 검사 3개, 기존 Node 16개 및 관련 Python 18개가 로컬에서 성공했다. 커밋 전 실행 기준·시간·실패 보정·미실행은 [검증 기록](playtest.md#issue-50-phase-50-a)과 [매트릭스](issue50-integration-matrix.md)에 연결한다. 게임 구현·프로토콜·운영 타이머·콘텐츠·영속 데이터 구조를 변경하지 않았다. 플레이 DB 불변, 실제 Portal/Server 종료 및 성공 실행의 격리 DB 삭제를 확인했다.
+
+정확한 최종 Push HEAD의 Quick/Smoke 성공 후 단일 Ready PR을 제출하고 네 GitHub Job을 확인한다. 이 제출 전 기록에서 아직 실행하지 않은 검증은 PASS로 확정하지 않는다. 최신 SHA·PR 링크·Quick·CI 및 A-01~20 판정은 Issue #50 Phase 50-A 진행 구역과 PR Validation에서 실제 결과로 갱신한다.
+
+50-B~F·전체 E2E·실제 600초/60초·정상 서버 재시작·최종 RELEASE는 NOT RUN이다. OS 한글 IME는 기존 사용자 수동 성공 PRIOR VERIFIED이며 새 검증 성공과 구분한다. Issue #50/#45 OPEN, 제출 PR OPEN/Ready 및 Source 브랜치를 유지한다. Merge/Closeout/운영 DB 적용은 이번 범위 밖이다.
+
 ## PR #56 — D13 장애 격리 P1 리뷰 보완 (병합 전 기록)
 
 기존 [PR #56](https://github.com/wonmin82/primal-zone/pull/56)의 `c90866cdef44035543c04e780b193d2801c83d9b`에서 설치된 Door endpoint가 DefaultExit로 손상되면 런타임 가드는 차단하지만 다음 서버 시작의 관리 Exit preflight가 전체 월드 초기화를 중단하는 P1을 격리 재현했다. 수정 전 1개 ERROR와 수정 후 PASS는 [실제 검증 기록](playtest.md#pr-56-d13-장애-격리-p1-보완)에 보존한다.

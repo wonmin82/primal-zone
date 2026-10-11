@@ -164,6 +164,19 @@ uv run python scripts/dev.py stop
 병렬·선별 테스트, DB 격리, Quick/Full smoke 차이, 수동 확인과 과거 CI·실패 이력은 [테스트 안내](docs/playtest.md#6-자동-테스트-실행)에 있다.
 검사는 플레이 DB와 운영 인증 설정을 보존한다. 브라우저 화면·실제 한글 IME 확인은 자동 테스트와 별도로 수행한다.
 
+### 실제 브라우저 자동 검증 (Issue #50 Phase 50-A)
+
+Node 24 LTS에서 아래 명령으로 기존 Harness가 준비·종료하는 격리 Evennia 서버에 실제 Chromium을 접속한다. 서로 다른 두 Account/Browser Context의 로그인·명령·공개 메시지·재접속과 Desktop/Narrow를 검증한다. 게임 및 운영 DB를 변경하지 않는다.
+
+```sh
+npm ci
+npx playwright install --no-shell chromium
+npm run test:browser
+npm run test:contracts
+```
+
+CI는 Chromium 설치에 `--with-deps`를 추가하며 기존 `test`·`smoke`와 새 `browser-e2e`·`contracts`를 실행한다. [격리·보안·증거 안내](docs/issue50-browser-validation.md), [단계별 추적](docs/issue50-integration-matrix.md), [실행·실패 이력](docs/playtest.md#issue-50-phase-50-a)을 참고한다. 50-B~50-F는 미실행이며 이미 수동 검증한 OS 한글 IME는 `PRIOR VERIFIED`로 구분한다.
+
 ### 정적 파일 수집
 
 CSS·JavaScript·글꼴을 수정하면 **`game` 디렉터리에서** 다음 명령을 실행한 뒤 브라우저를 새로고침한다.
