@@ -234,30 +234,34 @@ def take_loot(caller, item=None, corpse=True, now=None, *, request=None):
                 source.delete()
         if not received:
             raise rules.RuleError("가져갈 물건이 없거나 다른 탐사자의 보호된 전리품입니다.")
-    totals = {}
-    for target, identity, quantity in received:
-        totals[(target, identity)] = totals.get((target, identity), 0) + quantity
-    own = [ft.text(ft.item(identity), " ", count_word(quantity), " 개")
-           for (target, identity), quantity in totals.items() if target == caller and identity != CURRENCY["id"]]
-    if own:
-        caller.msg(ft.text("시체를 뒤져 " if corpse else "바닥에서 ", ft.join(own, "와 "), "를 챙겼다."))
-    if recovered_currency:
-        caller.msg(ft.text("시체에서 " if corpse else "바닥에서 ", ft.token("reward", format_currency(recovered_currency)), "을 회수했다."))
-        caller.msg(ft.join([ft.text(ft.token("player", target.key), " ", ft.token("reward", format_currency(amount)))
-                           for (target, identity), amount in totals.items() if identity == CURRENCY["id"]], " · "))
-    for (target, identity), quantity in totals.items():
-        if target != caller:
-            if identity == CURRENCY["id"]:
-                message = ft.text("전리품 분배로 ", ft.token("reward", format_currency(quantity)), "을 받았다.")
-            else:
-                message = ft.text(ft.item(identity), " ", count_word(quantity), " 개는 이번 순번인 ",
-                                  ft.token("player", target.key), "에게 돌아갔다.")
-                caller.msg(message)
-            target.msg(message)
-            target.push_state()
-    for obj in caller.location.contents:
-        if hasattr(obj, "push_state"):
-            obj.push_state()
+        # 메시지와 수신 대상을 지급 시점에 고정하고 최상위 커밋 후 전송한다.
+        totals = {}
+        for target, identity, quantity in received:
+            totals[(target, identity)] = totals.get((target, identity), 0) + quantity
+        own = [ft.text(ft.item(identity), " ", count_word(quantity), " 개")
+               for (target, identity), quantity in totals.items() if target == caller and identity != CURRENCY["id"]]
+        if own:
+            message = ft.text("시체를 뒤져 " if corpse else "바닥에서 ", ft.join(own, "와 "), "를 챙겼다.")
+            after_change(lambda message=message: caller.msg(message))
+        if recovered_currency:
+            message = ft.text("시체에서 " if corpse else "바닥에서 ", ft.token("reward", format_currency(recovered_currency)), "을 회수했다.")
+            after_change(lambda message=message: caller.msg(message))
+            message = ft.join([ft.text(ft.token("player", target.key), " ", ft.token("reward", format_currency(amount)))
+                               for (target, identity), amount in totals.items() if identity == CURRENCY["id"]], " · ")
+            after_change(lambda message=message: caller.msg(message))
+        for (target, identity), quantity in totals.items():
+            if target != caller:
+                if identity == CURRENCY["id"]:
+                    message = ft.text("전리품 분배로 ", ft.token("reward", format_currency(quantity)), "을 받았다.")
+                else:
+                    message = ft.text(ft.item(identity), " ", count_word(quantity), " 개는 이번 순번인 ",
+                                      ft.token("player", target.key), "에게 돌아갔다.")
+                    after_change(lambda message=message: caller.msg(message))
+                after_change(lambda target=target, message=message: target.msg(message))
+                after_change(target.push_state)
+        for obj in caller.location.contents:
+            if hasattr(obj, "push_state"):
+                after_change(obj.push_state)
     return received
 
 

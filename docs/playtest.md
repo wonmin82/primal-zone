@@ -1,5 +1,38 @@
 # 테스트와 검증
 
+## Issue #54 전리품 알림 커밋 경계
+
+Windows, Python 3.13.15, uv 0.12.13에서 `settings_test` 격리 SQLite/fixture와 실제 `take_loot()`을 사용했다. 메시지와 `push_state()`만 관찰하고 지급·권한·지분 계산은 실제 서비스를 사용한다. 지급 저장 후 예외를 주입하는 검사는 원래 저장을 실행한 다음 실패시킨다. main 기준은 `f48a632a1dd6a56b283f3864d6a4ace7e0f3b355`이다.
+
+### 실제 재현 및 보정 이력
+
+수정 전 `uv run python scripts/dev.py test tests.test_loot.LootNotificationTests.test_test01_legacy_item_outer_rollback_has_no_success_effects --parallel 1`은 1개 실패·종료 1이었다. 외부 변경을 의도적으로 롤백했을 때 데이터 복구는 성공했지만 그 전에 수령 성공 메시지 1회와 방 상태 갱신 2회가 이미 전달된 것을 확인했다. 운영에서 발생했다고 주장하는 사례가 아닌 자동 격리 재현이다.
+
+확장한 최초 11개 검사는 9개 실패·종료 1이었다. 그중 정상 단독 수령 1개는 테스트가 기존 `save_profile()`의 커밋 후 상태 갱신을 누락한 기대값 오류였다. 최소 수정 후 11개 검사에서 남은 5개 실패는 모두 기존 profile 갱신 횟수/순서 또는 Savepoint 이후 별도 정상 저장의 갱신을 잘못 제외한 새 관찰 기대값이었다. 원래 구현의 출력 횟수를 유지하도록 기대값을 보정했고 기존 assertion을 삭제하거나 지급 규칙을 완화하지 않았다. 보정 재검사 13개는 통과·종료 0 (13.890초, runner 24.505초)였다. 이후 보호 만료 경계 공통 명령 검사를 추가하여 최종 직접 영향 검사에 포함했다.
+
+### 수용 검사 추적
+
+| 수용 기준 | 실제 검사/추가 검증 |
+| --- | --- |
+| TEST-01 | `tests.test_loot.LootNotificationTests.test_test01_legacy_item_outer_rollback_has_no_success_effects`: Legacy 실물 실제 지급·원본/profile 롤백·커밋 전후 외부 효과 없음 |
+| TEST-02 | 같은 클래스 `test_test02_legacy_currency_outer_rollback_has_no_recipient_effects`: 두 수령인의 실제 화폐 지급/롤백·분배 알림과 상태 갱신 없음 |
+| TEST-03 | `tests.test_loot_entities.NativeLootNotificationTests.test_test03_native_common_command_outer_rollback_preserves_all_assets`: 공통 take_loot 경로의 ItemEntity·LootClaim·화폐/share·profile 전체 복구 |
+| TEST-04 | 두 클래스 `test_test04_*`: 단독 수령 반환·실제 DB 지급·원래 Semantic Text/대상/횟수/순서·알림 시점 커밋된 데이터 |
+| TEST-05 | 두 클래스 `test_test05_test07_*`: 상위 정상 커밋 전에 알림 없음, 이후 정확한 지급·수신·횟수; 반환 목록 변경으로 예약 알림이 바뀌지 않음 |
+| TEST-06 | 두 클래스 `test_test06_*`: 내부 Savepoint 롤백 콜백 폐기, 상위의 별도 정상 수령/profile 저장만 성공 |
+| TEST-07 | `test_test05_test07_*`, Legacy `test_test07_multiple_awards_outer_rollback_leaves_no_partial_success`: 여러 실물·수량·화폐/다수 수령인·집계·순서·상위 롤백시 부분 성공 누출 없음 |
+| TEST-08 | 새 `test_test08_*`: 재고 부족·지급 후 예외·실제 없는 수령인·비정상 지분 합·Native 보호 실패/정확한 만료. 기존 loot/loot_entities의 비권리자·중복 회수·지분·수량·실패 검사와 party_overhaul의 RT-15/16 Native/Legacy 해체 후 실제 개인 수령/보존을 재실행 |
+
+### 최종 직접 영향 검사와 제출 게이트
+
+- `uv run python scripts/dev.py test tests.test_loot tests.test_loot_entities tests.test_party_overhaul tests.test_item_entities --parallel 2`: 신규 14개를 포함한 119개 통과·종료 0 (57.286초, runner 67.404초). 기존 공통 커밋 후 출력 검사와 일행 해체의 실제 개인 수령도 포함한다.
+- `uv run python scripts/dev.py test tests.test_currency_loot --parallel 1`: 화폐 지분·잘못된 수령인·부분/만료·오프라인 지급·저장 실패 기존 16개 통과·종료 0 (7.522초, runner 16.890초).
+- `uv run python scripts/dev.py test tests.test_loot.LootNotificationTests.test_test08_invalid_shares_or_missing_recipient_preserve_data_without_effects --parallel 1`: 잘못된 지분 합과 실제로 없는 수령인 검사 1개(2개 하위 사례) 통과·종료 0 (5.440초, runner 14.825초). 신규 15개를 포함해 직접 영향 검사는 총 136개 성공이다. 앞선 성공 이후 지급 코드 변경은 없으며 추가 검사만 실행했다.
+- `uv run python scripts/dev.py check`: 코드 검사 통과·종료 0.
+- `git diff --check`: 통과·종료 0. GitHub GFM으로 변경 Markdown 4개 렌더링, 저장소 Markdown 52개·상대 링크 511개·앵커 링크 168개 검사 오류 0.
+
+전체 로컬 회귀·실 브라우저·OS IME·복수 실제 세션·production Full timing은 이번 좁은 수정에서 실행하지 않으며 수동/Cross-Issue 통합은 #50의 범위다. 새 커밋 이후 정확한 HEAD에서 `uv run python scripts/dev.py smoke`가 종료 0인 경우에만 Push한다. 커밋 후 Quick 소요 시간·SHA·최신 GitHub 전체 test/smoke 실행 URL과 결과는 PR Validation에 남기며 이전 HEAD의 성공으로 대체하지 않는다. 실제 플레이 DB의 SHA-256·크기·수정 시각을 검사 전후 대조한다.
+
 ## Issue #48 일행과 전술 검증
 
 v2.2 FREEZE를 기준으로 48-A/B/B2/C/D/E/F를 단일 브랜치에서 구현했다. [RT-01~RT-47](issue48-requirement-tests.md)에 Decision·실제 코드·테스트 이름을 연결한다. 아래 #47/#46/과거 Phase 기록은 당시 결과를 보존하며 현재 일행 정책과 혼동하지 않는다.

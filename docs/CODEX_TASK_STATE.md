@@ -1,5 +1,13 @@
 # 원시구역 개발 작업 및 검증 이력
 
+## Issue #54 — 전리품 알림 커밋 경계 수정 (제출 전 기록)
+
+[Issue #54](https://github.com/wonmin82/primal-zone/issues/54)는 [PR #53](https://github.com/wonmin82/primal-zone/pull/53) Closeout에서 별도 추적한 P2 위험이다. 병합된 main `f48a632a1dd6a56b283f3864d6a4ace7e0f3b355`에서 시작했고 운영 발생 사례가 아닌 격리된 실제 수령 API로 재현했다. 아래 과거 작업/실패/병합 전 기록은 당시 사실을 보존한다.
+
+Native/Legacy 공통 `take_loot()`에서 지급과 저장은 그대로 두고, 확정 메시지·수신 대상·상태 갱신을 기존 `after_change()`에 등록한다. 최상위 커밋 전에 성공 알림이 없고 상위/Savepoint 롤백에서는 폐기한다. 원래 메시지·반환·순서·수량·개인 권리와 상태 갱신 횟수를 유지한다. 별도 큐·마이그레이션·프로필 변경·공통 트랜잭션 수정은 없다.
+
+[TEST-01~08 추적과 실제 실행/보정](playtest.md#issue-54-전리품-알림-커밋-경계), [수령 계약](loot-claims.md#수령-알림의-커밋-경계-issue-54)을 연결한다. 새 커밋의 정확한 SHA에서 격리 Quick 성공 후 Push하고 Ready PR을 제출하며 최신 GitHub 전체 CI를 확인한다. 이 제출 전 기록에서 아직 발생하지 않은 Quick/Push/CI를 성공으로 표시하지 않는다. 실제 SHA·Quick 결과·PR URL·CI 결과는 PR Validation에 확정한다. 직접 영향 검사 총 136개(신규 15개), 코드/diff 및 문서 렌더링/링크 검사는 통과했다. Issue #54는 OPEN, 제출 후 PR은 리뷰 대기로 유지하며 Merge·브랜치 삭제·Issue 종료는 이번 범위 밖이다. #49는 미착수, #50의 실 브라우저·OS IME·복수 실제 세션·Cross-Issue 수동 통합은 미검증으로 유지한다.
+
 ## Issue #48 — 일행과 전술 v2.2 FREEZE 구현
 
 [Issue #48](https://github.com/wonmin82/primal-zone/issues/48)의 최신 본문과 부록 A/B/C를 읽고 origin/main `49669e24ebccfc7d876a6027e175a2e4e3d85382`에서 단일 `codex/issue-48-party-tactics` 브랜치로 진행했다. 선행 #46/#47은 완료된 기반이며 아래 이전 마감 기록은 당시 사실을 보존한다.

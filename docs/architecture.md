@@ -630,3 +630,7 @@ v6부터 사용하는 `light_sources[item_id]`에는 on, power_source, charge_se
 명령·웹은 동일한 서버 서비스를 사용한다. `world_change()`의 직렬 변경과 커밋 후 `after_change()`에 가입·승계·출력을 연결한다. 기존 5초 WorldLifecycle와 접속 훅이 실제 puppet 세션·600초 영속 시각을 재검증하며 Portal 동기화 전에는 오프라인 판단을 보류한다. 개인 확정 LootClaim/CurrencyLootShare는 삭제하지 않고 Party 공동 권리만 종료한다. Enemy는 기존 최고 위협도 기본 대상 선정 후 같은 일행의 유효 담당자에게만 최종 대상을 바꾼다.
 
 정책·저장·권리 경계는 [일행과 전술](party-and-tactics.md), 전체 검증 추적은 [RT 매트릭스](issue48-requirement-tests.md)에 모은다. #49 문/열쇠는 구현 범위에 포함하지 않으며 실제 브라우저·IME·복수 세션 및 Cross-Issue 종단 간 검증은 #50에서 수행한다.
+
+## Issue #54 전리품 알림 커밋 경계
+
+전리품의 실제 지급은 기존 `take_loot()`/`loot_service.pickup()` 및 `world_change()`를 유지한다. 공통 수령 경로의 성공 메시지·개인 분배 알림·웹 상태 갱신만 기존 `after_change()`에 등록하여 최상위 변경의 성공 이후 전달한다. Native/Legacy에 동일하게 적용하며, 외부 변경 롤백 또는 내부 Savepoint 실패를 상위에서 처리한 경우 실패한 수령의 알림은 남지 않는다. 메시지와 수신 대상은 등록 시 고정하고 상태는 실행 시 커밋된 값에서 생성한다. 공통 트랜잭션 구현·WebSocket 프로토콜·전리품 권리·경제 및 저장 버전은 바꾸지 않는다. [상세 경계](loot-claims.md#수령-알림의-커밋-경계-issue-54)와 [실제 재현/검증](playtest.md#issue-54-전리품-알림-커밋-경계)을 따른다.
