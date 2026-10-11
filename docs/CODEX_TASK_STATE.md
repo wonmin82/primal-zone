@@ -19,6 +19,8 @@
 
 이 기록은 구현·로컬 자동 검증 완료의 제출 전 상태다. 최종 전체 검사는 순수 229개(2.665초) + 통합 803개(474.796초) PASS·종료 0이며 코드/Node/문법/diff 검사도 통과했다. 실제 커밋 SHA의 Quick/Smoke 성공 후 Push·단일 Ready PR 생성·최신 GitHub CI·Issue 본문 PR 연결을 완료해야 제출 PASS다. 미래 PR 번호·SHA·CI 성공을 추정하지 않고 실제 결과는 PR Validation/Issue 진행 기록에 확정한다. Issue #49와 PR은 리뷰 대기로 OPEN 유지하며 Merge·브랜치 삭제·Issue 종료는 수행하지 않는다. 실 브라우저·OS IME·비색상 터미널·복수 실세션·장기 restart·Cross-Issue E2E는 #50 미검증 범위다.
 
+PR [#56](https://github.com/wonmin82/primal-zone/pull/56)을 Ready로 생성하고 Issue #49 본문에 연결했다. 소스 `66e67305836b2e65935849c4c404ef1d2453405e`의 Quick은 107.708초 PASS였지만 첫 원격 CI의 test는 10분 제한으로 취소되어 제출 PASS로 기록하지 않는다. 검사 범위와 코드를 유지한 채 test Job 제한만 20분으로 조정하고 새 HEAD의 Quick/CI를 확인한다. 최종 SHA와 결과는 PR/Issue 진행 기록을 따른다. 설계 전문·부록은 보존하고 PR/Issue는 OPEN으로 유지한다.
+
 ## Issue #54 — 전리품 알림 커밋 경계 수정 (제출 전 기록)
 
 [Issue #54](https://github.com/wonmin82/primal-zone/issues/54)는 [PR #53](https://github.com/wonmin82/primal-zone/pull/53) Closeout에서 별도 추적한 P2 위험이다. 병합된 main `f48a632a1dd6a56b283f3864d6a4ace7e0f3b355`에서 시작했고 운영 발생 사례가 아닌 격리된 실제 수령 API로 재현했다. 아래 과거 작업/실패/병합 전 기록은 당시 사실을 보존한다.

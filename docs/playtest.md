@@ -40,6 +40,12 @@
 
 최종 `uv run python scripts/dev.py test --parallel 4`: **순수 229개(2.665초) + 통합 803개(474.796초) PASS·종료 0**, 통합 runner 485.349초. 신규 Python 49개(통합/스키마 47개 + 순수 2개)를 포함하며 Native/Legacy 전리품·일행·NPC·명령·관찰·도움·v14 및 격리 migration 전체 회귀를 확인했다. 검사 뒤에는 실행 코드/테스트 변경 없이 문서의 결과 기록만 정리했다. 커밋 이후 정확한 Push HEAD에서 `uv run python scripts/dev.py smoke`를 실행해 종료 코드·격리 PASS·서버 종료·플레이 DB 불변을 확인하고, 해당 SHA의 GitHub test/smoke를 확인한다. 실제 SHA·Quick/CI URL은 PR Validation/Issue 진행 구역에 기록한다. 이전 HEAD의 성공을 새 HEAD로 대체하지 않는다.
 
+### 원격 CI 시간 제한 보정
+
+소스 `66e67305836b2e65935849c4c404ef1d2453405e`에서 로컬 `uv run python scripts/dev.py smoke`는 107.708초 PASS·종료 0, 임시 서버 종료/정리 및 실제 플레이 DB 지문 불변이었다. [첫 GitHub CI](https://github.com/wonmin82/primal-zone/actions/runs/38130666239)는 smoke 성공(1분 6초)이었으나 test Job이 기존 10분 제한을 초과해 CANCELLED였다. 원격 로그에서 순수 229개 성공은 확인했지만 통합 803개의 최종 결과는 없으므로 이 실행의 전체 CI를 성공으로 기록하지 않는다.
+
+기준 main의 직전 test Job도 8분 13초였고 Door/스키마 검사와 공유 월드 검증이 추가되었다. `.github/workflows/tests.yml`의 test 시간 제한만 20분으로 조정한다. 전체 검사 명령·병렬 2·수용 assertion·필수 Job·smoke 제한은 그대로이며 검사 생략이나 성공 강제 처리를 추가하지 않는다. 실행 코드와 테스트가 동일하므로 로컬 전체 PASS 근거는 재사용하고, 새 커밋의 정확한 HEAD에서는 사용자 제출 게이트에 따라 Quick/Smoke를 다시 실행한다. 새 SHA와 실제 Quick/원격 결과는 PR/Issue에 확정한다.
+
 ### 미실행과 #50 이관
 
 실 브라우저·OS 한글 IME·비색상 터미널·복수 실제 puppet 세션/네트워크 동시성·장기 reload/restart·production Full timing·Cross-Issue 수동 E2E는 미실행이다. 자동 DOM/세션 fixture·시각 주입·격리 schema 검증은 이 수동 검증의 완료 증거가 아니다. 정적 JS/CSS 자체는 변경하지 않았으므로 수집/실 브라우저 레이아웃 확인은 이번 자동 검증과 구분해 #50에서 수행한다. 실제 플레이 DB의 파일 hash·size·mtime을 전후 대조하며 테스트 DB와 정적 수집 결과물을 커밋하지 않는다.
