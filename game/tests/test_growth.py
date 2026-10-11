@@ -40,7 +40,7 @@ class GrowthIntegrationTests(WorldCommandTest):
             player.location = self.rooms['training_room']
             player.home = self.rooms['dock']
             player.push_state = Mock()
-            self.enterContext(patch.object(player.sessions, 'count', return_value=1))
+            self.connect_character(player)
         for module in ('enemies', 'explorers', 'loot'):
             self.enterContext(patch(f'typeclasses.{module}.delay'))
 
@@ -198,7 +198,7 @@ class GrowthIntegrationTests(WorldCommandTest):
         self.char1.location = self.char2.location = self.rooms['grass']
         self.char2.change(lambda p: p.update(hp=58))
         before = deepcopy(self.char1.profile())
-        self.assertIn('파티원', self.command(self.char2.key + ' 치료'))
+        self.assertIn('일행원', self.command(self.char2.key + ' 치료'))
         self.assertEqual(self.char1.profile(), before)
         invite(self.char1, self.char2, now=100)
         respond(self.char2, True, now=100)

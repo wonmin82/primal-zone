@@ -130,6 +130,8 @@ class LootEntityTests(NativeLootTest):
         self.assertEqual(root.owner_object_id, self.char2.pk)
 
     def test_party_entry_is_one_unit_and_assigned_recipient(self):
+        self.connect_character(self.char1)
+        self.connect_character(self.char2)
         party = invite(self.char1, self.char2, now=100)
         respond(self.char2, True, now=100)
         root = self.loot_item(party=party, assigned=self.char2)
@@ -141,6 +143,8 @@ class LootEntityTests(NativeLootTest):
         self.assertEqual(ItemEntity.objects.count(), 1)
 
     def test_party_dissolution_keeps_assignment_deadline_and_currency_eligibility(self):
+        self.connect_character(self.char1)
+        self.connect_character(self.char2)
         party = invite(self.char1, self.char2, now=100)
         respond(self.char2, True, now=100)
         root = self.loot_item(party=party, assigned=self.char2)
@@ -312,6 +316,8 @@ class LootEntityTests(NativeLootTest):
     def test_explicit_native_generation_reuses_round_robin_and_currency_allocation(self):
         enemy = create_object("typeclasses.enemies.Enemy", key="시험 적", location=self.char1.location)
         enemy.db.enemy_id = "scavenger"
+        self.connect_character(self.char1)
+        self.connect_character(self.char2)
         party = invite(self.char1, self.char2, now=100)
         respond(self.char2, True, now=100)
         groups = {f"party:{party.pk}": {self.char1.pk: 1, self.char2.pk: 1}}

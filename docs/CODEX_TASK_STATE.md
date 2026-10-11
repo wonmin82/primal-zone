@@ -1,5 +1,32 @@
 # 원시구역 개발 작업 및 검증 이력
 
+## Issue #48 — 일행과 전술 v2.2 FREEZE 구현
+
+[Issue #48](https://github.com/wonmin82/primal-zone/issues/48)의 최신 본문과 부록 A/B/C를 읽고 origin/main `49669e24ebccfc7d876a6027e175a2e4e3d85382`에서 단일 `codex/issue-48-party-tactics` 브랜치로 진행했다. 선행 #46/#47은 완료된 기반이며 아래 이전 마감 기록은 당시 사실을 보존한다.
+
+| Phase | 완료 범위 | 주요 코드·Decision·RT |
+| --- | --- | --- |
+| 48-A | 16개 명령/전체 Alias·구 런타임 제거·후치형/표준 도움 | commands/party.py·registry·help_pages, CMD-01~05, RT-01/02 |
+| 48-B | 생성·초청·요청·4인·TTL·가입 관리·2단계 해체·Native/Legacy 개인 권리 | typeclasses/parties.py, MEM/INV/REQ/DIS/DATA, RT-03~16/42 |
+| 48-B2 | 실제 puppet 오프라인 즉시/600초 자동 승계·접속/재시작·5초 월드 tick | parties.py·explorers.py·world/lifecycle.py, LEAD-01~08, RT-17~27 |
+| 48-C | 현재 온라인 구성원 전용 비공개 대화·커밋 후 멤버십 재검증 | parties.py·기존 #47 본문/Text, CHAT-01~04, RT-28~30 |
+| 48-D | 리더 지시·부분 참가·기존 교전 예약·오류 시 실제 완료 보고 | parties.py·explorers/enemies, ATK-01~07, RT-31~35 |
+| 48-E | Party 영속 담당 B안·같은 일행 기본 대상만 조건부 변경 | parties.py·enemies.py, DEF-01~07, RT-36~41 |
+| 48-F | 일행 패널/서버 명령·v14 안전 동사 이전·현재 어휘·도움/문서/추적 | world/state.py·primal.js·vocabulary/rules, MIG/UX/OPS, RT-42~46 |
+
+기존 Party Typeclass·영속 ID·가입 순서·초청/커서, 개인별 확정 Loot/XP/화폐 및 전투 2.5초·피해·Claim·보스 수치를 유지한다. v14는 저장 정의/버전 외 게임 상태를 바꾸지 않으며 신규 별도 Party/전투/메시징 엔진·RPC·DB schema·의존성 변경은 없다.
+
+[정책·구현 경계](party-and-tactics.md), [전체 RT 추적](issue48-requirement-tests.md), [실제 검사·실패/보정](playtest.md#issue-48-일행과-전술-검증)을 연결한다. 단계별 경량 검사 및 직접 영향 재검사를 통과했으며 최종 커밋의 격리 Quick 성공 후 Push/단일 PR 생성, 그 SHA의 원격 전체 CI 확인이 남은 제출 조건이다. 미발생한 Push·CI·Merge 결과를 이 문서에 미리 기록하지 않는다. 실제 PR URL/HEAD/Quick/CI 결과는 PR Validation과 최종 보고에 확정한다.
+
+### PR #53 최종 리뷰 보완 상태
+
+[PR #53](https://github.com/wonmin82/primal-zone/pull/53)의 `8e49f964c72554a81b032fb40667bd270f3a2165`를 기준으로 P2 세 건을 보완했다. Native/Legacy 실제 실물·화폐 수령과 권한·만료·보존·롤백 회귀 검사를 추가했고 지급 정책/구현은 변경하지 않았다. 웹 승계 조건에는 세션 재바인딩 완료 조건을 반영했으며 상태 조회를 읽기 전용으로 분리했다. 초청·요청은 서버 시각 기반 수신 기준 잔여 시간을 표시하며 기존 TTL을 연장하지 않는다.
+
+직접 영향 통합 검사 90개, 웹 자동 검사 15개 및 코드/문법/diff 검사를 통과했다. [RT-15/16/23/45 추가 추적](issue48-requirement-tests.md#pr-53-최종-리뷰-추가-검증)과 [실패 보정·실제 검증 기록](playtest.md#pr-53-최종-리뷰-보완)을 연결한다. 기존 구현/검증 기록과 v2.2 FREEZE는 유지한다. 이 기록 커밋 이후 정확한 HEAD의 Quick/Smoke 성공을 확인한 뒤 기존 PR에 Push하고 최신 GitHub 전체 CI를 확인한다. 실제 SHA·Quick/CI는 PR Validation에 확정하며 Merge·브랜치 삭제·Issue 종료는 승인 대기다.
+
+RT-47의 수동 브라우저·IME·복수 세션·Cross-Issue·장기 운영 검증은 #50에 남긴다. #49 문/열쇠는 미착수다. 사용자 승인 전 PR Merge·소스 브랜치 삭제·Issue #48 종료를 수행하지 않는다.
+
+
 ## PR #52 — Issue #47 최종 마감 (2026-10-11, 병합 전 기록)
 
 [Issue #47 v3.5 FINAL](https://github.com/wonmin82/primal-zone/issues/47)의 구현·도움말·테스트·문서와 [PR #52](https://github.com/wonmin82/primal-zone/pull/52) 리뷰 후속 수정을 완료했다. 이번 마감은 기존 소스 브랜치에서 문서만 보완하며, 아래 최초 구현 및 과거 실패·검증 기록을 보존한다.

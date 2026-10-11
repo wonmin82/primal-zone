@@ -11,14 +11,14 @@ Phase 6 현재 상태: cutover 후 일반 gameplay는 native ItemEntity만 사�
 | kind | 실물 또는 보급칩 | ItemEntity 또는 CurrencyLoot |
 | id | 아이템 정의 또는 credits | definition_id 또는 화폐 domain ID |
 | quantity | 잔여 수량 | ItemEntity/CurrencyLoot.quantity |
-| reserved_party | 보호 중 요청 가능한 파티 | LootClaim/CurrencyLoot.reserved_party |
+| reserved_party | 보호 중 요청 가능한 일행 | LootClaim/CurrencyLoot.reserved_party |
 | reserved_player | 개인 보호권 | LootClaim/CurrencyLoot.reserved_player |
 | assigned_player | 실물 순번의 실제 지급 대상 | LootClaim.assigned_player |
 | protection_until | now가 기한 이상이면 자유 획득 | 모델의 동일 timestamp |
 | eligible_players | 자기 몫과 무관한 원래 화폐 참여 자격 | 모든 share player, 0인 행 포함 |
 | remaining_shares | 아직 지급할 양과 부분 분배 weight | 양수 remaining_amount |
 
-기존 `build_entries()`의 기여 비중·round_robin_cursor, `recipient_for_item()`/`can_take_entry()`/`currency_payouts()`를 재사용한다. 실물 stack entry 하나는 배정 단위 하나이며 파티 인원수대로 자동 분할하지 않는다. XP는 기존 처치 보상으로 즉시 지급하고 전리품 row를 만들지 않는다.
+기존 `build_entries()`의 기여 비중·round_robin_cursor, `recipient_for_item()`/`can_take_entry()`/`currency_payouts()`를 재사용한다. 실물 stack entry 하나는 배정 단위 하나이며 일행 인원수대로 자동 분할하지 않는다. XP는 기존 처치 보상으로 즉시 지급하고 전리품 row를 만들지 않는다.
 
 ## 모델과 deletion safety
 
@@ -28,7 +28,7 @@ Phase 6 현재 상태: cutover 후 일반 gameplay는 native ItemEntity만 사�
 - `CurrencyLoot`: Corpse/DroppedLoot owner, 양의 정수 quantity, reserved_party/player, protection_until. 보급칩은 ItemEntity가 아니다. 출처 내 생성 PK 순서를 사용하며 사용자에게 PK를 표시하지 않는다.
 - `CurrencyLootShare`: currency_loot/player unique, 정수 remaining_amount≥0. 잔여 지분 합≤quantity를 검사하고 보호 상태 생성 시 합=quantity를 요구한다. eligible_players 저장 필드는 없다.
 
-실물·공간 owner·탐사자·share parent는 PROTECT이며 domain에서 관계를 먼저 정리한다. reserved_party만 SET_NULL이다. 기존 Party는 마지막 멤버 탈퇴로 삭제되므로 파티 참조만 비우고 assigned_player·share·보호 기한은 유지한다. 파티 해산으로 전리품이 삭제되거나 자유 획득으로 바뀌지 않는다.
+실물·공간 owner·탐사자·share parent는 PROTECT이며 domain에서 관계를 먼저 정리한다. reserved_party만 SET_NULL이다. 기존 Party는 마지막 멤버 탈퇴로 삭제되므로 일행 참조만 비우고 assigned_player·share·보호 기한은 유지한다. 일행 해산으로 전리품이 삭제되거나 자유 획득으로 바뀌지 않는다.
 
 ## 조회와 명시적 native 생성
 

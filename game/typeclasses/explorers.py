@@ -380,6 +380,8 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         self.begin_command_output()
         try:
             super().at_post_puppet(**kwargs)
+            from typeclasses.parties import connection_changed
+            connection_changed(self)
             self.msg("|g원시구역에 오신 것을 환영합니다.|n '도움말'로 명령을 확인하세요.")
             self.leave_combat()
             self.push_state()
@@ -403,6 +405,9 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             self.change(lambda profile: None)
             self.stop_recovery_timer()
         super().at_post_unpuppet(account=account, session=session, **kwargs)
+        from typeclasses.parties import connection_changed
+        connection_changed(self)
+        self.ndb.party_dissolve_request = None
 
     def reconcile_lights(self, observed_at, *, turn_off=False):
         from world.lighting_service import reconcile
@@ -416,6 +421,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         stop_execution(self)
         self.cancel_pending_prompt()
         self.ndb.shortcut_delete_all_request = None
+        self.ndb.party_dissolve_request = None
         self.ndb.npc_dialogue_context = None
         self.ndb.npc_dialogue_tokens = None
         self.ndb.npc_dialogue_guides = None
@@ -549,13 +555,12 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         if not enemy:
             raise rules.RuleError("이곳에는 공격할 수 있는 상대가 없습니다.")
         enemy.engage(self)
-        self.msg(
-            ft.text(
+        message = ft.text(
                 ft.named("hostile", enemy.key, "과/와"),
                 " 교전을 시작했다. 기본 공격은 2.5초마다 이어진다.",
-            )
         )
-        self.push_state()
+        after_change(lambda: self.msg(message))
+        after_change(self.push_state)
 
     def leave_combat(self, now=None):
         from world.multiplayer import world_change

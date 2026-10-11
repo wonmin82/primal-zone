@@ -1,3 +1,64 @@
+# 테스트와 검증
+
+## Issue #48 일행과 전술 검증
+
+v2.2 FREEZE를 기준으로 48-A/B/B2/C/D/E/F를 단일 브랜치에서 구현했다. [RT-01~RT-47](issue48-requirement-tests.md)에 Decision·실제 코드·테스트 이름을 연결한다. 아래 #47/#46/과거 Phase 기록은 당시 결과를 보존하며 현재 일행 정책과 혼동하지 않는다.
+
+### 실행 환경과 정책
+
+Windows, Python 3.13.15, uv 0.12.13. 저장소 루트의 uv 환경과 settings_test 격리 DB/fixture를 사용했다. 단계별 경량 검사만 실행하고 최종 Push할 커밋 HEAD에서 `uv run python scripts/dev.py smoke`의 격리 Quick 성공을 확인한 뒤 Push한다. 이후 최신 HEAD의 원격 전체 test/smoke를 확인한다. 로컬 전체 회귀·실 브라우저·OS IME·장기 production Full timing은 이번에 실행하지 않는다.
+
+### 실제 개발 검사와 실패 보정
+
+| 범위 | 실제 명령·결과 |
+| --- | --- |
+| 48-A | `uv run python scripts/dev.py test tests.test_party_overhaul --parallel 2`: 최초 2개 통과. Alias의 Evennia 정렬 및 반대 순서 해체 입력의 다른 실제 명령 선택을 반영해 검사를 보정했다. |
+| 48-B | 같은 명령으로 누적 11개 통과. 실제 puppet 세션 fixture에 필요한 전달 속성을 보완했다. 해당 커밋의 diff 검사에는 파일 끝 빈 줄 경고가 있었으며 다음 B2에서 제거했다. |
+| 48-B2 | 같은 명령 누적 17개 통과. 세션 0/1/2개·주입 시각·reload 표지·cold restart/world tick·승계 보존을 확인했다. |
+| 48-C/D/E | 각각 PartyChatTests 2개, PartyAttackTests 4개, PartyDefenseTests 5개 통과. D 첫 실행의 주입 시각 불일치로 만료된 fixture Claim을 월드 시각과 맞춘 뒤 재검사했다. |
+| 초기 F | `... test tests.test_party_overhaul tests.test_parties world.test_party_migration world.test_dialogue_migration --parallel 2` 계열 42개 통과. 처음의 $9 단독 fixture를 기존 연속 변수 문법에 맞게 수정했다. |
+| 직접 영향 회귀 | access/economy/growth/growth_review/lifecycle/loot/loot_entities/rewards/text/targets/regions/web_state/vocabulary/equipment_entities 및 world.command_shortcuts/progression 207개 실행: 최초 5실패·1오류. 이미 잘못된 구 프로필 저장 원본을 v14에서 감싸던 회귀와 온라인 세션 fixture를 수정했다. 실패 기록을 로컬 전체 회귀 성공으로 바꾸지 않는다. |
+| 보정 재검사 | `... test world.test_command_shortcuts tests.test_web_state tests.test_loot_entities world.test_party_migration --parallel 2`: 54개 중 Native 3개에 실제 온라인 fixture 누락 오류. 해당 테스트에만 접속 fixture를 연결했다. 런타임 온라인 조건을 완화하지 않았다. |
+| F 재검사 | `uv run python scripts/dev.py test tests.test_party_overhaul tests.test_loot_entities tests.test_web_state world.test_party_migration world.test_command_shortcuts --parallel 2`: 83개 통과·종료 0 (44.197초). |
+| 최종 경계 | `uv run python scripts/dev.py test tests.test_party_overhaul tests.test_rewards tests.test_parties tests.test_distant_view world.test_party_migration --parallel 2`: 60개 통과·종료 0 (49.220초). 도움 정식/Alias·동명/거절 분기·해체 변경·승계 경합·보상·관찰을 확인했다. |
+| 해체 권리 최종 | `uv run python scripts/dev.py test tests.test_party_overhaul.PartyLootRightsTests world.test_party_migration --parallel 2`: 7개 통과·종료 0. 만료/Legacy 화폐와 공동 회수 종료, 비정상 Native 지분 합 중단·원본 보존을 확인했다. |
+| 보스 회귀 | `uv run python scripts/dev.py test tests.test_combat.SharedCombatTests.test_enemy_timer_unique_threat_and_shared_boss_round tests.test_phase6_runtime.Phase6RuntimeTests.test_boss_late_eligible_join_preserves_damage_and_no_downscale --parallel 1`: 2개 통과·종료 0. 기존 단일 타이머·위협도·보스 추가 참가 스케일과 피해/이탈 비축소를 확인했다. |
+| 저장 우선순위 | CommandShortcutsTests의 runtime_real_and_locked_command_precedence_over_personal, cycles_register_and_sibling_calls_do_not_share_reference_paths 2개 통과. 같은 명령의 출입증 테스트 이름 오기로 1개 로딩 오류가 있었고 올바른 AccessTests.test_party_does_not_share_credential 단독 재실행 1개 통과·종료 0. |
+| DB 없는 이전 | game에서 `uv run python -m unittest world.test_party_migration world.test_dialogue_migration`: 7개 통과·종료 0. 이후 최종 경계 검사에도 v14 변환 3개를 포함했다. |
+| 웹 | `node --check game/web/static/webclient/js/primal.js` 성공; `node --test scripts/tests/test_web_prompt.cjs`: 13개 통과·종료 0. 상태/영속 효과 구분·멤버별 버튼·16개 명령 접근·안전한 DOM·기존 입력/IME 이벤트 자동 계약을 확인했다. |
+| 문서 | 일회성 GitHub GFM 렌더링 검사 13개 변경 Markdown, 저장소 Markdown 52개·상대 링크 502개·앵커 링크 159개 검사 오류 0. README 기존 11개 제목 앵커와 명시적 이전 앵커를 유지한다. `git diff --check` 통과. |
+| 코드 | `uv run python scripts/dev.py check`: 통과·종료 0. 최종 변경 이후 코드 검사와 diff를 다시 확인한다. |
+
+### 최종 자체 리뷰 보정
+
+웹 구성원 버튼의 번호를 전체 탐사자 목록이 아니라 실제 구성원 선택기와 같은 순서로 생성하도록 수정했다. 외부 동명 탐사자가 있어도 정확한 멤버를 방어 담당·리더로 지정하는 회귀 검사를 추가했다. `uv run python scripts/dev.py test tests.test_web_state --parallel 1` 5개 통과·종료 0 (7.237초), 코드 검사와 diff 검사 통과.
+
+이전 `6201a7a711a5f1a5593adf2626072e82f07bd811`의 격리 Quick은 125.319초·종료 0으로 성공했다. 웹 선택기 코드/테스트가 이후 변경됐으므로 이 결과를 새 HEAD의 검증으로 대신하지 않으며 새 커밋에서 다시 Quick을 실행한다.
+
+추가 저장 검토에서 실행 불가능한 v13 목록을 새 동사로 부분 변환하지 않고 전체 원문/이유를 보존하도록 보강했다. game에서 `uv run python -m unittest world.test_party_migration world.test_command_shortcuts world.test_dialogue_migration` 24개 통과·종료 0 (0.088초). 직전 `429166505e5494a0b173a6929dcc00653a01fc7c` Quick은 104.028초·종료 0이며, 마지막 저장 변환 변경 후 새 HEAD에서 다시 Quick을 수행한다.
+
+실제 명령·별칭 우선권을 v13 등록 어휘 전체와 전수 대조했다. 첫 스냅샷 검사에서 상속된 장착 명령/별칭과 내부 fallback 10개 누락을 발견해 보완했으며, `uv run python scripts/dev.py test tests.test_party_overhaul.PartyCommandContractTests world.test_party_migration world.test_command_shortcuts --parallel 2` 23개 통과·종료 0이다. 위험한 동명 개인 정의가 실제 명령 호출을 비활성화하지 않는지 모든 기존 명령/별칭으로 검사했다. 직전 `8ffebbaaca49956163aa41bd1beab255e4d3a213` Quick은 102.513초·종료 0이며 이 변경 이후 최종 HEAD에서 Quick을 다시 실행한다.
+
+### 최종 Push 및 원격 검증 기록
+
+첫 [PR #53 CI 38109537219](https://github.com/wonmin82/primal-zone/actions/runs/38109537219)는 `ed4690d03b27102ee7177c50e967ac2b018ce534`에서 코드 검사와 Quick smoke가 성공했으나 순수 227개 중 경제 검사의 현재 프로필 버전 기대값이 v13으로 남아 1개 실패했다. Issue #48의 확정 v14 전환에 맞게 경제 검사와 같은 기대값이 남은 #46 명령 검사를 v14로 정정했다. 가격·보급칩·이전 변환 원본·명령 동작 assertion은 유지하며 게임 구현을 바꾸지 않았다. 보정 후 실제 경량 검사와 새 HEAD의 Quick 및 CI 결과를 아래/PR Validation에 구분해 기록한다.
+
+보정 후 `game`에서 `uv run python -m unittest discover -s world -p 'test_*.py'`: 실패한 순수 검사 단계 전체 227개 성공·종료 0 (2.562초). 저장소 루트의 `uv run python scripts/dev.py test tests.test_command_overhaul --parallel 1`: 5개 성공·종료 0 (36.381초, runner 45.546초). 코드 검사·Markdown 렌더링/링크/앵커·diff 검사도 통과했다. 전체 로컬 게임 통합 검사는 실행하지 않았으며 새 HEAD의 Quick과 원격 CI는 이 기록 커밋 이후 별도로 확인한다.
+
+이 문서 커밋 시점에는 최종 HEAD의 Quick/Smoke와 원격 CI를 아직 성공으로 확정하지 않는다. 커밋 후 정확한 SHA에서 Quick을 실행하며, 실제 명령·종료 코드·소요 시간·SHA와 최신 GitHub Actions 전체 CI URL/결과는 구현 PR의 Validation에 기록한다. 검사 이후 실행 코드/테스트 변경이 있으면 새 HEAD에서 다시 Quick을 통과해야 한다.
+
+RT-47의 실 브라우저·한글 IME·좁은 화면/접근성·복수 실제 세션·장기 reload/restart·Cross-Issue 및 최종 통합은 #50에서 수행한다. #49 문/열쇠 기능은 이번에 구현하지 않는다. 플레이 DB를 테스트로 초기화하거나 변경하지 않는다.
+
+### PR #53 최종 리뷰 보완
+
+기준 `8e49f964c72554a81b032fb40667bd270f3a2165`의 [CI 38109881214](https://github.com/wonmin82/primal-zone/actions/runs/38109881214)는 성공이었다. 이 결과를 아래 새 변경 HEAD의 성공으로 대신하지 않는다. 테스트 환경은 위 Windows/Python/uv 및 격리 settings_test DB를 유지했다.
+
+- `uv run python scripts/dev.py test tests.test_party_overhaul tests.test_web_state world.test_party_migration tests.test_loot_entities tests.test_loot --parallel 2`: 90개 통과, 종료 0 (테스트 51.891초, runner 61.128초). 실제 Native/Legacy 수령 API의 보호·지분·부분 지급·중복 차단·만료·해체/수령 롤백과 승계 세션·읽기 전용 상태·TTL/UI 정리를 확인했다. 권한·지급 계산을 Mock으로 대체하지 않았다.
+- 앞선 직접 검사 17개는 Legacy fixture 2개 오류였다. 시체 선택 문법을 기존 공통 문법으로 맞추고 초기 관찰이 가짜 시각의 시체를 만료시키지 않도록 fixture 생성 순서를 보정했다. Legacy 재검사 3개 통과 후 위 90개를 실행했다. 이는 게임 지급 결함 수정이 아니며 지급 정책은 유지한다.
+- `node --test scripts/tests/test_web_prompt.cjs`: 15개 통과, 종료 0. 서버 수신 시각의 잔여 시간·정확한 만료·새 상태·극단적인 로컬 시계 차이·승계 버튼/설명·기존 입력 경로를 확인했다. 실시간 카운트다운 대신 수신 기준 스냅샷을 사용하며 추가 interval은 없다.
+- `node --check game/web/static/webclient/js/primal.js`, `uv run python scripts/dev.py check`, `git diff --check`: 통과. 문서 보완 후 GitHub GFM 렌더링·상대 링크·앵커 검사도 오류 0으로 통과했다.
+- 이 기록은 커밋 전 실제 검사다. 최종 Push HEAD의 Quick/Smoke·GitHub 전체 CI는 아직 선기록하지 않으며 커밋 이후 PR Validation에 실제 SHA·종료 코드·실행 URL을 확정한다. 로컬 전체 회귀·OS 브라우저/IME·복수 세션 수동 E2E는 미실행이며 RT-47/#50 범위를 유지한다.
+
 ## Issue #47 NPC 대화·개인 메시지 검증
 
 [Issue #47 v3.5 FINAL](https://github.com/wonmin82/primal-zone/issues/47)의 개발·검증 기록이다. 현재 사용자 입력은 [플레이 가이드](gameplay.md#npc-대화와-개인-메시지), 기술 계약은 [NPC 대화 설계](npc-dialogue.md)를 따른다. 아래 과거 PR/Phase 기록의 NPC `대화`·프로필 버전·당시 테스트 결과는 역사적 근거로 유지한다.

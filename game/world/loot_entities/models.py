@@ -30,7 +30,7 @@ class Reservation(models.Model):
 
         validate_time(self.protection_until)
         if self.reserved_party_id and not isinstance(self.reserved_party, Party):
-            raise ValidationError({"reserved_party": "파티만 보호권을 가질 수 있습니다."})
+            raise ValidationError({"reserved_party": "일행만 보호권을 가질 수 있습니다."})
         for field in ("reserved_player", "assigned_player"):
             if getattr(self, field + "_id", None) and not isinstance(getattr(self, field), Explorer):
                 raise ValidationError({field: "탐사자 참조가 필요합니다."})

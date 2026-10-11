@@ -1,0 +1,76 @@
+# Issue #48 요구사항과 실제 검증 추적
+
+[Issue #48 v2.2 FREEZE](https://github.com/wonmin82/primal-zone/issues/48)의 Decision Register·Requirement–Test Matrix를 기준으로 한다. 정책과 저장 경계는 [일행과 전술](party-and-tactics.md), 단계별 실행 명령·실패/보정 기록은 [playtest](playtest.md#issue-48-일행과-전술-검증)에 모은다. 아래 테스트 이름은 실제 코드에 존재한다.
+
+개발 중 격리된 직접 영향 테스트를 실행했다. RT의 “자동 확인”은 아래 입력·경계와 단일 서버 world_change 직렬 변경 전제에 대한 자동 검사이며 실 브라우저·다중 세션 수동 E2E를 뜻하지 않는다. 원격 전체 CI와 최종 커밋 Quick의 실제 SHA·결과·URL은 PR Validation에 확정한다. 동일 코드의 성공 이후 문서만 바뀐 검사는 재실행한 것으로 표기하지 않는다.
+
+| RT ID | Decision ID | 구현 경로 | 테스트 파일·이름 / 증거 | 실행·결과 |
+| --- | --- | --- | --- | --- |
+| RT-01 | CMD-01~05 | `game/commands/party.py · registry.py · help_pages.py` | [PartyCommandContractTests.test_rt01_all_sixteen_commands_aliases_help_and_old_verbs_absent](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-02 | CMD-03, DIS-02 | `game/commands/party.py · registry.py · help_pages.py` | [PartyCommandContractTests.test_rt02_postfix_and_alias_preserve_arguments](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-03 | MEM-01~04 | `game/typeclasses/parties.py` | [PartyMembershipTests.test_rt03_rt04_creation_permissions_and_pending_cleanup](../game/tests/test_party_overhaul.py)<br>[PartyAttackTests.test_rt03_rt04_existing_combat_invite_and_new_combat_party_denied](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-04 | INV-01~04 | `game/typeclasses/parties.py` | [PartyMembershipTests.test_rt03_rt04_creation_permissions_and_pending_cleanup](../game/tests/test_party_overhaul.py)<br>[PartyMembershipTests.test_rt04_rt07_capacity_rechecked_and_requests_single](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-05 | INV-02~03, TIME-01 | `game/typeclasses/parties.py` | [PartyMembershipTests.test_rt05_rt07_rt08_rt09_rt10_ttl_and_independent_requests](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-06 | INV-05, LEAD-01~02 | `game/typeclasses/parties.py` | [PartyMembershipTests.test_rt06_rt11_rt27_invite_survives_offline_and_transfer](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-07 | REQ-01~05 | `game/typeclasses/parties.py` | [PartyMembershipTests.test_rt05_rt07_rt08_rt09_rt10_ttl_and_independent_requests](../game/tests/test_party_overhaul.py)<br>[PartyMembershipTests.test_rt04_rt07_capacity_rechecked_and_requests_single](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-08 | REQ-08~10 | `game/typeclasses/parties.py` | [PartyMembershipTests.test_rt05_rt07_rt08_rt09_rt10_ttl_and_independent_requests](../game/tests/test_party_overhaul.py)<br>[PartyMembershipTests.test_rt07_rt08_ambiguous_request_target_and_reject_modes](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-09 | REQ-09 | `game/typeclasses/parties.py` | [PartyMembershipTests.test_rt05_rt07_rt08_rt09_rt10_ttl_and_independent_requests](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-10 | REQ-07, MEM-04 | `game/typeclasses/parties.py` | [PartyMembershipTests.test_rt05_rt07_rt08_rt09_rt10_ttl_and_independent_requests](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-11 | MEM-05~09 | `game/typeclasses/parties.py` | [PartyMembershipTests.test_rt06_rt11_rt27_invite_survives_offline_and_transfer](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-12 | MEM-06, DIS-05 | `game/typeclasses/parties.py` | [RewardTests.test_party_departure_removes_combat_and_contribution](../game/tests/test_rewards.py) | 자동 확인 (격리 검사 통과) |
+| RT-13 | DIS-01~04 | `game/typeclasses/parties.py` | [PartyMembershipTests.test_rt13_rt14_dissolve_snapshot_ttl_and_stale_target](../game/tests/test_party_overhaul.py)<br>[PartyMembershipTests.test_rt13_expired_invite_keeps_confirmation_but_leader_change_invalidates](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-14 | DIS-01 | `game/typeclasses/parties.py` | [PartyMembershipTests.test_rt13_rt14_dissolve_snapshot_ttl_and_stale_target](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-15 | DIS-05~06 | `game/typeclasses/parties.py · game/world/loot_entities/models.py` | [PartyLootRightsTests.test_rt15_native_and_legacy_personal_rights_survive_dissolution](../game/tests/test_party_overhaul.py)<br>[PartyLootRightsTests.test_rt15_rt16_unallocated_protected_rights_stop_deletion_and_roll_back](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-16 | DIS-05~06 | `game/typeclasses/parties.py · game/world/loot_entities/models.py` | [PartyMembershipTests.test_rt16_creation_and_join_rollback_restore_attributes](../game/tests/test_party_overhaul.py)<br>[PartyLootRightsTests.test_rt15_rt16_unallocated_protected_rights_stop_deletion_and_roll_back](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-17 | LEAD-01 | `game/typeclasses/parties.py · explorers.py · game/world/lifecycle.py` | [PartySuccessionTests.test_rt17_rt18_immediate_and_online_rejection](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-18 | LEAD-01 | `game/typeclasses/parties.py · explorers.py · game/world/lifecycle.py` | [PartySuccessionTests.test_rt17_rt18_immediate_and_online_rejection](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-19 | LEAD-02~03 | `game/typeclasses/parties.py · explorers.py · game/world/lifecycle.py` | [PartySuccessionTests.test_rt19_rt20_rt25_tick_boundary_order_and_stale_recheck](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-20 | LEAD-04 | `game/typeclasses/parties.py · explorers.py · game/world/lifecycle.py` | [PartySuccessionTests.test_rt21_rt22_no_candidate_then_member_or_leader_reconnect](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-21 | LEAD-02,06 | `game/typeclasses/parties.py · explorers.py · game/world/lifecycle.py` | [PartySuccessionTests.test_rt21_rt22_no_candidate_then_member_or_leader_reconnect](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-22 | LEAD-06 | `game/typeclasses/parties.py · explorers.py · game/world/lifecycle.py` | [PartySuccessionTests.test_rt23_reload_multisession_and_unpuppet_event](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-23 | LEAD-07 | `game/typeclasses/parties.py · explorers.py · game/world/lifecycle.py` | [PartySuccessionTests.test_rt23_reload_multisession_and_unpuppet_event](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-24 | LEAD-07~08 | `game/typeclasses/parties.py · explorers.py · game/world/lifecycle.py` | [PartySuccessionTests.test_rt24_restart_persistent_time_missing_field_and_scheduler](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-25 | LEAD-01~07 | `game/typeclasses/parties.py · explorers.py · game/world/lifecycle.py` | [PartySuccessionTests.test_rt25_stale_competing_succession_rechecks_current_leader_once](../game/tests/test_party_overhaul.py)<br>[PartySuccessionTests.test_rt19_rt20_rt25_tick_boundary_order_and_stale_recheck](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-26 | LEAD-05 | `game/typeclasses/parties.py · explorers.py · game/world/lifecycle.py` | [PartySuccessionTests.test_rt26_rt27_confirmation_and_party_data_preserved](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-27 | LEAD-05, REQ-04 | `game/typeclasses/parties.py · explorers.py · game/world/lifecycle.py` | [PartyMembershipTests.test_rt06_rt11_rt27_invite_survives_offline_and_transfer](../game/tests/test_party_overhaul.py)<br>[PartySuccessionTests.test_rt26_rt27_confirmation_and_party_data_preserved](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-28 | CHAT-01~04 | `game/typeclasses/parties.py` | [PartyChatTests.test_rt28_rt29_private_members_cross_rooms_and_validation](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-29 | CHAT-02 | `game/typeclasses/parties.py` | [PartyChatTests.test_rt28_rt29_private_members_cross_rooms_and_validation](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-30 | CHAT-03~04 | `game/typeclasses/parties.py` | [PartyChatTests.test_rt30_delivery_rechecks_departed_recipient_and_sender](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-31 | ATK-01~04 | `game/typeclasses/parties.py · enemies.py` | [PartyAttackTests.test_rt31_rt32_rt34_partial_attack_preserves_existing_schedule](../game/tests/test_party_overhaul.py)<br>[PartyAttackTests.test_rt31_rt35_leader_permission_visibility_and_other_claim](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-32 | ATK-04~06 | `game/typeclasses/parties.py · enemies.py` | [PartyAttackTests.test_rt31_rt32_rt34_partial_attack_preserves_existing_schedule](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-33 | ATK-05~06 | `game/typeclasses/parties.py · enemies.py` | [PartyAttackTests.test_rt33_all_existing_none_eligible_and_runtime_error](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-34 | ATK-07 | `game/typeclasses/parties.py · enemies.py` | [PartyAttackTests.test_rt31_rt32_rt34_partial_attack_preserves_existing_schedule](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-35 | ATK-07 | `game/typeclasses/parties.py · enemies.py` | [PartyAttackTests.test_rt31_rt35_leader_permission_visibility_and_other_claim](../game/tests/test_party_overhaul.py); 기존 Rewards의 공개 두 일행/적격 보상 및 Phase6RuntimeTests의 보스 late join/no downscale 검사 | 자동 확인 (격리 검사 통과) |
+| RT-36 | DEF-01~03 | `game/typeclasses/parties.py · enemies.py` | [PartyDefenseTests.test_rt36_rt37_offline_persistent_assignment_control_and_idempotency](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-37 | DEF-02,05 | `game/typeclasses/parties.py · enemies.py` | [PartyDefenseTests.test_rt36_rt37_offline_persistent_assignment_control_and_idempotency](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-38 | DEF-03 | `game/typeclasses/parties.py · enemies.py` | [PartyDefenseTests.test_rt38_enemy_tick_redirects_without_threat_damage_or_interval_change](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-39 | DEF-03 | `game/typeclasses/parties.py · enemies.py` | [PartyDefenseTests.test_rt39_solo_and_other_party_priority_not_hijacked](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-40 | DEF-04~05 | `game/typeclasses/parties.py · enemies.py` | [PartyDefenseTests.test_rt40_rt41_effect_inactive_keeps_assignment_and_departure_clears](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-41 | DEF-04~07 | `game/typeclasses/parties.py · enemies.py` | [PartyDefenseTests.test_rt40_rt41_effect_inactive_keeps_assignment_and_departure_clears](../game/tests/test_party_overhaul.py)<br>[PartyDefenseTests.test_rt41_broken_deleted_defender_cleaned_without_reassigning](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-42 | DATA-01~02 | `game/typeclasses/parties.py` | [PartyMembershipTests.test_rt42_legacy_defaults_preserve_valid_data](../game/tests/test_party_overhaul.py) | 자동 확인 (격리 검사 통과) |
+| RT-43 | MIG-01~02 | `game/commands/vocabulary.py · game/world/rules.py` | [PartyMigrationTests.test_rt43_verbs_variables_sequence_and_chat_unchanged](../game/world/test_party_migration.py)<br>[PartyMigrationTests.test_rt43_rt44_risky_sequences_indirect_cycles_and_collisions](../game/world/test_party_migration.py) | 자동 확인 (격리 검사 통과) |
+| RT-44 | MIG-01~02 | `game/commands/vocabulary.py · game/world/rules.py` | [PartyMigrationTests.test_rt43_rt44_risky_sequences_indirect_cycles_and_collisions](../game/world/test_party_migration.py)<br>[PartyMigrationTests.test_rt44_profile_only_definitions_changed_and_new_names_untouched](../game/world/test_party_migration.py) | 자동 확인 (격리 검사 통과) |
+| RT-45 | UX-01~04 | `game/world/state.py · game/web/static/webclient/js/primal.js · webclient.html` | [WebStateTests.test_rt45_tactics_succession_requests_and_confirm_snapshot](../game/tests/test_web_state.py)<br>[일행 패널은 영속 담당·현재 효과·승계를 표시하고 서버 명령만 전송](../scripts/tests/test_web_prompt.cjs); WebStateTests.test_rt45_member_buttons_use_member_selector_order_not_global_duplicate_order (외부 동명/실제 버튼 명령) | 자동 확인 (웹 상태 5개 재검사 포함) |
+| RT-46 | OPS-01~03 | `scripts/smoke.py · .github/workflows/tests.yml` | 커밋 후 scripts/dev.py smoke → Push → 최신 PR의 test/smoke. 실제 SHA·로그·CI URL은 PR Validation에서 확인 | 이 문서 커밋 시점 최종 게이트 대기; 성공 확인 후에만 Push |
+| RT-47 | OPS-03 | `Issue #50` | [Issue #50](https://github.com/wonmin82/primal-zone/issues/50): 실 브라우저·OS IME·복수 세션·#49 문/열쇠 연계 | 미실행 · #50 이관 |
+
+## 범위와 미검증 구분
+
+- RT-05/13/19는 주입 시각으로 59.999/60 및 599.999/600 경계를 확인한다. 실제 600초를 기다리지 않는다. RT-24는 기존 WorldLifecycle 호출과 영속 시작 시각을 확인하며, Portal 재바인딩을 포함한 장기 실 서버 재시작은 #50에 남긴다.
+- RT-25는 동시 요청이 단일 서버 잠금 안에서 차례로 재검증되는 경합·오래된 요청·중복 알림 경계를 검사한다. 다중 서버 지원이나 외부 DB의 다중 프로세스 경합을 보장하지 않는다.
+- RT-15/16은 Native/Legacy 개인 참조·지분·보호 만료, 공동 회수 종료와 비정상 데이터 중단/롤백을 확인한다. XP·가격·전리품 수량·분배 공식은 변경하지 않는다.
+- RT-43/44는 동사만 변환·변수/묶음/간접 참조·충돌·원본 보존·멱등 및 기존 잠긴 명령 우회 금지를 연결한다. 기존 v13 비활성 저장과 이미 잘못된 이전 프로필 입력의 원본도 보존한다.
+- RT-45는 실제 서버 상태 스냅샷과 기존 DOM/명령 전달 자동 테스트, 정식 명령/Alias 도움 전수 검사다. 화면·색상·좁은 폭·OS IME 수동 확인은 RT-47이며 이번에 통과했다고 주장하지 않는다.
+
+## PR #53 최종 리뷰 추가 검증
+
+기존 RT ID와 v2.2 FREEZE를 유지한다. 아래 추가 검사는 저장 필드 보존에 더해 실제 지급 및 웹 상태 경계를 확인한다. 기존 테스트와 실패 기록은 삭제하지 않는다.
+
+| RT / Decision | 실제 테스트·구현 경로 | 추가 확인 및 결과 |
+| --- | --- | --- |
+| RT-15/16 · DIS-05/06 | `game/tests/test_party_overhaul.py`의 `PartyLootRightsTests.test_rt15_rt16_native_item_actual_pickup_after_dissolve_and_rollback`, `test_rt15_rt16_native_currency_actual_split_receipts_and_rollback`, `test_rt15_native_reserved_player_and_expiry_actual_receipts`; 실제 `game/world/loot_service.py` | Native 배정/예약 실물·화폐 지분 실제 수령, 비권리자 차단·공동 권한 종료·부분 지급 보존·만료 경계·중복 방지·수령 롤백 통과 |
+| RT-15/16 · DIS-05/06 | 같은 파일의 `PartyLegacyLootRightsTests.test_rt15_rt16_legacy_actual_item_currency_protection_and_conservation`, `test_rt15_legacy_reserved_player_and_expiry_receipts`, `test_rt16_legacy_invalid_share_stops_dissolve_and_rolls_back`; 실제 `game/typeclasses/loot.py` | Legacy 실제 수령·예약 수령인·남은 지분·수량 보존·만료·중복·수령 롤백 및 잘못된 수령인/지분 해체 중단 통과 |
+| RT-23/45 · LEAD-07, UX | `game/tests/test_web_state.py`의 `test_rt23_rt45_succession_snapshot_rebinding_sessions_and_read_only`; `game/world/state.py`, `game/typeclasses/parties.py` | 실제 puppet 0/1/2개·재바인딩 전/후·리더 재접속·리더/비멤버 거절·조회 시 Party 불변 통과 |
+| RT-45 · UX-01~04 | 같은 파일의 `test_rt45_pending_server_time_boundaries_cleanup_and_stale_ttl`; `scripts/tests/test_web_prompt.cjs`의 서버 시각 TTL 및 재바인딩 스냅샷 검사 | 최초/만료 직전/정확한 만료/이후·시계 차이·새 상태·반복 TTL 불변·승인/거절/가입 정리·오래된 UI의 서버 거절·추가 타이머 없음 통과 |
+
+실행 결과는 [최종 리뷰 검사 기록](playtest.md#pr-53-최종-리뷰-보완)에 모은다. 최종 커밋 Quick 및 해당 HEAD의 GitHub CI는 커밋 이후 PR Validation에서 확인한다. RT-47의 실제 OS 브라우저·IME·복수 실제 세션 수동 검증은 #50에 남긴다.

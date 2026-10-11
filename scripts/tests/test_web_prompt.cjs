@@ -44,7 +44,7 @@ const full = [{role:"text",text:"[ "}, {role:"success",text:"60"}, {role:"text",
 const damaged = full.map(p => ({...p, text: p.text === "60" ? "52" : p.text}));
 const beforeRecovery = [{role:"text",text:"[ 40/60 · 25/40 ] >"}];
 const recovered = [{role:"text",text:"[ 41/60 · 26/40 ] >"}];
-function client() {
+function client(localNow = 0) {
   const elements = new Map();
   const byId = id => { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); };
   const document = new Element();
@@ -59,7 +59,8 @@ function client() {
   }
   const intervals = [];
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../../game/web/static/webclient/js/primal.js"), "utf8"), {
-    document, WebSocket:Socket, location:{}, setInterval:(fn, ms) => intervals.push({fn,ms}),
+    document, WebSocket:Socket, location:{}, Date:class extends Date { static now() { return localNow; } },
+    setInterval:(fn, ms) => intervals.push({fn,ms}),
     setTimeout:() => 1, clearTimeout:() => {},
   });
   const receive = (kind, payload) => socket.fire("message", {data:JSON.stringify([kind,[payload],{}])});
@@ -236,4 +237,91 @@ test("실제 출구 상태로 중앙 기호·제한 버튼·층 명령을 표시
   assert.equal(buttons.children.length, 6);
   c.click(buttons.children[4].dataset.command);
   assert.deepEqual(c.socket.sent.at(-1), ["text",["5층"],{}]);
+});
+const partyState = (party, extra = {}) => ({
+  resource_prompt:{kind:"prompt",segments:full}, currency:{formatted:"20칩",name:"보급칩"},
+  exits:[],exit_details:[],enemies:[],corpses:[],ground_loot:[],interactables:[],inventory:[],
+  growth:{attributes:[],skills:[],attribute_points:0,skill_points:0}, party, ...extra,
+});
+const commandButtons = element => element.children.flatMap(child => typeof child === "string" ? [] :
+  [...(child.dataset.command ? [child.dataset.command] : []), ...commandButtons(child)]);
+
+test("일행 패널은 영속 담당·현재 효과·승계를 표시하고 서버 명령만 전송", () => {
+  const c = client();
+  const party = {id:42,leader:1,leader_name:"탐사자",is_leader:true,leader_online:true,max_size:4,
+    members:[{id:1,name:"탐사자",label:"탐사자 1",online:true},{id:2,name:"<b>철수</b>",label:"철수 2",online:false}],
+    defender:{id:2,name:"<b>철수</b>",online:false,active:false},can_succeed:false,
+    join_requests:[{id:3,name:"민수",label:"민수 1"}],invitations:[{id:4,name:"영희"}],confirm_dissolve:false};
+  c.receive("pz_state",partyState(party,{enemies:[{label:"어린청소룡 2",name:"어린청소룡",can_attack:true,hp:20,max_hp:20}]}));
+  assert.match(c.byId("party-state").textContent,/일행 #42/);
+  assert.match(c.byId("party-tactics").textContent,/2\/4.*오프라인.*효과 비활성.*지정 유지/);
+  assert.match(c.byId("party-members").textContent,/<b>철수<\/b>/);
+  const commands = ["party-actions","party-members","party-pending"].flatMap(id => commandButtons(c.byId(id)));
+  for (const command of ["일행","일행탈퇴","일행방어","일행공격","어린청소룡 2 일행공격","해제 일행방어","순번 일행분배","일행해체","철수 2 일행리더","철수 2 일행제외","철수 2 일행방어","민수 1 일행허락","민수 1 일행거절"]) assert.ok(commands.includes(command), command);
+  c.receive("pz_state",partyState({...party,confirm_dissolve:true}));
+  assert.ok(commandButtons(c.byId("party-actions")).includes("확인 일행해체"));
+  c.receive("pz_state",partyState({...party,is_leader:false,leader_online:false,can_succeed:true}));
+  const ordinary = commandButtons(c.byId("party-actions"));
+  assert.ok(ordinary.includes("일행승계"));
+  assert.ok(!ordinary.includes("일행해체"));
+  assert.ok(!commandButtons(c.byId("party-members")).some(command => command.endsWith("일행제외")));
+  c.byId("party-chat-body").value = "모여 주세요";
+  c.byId("party-chat-form").fire("submit");
+  assert.equal(c.socket.sent.at(-1)[1][0],"모여 주세요 일행대화");
+  c.receive("pz_state",partyState(null,{invitation:{inviter:"영희"},join_request:{party_id:99}}));
+  assert.ok(commandButtons(c.byId("party-actions")).includes("일행모으기"));
+  assert.equal(c.byId("party-invitation").hidden,false);
+  assert.match(c.byId("party-outgoing").textContent,/#99/);
+  c.byId("party-target").value = "철수 2";
+  c.byId("party-invite-form").fire("submit",{submitter:{value:"일행요청"}});
+  assert.equal(c.socket.sent.at(-1)[1][0],"철수 2 일행요청");
+  c.byId("party-invite-form").fire("submit",{submitter:{value:"일행초청"}});
+  assert.equal(c.socket.sent.at(-1)[1][0],"철수 2 일행초청");
+});
+
+test("일행 TTL은 서버 수신 시각 스냅샷이며 만료·새 상태를 안전하게 반영", () => {
+  for (const localNow of [-1000000000000, 9999999999999]) {
+    const c = client(localNow);
+    const pending = {id:3,name:"민수",label:"민수",expires_at:160};
+    const party = {id:42,leader:1,leader_name:"리더",is_leader:true,leader_online:true,
+      members:[],join_requests:[pending],invitations:[{...pending,name:"영희"}]};
+    const extra = {server_now:100,invitation:{inviter:"영희",expires_at:160},
+      join_request:{party_id:99,expires_at:160}};
+    const intervalCount = c.intervals.length;
+    for (const [now, seconds] of [[100,60],[118,42],[151,9],[159.999,1]]) {
+      c.receive("pz_state",partyState(party,{...extra,server_now:now}));
+      for (const id of ["party-pending","party-outgoing","party-inviter"])
+        assert.ok(c.byId(id).textContent.includes(seconds + "초 남음 (수신 기준)"), id);
+      assert.ok(commandButtons(c.byId("party-pending")).includes("민수 일행허락"));
+      assert.equal(c.byId("party-invitation").hidden,false);
+    }
+    for (const now of [160,161,999]) {
+      c.receive("pz_state",partyState(party,{...extra,server_now:now}));
+      for (const id of ["party-pending","party-outgoing","party-inviter"])
+        assert.ok(c.byId(id).textContent.includes("만료됨"));
+      assert.deepEqual(commandButtons(c.byId("party-pending")),[]);
+      assert.equal(c.byId("party-invitation").hidden,true);
+    }
+    // 새 서버 상태의 만료 시각을 사용하며 동일 서버 시각이면 로컬 시계는 영향이 없다.
+    c.receive("pz_state",partyState({...party,join_requests:[{...pending,expires_at:220}],invitations:[]},
+      {server_now:170,invitation:null,join_request:null}));
+    assert.match(c.byId("party-pending").textContent,/50초 남음/);
+    assert.equal(c.byId("party-outgoing").textContent,"");
+    assert.equal(c.byId("party-invitation").hidden,true);
+    c.receive("pz_state",partyState({...party,join_requests:[],invitations:[]},{server_now:171}));
+    assert.equal(c.byId("party-pending").textContent,"");
+    assert.equal(c.intervals.length,intervalCount);
+  }
+});
+
+test("재바인딩 중 승계 불가 스냅샷은 버튼과 상태 설명을 일치시킨다", () => {
+  const c = client();
+  const party = {id:42,leader:1,leader_name:"리더",is_leader:false,leader_online:false,
+    members:[],can_succeed:false};
+  c.receive("pz_state",partyState(party));
+  assert.ok(!commandButtons(c.byId("party-actions")).includes("일행승계"));
+  assert.match(c.byId("party-state").textContent,/승계 불가/);
+  c.receive("pz_state",partyState({...party,can_succeed:true}));
+  assert.ok(commandButtons(c.byId("party-actions")).includes("일행승계"));
+  assert.match(c.byId("party-state").textContent,/승계 가능/);
 });

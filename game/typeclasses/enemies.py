@@ -156,7 +156,7 @@ class Enemy(DistantPresenceMixin, DefaultObject):
             if profile.get("combat_target") not in (None, self.id):
                 raise rules.RuleError("현재 상대에게서 먼저 도망하세요.")
             if not self.can_attack(player):
-                owner = "다른 파티" if str(self.db.claim).startswith("party:") else "다른 탐사자"
+                owner = "다른 일행" if str(self.db.claim).startswith("party:") else "다른 탐사자"
                 raise rules.RuleError(
                     f"{self.key}{ft.particle(self.key, '은/는')} {owner}와 교전 중입니다."
                 )
@@ -177,8 +177,8 @@ class Enemy(DistantPresenceMixin, DefaultObject):
             if len(self.db.combatants) == 1 and not self.db.claim_last_activity:
                 self.db.claim_last_activity = now
                 self.db.last_activity = now
-        player.schedule_combat()
-        self.schedule_combat()
+        after_change(player.schedule_combat)
+        after_change(self.schedule_combat)
 
     def remove_combatant(self, player, now=None):
         now = time() if now is None else now
@@ -395,6 +395,10 @@ class Enemy(DistantPresenceMixin, DefaultObject):
             if self.db.state != "alive" or not players or now < self.db.next_attack_at:
                 return
             target = min(players, key=lambda player: (-self.db.threat.get(player.id, 0), player.id))
+            from typeclasses.parties import party_for
+            party = party_for(target)
+            if party:
+                target = party.defense_target(self, target, players)
             self.db.enemy_round += 1
             self.db.next_attack_at = now + COMBAT_INTERVAL
             result_profile = target.profile()

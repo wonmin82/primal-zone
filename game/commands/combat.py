@@ -83,7 +83,7 @@ class Suppress(Heavy):
 class Heal(GameCommand):
     category = "전투·회복"
     usage = "치료 · 철수 치료"
-    summary = "정신력으로 자신 또는 같은 방의 파티원을 치료합니다. 전투 중에는 다음 공격을 대신합니다."
+    summary = "정신력으로 자신 또는 같은 방의 일행원을 치료합니다. 전투 중에는 다음 공격을 대신합니다."
     input_style = "target"
     key = "치료"
     aliases = ["힐", "heal"]

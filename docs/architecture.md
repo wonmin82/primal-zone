@@ -12,7 +12,7 @@ EquipmentProfile의 inventory는 DB에서 파생한 일시적 수량 계산 cont
 
 ## 현재 접근·상점·전리품 계약
 
-Quest state는 entitlement와 진행 이력이며 access authority는 실제 Credential ItemEntity다. `can_enter`는 Room availability → 개인 credential → 기존 quest 환경 gate를 읽기 전용으로 검사한다. 파티에 권한을 공유하지 않고 제한실에서 public 공간으로 나갈 수 있다. [출입증·접근·상점](credentials-access-shops.md)을 따른다.
+Quest state는 entitlement와 진행 이력이며 access authority는 실제 Credential ItemEntity다. `can_enter`는 Room availability → 개인 credential → 기존 quest 환경 gate를 읽기 전용으로 검사한다. 일행에 권한을 공유하지 않고 제한실에서 public 공간으로 나갈 수 있다. [출입증·접근·상점](credentials-access-shops.md)을 따른다.
 
 Shopkeeper는 재고 owner가 아닌 source/sink 서비스다. `purchase_catalog`는 구매 목록, `accepts`는 매입 category다. `shop_service`는 credits와 ItemEntity 생성·삭제를 한 transaction으로 처리한다. 일반 아이템·소각·보관도 native Entity를 사용하며 archive profile 필드에 쓰지 않는다. [장비](equipment.md), [광원·총기](lighting-firearms.md), [전리품](loot-claims.md), [아이템 API](item-entities.md)는 현재 계약을 먼저 설명한다.
 
@@ -67,7 +67,7 @@ Web command echo는 별도 `› 명령` entry가 아니다. 마지막 entry가 �
 
 `world.loot_service`가 모델을 backend-neutral snapshot으로 제공한다. ItemEntity root와 LootClaim, CurrencyLoot/Share가 authoritative하며 legacy normalize_entry는 migration·historical 호환용이다. snapshot.as_entry의 eligible_players/remaining_shares는 share rows에서 파생한 pure 계산 입력이며 CurrencyLoot에 중복 저장하지 않는다. 조회는 DB를 변경하지 않는다.
 
-`rules.reward_allocation(amount, groups)`는 그룹 기여도 비례 → 파티 내부 균등 → deterministic 최대 나머지법으로 총량을 보존한다. XP는 즉시 지급하고 보급칩은 그룹별 CurrencyLoot로 생성한다. Share=0 행도 원래 eligibility를 유지한다. 부분 지급은 양수 remaining 몫만 weight로 쓰며 quantity·shares·offline 포함 모든 recipient credits가 같은 transaction에 저장된다. Missing recipient는 전체 rollback이다. 만료 후 잔액은 caller에게 지급하고 decay는 owner만 바꾸며 share·reservation·deadline을 보존한다.
+`rules.reward_allocation(amount, groups)`는 그룹 기여도 비례 → 일행 내부 균등 → deterministic 최대 나머지법으로 총량을 보존한다. XP는 즉시 지급하고 보급칩은 그룹별 CurrencyLoot로 생성한다. Share=0 행도 원래 eligibility를 유지한다. 부분 지급은 양수 remaining 몫만 weight로 쓰며 quantity·shares·offline 포함 모든 recipient credits가 같은 transaction에 저장된다. Missing recipient는 전체 rollback이다. 만료 후 잔액은 caller에게 지급하고 decay는 owner만 바꾸며 share·reservation·deadline을 보존한다.
 
 currency_request는 기존 TargetSelector에서 금액만 읽는다. 20칩은 양의 정수 금액, 칩 2는 공통 INDEX, 칩 모두는 ALL이다. source/관계 parsing은 기존 helper를 사용하고 여러 시체에는 ALL target을 요구한다. 기본 화폐 대상은 접근 가능한 entry에서 선택하며 기존 item 선택 정책은 바꾸지 않는다. player 간 전달·버리기와 전리품 회수는 world_change 안에서 관련 profile/loot를 함께 변경하고 실패 시 rollback한다. 임무·정산·NPC 판매는 직접 source, 구매·학습·패배는 sink이며 패배 손실은 드롭하지 않는다.
 
@@ -75,7 +75,7 @@ currency_request는 기존 TargetSelector에서 금액만 읽는다. 20칩은 �
 
 ## 목표와 구성
 
-사냥·장비 수집·성장을 중심으로 하는 한국어 웹 MUD다. 모든 주요 임무는 혼자 완료할 수 있으며 파티는 선택 사항이다. Python 3.13 / Evennia 6.1.0 / SQLite / HTML·CSS·JavaScript를 사용하고 정확한 버전은 uv.lock으로 고정한다.
+사냥·장비 수집·성장을 중심으로 하는 한국어 웹 MUD다. 모든 주요 임무는 혼자 완료할 수 있으며 일행는 선택 사항이다. Python 3.13 / Evennia 6.1.0 / SQLite / HTML·CSS·JavaScript를 사용하고 정확한 버전은 uv.lock으로 고정한다.
 
 | 구성 | 책임 |
 | --- | --- |
@@ -85,7 +85,7 @@ currency_request는 기존 TargetSelector에서 금액만 읽는다. 20칩은 �
 | commands/registry.py / 각 명령 모듈 | 명시적 등록, 인자 문법과 공통 검증, 도움말 metadata |
 | typeclasses/interactables.py | 윤대장·정비기록·보급상자·발전기·훈련관의 콘텐츠 행동 |
 | world/multiplayer.py | 시간·인원 상수, 단일 서버 상태 변경 잠금과 트랜잭션 |
-| typeclasses/parties.py | 영속 파티, 초대, 가입 순서와 리더 관리 |
+| typeclasses/parties.py | 영속 일행, 초대, 가입 순서와 리더 관리 |
 | typeclasses/enemies.py | 공유 HP, 점유, 위협도, 기여도, 적 공격과 사망 전이 |
 | typeclasses/loot.py | 영속 시체·바닥 아이템, 배정과 회수 |
 | typeclasses/explorers.py | 개인 성장 저장, 개인 전투 입력과 공격 타이머 |
@@ -156,7 +156,7 @@ bootstrap은 stable `primal_interactable` tag로 기존 객체를 찾아 DB ID�
 
 `rules.treatment_quote`는 안전 지역·비전투 조건과 요청량을 검증해 실제 회복 HP와 정수 비용을 계산한다. `Treat`는 읽기 전용 입력 경계 뒤 기존 `world_change` 직렬 잠금/DB transaction 안에서 대상을 확인하고 현재 프로필을 다시 읽고 기존 `save_profile`로 한 번 저장한다. 서비스 자체의 정신력 증가를 막기 위해 자연회복 checkpoint는 scheduler와 분리한다. `rules.treat`가 HP와 credits를 함께 변경하고 저장 실패 시 DB·Evennia attribute cache를 함께 복원한다. 정신력은 그대로며 `rules.rest`의 무료 HP·정신력 전체 회복은 독립적이다. 상세 경합·다중 서버 검증은 #50 범위다.
 
-profile v12는 기존 v8/v10/v11 의미 변환을 보존한 뒤 저장 정의의 동사와 새 이름 충돌을 이전했다. 현재 v13은 구형 NPC 대화의 방법 B 이전을 추가하며 장비 데이터·스키마·영속 ID를 바꾸지 않는다. 자세한 [NPC 대화·개인 메시지 계약](npc-dialogue.md)은 Intent, 공개 원문/개인 결과, 문맥, 선택 토큰, 메시징 Attribute를 설명한다.
+profile v12는 기존 v8/v10/v11 의미 변환을 보존한 뒤 저장 정의의 동사와 새 이름 충돌을 이전했다. v13은 구형 NPC 대화의 방법 B 이전을 추가했고 현재 v14는 구 일행 저장 동사의 안전 이전을 추가하며 장비 데이터·스키마·영속 ID를 바꾸지 않는다. 자세한 [NPC 대화·개인 메시지 계약](npc-dialogue.md)은 Intent, 공개 원문/개인 결과, 문맥, 선택 토큰, 메시징 Attribute를 설명한다.
 
 ## 현재 NPC 대화와 개인 메시지 (#47)
 
@@ -216,7 +216,7 @@ Integrity는 세 판매자 배치·catalog ID/행동, catalog 비어 있지 않�
 
 `ordered()`의 객체 ID 오름차순을 Room 서술, SURROUNDINGS, 보기, 공격, 콘텐츠 행동, 시체 회수에서 공유한다. 번호는 방 안의 보이는 후보에 붙이는 1부터 시작하는 transient presentation index이며 DB에 저장하거나 객체 ID 자체를 노출하지 않는다. 같은 이름끼리 번호를 붙이되 `시체`는 방 전체 Corpse pool을 사용한다. 시체가 만료되면 남은 시체 번호도 다시 계산된다.
 
-DEFAULT는 구조적으로 행동을 지원하는 첫 대상을 선택한다. INDEX는 표시 순서의 정확한 개체를 선택한다. 실제 점유·임무·한 번 보상·전리품 권한은 행동/규칙 계층이 판단하며 resolver가 가능한 다음 대상으로 자동 이동하지 않는다. 보기·가져와 허용된 물품 이전·스택 판매·소각은 각 행동의 ALL 계약을 따른다. 공격·대화·조사·수리·무장·착용·구매·학습·파티 인물 조작은 단일 대상이다. 정산의 교환은 NPC 하나를 선택하고 회수부품에는 1/N개/모두 수량을 적용한다. 스택 판매·소각도 같은 개 suffix 수량 parser를 사용한다. 전투가 시작된 뒤 공격·강타·사격·간파·견제·치료·호흡·도망는 기존 combat_target을 사용한다. 특성의 `힘 2 배분`처럼 수량을 받는 명령은 해당 명령의 인자 문법을 유지한다. 파티 초대/관리의 기존 원격 캐릭터 범위도 유지한다.
+DEFAULT는 구조적으로 행동을 지원하는 첫 대상을 선택한다. INDEX는 표시 순서의 정확한 개체를 선택한다. 실제 점유·임무·한 번 보상·전리품 권한은 행동/규칙 계층이 판단하며 resolver가 가능한 다음 대상으로 자동 이동하지 않는다. 보기·가져와 허용된 물품 이전·스택 판매·소각은 각 행동의 ALL 계약을 따른다. 공격·대화·조사·수리·무장·착용·구매·학습·일행 인물 조작은 단일 대상이다. 정산의 교환은 NPC 하나를 선택하고 회수부품에는 1/N개/모두 수량을 적용한다. 스택 판매·소각도 같은 개 suffix 수량 parser를 사용한다. 전투가 시작된 뒤 공격·강타·사격·간파·견제·치료·호흡·도망는 기존 combat_target을 사용한다. 특성의 `힘 2 배분`처럼 수량을 받는 명령은 해당 명령의 인자 문법을 유지한다. 일행 초대/관리의 기존 원격 캐릭터 범위도 유지한다.
 
 `world/target_presentation.py`는 개체 수를 자연어로 묘사하고 필요한 경우에만 `'갈퀴사냥룡 1'`, `'시체 2'` 같은 지정 방법을 문장으로 안내한다. Room 본문과 세계 서술은 객체 표가 아니다. SURROUNDINGS·버튼·상태/조작 control에서는 빠른 인식과 조작을 위해 `시체 1 · 갈퀴사냥룡의 시체` 같은 compact label·번호·상태를 사용할 수 있다. `world/state.py`가 label/command를 생성하고 웹은 그대로 텍스트 명령을 전송하므로 클라이언트에 선택 parser를 복제하지 않는다.
 
@@ -228,7 +228,7 @@ DEFAULT는 구조적으로 행동을 지원하는 첫 대상을 선택한다. IN
 
 수치와 상태 규칙은 [장기 성장 설계](progression.md)에 정리한다. `world/progression.py`의 SKILLS와 순수 helper가 SSOT이고 `world.test_progression`이 대표 값·경계를 검증한다. 장비는 기존 외부 능력치 보정이며 별도 숙련은 없다. 레벨 cap은 기본 기술의 추가 Rank 합 +1로 도출한다.
 
-v10에서 도입해 현재 v13에서도 유지하는 `attributes`는 기본 10과 추가 투자, `skills`는 여덟 Rank다. 남은 포인트·훈련은 레벨과 투자량에서 도출하며 가변 잔액을 저장하지 않는다. migration은 옛 기술을 R1로 환원하고 proficiency/guard를 제거한다. 특성은 canonical 순서로 +20·레벨 예산을 제한하고 기존 XP·장비·소지품·임무·월드 진행을 유지한다. 현재 버전의 잘못된 Rank도 저장 전에 같은 정규화를 거친다. read-only snapshot은 입력과 DB를 바꾸지 않는다.
+v10에서 도입해 현재 v14에서도 유지하는 `attributes`는 기본 10과 추가 투자, `skills`는 여덟 Rank다. 남은 포인트·훈련은 레벨과 투자량에서 도출하며 가변 잔액을 저장하지 않는다. migration은 옛 기술을 R1로 환원하고 proficiency/guard를 제거한다. 특성은 canonical 순서로 +20·레벨 예산을 제한하고 기존 XP·장비·소지품·임무·월드 진행을 유지한다. 현재 버전의 잘못된 Rank도 저장 전에 같은 정규화를 거친다. read-only snapshot은 입력과 DB를 바꾸지 않는다.
 
 <a id="npc-소유-훈련과-지원동-시설"></a>
 
@@ -244,9 +244,9 @@ v10에서 도입해 현재 v13에서도 유지하는 `attributes`는 기본 10�
 
 기존 자동 공격 scheduler를 유지한다. 강타·사격·견제는 다음 공격을 바꾸며 간파·치료·호흡·붕대는 한 공격 기회를 대신한다. 자원·cooldown은 실행 차례에 다시 검증하고 성공 때만 commit한다. `skill_ready_at`은 절대시각이며 재로그인·재훈련으로 초기화하지 않는다. `heavy_ready_at`은 기존 deadline 호환성을 유지한다.
 
-`insight`는 플레이어의 한 대상에만 귀속되고 유효한 공격 적중·사망·전투 종료·양쪽 이동에서 해제한다. 지원 행동은 소모하지 않는다. 파티 치료는 예약과 실행 양쪽에서 동일 방·파티·관찰 조건을 검증하고 단일 world_change로 양쪽을 저장한다. 대상이 바뀌거나 사라지면 무료 공격으로 바꾸지 않고 그 지원 기회를 종료한다.
+`insight`는 플레이어의 한 대상에만 귀속되고 유효한 공격 적중·사망·전투 종료·양쪽 이동에서 해제한다. 지원 행동은 소모하지 않는다. 일행 치료는 예약과 실행 양쪽에서 동일 방·일행·관찰 조건을 검증하고 단일 world_change로 양쪽을 저장한다. 대상이 바뀌거나 사라지면 무료 공격으로 바꾸지 않고 그 지원 기회를 종료한다.
 
-견제는 공유 Enemy의 `suppressions[str(source_player_id)]`에 Rank·개별 감소율·남은 공격 횟수를 저장한다. 동일 source의 효과만 Rank 비교하며 다른 source와 공존한다. `progression.apply_suppression`이 applied/refreshed/upgraded/preserved를 반환하고 `combined_suppression`이 곱산 후 `suppression_cap`으로 최종 감소율만 제한한다. public 전투의 여러 파티·솔로 참여는 유지하며 source 수에 제한을 두지 않는다. 상한은 MAX Rank 네 효과 기준(일반56.953279%·보스32.9198049375%)이며 cap에 걸려도 모든 효과의 수명과 소비는 같다. 전투 보스 판정은 `boss` flag를 사용해 각 효과의 감소율을 한 번만 절반으로 적용하고 해당 상한을 선택한다. `boss_quest`는 임무 진행에만 사용한다. 적 attack event마다 `consume_suppressions`로 모든 효과를 한 번 소비한다. 현재 엔진은 단일 대상 확정 공격이며 향후 miss/AoE도 event 단위 helper를 호출해야 한다. telegraph는 추가 소비하지 않는다. 마지막 combatant 이탈·claim timeout·Enemy 이동·사망·respawn에서 전체 정리하며 HP 회복과 수명을 분리한다. source 없는 옛 suppression은 reconcile/bootstrap에서 제거한다. 간파와 견제는 플레이어별 절대 deadline으로10초 cooldown을 적용한다. 액티브 guard와 응급처치 기술은 사용하지 않는다.
+견제는 공유 Enemy의 `suppressions[str(source_player_id)]`에 Rank·개별 감소율·남은 공격 횟수를 저장한다. 동일 source의 효과만 Rank 비교하며 다른 source와 공존한다. `progression.apply_suppression`이 applied/refreshed/upgraded/preserved를 반환하고 `combined_suppression`이 곱산 후 `suppression_cap`으로 최종 감소율만 제한한다. public 전투의 여러 일행·솔로 참여는 유지하며 source 수에 제한을 두지 않는다. 상한은 MAX Rank 네 효과 기준(일반56.953279%·보스32.9198049375%)이며 cap에 걸려도 모든 효과의 수명과 소비는 같다. 전투 보스 판정은 `boss` flag를 사용해 각 효과의 감소율을 한 번만 절반으로 적용하고 해당 상한을 선택한다. `boss_quest`는 임무 진행에만 사용한다. 적 attack event마다 `consume_suppressions`로 모든 효과를 한 번 소비한다. 현재 엔진은 단일 대상 확정 공격이며 향후 miss/AoE도 event 단위 helper를 호출해야 한다. telegraph는 추가 소비하지 않는다. 마지막 combatant 이탈·claim timeout·Enemy 이동·사망·respawn에서 전체 정리하며 HP 회복과 수명을 분리한다. source 없는 옛 suppression은 reconcile/bootstrap에서 제거한다. 간파와 견제는 플레이어별 절대 deadline으로10초 cooldown을 적용한다. 액티브 guard와 응급처치 기술은 사용하지 않는다.
 
 기술 정신력 검증은 `progression.mental_cost(action, level)`의 결과를 메시지에도 사용한다. 실패 시 기술명과 실제 필요량을 안내하며 자원·cooldown·예약·대상 상태를 변경하지 않는다. 기존 검증 우선순위와 치료의 단일 transaction 경계는 유지한다.
 
@@ -268,7 +268,7 @@ parser는 마지막 token으로 행동만 찾는다. Command는 인자 문법·�
 
 방향 정의의 shortcut에서 여덟 방향을 파생하고 정보 단축어와 합성한다. 글로벌 단축어와 개인 줄임말은 별도다. 현재 치료/힐/heal은 활성 플레이어 기술이며 붕대 사용과 분리한다. Doctor 진료(treat)는 HP, Bed 휴식(rest)은 HP·정신력을 무료로 채운다. generic item heal field는 일반 회복량 데이터이며 skill ID heal과 다른 문맥이다. profile v10에서 숙련은 제거한다.
 
-`commands/help_pages.py`의 명시적 여섯 분류 순서·query·대표 명령과 각 command의 help-only `category`가 root/분류/detail을 구성한다. 입력할 수 없는 '8방향 이동'은 text role이다. query는 casefold → 글로벌 단축어 → 실제 command key/alias → 방향/영문 alias → category/topic 순서로 판정한다. 파티 detail이 category보다 우선하며 parser 상세는 `입력 도움말`로 분리했다. 실제 승강기 층별 Exit는 registry 명령과 별개이며 이동 분류와 공통 출구 정보로 안내한다.
+`commands/help_pages.py`의 명시적 여섯 분류 순서·query·대표 명령과 각 command의 help-only `category`가 root/분류/detail을 구성한다. 입력할 수 없는 '8방향 이동'은 text role이다. query는 casefold → 글로벌 단축어 → 실제 command key/alias → 방향/영문 alias → category/topic 순서로 판정한다. 일행 detail이 category보다 우선하며 parser 상세는 `입력 도움말`로 분리했다. 실제 승강기 층별 Exit는 registry 명령과 별개이며 이동 분류와 공통 출구 정보로 안내한다.
 
 과거 v8 migration은 `skills.heal → firstaid` Rank와 `queued_action`을 보존한다. pure `commands/vocabulary.py`는 저장 정의의 실제 명령 위치만 canonical로 변환하고 새 글로벌/command/미래 예약 이름과 충돌한 개인 key를 `_개인[번호]`로 보존한다. exact 중첩 참조만 갱신하며 채팅·대상 문자열은 유지한다. 상세 계약은 [command-shortcuts.md](command-shortcuts.md)에 있다.
 
@@ -300,11 +300,11 @@ parser는 마지막 token으로 행동만 찾는다. Command는 인자 문법·�
 
 ## Party의 단일 상태
 
-Party는 위치가 없는 영속 Evennia 객체다. DB identity 하나가 파티의 고유 ID이며 leader, members, invitations, loot_mode, round_robin_cursor, created_at을 소유한다. members의 순서가 가입 순서다. Character에는 party_id 참조만 저장하며 전체 상태를 복제하지 않는다.
+Party는 위치가 없는 영속 Evennia 객체다. DB identity 하나가 일행의 고유 ID이며 leader, members, invitations, loot_mode, round_robin_cursor, created_at 및 join_requests, tactics, leader_offline_since를 소유한다. members의 순서가 가입 순서다. Character에는 party_id 참조만 저장하며 전체 상태를 복제하지 않는다.
 
-최대 4명, 초대는 60초간 유효하다. 초대·제외·위임·분배 모드 설정은 파티장만 가능하다. 수락할 때도 초대 유효성, 현재 소속과 정원을 재검사한다. 자신·동일/다른 파티 소속·없는 탐사자 초대는 거부한다. 중복 초대는 만료 기한을 무한 연장하지 않는다. 한 탐사자는 대기 초대 하나만 받는다.
+최대 4명, 초대는 60초간 유효하다. 초대·제외·위임·분배 모드 설정은 일행 리더만 가능하다. 수락할 때도 초대 유효성, 현재 소속과 정원을 재검사한다. 자신·동일/다른 일행 소속·없는 탐사자 초대는 거부한다. 중복 초대는 만료 기한을 무한 연장하지 않는다. 한 탐사자는 대기 초대 하나만 받는다.
 
-파티장이 명시적으로 탈퇴하면 남은 가입 순서의 첫 멤버가 승계한다. 접속 종료는 파티장 변경 사유가 아니다. 마지막 멤버가 나가면 파티를 삭제한다. 교전 중 새 파티 생성·가입은 거부하며, 탈퇴·제외는 해당 탐사자의 전투 참여도 함께 정리한다. 기존 파티장의 위임은 그룹 identity를 바꾸지 않는다.
+일행 리더가 명시적으로 탈퇴하면 남은 가입 순서의 첫 멤버가 승계한다. 리더의 실제 세션이 모두 종료되면 일반 온라인 멤버의 즉시 승계 또는 연속 600초 후 첫 정상 월드 tick의 자동 승계를 허용한다. 마지막 멤버가 나가면 일행을 삭제한다. 교전 중 새 일행 생성·가입은 거부하며, 탈퇴·제외는 해당 탐사자의 전투 참여도 함께 정리한다. 기존 일행 리더의 위임은 그룹 identity를 바꾸지 않는다.
 
 ## 공유 Enemy와 두 공격 타이머
 
@@ -320,15 +320,15 @@ Enemy가 HP/max HP, alive/respawning 상태, respawn_at, claim, claim_last_activ
 
 ## 점유와 보상 자격
 
-일반 적의 combat_mode는 claimed다. 첫 교전 탐사자 또는 파티가 점유한다. 같은 파티는 합류할 수 있고 외부 그룹은 서버에서 거절된다. 실제 전투 행동이 점유 활동 시각을 갱신한다. 명령 반복만으로 기한을 늘리지 않는다. 그룹 전원 도망·이탈·접속 종료 시 즉시 점유를 해제하며, 활동이 15초간 없으면 남은 참여를 종료하고 해제한다.
+일반 적의 combat_mode는 claimed다. 첫 교전 탐사자 또는 일행가 점유한다. 같은 일행는 합류할 수 있고 외부 그룹은 서버에서 거절된다. 실제 전투 행동이 점유 활동 시각을 갱신한다. 명령 반복만으로 기한을 늘리지 않는다. 그룹 전원 도망·이탈·접속 종료 시 즉시 점유를 해제하며, 활동이 15초간 없으면 남은 참여를 종료하고 해제한다.
 
 살아 있는 적은 마지막 참가자의 교전 종료부터 15초 유예 후 `8 + max_hp/15`의 분당 회복률로 점진 회복한다. 위협도·기여도·차례 정리와 HP 회복을 분리하며 재교전은 현재 HP를 유지한다. 빈 방은 회복 tick 없이 다음 접근에서 batch 계산하고, 접속 관찰자가 있을 때만 다음 10초 경계를 하나 예약한다. 죽은 적은 회복하지 않고 기존 45초 respawn에서 최대 HP로 돌아온다. timing SSOT와 smoke의 canonical key는 ENEMY_RECOVERY_DELAY_SECONDS다. PRIMAL_ENEMY_RECOVERY_DELAY_SECONDS override가 우선하고 없으면 기존 PRIMAL_ENEMY_RESET_SECONDS를 fallback으로 읽는다. 기존 ENEMY_RESET_SECONDS import는 호환 alias만 남기며 production 유예 15초를 유지한다.
 
-우두머리는 public으로 여러 솔로/파티가 참여할 수 있다. contribution에는 캐릭터별 damage, last_action_at, group identity를 기록한다. 자기 회복·방어만으로 최초 보상 자격이 생기지는 않는다. 지원/치유 기여 가중치는 아직 구현하지 않았다.
+우두머리는 public으로 여러 솔로/일행가 참여할 수 있다. contribution에는 캐릭터별 damage, last_action_at, group identity를 기록한다. 자기 회복·방어만으로 최초 보상 자격이 생기지는 않는다. 지원/치유 기여 가중치는 아직 구현하지 않았다.
 
-처치 시 실제 피해 기여가 있고, 같은 방에서 접속한 채 교전 중이며, 최근 15초 내 행동한 탐사자만 적격이다. 파티에 있다는 이유로 원격·AFK·미참여 멤버에게 지급하지 않는다. 도망 후 재참여하면 이전 기여는 이어받지 않는다.
+처치 시 실제 피해 기여가 있고, 같은 방에서 접속한 채 교전 중이며, 최근 15초 내 행동한 탐사자만 적격이다. 일행에 있다는 이유로 원격·AFK·미참여 멤버에게 지급하지 않는다. 도망 후 재참여하면 이전 기여는 이어받지 않는다.
 
-경험치·보급칩은 적격 그룹의 피해 합계 비중으로 나누고, 파티 안에서는 적격 멤버끼리 균등 분배한다. 일반 적은 점유 그룹만 존재하므로 그 그룹이 전체 풀을 받는다. 각 단계에서 최대 나머지법으로 정수 총량을 보존하며, 같은 나머지는 그룹 키/캐릭터 ID 오름차순으로 결정한다. 보스 처치 플래그도 적격 탐사자 각각에게만 적용한다. 막타와 회수 명령자는 보상 자격을 독점하지 않는다.
+경험치·보급칩은 적격 그룹의 피해 합계 비중으로 나누고, 일행 안에서는 적격 멤버끼리 균등 분배한다. 일반 적은 점유 그룹만 존재하므로 그 그룹이 전체 풀을 받는다. 각 단계에서 최대 나머지법으로 정수 총량을 보존하며, 같은 나머지는 그룹 키/캐릭터 ID 오름차순으로 결정한다. 보스 처치 플래그도 적격 탐사자 각각에게만 적용한다. 막타와 회수 명령자는 보상 자격을 독점하지 않는다.
 
 ## 시체·아이템 배정·바닥 전리품
 
@@ -338,9 +338,9 @@ Corpse는 실제 공간 객체이며 source spawn/enemy, created_at, decay_at을
 
 공용 보스도 시체는 하나다. 각 아이템은 정렬된 보상 그룹의 누적 피해 비중 구간에, 전체 드롭 개수로 나눈 등간격 중점을 대응시켜 그룹을 결정한다. 예를 들어 50:50 두 그룹에 두 아이템이면 각각 하나씩 배정된다. 아이템 수가 적으면 기여 비중이 낮은 그룹은 아이템을 못 받을 수 있다. 경험치·보급칩 비례 배분과는 별개이며 첫 회수자가 전체 드롭을 갖지 않는다.
 
-선정된 파티의 실제 참여자를 가입 순서로 정렬하고 Party.round_robin_cursor를 적용한다. 아이템 한 개마다 순번을 증가시킨다. 현재 지원 모드는 round_robin뿐이며 `순번 파티분배`로 설정한다. free_for_all·need_greed·leader 방식과 관련 UI는 구현하지 않았다.
+선정된 일행의 실제 참여자를 가입 순서로 정렬하고 Party.round_robin_cursor를 적용한다. 아이템 한 개마다 순번을 증가시킨다. 현재 지원 모드는 round_robin뿐이며 `순번 일행분배`로 설정한다. free_for_all·need_greed·leader 방식과 관련 UI는 구현하지 않았다.
 
-Physical root는 ItemEntity definition/quantity와 별도 LootClaim의 reserved_party/reserved_player/assigned_player/protection_until로 표현한다. 보호 중에는 배정된 탐사자 또는 원래 파티원이 회수를 요청할 수 있으나 실제 소지품은 assigned_player에게 지급된다. 배정자는 탈퇴·접속 종료해도 바뀌지 않는다. 보호 종료 뒤에는 회수 명령자가 받는다. 특정 아이템은 한 개, `<아이템> 모두`는 선택한 출처의 같은 종류 전체 수량을 처리한다. 여러 시체 전체의 회수는 `모든 시체에서 모두 가져`로 명시한다.
+Physical root는 ItemEntity definition/quantity와 별도 LootClaim의 reserved_party/reserved_player/assigned_player/protection_until로 표현한다. 보호 중에는 배정된 탐사자 또는 원래 일행원이 회수를 요청할 수 있으나 실제 소지품은 assigned_player에게 지급된다. 배정자는 탈퇴·접속 종료해도 바뀌지 않는다. 보호 종료 뒤에는 회수 명령자가 받는다. 특정 아이템은 한 개, `<아이템> 모두`는 선택한 출처의 같은 종류 전체 수량을 처리한다. 여러 시체 전체의 회수는 `모든 시체에서 모두 가져`로 명시한다.
 
 시체는 처치 후 30초에 남은 entries를 DroppedLoot 방 객체로 옮기고 삭제된다. 원래 권한과 처치 후 120초인 protection_until은 그대로 유지된다. 적은 처치 후 45초(시체 30초 + 대기 15초)에 같은 spawn으로 재생성한다. 바닥 아이템은 재생성 시 삭제하지 않으며 현재 별도 영구 소멸 기한은 없다. 장기간 운영 시 누적량 관리 정책이 필요하다.
 
@@ -348,7 +348,7 @@ Physical root는 ItemEntity definition/quantity와 별도 LootClaim의 reserved_
 
 Production 기본값은 world/timing.py, 실행 설정의 해석·사용은 world/multiplayer.py에서 관리한다. persistent timestamp가 진실이며 delay/task는 실행 편의다. 서버 시작, 5초 간격 WorldLifecycle script, 보기·공격·회수 시 같은 reconcile 함수를 사용한다. 지연된 시체는 바닥으로 옮기고 재생성 시각이 지난 적은 복원한다. 보호 만료 조회는 현재 시각 비교로 free로 해석하고 명시적 source reconcile은 expired LootClaim row만 삭제한다. 초대도 만료 시각으로 정리한다. 반복 reconcile은 전리품을 복제하지 않는다.
 
-재시작 때 개인 combat_target과 Enemy의 참여·위협도를 정리한다. 파티와 개인 성장 기록은 유지되며 접속 후 살아 있는 상대를 다시 지정한다. 오프라인 중 자동 사냥 보상을 주지 않는다. 비정상 연결 종료는 서버가 단절을 인지하기 전까지 전투가 진행될 수 있다.
+재시작 때 개인 combat_target과 Enemy의 참여·위협도를 정리한다. 일행과 개인 성장 기록은 유지되며 접속 후 살아 있는 상대를 다시 지정한다. 오프라인 중 자동 사냥 보상을 주지 않는다. 비정상 연결 종료는 서버가 단절을 인지하기 전까지 전투가 진행될 수 있다.
 
 ## 기존 데이터와 운영 범위
 
@@ -368,7 +368,7 @@ Production 기본값은 world/timing.py, 실행 설정의 해석·사용은 worl
 
 ## 텍스트와 의미별 색상
 
-세계 사건과 조회 화면은 같은 데이터를 서로 다른 형식으로 표현한다. Room·공격·처치·전리품·NPC 대화는 한국어 서술이고, 상태·능력·경험치·기술·장비·소지품·상점·임무·파티·도움말은 `[제목]`과 짧은 행으로 구성한 compact 정보창이다. Room과 대상 보기는 기존 구분선과 설명·행동 안내를 유지한다. Room은 실제로 보이는 대상만 묘사하며 명령 목록을 넣지 않는다. 가능한 행동은 대상 보기와 command registry 기반 도움말에서 확인한다.
+세계 사건과 조회 화면은 같은 데이터를 서로 다른 형식으로 표현한다. Room·공격·처치·전리품·NPC 대화는 한국어 서술이고, 상태·능력·경험치·기술·장비·소지품·상점·임무·일행·도움말은 `[제목]`과 짧은 행으로 구성한 compact 정보창이다. Room과 대상 보기는 기존 구분선과 설명·행동 안내를 유지한다. Room은 실제로 보이는 대상만 묘사하며 명령 목록을 넣지 않는다. 가능한 행동은 대상 보기와 command registry 기반 도움말에서 확인한다.
 
 `world/text.py`의 `Text`는 색 없는 문자열과 `{text, role}` 조각을 함께 가진다. `token`, `text`, `join`, `sheet`, `compact`, `row`가 조합과 한글 표시 폭을 담당한다. 조사는 색 코드를 붙이기 전 원래 이름의 받침으로 선택한다. `world/presentation.py`는 기존 rules·성장 정의·ITEMS·SHOP_CATALOGS에서 조회값을 읽는다. Enemy/Corpse/DroppedLoot/ActionObject/Explorer의 실제 타입과 콘텐츠 정의가 대상 역할과 행동을 결정한다. 이름별 색상 목록이나 완성된 문자열 검색은 사용하지 않는다.
 
@@ -447,7 +447,7 @@ native equipment row가 없으면 빈 슬롯이며 active_weapon은 None일 수 
 
 `world/quests.py`의 임무별 단계는 `flag/대상/의미 역할/설명`과 안내문으로 구성된다. 선행 임무 조건 `requires`와 시작 전 표시 여부 `visible_from_start`도 임무 정의가 소유하며, 안내 선택과 임무 화면은 이 정의를 순서대로 읽는다. profile은 `quests[quest_id][flag]`와 개인 일회 발견용 `discoveries[id]`를 저장한다. 조회 화면은 완료 임무를 한 줄로 압축하고 진행 임무의 완료·현재·대기 단계를 보여준다. 웹 `pz_state`는 현재 안내 외에 Region ID/이름을 전달한다. 실제 임무 행동은 `ActionObject` subclass와 순수 `rules` 함수가 처리하므로 임무 DSL이나 새 parser는 없다.
 
-`build_world()`는 Room 이름·설명, Exit 방향·별칭·목적지, 상호작용 객체 이름·별칭·위치, Enemy 이름·ID·최대 HP와 유휴 spawn 위치처럼 정적 정의가 소유하는 값을 동기화한다. 이전 정의 기준 alive·full·idle(교전자 없음)이면 새 max HP 기준 full로 맞춘다. damaged idle/교전 중이면 current HP를 유지하고 새 max 이하로 clamp하며 Boss encounter scaling 참가자 상태를 보존한다. Enemy의 교전 중 위치, state, respawn_at, claim, combatants, contribution, threat, round·timer·last_activity와 시체·바닥 전리품, 파티, 플레이어 profile·소지품·임무는 런타임이 소유하므로 초기화하지 않는다. 삭제된 관리 Exit/Interactable/spawn은 `stale_definitions()`로 보고하지만 자동 삭제하지 않는다. 실제 운영 DB에서 제거가 필요하면 상태와 참조를 확인한 뒤 별도 작업으로 정리한다. Region 3 추가 시 지역 정의, 필요하다면 작은 행동 subclass, 임무 정의 및 순수 규칙 함수를 더하고 무결성 검사를 통과시킨다.
+`build_world()`는 Room 이름·설명, Exit 방향·별칭·목적지, 상호작용 객체 이름·별칭·위치, Enemy 이름·ID·최대 HP와 유휴 spawn 위치처럼 정적 정의가 소유하는 값을 동기화한다. 이전 정의 기준 alive·full·idle(교전자 없음)이면 새 max HP 기준 full로 맞춘다. damaged idle/교전 중이면 current HP를 유지하고 새 max 이하로 clamp하며 Boss encounter scaling 참가자 상태를 보존한다. Enemy의 교전 중 위치, state, respawn_at, claim, combatants, contribution, threat, round·timer·last_activity와 시체·바닥 전리품, 일행, 플레이어 profile·소지품·임무는 런타임이 소유하므로 초기화하지 않는다. 삭제된 관리 Exit/Interactable/spawn은 `stale_definitions()`로 보고하지만 자동 삭제하지 않는다. 실제 운영 DB에서 제거가 필요하면 상태와 참조를 확인한 뒤 별도 작업으로 정리한다. Region 3 추가 시 지역 정의, 필요하다면 작은 행동 subclass, 임무 정의 및 순수 규칙 함수를 더하고 무결성 검사를 통과시킨다.
 
 밀림 신호전지는 두 번째 지역 임무 전용 열쇠다. 수위 표식은 문이 닫혀 있고 전지가 없을 때만 한 개를 지급하며, 신호 장치 가동은 조건을 모두 확인한 뒤 전지 한 개를 소비하고 gate_open을 기록한다. 철갑등짐승은 신호전지 대신 일반 회수부품을 확률적으로 남긴다. 이미 문을 연 개발 데이터의 잔여 전지는 bootstrap이나 profile 변환에서 임의로 삭제하지 않는다.
 
@@ -480,7 +480,7 @@ Room description은 지형·건축·분위기·지속되는 흔적, Environment�
 
 재시작 시 지난 deadline을 따라 최종 유효 구간까지 복구하고 과거 이벤트는 재생하지 않는다. 매우 긴 중단은 한 reconcile당 256회로 제한하고 이후 현재 시각에서 새 지속 구간을 시작한다. 이 제한을 넘는 중단은 세부 기상 이력을 재현하지 않는다. 변경은 기존 world_change transaction 안에서 저장하며 성공 후 callback으로 발행한다. 저장/외부 transaction 실패 시 상태와 알림을 되돌린다. 최종 weather 또는 period가 실제 달라진 zone의 **현재 session이 있는** 탐사자 중 해당 Room의 환경 표현이 달라진 사람에게만 1–2문장을 보낸다. 같은 날씨의 기간 갱신이나 매 sweep는 로그를 추가하지 않는다. 웹은 기존 sweep의 push_state(observed_at=now) 한 경로로 갱신한다.
 
-환경 데이터는 캐릭터에 저장하지 않는다. 현재 개인 광원은 ItemEntity.state와 active_light 참조로 관리하고 legacy profile 광원 필드는 archive로 보존할 수 있지만 gameplay에서 읽지 않는다. 타이머·점유·참여 보상·Corpse/DroppedLoot·파티 정책은 해당 공통 서비스가 담당한다. LOS·외부 날씨 API·조도 전파 엔진·환경 피해는 제공하지 않는다.
+환경 데이터는 캐릭터에 저장하지 않는다. 현재 개인 광원은 ItemEntity.state와 active_light 참조로 관리하고 legacy profile 광원 필드는 archive로 보존할 수 있지만 gameplay에서 읽지 않는다. 타이머·점유·참여 보상·Corpse/DroppedLoot·일행 정책은 해당 공통 서비스가 담당한다. LOS·외부 날씨 API·조도 전파 엔진·환경 피해는 제공하지 않는다.
 
 
 ## 관찰, 광원과 공용 시설
@@ -523,11 +523,11 @@ Room `hints`는 stable INTERACTABLES ID/action 또는 일반 text를 참조한�
 
 `world/timing.py`가 production 2.5/30/15/120/15/15/15초 기본값을 갖고 `world.multiplayer`는 선택적인 `PRIMAL_*` settings를 읽는다. `settings_test`는 타이머를 줄이지 않는다. `server/conf/smoke_support.py`의 Quick 값은 2.5/10/2/20/15/15/2초이며 Full은 production 기본값을 그대로 쓴다. Quick에서 점유/참여 만료는 관찰 대상이 아니므로 production 15초를 유지하고 DB/state 전송 지연으로 유효 참가자가 지워지는 false timeout을 막는다. Quick의 outsider 거절/부분 pickup 요청은 병렬 전송해 불필요한 두 command 왕복을 피한다. 공동 전투는 2.5초 공격 간격으로 실제 join/state 전송 전에 한 명만 처치하는 race를 막고, 시체는 10초 관찰 창을 확보한다. 기존 실제 `delay()` 및 WorldLifecycle의 5초 sweep을 재사용하며 fake Clock나 새 scheduler framework는 없다.
 
-`scripts/smoke_harness.py`는 실행마다 새 작업 경로에 게임 코드/새 SECRET_KEY·SQLite를 준비하고 `smoke_setup.py`를 별도 프로세스에서 실행한다. DB 접근 전 marker·정확한 작업/DB 경로·SQLite engine을 검증한다. 사용자 PostgreSQL 환경은 제거한다. Smoke 전용 SQLite는 Portal+Server 재시작 중 읽기→쓰기 승격 경합을 막도록 IMMEDIATE transaction과 30초 busy timeout을 사용한다. 일반 플레이 DB 설정은 바꾸지 않는다. 정상 Evennia Account/Character API로 일반 fixture 계정을 만들고 기본 quest/파티/전투/시작 위치와 구매 자금/HP를 준비한다. 비밀번호는 runtime 메모리와 자식 stdin으로만 전달한다. 결과 장비/시체는 scenario의 실제 동작으로 생성한다.
+`scripts/smoke_harness.py`는 실행마다 새 작업 경로에 게임 코드/새 SECRET_KEY·SQLite를 준비하고 `smoke_setup.py`를 별도 프로세스에서 실행한다. DB 접근 전 marker·정확한 작업/DB 경로·SQLite engine을 검증한다. 사용자 PostgreSQL 환경은 제거한다. Smoke 전용 SQLite는 Portal+Server 재시작 중 읽기→쓰기 승격 경합을 막도록 IMMEDIATE transaction과 30초 busy timeout을 사용한다. 일반 플레이 DB 설정은 바꾸지 않는다. 정상 Evennia Account/Character API로 일반 fixture 계정을 만들고 기본 quest/일행/전투/시작 위치와 구매 자금/HP를 준비한다. 비밀번호는 runtime 메모리와 자식 stdin으로만 전달한다. 결과 장비/시체는 scenario의 실제 동작으로 생성한다.
 
 정상 초기 객체·static 준비를 마친 fixture DB에 초기 setup 완료를 기록해 첫 실행의 자동 재시작을 피한다. 실제 Twisted foreground Portal/Server를 각각 시작해 exit를 추적하고 loopback HTTP/WS readiness를 polling한다. scenario 중 health monitor가 server premature exit를 실패로 전파한다. 실패·interrupt·성공 모두 자체 Popen/process group만 종료하며 개발 서버 launcher stop/reload를 호출하지 않는다. 성공 시 자신이 생성한 marker 경로만 삭제하고 실패 시 진단 DB/로그를 남긴다. CI는 기존 `test`와 추가 `smoke` job을 실행하고 Full은 제외한다. 실패 단계는 로그 tail만 출력하며 DB는 출력/업로드하지 않는다.
 
-Quick/Full의 client·단계·predicate 대기를 공유한다. 공개 register/610초 sleep·5회 반복 사냥을 제거하고 auth/party/combat/corpse/lifecycle/protection/respawn/shop/persistence 단계별 결과를 출력한다. 시체 배정/파티 회수 권한을 읽고 그대로 남겨 그 시체의 ground 전환과 outsider 회수를 검증한다. Full은 실제 관찰 시각의 허용 오차를 적용해 지나치게 빠른 production 만료를 탐지한다. 일반 플레이 SQLite의 hash·mtime·size는 실행 전후 비교할 뿐 migrate/fixture/cleanup 대상이 아니다. 프로필 schema나 production 게임 밸런스는 바꾸지 않는다.
+Quick/Full의 client·단계·predicate 대기를 공유한다. 공개 register/610초 sleep·5회 반복 사냥을 제거하고 auth/party/combat/corpse/lifecycle/protection/respawn/shop/persistence 단계별 결과를 출력한다. 시체 배정/일행 회수 권한을 읽고 그대로 남겨 그 시체의 ground 전환과 outsider 회수를 검증한다. Full은 실제 관찰 시각의 허용 오차를 적용해 지나치게 빠른 production 만료를 탐지한다. 일반 플레이 SQLite의 hash·mtime·size는 실행 전후 비교할 뿐 migrate/fixture/cleanup 대상이 아니다. 프로필 schema나 production 게임 밸런스는 바꾸지 않는다.
 
 
 <a id="본부-7단계-통합-closeout"></a>
@@ -599,7 +599,7 @@ Modifier는 구조화된 target/op/value/scope의 add 합산·multiply 곱·clam
 
 `world/loot_assets.py`의 읽기 전용 normalize_entry는 legacy {item, quantity}를 {kind: item, id, quantity}로 해석한다. 새 currency entry는 kind=currency·id=credits·quantity·eligible_players·remaining_shares와 공통 reservation/protection_until을 가진다. 초기 PR의 shares는 읽을 때 원래 key를 eligible_players로, 양수 몫을 remaining_shares로 해석한다. 입력을 변경하지 않고 반복 normalize도 안정적이며 새 저장은 분리된 구조를 사용한다. 상세 보기·Web·회수·decay가 이 계층을 공유하며 조회로 DB를 다시 쓰지 않는다.
 
-`rules.reward_allocation(amount, groups)`는 그룹 기여도 비례 → 파티 내부 균등 → deterministic 최대 나머지법으로 총량을 보존한다. XP는 처치 transaction에서 즉시 지급하고 enemy.currency는 그룹별 currency entry로 저장한다. eligible_players는 처치 시점 적격 참여자 snapshot으로 파티 변화·로그아웃과 무관하게 고정된다. remaining_shares는 아직 지급하지 않은 금액만 담는다. 보호 중 루팅 요청자는 protected distribution을 trigger할 자격을 가질 뿐, 자신의 remaining share가 0이라는 이유로 자격을 잃지 않는다. currency_payouts는 remaining_shares만 weight로 부분 지급한 뒤 몫과 quantity를 차감하며 0인 몫은 제거한다. 실제 지급은 session 없이도 persistent Explorer에 저장하며 수령 객체가 없으면 전체 transaction을 rollback한다. 다른 그룹 entry는 남는다. 보호 만료 후에는 남은 금액을 caller에게 지급하며 과거 자격/몫을 적용하지 않는다. 시체 decay는 quantity·eligible_players·remaining_shares·reservation·보호 deadline을 바닥으로 그대로 옮긴다.
+`rules.reward_allocation(amount, groups)`는 그룹 기여도 비례 → 일행 내부 균등 → deterministic 최대 나머지법으로 총량을 보존한다. XP는 처치 transaction에서 즉시 지급하고 enemy.currency는 그룹별 currency entry로 저장한다. eligible_players는 처치 시점 적격 참여자 snapshot으로 일행 변화·로그아웃과 무관하게 고정된다. remaining_shares는 아직 지급하지 않은 금액만 담는다. 보호 중 루팅 요청자는 protected distribution을 trigger할 자격을 가질 뿐, 자신의 remaining share가 0이라는 이유로 자격을 잃지 않는다. currency_payouts는 remaining_shares만 weight로 부분 지급한 뒤 몫과 quantity를 차감하며 0인 몫은 제거한다. 실제 지급은 session 없이도 persistent Explorer에 저장하며 수령 객체가 없으면 전체 transaction을 rollback한다. 다른 그룹 entry는 남는다. 보호 만료 후에는 남은 금액을 caller에게 지급하며 과거 자격/몫을 적용하지 않는다. 시체 decay는 quantity·eligible_players·remaining_shares·reservation·보호 deadline을 바닥으로 그대로 옮긴다.
 
 ITEMS[*].value만 상품 가치와 구매가를 소유한다. SHOP_CATALOGS는 item ID tuple, Shopkeeper는 shop_id와 catalog의 취급 사실만 소유한다. purchase_price와 resale_price(value//2, 최소 1)가 가격을 계산한다. 가치/판매는 기존 구매의 seller selection·safe/peace/perception 정책을 재사용한다. 판매는 move_item의 transferable·장착 복사본 reservation을 사용하며 일반 판매에 수량 N개 문법은 추가하지 않는다. Web 기본 판매도 1개이며 판매 가능한 복사본이 2개 이상일 때만 별도 모두 판매와 총액(장착분 제외 수량 × 매입가)을 제공한다. value 없는 임무/resource는 매매하지 않는다.
 
@@ -619,6 +619,14 @@ v6부터 사용하는 `light_sources[item_id]`에는 on, power_source, charge_se
 
 아래는 성장/profile 호환을 설명하던 당시 기록이다. 현재 full-world item migration 경로는 위 explicit maintenance 계약을 따른다.
 
-당시 profile의 최신 버전은 10이었다. 현재 v13까지의 줄임말 이전은 위 개인 줄임말 절을 따른다. v9 이하는 여덟 기술의 기본 Rank와 재투자 가능 훈련으로 정규화하며 자세한 성장 호환은 [성장 설계](progression.md)를 따른다. v1/v2의 개인 encounter 제거·전투 입력 필드·성장 기본값 변환을 거친 뒤, v1~v3의 첫 임무 boolean을 `quests.radio_tower`의 진행 필드로 옮긴다. `cache_claimed`는 `discoveries.supply_cache`로 옮긴다. v1~v4에는 개인 보관 `storage={}`의 기본값을 추가한다. XP, HP, credits, inventory, equipment(명시적 None 포함), kills, 완료 여부와 visited 및 개인 전투 상태를 유지한다. 이미 받은 보상은 재지급하지 않는다. v1~v5에는 개인 광원 `light_sources={}`, v1~v6에는 개인 줄임말 `command_shortcuts={}`를 보완한다. v8 이하에는 현재 최대 정신력과 빈 recovery_effects를 추가하며 timestamp는 첫 mutable accrue에서 초기화한다. migration은 시간을 조회하지 않고 profile_snapshot은 사본만 변환한다.
+당시 profile의 최신 버전은 10이었다. 현재 v14까지의 줄임말 이전은 위 개인 줄임말 절을 따른다. v9 이하는 여덟 기술의 기본 Rank와 재투자 가능 훈련으로 정규화하며 자세한 성장 호환은 [성장 설계](progression.md)를 따른다. v1/v2의 개인 encounter 제거·전투 입력 필드·성장 기본값 변환을 거친 뒤, v1~v3의 첫 임무 boolean을 `quests.radio_tower`의 진행 필드로 옮긴다. `cache_claimed`는 `discoveries.supply_cache`로 옮긴다. v1~v4에는 개인 보관 `storage={}`의 기본값을 추가한다. XP, HP, credits, inventory, equipment(명시적 None 포함), kills, 완료 여부와 visited 및 개인 전투 상태를 유지한다. 이미 받은 보상은 재지급하지 않는다. v1~v5에는 개인 광원 `light_sources={}`, v1~v6에는 개인 줄임말 `command_shortcuts={}`를 보완한다. v8 이하에는 현재 최대 정신력과 빈 recovery_effects를 추가하며 timestamp는 첫 mutable accrue에서 초기화한다. migration은 시간을 조회하지 않고 profile_snapshot은 사본만 변환한다.
 
 변환은 기존 프로필의 복사본에서 첫 임무·보급 boolean을 새 구조로 옮기고 오래된 key를 제거한다. 기존 플레이어는 현재 레벨에 해당하는 포인트를 즉시 사용할 수 있고, 무료 기본 기술 Rank 1과 미투자 특성은 기존 전투 성능을 유지한다. Party·Enemy·Corpse·DroppedLoot는 profile 밖에 있으므로 migration이 수정하지 않는다. 기존 DB의 로드 시 점진적으로 변환하며 DB 삭제·교체는 필요 없다. 위의 서버 재시작/재접속 전투 정리 정책과 migration 자체의 보존 정책은 별개다.
+
+## Issue #48 일행과 전술
+
+현재 프로필은 v14이며 v13의 NPC 방법 B 위에 일행 저장 동사 이전을 추가한다. 기존 `typeclasses.parties.Party`와 영속 ID·가입 순서·전리품 커서를 유지하고 `join_requests`, `tactics.defender_id`, `leader_offline_since`만 확장한다. 현재 사용자 용어는 일행이며 내부 Party/party claim ID는 보존한다.
+
+명령·웹은 동일한 서버 서비스를 사용한다. `world_change()`의 직렬 변경과 커밋 후 `after_change()`에 가입·승계·출력을 연결한다. 기존 5초 WorldLifecycle와 접속 훅이 실제 puppet 세션·600초 영속 시각을 재검증하며 Portal 동기화 전에는 오프라인 판단을 보류한다. 개인 확정 LootClaim/CurrencyLootShare는 삭제하지 않고 Party 공동 권리만 종료한다. Enemy는 기존 최고 위협도 기본 대상 선정 후 같은 일행의 유효 담당자에게만 최종 대상을 바꾼다.
+
+정책·저장·권리 경계는 [일행과 전술](party-and-tactics.md), 전체 검증 추적은 [RT 매트릭스](issue48-requirement-tests.md)에 모은다. #49 문/열쇠는 구현 범위에 포함하지 않으며 실제 브라우저·IME·복수 세션 및 Cross-Issue 종단 간 검증은 #50에서 수행한다.

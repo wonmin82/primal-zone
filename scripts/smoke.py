@@ -229,22 +229,27 @@ class Scenario:
             await first.expect_text(second.name + " 대화거부", "해제")
             self.report("dialogue", "NPC 공개 조회/원래 NPC 선택 토큰 수락/미발견 원문 fallback/개인 대화·답장·차단")
             self.phase = "party"
-            await first.act(second.name + " 파티초대", lambda state: state["party"] is not None)
+            await first.act(second.name + " 일행초청", lambda state: state["party"] is not None)
             await second.until(lambda state: state["invitation"] is not None)
-            await second.act("파티수락", lambda state: state["party"] is not None)
-            self.report("party", "invite / accept")
+            await second.act("일행합류", lambda state: state["party"] is not None)
+            await first.act(second.name + " 일행방어", lambda state: state["party"]["defender"] is not None)
+            await first.expect_text("모여 주세요 무", "[일행]")
+            await outsider.act(first.name + " 일행요청", lambda state: state["join_request"] is not None)
+            await first.until(lambda state: bool(state["party"]["join_requests"]))
+            await first.expect_text(outsider.name + " 일행거절", "가입 요청을 거절")
+            self.report("party", "invite / accept / persistent defense / member chat / request-reject")
             for player in self.players:
                 await route(player, (("북", "grass"),))
             self.phase = "combat"
             initial_credits = {player.name: player.state["credits"] for player in self.players}
             enemy_id = first.state["enemies"][0]["id"]
             started = monotonic()
-            await first.act("어린청소룡 때려", lambda state: state["combat_target"] is not None)
+            await first.act("어린청소룡 일공", lambda state: state["combat_target"] is not None)
             # 단축 전투에서 두 번째 플레이어의 화면 전송을 기다리는 사이 적이 죽지 않도록
             # 참여와 outsider 거절 요청을 같은 시점에 보낸다. 권한은 서버가 판정한다.
             await asyncio.gather(
                 second.act("어린청소룡 때려", lambda state: state["combat_target"] is not None),
-                outsider.expect_text("어린청소룡 때려", "다른 파티"),
+                outsider.expect_text("어린청소룡 때려", "다른 일행"),
             )
             await first.until(lambda state: state["player_round"] >= 1, self.timeouts.combat)
             first_round = monotonic() - started
@@ -255,6 +260,8 @@ class Scenario:
                 await player.until(lambda state: state["xp"] == 11 and state["combat_target"] is None,
                                    self.timeouts.combat)
                 assert player.state["credits"] == initial_credits[player.name]
+                assert player.state["party"]["defender"]["name"] == second.name
+                assert not player.state["party"]["defender"]["active"]
             self.report("combat", "shared enemy defeated / 양쪽 참여 보상")
             self.phase = "corpse"
             await first.until(lambda state: bool(state["corpses"]))

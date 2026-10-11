@@ -156,6 +156,47 @@ def migrate_string_shortcuts(shortcuts):
 
 def migrate_dialogue_shortcuts(shortcuts):
     """v12→v13 방법 B. 구형 NPC 동작과 공개 출력이 동등한 변환은 현재 없다."""
+    return _migrate_protected_shortcuts(shortcuts)
+
+
+# v13의 등록된 실제 명령/별칭. 향후 명령 추가를 과거 의미에 소급하지 않는다.
+V13_RUNTIME_NAMES = frozenset({
+    '__nomatch_command', '`', 'breathing', 'drink', 'drop', 'eat', 'exchange', 'exits',
+    'flee', 'give', 'heal', 'heavy', 'home', 'insight', 'quest', 'rate',
+    'rest', 'retrieve', 'say', 'store', 'suppress', 'unwield', 'wield', '가져',
+    '가진', '가진거', '가치', '간파', '강타', '견제', '경', '경험치',
+    '공격', '교환', '구입', '귀환', '기술', '꺼', '꺼내', '날씨',
+    '넣어', '능력', '단축어', '대답', '대화', '대화거부', '도망', '도움',
+    '도움말', '때려', '마셔', '말', '먹어', '메뉴', '목', '목록',
+    '무장', '배분', '배워', '버려', '벗', '벗어', '보', '본',
+    '봐', '사', '사용', '상', '상태', '소', '소각', '소각 확정',
+    '소지', '소지품', '수리', '쏴', '얼마', '임무', '입', '입어',
+    '장', '장비', '장전', '재분배', '재장전', '재훈련', '점', '점수',
+    '정보', '조사', '주무기', '준말', '줄임말', '줘', '지', '지도',
+    '집', '착용', '채워', '쳐', '출구', '치료', '켜', '퀘스트',
+    '판', '팔', '팔아', '품', '품목', '해', '해제', '해지',
+    '호흡', '확인', '환경', '환율', '회복', '휴식', '힐',
+})
+
+V13_PARTY_COMMANDS = {
+    "파티": "일행", "파티초대": "일행초청", "파티수락": "일행합류", "파티거절": "일행거절",
+    "파티탈퇴": "일행탈퇴", "파티제외": "일행제외", "파티장위임": "일행리더", "파티분배": "일행분배",
+}
+V14_PARTY_NAMES = frozenset({
+    "일행", "무리", "그룹", "일행모으기", "그룹만들기", "그룹모으기", "일행초청", "그룹초청",
+    "일행합류", "그룹가입", "일행거절", "일행요청", "그룹요청", "일행허락", "그룹허락",
+    "일행제외", "일행탈퇴", "그룹탈퇴", "일행리더", "그룹리더", "일행승계", "그룹승계",
+    "일행해체", "그룹해체", "일행대화", "무리말", "그룹대화", "무", "일행공격", "일공",
+    "일행방어", "그룹방어", "일행분배",
+})
+
+
+def migrate_party_shortcuts(shortcuts):
+    """v13→v14: 동사 자리만 변환하고 위험한 묶음·간접 참조는 원본을 보존한다."""
+    return _migrate_protected_shortcuts(shortcuts, party=True)
+
+
+def _migrate_protected_shortcuts(shortcuts, *, party=False):
     from copy import deepcopy
 
     from world.rules import RuleError
@@ -176,13 +217,16 @@ def migrate_dialogue_shortcuts(shortcuts):
         "파티", "파티초대", "파티수락", "파티거절", "파티탈퇴", "파티추방", "파티위임", "전리품방식",
         "소각", "소각 확정",
     }) | frozenset(SHORTCUTS) | frozenset(ARGUMENT_SHORTCUTS)
+    if party:
+        actual = V13_RUNTIME_NAMES | frozenset(V13_PARTY_COMMANDS) | frozenset(SHORTCUTS) | frozenset(ARGUMENT_SHORTCUTS)
+    reserved = V14_PARTY_NAMES if party else {"대화", "대답", "대화거부"}
     normalized = {}
     for key in shortcuts:
         normalized.setdefault(key.casefold(), []).append(key)
     occupied = set(normalized)
     renamed = {}
     for key in shortcuts:
-        if key.casefold() not in {"대화", "대답", "대화거부"}:
+        if key.casefold() not in reserved:
             continue
         index = 1
         while True:
@@ -204,8 +248,13 @@ def migrate_dialogue_shortcuts(shortcuts):
                 continue
             parts = command.rsplit(None, 1)
             verb = parts[-1].casefold()
-            if verb == "대화":
+            if verb == "대화" and not party:
                 reasons[owner] = "구형 NPC 대화는 상태별 행동·개인 출력을 포함해 새 공개 Intent/개인 메시지와 동등하지 않습니다."
+            elif party and verb in V13_PARTY_COMMANDS:
+                if verb in {"파티", "파티수락", "파티거절", "파티탈퇴"} and len(parts) == 2:
+                    reasons[owner] = "구 일행 단독 명령의 인자 의미를 확정할 수 없습니다."
+                else:
+                    command = (parts[0] + " " if len(parts) == 2 else "") + V13_PARTY_COMMANDS[verb]
             elif "$" in verb:
                 reasons[owner] = "변수로 생성하는 동사·간접 참조의 기존 대화 의미를 확정할 수 없습니다."
             elif verb not in actual and verb in normalized:
@@ -228,6 +277,8 @@ def migrate_dialogue_shortcuts(shortcuts):
         try:
             # v11에서 안전 변환되지 못한 목록은 원래 경계를 유지해 검사만 한다.
             if isinstance(value, list):
+                if party:
+                    raise RuleError("실행할 수 없는 구형 목록 정의입니다. 원래 경계를 확인한 뒤 현재 문자열 문법으로 재등록하세요.")
                 if not value or any(not isinstance(command, str) for command in value):
                     raise RuleError("불명확한 구형 저장 정의")
                 rendered = [inspect(command, key) for command in value]
@@ -241,7 +292,8 @@ def migrate_dialogue_shortcuts(shortcuts):
         except RuleError as error:
             reasons[key] = str(error)
             converted[key] = deepcopy(value)
-            preserve_invalid.add(key)
+            if not party or not any(verb in str(value) for verb in V13_PARTY_COMMANDS):
+                preserve_invalid.add(key)
     changed = True
     while changed:
         changed = False

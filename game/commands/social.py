@@ -4,7 +4,7 @@ from commands.base import GameCommand
 
 
 class Say(GameCommand):
-    category = "파티·교류"
+    category = "일행·교류"
     usage = "내용 말 · '내용"
     summary = "같은 방에 공개 발화하고 NPC의 화제·행동 키워드를 사용합니다."
     read_only = True
@@ -42,7 +42,7 @@ class PrivateTalk(GameCommand):
     aliases = []
     input_style = "chat"
     read_only = True
-    category = "파티·교류"
+    category = "일행·교류"
     usage = "플레이어 내용 대화"
     summary = "온라인 플레이어 한 명에게 비공개 메시지를 보냅니다."
     help_sections = (
@@ -68,7 +68,7 @@ class Reply(GameCommand):
     aliases = []
     input_style = "chat"
     read_only = True
-    category = "파티·교류"
+    category = "일행·교류"
     usage = "내용 대답"
     summary = "최근 성공적으로 개인 메시지를 주고받은 상대에게 답장합니다."
     help_sections = (
@@ -92,7 +92,7 @@ class RefuseTalk(GameCommand):
     aliases = []
     input_style = "target"
     read_only = True
-    category = "파티·교류"
+    category = "일행·교류"
     usage = "플레이어 대화거부 · 대화거부"
     summary = "상대별 개인 메시지 수신 차단을 전환하거나 목록을 확인합니다."
     help_sections = (
@@ -101,7 +101,7 @@ class RefuseTalk(GameCommand):
         ("실행 규칙", ("이름을 지정하면 차단·해제를 토글합니다. 이름 없이 입력하면 자신의 차단 목록을 봅니다.",
                       "존재하는 오프라인 캐릭터도 지정할 수 있습니다. 영속 ID로 저장해 재접속 뒤에도 유지합니다.")),
         ("제한", ("자신·NPC·적·일반 객체는 대상이 아닙니다. 차단 목록은 최대 100명입니다.",
-                "개인 대화·대답에만 적용하며 공개 말·NPC·시스템 알림·파티 채팅을 차단하지 않습니다.")),
+                "개인 대화·대답에만 적용하며 공개 말·NPC·시스템 알림·일행 채팅을 차단하지 않습니다.")),
         ("관련 도움말", ("대화 도움", "대답 도움", "말 도움")),
     )
 

@@ -4,7 +4,7 @@ from time import time
 
 from typeclasses.enemies import room_enemies
 from typeclasses.loot import can_take_entry, room_loot
-from typeclasses.parties import invitation_for, party_for
+from typeclasses.parties import invitation_for, online, party_for, request_for, sessions_ready
 
 from world.content import ENEMIES
 from world.currency import currency_names, format_currency
@@ -102,16 +102,44 @@ def multiplayer_state(player, now=None):
     party_data = None
     if party:
         state = party.state()
+        from typeclasses.explorers import Explorer
+
+        from world.targets import ordered
+        player_controls = labels(ordered(Explorer.objects.all()))
+        member_controls = labels(ordered([member for identity in state["members"]
+                                         if (member := object_by_id(identity))]))
+        defender = object_by_id(state["tactics"].get("defender_id"))
+        defended_enemy = defender.combat_target() if defender else None
+        participants = defended_enemy.active_players() if defended_enemy else []
+        default = min(participants, key=lambda obj: (-defended_enemy.db.threat.get(obj.id, 0), obj.id)) if participants else None
+        active = bool(default and party.defense_target(defended_enemy, default, participants) == defender)
+        leader_online = online(object_by_id(state["leader"]))
+        confirmation = player.ndb.party_dissolve_request
         party_data = {
             "id": party.id,
             "leader": state["leader"],
             "leader_name": player_name(state["leader"]),
             "is_leader": state["leader"] == player.id,
-            "members": [{"id": key, "name": player_name(key)} for key in state["members"]],
+            "members": [{"id": key, "name": player_name(key), "label": member_controls.get(key, player_name(key)),
+                         "online": online(object_by_id(key))} for key in state["members"]],
             "loot_mode": state["loot_mode"],
+            "max_size": 4,
+            "leader_online": leader_online,
+            "leader_offline_since": state["leader_offline_since"],
+            "can_succeed": sessions_ready() and online(player) and state["leader"] != player.pk and not leader_online,
+            "defender": {"id": defender.pk, "name": defender.key, "online": online(defender), "active": active} if defender else None,
+            "join_requests": [{"id": key, "name": player_name(key), "label": player_controls.get(key, player_name(key)),
+                               "expires_at": value["expires_at"]} for key, value in state["join_requests"].items()
+                              if now < value["expires_at"]],
+            "invitations": [{"id": key, "name": player_name(key), "expires_at": value["expires_at"]}
+                            for key, value in state["invitations"].items() if now < value["expires_at"]],
+            "confirm_dissolve": bool(confirmation and now < confirmation["expires_at"]
+                                     and confirmation["snapshot"] == (party.pk, state["leader"], tuple(state["members"]))),
         }
-    invited, invitation = invitation_for(player, now)
+    invited, invitation = invitation_for(player, now, reconcile=False)
+    requested, request = request_for(player, now, reconcile=False)
     return {
+        "server_now": now,
         "enemies": [
             {
                 "id": enemy.id,
@@ -165,5 +193,6 @@ def multiplayer_state(player, now=None):
         }
         if invited
         else None,
+        "join_request": {"party_id": requested.pk, "expires_at": request["expires_at"]} if requested else None,
         "combat_target": player.combat_snapshot(),
     }

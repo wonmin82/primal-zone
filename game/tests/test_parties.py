@@ -12,6 +12,11 @@ from tests.base import GameCommandTest
 class PartyTests(GameCommandTest):
     character_typeclass = Explorer
 
+    def setUp(self):
+        super().setUp()
+        self.connect_character(self.char1)
+        self.connect_character(self.char2)
+
     def test_invite_accept_persistence_and_duplicate(self):
         party = invite(self.char1, self.char2, now=100)
         self.assertEqual(invite(self.char1, self.char2, now=110), party)
@@ -67,6 +72,7 @@ class PartyTests(GameCommandTest):
         party = invite(self.char1, self.char2)
         extras = [create_object(Explorer, key=f"추가탐사자{i}") for i in range(3)]
         for target in extras:
+            self.connect_character(target)
             invite(self.char1, target)
         respond(self.char2, True)
         for target in extras[:2]:
@@ -81,12 +87,12 @@ class PartyTests(GameCommandTest):
         self.assertEqual(party.state()["leader"], extras[0].id)
 
     def test_target_action_commands(self):
-        self.char1.execute_cmd(f"{self.char2.key} 파티초대")
-        self.char2.execute_cmd("파티수락")
+        self.char1.execute_cmd(f"{self.char2.key} 일행초청")
+        self.char2.execute_cmd("일행합류")
         self.assertEqual(party_for(self.char1), party_for(self.char2))
-        self.char1.execute_cmd(f"{self.char2.key} 파티장위임")
+        self.char1.execute_cmd(f"{self.char2.key} 일행리더")
         self.assertEqual(party_for(self.char1).state()["leader"], self.char2.id)
-        self.char2.execute_cmd(f"{self.char1.key} 파티제외")
+        self.char2.execute_cmd(f"{self.char1.key} 일행제외")
         self.assertIsNone(party_for(self.char1))
-        self.char2.execute_cmd("파티탈퇴")
+        self.char2.execute_cmd("일행탈퇴")
         self.assertIsNone(party_for(self.char2))

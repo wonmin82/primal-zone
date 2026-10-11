@@ -17,7 +17,7 @@ def heal_target(caller, identity=None):
         return target
     party = party_for(caller)
     if not isinstance(target, Explorer) or target.location != caller.location or not party or party_for(target) != party:
-        raise rules.RuleError("같은 방의 파티원만 치료할 수 있다.")
+        raise rules.RuleError("같은 방의 일행원만 치료할 수 있다.")
     from world.observation import can_perceive, context_for
 
     if not can_perceive(target, context_for(caller)):
