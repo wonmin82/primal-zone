@@ -258,6 +258,8 @@ def _migrate_protected_shortcuts(shortcuts, *, party=False):
         try:
             # v11에서 안전 변환되지 못한 목록은 원래 경계를 유지해 검사만 한다.
             if isinstance(value, list):
+                if party:
+                    raise RuleError("실행할 수 없는 구형 목록 정의입니다. 원래 경계를 확인한 뒤 현재 문자열 문법으로 재등록하세요.")
                 if not value or any(not isinstance(command, str) for command in value):
                     raise RuleError("불명확한 구형 저장 정의")
                 rendered = [inspect(command, key) for command in value]

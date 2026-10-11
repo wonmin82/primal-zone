@@ -35,6 +35,8 @@ Windows, Python 3.13.15, uv 0.12.13. 저장소 루트의 uv 환경과 settings_t
 
 이전 `6201a7a711a5f1a5593adf2626072e82f07bd811`의 격리 Quick은 125.319초·종료 0으로 성공했다. 웹 선택기 코드/테스트가 이후 변경됐으므로 이 결과를 새 HEAD의 검증으로 대신하지 않으며 새 커밋에서 다시 Quick을 실행한다.
 
+추가 저장 검토에서 실행 불가능한 v13 목록을 새 동사로 부분 변환하지 않고 전체 원문/이유를 보존하도록 보강했다. game에서 `uv run python -m unittest world.test_party_migration world.test_command_shortcuts world.test_dialogue_migration` 24개 통과·종료 0 (0.088초). 직전 `429166505e5494a0b173a6929dcc00653a01fc7c` Quick은 104.028초·종료 0이며, 마지막 저장 변환 변경 후 새 HEAD에서 다시 Quick을 수행한다.
+
 ### 최종 Push 및 원격 검증 기록
 
 이 문서 커밋 시점에는 최종 HEAD의 Quick/Smoke와 원격 CI를 아직 성공으로 확정하지 않는다. 커밋 후 정확한 SHA에서 Quick을 실행하며, 실제 명령·종료 코드·소요 시간·SHA와 최신 GitHub Actions 전체 CI URL/결과는 구현 PR의 Validation에 기록한다. 검사 이후 실행 코드/테스트 변경이 있으면 새 HEAD에서 다시 Quick을 통과해야 한다.

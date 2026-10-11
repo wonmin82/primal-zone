@@ -29,13 +29,13 @@ class PartyMigrationTests(TestCase):
         old = {"무": "점수", "일행승계": "봐", "무_개인": "장비", "참조": "무",
                "승계참조": "일행승계", "동사": "$*", "위험": "점수, 동사 해", "상위": "위험",
                "a": "b", "b": "a, 위험 해", "손상": {"원본": "파티", "문제": "이전 사유"},
-               "불명": "철수 파티수락", "파티추방": "$*", "옛이름참조": "파티추방", "실제": "파티", "파티": "$*"}
+               "구목록": ["점수", "$1 파티초대"], "목록참조": "구목록", "불명": "철수 파티수락", "파티추방": "$*", "옛이름참조": "파티추방", "실제": "파티", "파티": "$*"}
         changed = migrate_party_shortcuts(old)
         self.assertEqual(changed['참조'], '무_개인2')
         self.assertEqual(changed['승계참조'], '일행승계_개인')
         self.assertEqual(changed['실제'], '일행')  # 구 실제 명령이 개인 이름보다 우선
         self.assertEqual(changed['손상'], old['손상'])
-        for key in ('동사', '위험', '상위', 'a', 'b', '불명', '파티', '파티추방', '옛이름참조'):
+        for key in ('동사', '위험', '상위', 'a', 'b', '구목록', '목록참조', '불명', '파티', '파티추방', '옛이름참조'):
             self.assertEqual(changed[key]['원본'], old[key])
             with self.assertRaises(rules.RuleError):
                 parse_definition(changed[key])
