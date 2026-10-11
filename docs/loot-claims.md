@@ -76,6 +76,12 @@ Firearm root에만 claim이 있고 magazine child에는 없다. 전체 tree 회�
 
 여러 source를 회수하는 command는 전체 집합을 먼저 잠근다. before/after_item_change·active weapon/light reconciliation·recovery 경계를 유지한다. 신뢰된 decay만 operation=None이고 사용자 회수는 operation="loot"다. raw QuerySet.update/bulk_create로 검증을 우회하지 않는다. `integrity_errors(source)`는 출처 단위 모델/권리/지분을 검사한다.
 
+## 수령 알림의 커밋 경계 (Issue #54)
+
+`typeclasses.loot.take_loot()`은 Native/Legacy 공통 사용자 수령 경로다. 선택·권한·실물 이동·화폐 지분·profile 저장은 기존 `world_change()` 안에서 확정하고, 성공 메시지와 수령인/같은 방 탐사자의 `push_state()`는 그 안에서 `after_change()`에 등록한다. 가장 바깥 `world_change()`가 성공한 뒤에만 전송하며 상위 롤백 또는 예외를 처리한 내부 Savepoint 롤백에서는 해당 콜백을 폐기한다. `loot_service.pickup()`은 지급 domain이며 사용자 성공 출력은 공통 경로가 담당한다.
+
+메시지의 Semantic Text·수량·수신 대상과 순서를 지급 시점에 고정한다. 반환된 `received` 목록을 호출자가 변경해도 예약한 알림은 바뀌지 않는다. 화면 상태는 콜백 실행 시 커밋된 데이터를 조회한다. 기존 profile 저장의 상태 갱신과 명시적 수령/방 상태 갱신 횟수는 유지하며 알림 재전송 큐나 저장 이력은 추가하지 않는다. 수량·배정·보호 기한·지분·개인 확정 권리·ID 및 DB schema는 변경하지 않는다. 재현과 자동 수용 검사 TEST-01~08은 [검증 기록](playtest.md#issue-54-전리품-알림-커밋-경계)을 따른다.
+
 ## 검증과 호환 경계
 
 정상 사냥·pickup·decay는 native만 사용하며 legacy blob에 같은 unit을 다시 저장하지 않는다. Wallet은 profile credits다. 명시적 전체 legacy upgrade는 [item-migration](item-migration.md), 현재 자동 기준선과 Phase 7B/7C에서 완료한 검증 결과는 [Phase 7 audit](phase7-final-integration-audit.md)을 따른다. PostgreSQL contention·multi-server는 별도 infrastructure이며 실제 mobile device matrix는 이번 검증 범위 밖의 후속 검증이다.

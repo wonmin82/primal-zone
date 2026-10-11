@@ -416,3 +416,139 @@ class LootEntityTests(NativeLootTest):
                 setattr(candidate, field, value)
                 with self.assertRaises(ValidationError):
                     candidate.save()
+
+
+class NativeLootNotificationTests(NativeLootTest):
+    """TEST-03~08: Native 지급도 공통 take_loot 출력 경계를 거친다."""
+
+    def setUp(self):
+        super().setUp()
+        self.enterContext(patch("typeclasses.loot.time", return_value=100))
+        self.enterContext(patch("world.lifecycle.time", return_value=100))
+        for player in (self.char1, self.char2):
+            self.connect_character(player)
+        self.party = invite(self.char1, self.char2, now=100)
+        respond(self.char2, True, now=100)
+        self.root = self.loot_item(party=self.party, assigned=self.char2)
+        self.currency = loot_service.create_currency(
+            self.source, 20, shares={self.char1: 6, self.char2: 14},
+            reserved_party=self.party, protection_until=300,
+        )
+        for player in (self.char1, self.char2):
+            self.enterContext(patch.object(player, "msg"))
+            player.push_state.reset_mock()
+
+    def assert_no_effects(self):
+        for player in (self.char1, self.char2):
+            player.msg.assert_not_called()
+            player.push_state.assert_not_called()
+
+    def test_test03_native_common_command_outer_rollback_preserves_all_assets(self):
+        before = self.all_state()
+        with self.assertRaisesRegex(RuntimeError, "outer rollback"):
+            with world_change():
+                received = take_loot(self.char1, now=100)
+                self.assertEqual(received, [(self.char2, "ammo_9", 10),
+                                            (self.char1, "credits", 6), (self.char2, "credits", 14)])
+                pending_messages = [player.msg.call_count for player in (self.char1, self.char2)]
+                pending_states = [player.push_state.call_count for player in (self.char1, self.char2)]
+                raise RuntimeError("outer rollback")
+        self.assertEqual(self.all_state(), before)
+        self.assertEqual(pending_messages, [0, 0])
+        self.assertEqual(pending_states, [0, 0])
+        self.assert_no_effects()
+
+    def test_test05_test07_native_nested_multiple_recipients_commit_once(self):
+        from world.text import Text
+        before = [player.profile()["credits"] for player in (self.char1, self.char2)]
+        with world_change():
+            received = take_loot(self.char1, now=100)
+            self.assert_no_effects()
+        self.root.refresh_from_db()
+        self.assertEqual((self.root.owner_object_id, self.root.location_kind, self.root.quantity),
+                         (self.char2.pk, "inventory", 10))
+        self.assertFalse(LootClaim.objects.filter(item_entity=self.root).exists())
+        self.assertFalse(type(self.currency).objects.filter(pk=self.currency.pk).exists())
+        self.assertEqual([player.profile()["credits"] for player in (self.char1, self.char2)],
+                         [before[0] + 6, before[1] + 14])
+        self.assertEqual(received, [(self.char2, "ammo_9", 10),
+                                    (self.char1, "credits", 6), (self.char2, "credits", 14)])
+        self.assertEqual((self.char1.msg.call_count, self.char2.msg.call_count), (3, 2))
+        self.assertEqual((self.char1.push_state.call_count, self.char2.push_state.call_count), (2, 4))
+        self.assertEqual(self.char1.msg.call_args_list[2].args, self.char2.msg.call_args_list[0].args)
+        self.assertEqual(str(self.char2.msg.call_args_list[1].args[0]), "전리품 분배로 14칩을 받았다.")
+        self.assertTrue(all(isinstance(call.args[0], Text) for player in (self.char1, self.char2)
+                            for call in player.msg.call_args_list))
+        with self.assertRaises(rules.RuleError):
+            take_loot(self.char1, now=100)
+        self.assertEqual((self.char1.msg.call_count, self.char2.msg.call_count), (3, 2))
+
+    def test_test06_native_failed_savepoint_has_no_callbacks_after_outer_success(self):
+        before = self.all_state()
+        with world_change():
+            try:
+                with world_change():
+                    take_loot(self.char1, now=100)
+                    raise RuntimeError("savepoint rollback")
+            except RuntimeError:
+                pass
+            self.assertEqual(self.all_state(), before)
+            profile = self.char1.profile()
+            profile["credits"] += 1
+            self.char1.save_profile(profile)
+        self.char1.msg.assert_not_called()
+        self.char2.msg.assert_not_called()
+        self.char1.push_state.assert_called_once_with()  # 다른 정상 profile 저장만 전달된다.
+        self.char2.push_state.assert_not_called()
+        self.assertEqual(self.char1.profile()["credits"], before[1][0][3]["credits"] + 1)
+        self.root.refresh_from_db()
+        self.assertEqual((self.root.owner_object_id, self.root.location_kind), (self.source.pk, "corpse_loot"))
+
+    def test_test04_native_standalone_committed_data_visible_when_message_sent(self):
+        observed = []
+
+        def observe(message):
+            self.root.refresh_from_db()
+            observed.append((str(message), self.root.owner_object_id,
+                             self.root.location_kind, LootClaim.objects.exists(),
+                             type(self.currency).objects.filter(pk=self.currency.pk).exists()))
+
+        self.char1.msg.side_effect = observe
+        received = take_loot(self.char1, now=100)
+        self.assertEqual(len(received), 3)
+        self.assertEqual(len(observed), 3)
+        self.assertTrue(all(row[1:] == (self.char2.pk, "inventory", False, False) for row in observed))
+        self.assertEqual((self.char1.msg.call_count, self.char2.msg.call_count), (3, 2))
+        self.assertEqual((self.char1.push_state.call_count, self.char2.push_state.call_count), (2, 4))
+
+    def test_test08_native_payout_exception_rolls_back_item_and_currency_without_effects(self):
+        before = self.all_state()
+        save = self.char2.save_profile
+
+        def fail_after_save(profile):
+            save(profile)
+            raise RuntimeError("native payout failure")
+
+        with patch.object(self.char2, "save_profile", side_effect=fail_after_save):
+            with self.assertRaisesRegex(RuntimeError, "native payout failure"):
+                take_loot(self.char1, now=100)
+        self.assertEqual(self.all_state(), before)
+        self.assert_no_effects()
+
+    def test_test08_native_protected_failure_then_expiry_receipt(self):
+        claim = LootClaim.objects.get(item_entity=self.root)
+        claim.reserved_party = None
+        claim.reserved_player = self.char1
+        claim.assigned_player = self.char1
+        claim.save()
+        before = self.all_state()
+        with self.assertRaises(rules.RuleError):
+            take_loot(self.char2, "ammo_9", now=100)
+        self.assertEqual(self.all_state(), before)
+        self.assert_no_effects()
+        self.source.db.decay_at = 1000
+        received = take_loot(self.char2, "ammo_9", now=300)
+        self.assertEqual(received, [(self.char2, "ammo_9", 1)])
+        self.assertEqual(ItemEntity.objects.get(owner_object=self.char2, location_kind="inventory").quantity, 1)
+        self.assertFalse(LootClaim.objects.filter(item_entity=self.root).exists())
+        self.assertEqual(self.char2.msg.call_count, 1)
