@@ -19,10 +19,29 @@ from world.rules import RuleError
 
 def online(character):
     """계정/AFK가 아니라 실제 이 캐릭터를 제어하는 활성 세션을 확인한다."""
-    return bool(character and character.pk and any(
+    return bool(character and character.pk and character.sessions.count() and any(
         getattr(session, "puppet", None) == character and getattr(session, "logged_in", False)
         for session in character.sessions.all()
     ))
+
+
+def sessions_ready():
+    """Portal의 전체 세션 재바인딩 완료 전에는 오프라인을 추측하지 않는다."""
+    from evennia.server.models import ServerConfig
+    return ServerConfig.objects.conf("server_restart_mode") is None
+
+
+def invalidate_confirmation(party):
+    for identity in party.state()["members"]:
+        member = object_by_id(identity)
+        if member:
+            after_change(lambda member=member: setattr(member.ndb, "party_dissolve_request", None))
+
+
+def connection_changed(character, now=None):
+    party = party_for(character)
+    if party and sessions_ready():
+        party.reconcile_leader(now)
 
 
 def party_for(character):
@@ -139,6 +158,7 @@ def join(party, character):
     if len(state["members"]) >= PARTY_MAX_SIZE:
         raise RuleError("일행 정원이 가득 찼습니다.")
     state["members"].append(character.id)
+    invalidate_confirmation(party)
     party.db.state = state
     character.db.party_id = party.id
     clear_pending(character)
@@ -269,6 +289,7 @@ class Party(DefaultObject):
                 raise RuleError("현재 일행 구성원을 지정하세요.")
             if state["leader"] == target.id:
                 return
+            invalidate_confirmation(self)
             state.update(leader=target.id, leader_offline_since=None)
             self.db.state = state
             after_change(lambda: announce(self, ft.text(ft.named("player", target.key, "이/가"), " 일행 리더를 맡았다.")))
@@ -303,6 +324,7 @@ class Party(DefaultObject):
                 raise RuleError("현재 일행 구성원이 아닙니다.")
             if len(state["members"]) == 1:
                 preserve_loot(self, now)
+            invalidate_confirmation(self)
             target.leave_combat(now=now)
             state["members"].remove(target.id)
             target.db.party_id = None
@@ -316,6 +338,51 @@ class Party(DefaultObject):
                 self.db.state = state
                 after_change(lambda: announce(self, ft.text(ft.named("player", target.key, "이/가"), " 일행에서 나갔다.")))
             after_change(lambda: target.msg("일행에서 나왔습니다."))
+
+    def reconcile_leader(self, now=None):
+        now = time() if now is None else now
+        with world_change():
+            if not self.pk or not sessions_ready():
+                return
+            state = self.state()
+            leader = object_by_id(state["leader"])
+            if online(leader):
+                if state["leader_offline_since"] is not None:
+                    state["leader_offline_since"] = None
+                    self.db.state = state
+                return
+            since = state["leader_offline_since"]
+            if since is None:
+                state["leader_offline_since"] = now
+                self.db.state = state
+                return
+            if now - since >= 600:
+                for identity in state["members"]:
+                    candidate = object_by_id(identity)
+                    if identity != state["leader"] and online(candidate):
+                        self.succeed(candidate, automatic=True, now=now)
+                        break
+
+    def succeed(self, caller, automatic=False, now=None):
+        now = time() if now is None else now
+        with world_change():
+            state = self.state()
+            if party_for(caller) != self or not online(caller) or caller.id == state["leader"]:
+                raise RuleError("온라인인 일반 일행 구성원만 승계할 수 있습니다.")
+            if not sessions_ready() or online(object_by_id(state["leader"])):
+                raise RuleError("리더의 실제 캐릭터 세션이 모두 종료된 뒤 승계하세요.")
+            if automatic:
+                since = state["leader_offline_since"]
+                candidates = [identity for identity in state["members"]
+                              if identity != state["leader"] and online(object_by_id(identity))]
+                if since is None or now - since < 600 or not candidates or candidates[0] != caller.id:
+                    return False
+            invalidate_confirmation(self)
+            state.update(leader=caller.id, leader_offline_since=None)
+            self.db.state = state
+            after_change(lambda: announce(self, ft.text(ft.token("player", caller.key),
+                         "이/가 일행 리더를 " + ("자동 " if automatic else "즉시 ") + "승계했습니다.")))
+            return True
 
     def dissolve(self, caller, confirm=False, now=None):
         now = time() if now is None else now

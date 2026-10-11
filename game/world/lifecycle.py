@@ -32,6 +32,7 @@ def reconcile_world(now=None, restart=False):
             player.leave_combat(now=now)
     for party in Party.objects.all():
         party.reconcile(now)
+        party.reconcile_leader(now)
     for corpse in list(Corpse.objects.all()):
         corpse.reconcile(now)
         if corpse.pk:

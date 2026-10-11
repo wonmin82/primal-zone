@@ -58,7 +58,7 @@ class PartyCommandContractTests(GameCommandTest):
                              for match in select_command("일행해체 확인", cmdset, self.char1).matches))
 
 
-class PartyMembershipTests(GameCommandTest):
+class PartyFixture(GameCommandTest):
     character_typeclass = Explorer
 
     def setUp(self):
@@ -85,6 +85,9 @@ class PartyMembershipTests(GameCommandTest):
         respond(self.char2, True, now=101)
         return party
 
+
+
+class PartyMembershipTests(PartyFixture):
     def test_rt03_rt04_creation_permissions_and_pending_cleanup(self):
         from typeclasses.parties import Party, create_party, invite, party_for, request_join
         party = create_party(self.char1, now=100)
@@ -250,3 +253,100 @@ class PartyLootRightsTests(NativeLootTest):
         self.assertEqual(self.char1.db.party_id, party.pk)
 
 
+class PartySuccessionTests(PartyFixture):
+    def test_rt17_rt18_immediate_and_online_rejection(self):
+        party = self.pair()
+        with self.assertRaises(RuleError):
+            party.succeed(self.char2, now=102)
+        self.set_online(self.char1, 0)
+        self.assertTrue(party.succeed(self.char2, now=102))
+        self.assertEqual(party.state()['leader'], self.char2.pk)
+        self.set_online(self.char1)
+        party.reconcile_leader(now=1000)
+        self.assertEqual(party.state()['leader'], self.char2.pk)
+        with self.assertRaises(RuleError):
+            party.succeed(self.char1)
+
+    def test_rt19_rt20_rt25_tick_boundary_order_and_stale_recheck(self):
+        from typeclasses.parties import invite, respond
+        party = self.pair()
+        invite(self.char1, self.people[2], now=101)
+        respond(self.people[2], True, now=102)
+        self.set_online(self.char1, 0)
+        party.reconcile_leader(now=200)
+        party.reconcile_leader(now=799.999)
+        self.assertEqual(party.state()['leader'], self.char1.pk)
+        party.reconcile_leader(now=800)
+        self.assertEqual(party.state()['leader'], self.char2.pk)
+        with self.assertRaises(RuleError):
+            party.succeed(self.people[2])
+
+    def test_rt21_rt22_no_candidate_then_member_or_leader_reconnect(self):
+        from typeclasses.parties import connection_changed
+        party = self.pair()
+        self.set_online(self.char1, 0)
+        self.set_online(self.char2, 0)
+        party.reconcile_leader(now=200)
+        party.reconcile_leader(now=800)
+        self.assertEqual(party.state()['leader'], self.char1.pk)
+        self.set_online(self.char1)
+        connection_changed(self.char1, now=801)
+        self.assertIsNone(party.state()['leader_offline_since'])
+        self.set_online(self.char1, 0)
+        party.reconcile_leader(now=900)
+        self.set_online(self.char2)
+        connection_changed(self.char2, now=1500)
+        self.assertEqual(party.state()['leader'], self.char2.pk)
+
+    def test_rt23_reload_multisession_and_unpuppet_event(self):
+        from evennia.server.models import ServerConfig
+        from typeclasses.parties import connection_changed
+        party = self.pair()
+        self.set_online(self.char1, 2)
+        self.sessions[self.char1.pk].pop()
+        connection_changed(self.char1, now=200)
+        self.assertIsNone(party.state()['leader_offline_since'])
+        ServerConfig.objects.conf('server_restart_mode', 'reload')
+        self.set_online(self.char1, 0)
+        party.reconcile_leader(now=300)
+        self.assertIsNone(party.state()['leader_offline_since'])
+        self.set_online(self.char1)
+        ServerConfig.objects.conf('server_restart_mode', delete=True)
+        party.reconcile_leader(now=400)
+        self.assertIsNone(party.state()['leader_offline_since'])
+        self.set_online(self.char1, 0)
+        with patch('typeclasses.parties.time', return_value=500):
+            self.char1.at_post_unpuppet(self.account)
+        self.assertEqual(party.state()['leader_offline_since'], 500)
+
+    def test_rt24_restart_persistent_time_missing_field_and_scheduler(self):
+        from world.lifecycle import reconcile_world
+        party = self.pair()
+        self.set_online(self.char1, 0)
+        state = party.state()
+        state.pop('leader_offline_since')
+        party.db.state = state
+        reconcile_world(now=200, restart=True)
+        self.assertEqual(party.state()['leader_offline_since'], 200)
+        self.assertEqual(object_by_id(party.pk).state()['leader_offline_since'], 200)
+        reconcile_world(now=799.999, restart=True)
+        self.assertEqual(party.state()['leader'], self.char1.pk)
+        reconcile_world(now=804)
+        self.assertEqual(party.state()['leader'], self.char2.pk)
+
+    def test_rt26_rt27_confirmation_and_party_data_preserved(self):
+        from typeclasses.parties import invite, request_join
+        party = self.pair()
+        invite(self.char1, self.people[2], now=100)
+        request_join(self.people[3], self.char1, now=100)
+        state = party.state()
+        state['round_robin_cursor'] = 5
+        state['tactics']['defender_id'] = self.char1.pk
+        party.db.state = state
+        party.dissolve(self.char1, now=100)
+        self.set_online(self.char1, 0)
+        party.succeed(self.char2, now=101)
+        after = party.state()
+        for field in ('members', 'invitations', 'join_requests', 'loot_mode', 'round_robin_cursor', 'tactics', 'created_at'):
+            self.assertEqual(after[field], state[field], field)
+        self.assertIsNone(self.char1.ndb.party_dissolve_request)
