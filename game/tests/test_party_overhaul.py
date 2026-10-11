@@ -13,7 +13,7 @@ from world import text as ft
 from world.multiplayer import object_by_id
 from world.rules import RuleError
 
-from tests.base import GameCommandTest
+from tests.base import GameCommandTest, WorldCommandTest
 from tests.loot_entity_fixture import NativeLootTest
 
 
@@ -392,3 +392,97 @@ class PartySuccessionTests(PartyFixture):
         for field in ('members', 'invitations', 'join_requests', 'loot_mode', 'round_robin_cursor', 'tactics', 'created_at'):
             self.assertEqual(after[field], state[field], field)
         self.assertIsNone(self.char1.ndb.party_dissolve_request)
+
+
+class PartyCombatFixture(WorldCommandTest):
+    character_typeclass = Explorer
+
+    def setUp(self):
+        super().setUp()
+        self.enterContext(patch('world.lifecycle.time', return_value=100))
+        from typeclasses.enemies import room_enemies
+        self.rooms = self.world_rooms()
+        self.people = [self.char1, self.char2] + [create_object(Explorer, key=f'전술탐사자{i}') for i in range(3)]
+        for obj in self.people:
+            obj.location = self.rooms['grass']
+            self.connect_character(obj)
+            obj.push_state = Mock()
+            obj.msg = Mock()
+        for module in ('enemies', 'explorers', 'parties', 'loot'):
+            self.enterContext(patch(f'typeclasses.{module}.delay')) if module != 'parties' else None
+            self.enterContext(patch(f'typeclasses.{module}.time', return_value=100))
+        self.enemy = room_enemies(self.rooms['grass'])[0]
+
+    def pair(self):
+        from typeclasses.parties import invite, respond
+        party = invite(self.char1, self.char2)
+        respond(self.char2, True)
+        return party
+
+
+class PartyAttackTests(PartyCombatFixture):
+    def test_rt31_rt32_rt34_partial_attack_preserves_existing_schedule(self):
+        from typeclasses.parties import invite, respond
+        party = self.pair()
+        for obj in self.people[2:4]:
+            invite(self.char1, obj)
+            respond(obj, True)
+        self.enemy.engage(self.char2, now=100)
+        before = dict(self.char2.profile())
+        self.char1.change(lambda p: p.update(combat_target=999999))
+        self.people[3].location = self.rooms['dock']
+        enemy_hp = self.enemy.db.hp
+        result = party.attack(self.char1, self.enemy)
+        self.assertEqual(result['new'], [self.people[2].key])
+        self.assertEqual(result['existing'], [self.char2.key])
+        self.assertEqual(len(result['skipped']), 2)
+        self.assertEqual(dict(self.char2.profile()), before)
+        self.assertEqual(self.enemy.db.hp, enemy_hp)
+        self.assertEqual(self.people[2].profile()['next_attack_at'], 102.5)
+        self.assertEqual(self.people[2].profile()['queued_action'], 'attack')
+        self.assertEqual(self.people[2].profile()['xp'], 0)
+
+    def test_rt33_all_existing_none_eligible_and_runtime_error(self):
+        party = self.pair()
+        first = party.attack(self.char1, self.enemy)
+        self.assertEqual(first['new'], [self.char1.key, self.char2.key])
+        before = [(obj.profile()['next_attack_at'], obj.ndb.combat_task) for obj in self.people[:2]]
+        repeat = party.attack(self.char1, self.enemy)
+        self.assertEqual(repeat['existing'], first['new'])
+        self.assertEqual([(obj.profile()['next_attack_at'], obj.ndb.combat_task) for obj in self.people[:2]], before)
+        for obj in self.people[:2]:
+            obj.leave_combat(now=100)
+            obj.change(lambda p: p.update(hp=0))
+        with self.assertRaises(RuleError):
+            party.attack(self.char1, self.enemy)
+        for obj in self.people[:2]:
+            obj.change(lambda p: p.update(hp=60))
+        with patch.object(self.char2, 'start_combat', side_effect=RuntimeError('database')):
+            with self.assertRaises(RuntimeError):
+                party.attack(self.char1, self.enemy)
+        self.assertEqual(self.char1.profile()['combat_target'], self.enemy.pk)
+        self.assertIsNone(self.char2.profile()['combat_target'])
+        self.assertIn('후속 참가 처리를 중단', str(self.char1.msg.call_args.args[0]))
+
+    def test_rt31_rt35_leader_permission_visibility_and_other_claim(self):
+        party = self.pair()
+        with self.assertRaises(RuleError):
+            party.attack(self.char2, self.enemy)
+        self.enemy.engage(self.people[2], now=100)
+        with self.assertRaises(RuleError):
+            party.attack(self.char1, self.enemy)
+        self.assertEqual(list(self.enemy.db.combatants), [self.people[2].pk])
+        with patch('world.observation.can_perceive', return_value=False):
+            with self.assertRaises(RuleError):
+                party.attack(self.char1, self.enemy)
+
+    def test_rt13_dissolve_rejects_real_combat_at_both_steps(self):
+        party = self.pair()
+        self.enemy.engage(self.char2, now=100)
+        with self.assertRaises(RuleError):
+            party.dissolve(self.char1, now=100)
+        self.char2.leave_combat(now=100)
+        party.dissolve(self.char1, now=100)
+        self.enemy.engage(self.char2, now=100)
+        with self.assertRaises(RuleError):
+            party.dissolve(self.char1, True, now=101)

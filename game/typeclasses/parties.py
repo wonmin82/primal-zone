@@ -407,6 +407,60 @@ class Party(DefaultObject):
                     except Exception:
                         logger.log_trace("일행대화 전달 시도 실패 (본문 미기록)")
 
+    def attack(self, caller, enemy):
+        from world.observation import can_perceive, context_for
+
+        from typeclasses.enemies import Enemy
+        with world_change():
+            self.require_leader(caller)
+            if (not isinstance(enemy, Enemy) or enemy.db.state != "alive"
+                    or not can_perceive(enemy, context_for(caller))):
+                raise RuleError("이곳에서 적법하게 식별할 수 있는 적을 지정하세요.")
+            members = tuple(self.state()["members"])
+        new, existing, skipped = [], [], []
+
+        def report():
+            return ft.text("일행공격 — 신규: ", " · ".join(new) or "없음", " / 기존: ",
+                           " · ".join(existing) or "없음", " / 불참: ", " · ".join(skipped) or "없음")
+
+        for identity in members:
+            player = object_by_id(identity)
+            label = player.key if player else f"구성원 #{identity}"
+            try:
+                with world_change():
+                    self.require_leader(caller)
+                    if not player or party_for(player) != self:
+                        raise RuleError("현재 구성원 아님")
+                    if not online(player):
+                        raise RuleError("오프라인")
+                    if player.location != enemy.location or player.location != caller.location:
+                        raise RuleError("다른 장소")
+                    profile = player.profile()
+                    if profile["hp"] <= 0:
+                        raise RuleError("전투 불가")
+                    if not can_perceive(enemy, context_for(player)):
+                        raise RuleError("적 식별 불가")
+                    if profile.get("combat_target") not in (None, enemy.pk):
+                        raise RuleError("다른 적과 교전 중")
+                    if not enemy.can_attack(player):
+                        raise RuleError("다른 탐사자/일행의 교전 권한")
+                    if in_combat(player) and profile["combat_target"] == enemy.pk:
+                        existing.append(label)
+                        continue
+                    player.start_combat(enemy)
+                new.append(label)
+            except RuleError as error:
+                skipped.append(f"{label} ({error})")
+            except Exception:
+                if player and in_combat(player) and player.profile().get("combat_target") == enemy.pk and label not in new:
+                    new.append(label)
+                caller.msg(ft.text(report(), "\n예상하지 못한 실행 오류로 후속 참가 처리를 중단했습니다."))
+                raise
+        if not new and not existing:
+            raise RuleError(str(report()))
+        caller.msg(report())
+        return {"new": new, "existing": existing, "skipped": skipped}
+
     def dissolve(self, caller, confirm=False, now=None):
         now = time() if now is None else now
         with world_change():

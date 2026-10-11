@@ -177,8 +177,8 @@ class Enemy(DistantPresenceMixin, DefaultObject):
             if len(self.db.combatants) == 1 and not self.db.claim_last_activity:
                 self.db.claim_last_activity = now
                 self.db.last_activity = now
-        player.schedule_combat()
-        self.schedule_combat()
+        after_change(player.schedule_combat)
+        after_change(self.schedule_combat)
 
     def remove_combatant(self, player, now=None):
         now = time() if now is None else now

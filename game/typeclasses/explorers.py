@@ -555,13 +555,12 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         if not enemy:
             raise rules.RuleError("이곳에는 공격할 수 있는 상대가 없습니다.")
         enemy.engage(self)
-        self.msg(
-            ft.text(
+        message = ft.text(
                 ft.named("hostile", enemy.key, "과/와"),
                 " 교전을 시작했다. 기본 공격은 2.5초마다 이어진다.",
-            )
         )
-        self.push_state()
+        after_change(lambda: self.msg(message))
+        after_change(self.push_state)
 
     def leave_combat(self, now=None):
         from world.multiplayer import world_change
