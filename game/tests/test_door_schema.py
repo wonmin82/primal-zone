@@ -88,6 +88,86 @@ call_command("makemigrations", "door_entities", check=True, dry_run=True, verbos
 print("Door schema PASS: " + ("existing rows preserved" if existing else "empty database"))
 '''
 
+RESTART_SEED = r'''
+import json
+from pathlib import Path
+from evennia import create_object
+from evennia.objects.models import ObjectDB
+from world import rules
+door = Door.objects.get(door_id="hq_admin_door")
+Door.objects.filter(pk=door.pk).update(state="OPEN", auto_close_at=777)
+door.exit_a.swap_typeclass("evennia.objects.objects.DefaultExit", clean_attributes=False, run_start_hooks=None)
+player = create_object("typeclasses.explorers.Explorer", key="재시작탐사자", location=door.exit_a.location)
+player.db.profile = {**rules.new_profile(), "credits": 456, "visited": ["dock"]}
+expected = {"doors": list(Door.objects.order_by("pk").values()),
+            "journals": list(DoorInstallation.objects.order_by("pk").values()),
+            "endpoints": list(ObjectDB.objects.filter(pk__in=[door.exit_a_id, door.exit_b_id]).order_by("pk")
+                              .values_list("pk", "db_location_id", "db_destination_id", "db_typeclass_path")),
+            "objects": ObjectDB.objects.count(), "player": player.pk}
+Path(os.environ["PZ_DOOR_RESTART_PROOF"]).write_text(json.dumps(expected), encoding="utf-8")
+'''
+
+RESTART_CHECK = r'''
+import os
+import json
+import logging
+from pathlib import Path
+import django
+from django.conf import settings
+settings.DATABASES["default"]["NAME"] = os.environ["PZ_DOOR_SCHEMA_DB"]
+settings.TEST_ENVIRONMENT = True
+django.setup()
+import evennia
+evennia._init()
+from evennia.objects.models import ObjectDB
+from world import doors
+from world.door_entities.models import Door, DoorInstallation
+from server.conf.at_server_startstop import at_server_start
+from unittest.mock import Mock, patch
+expected = json.loads(Path(os.environ["PZ_DOOR_RESTART_PROOF"]).read_text(encoding="utf-8"))
+assert list(Door.objects.order_by("pk").values()) == expected["doors"]
+assert list(DoorInstallation.objects.order_by("pk").values()) == expected["journals"]
+records = []
+class Capture(logging.Handler):
+    def emit(self, record):
+        records.append(record.getMessage())
+handler = Capture()
+doors.logger.addHandler(handler)
+with patch("evennia.create_script"), patch("world.doors.time", return_value=100), patch("world.lifecycle.time", return_value=100):
+    at_server_start()
+doors.logger.removeHandler(handler)
+assert any("hq_admin_door" in record and "국소 격리" in record for record in records)
+assert list(Door.objects.order_by("pk").values()) == expected["doors"]
+assert list(DoorInstallation.objects.order_by("pk").values()) == expected["journals"]
+broken = Door.objects.get(door_id="hq_admin_door")
+assert [list(row) for row in ObjectDB.objects.filter(pk__in=[broken.exit_a_id, broken.exit_b_id]).order_by("pk")
+        .values_list("pk", "db_location_id", "db_destination_id", "db_typeclass_path")] == expected["endpoints"]
+assert ObjectDB.objects.count() == expected["objects"]
+player = ObjectDB.objects.get(pk=expected["player"])
+player.msg = Mock()
+player.push_state = Mock()
+assert player.profile_snapshot()["credits"] == 456 and player.profile_snapshot()["visited"] == ["dock"]
+for endpoint in (broken.exit_a, broken.exit_b):
+    assert doors.state_for_exit(endpoint, 100) == doors.UNAVAILABLE
+    player.location = endpoint.location
+    before = player.profile_snapshot()
+    endpoint.at_traverse(player, endpoint.destination)
+    assert player.location == endpoint.location and player.profile_snapshot() == before
+recovery = Door.objects.get(door_id="recovery_room_door")
+player.location = recovery.exit_a.location
+doors.operate(player, "문", "닫아", 100)
+doors.operate(player, "문", "열어", 110)
+with patch("world.doors.time", return_value=120):
+    recovery.exit_a.at_traverse(player, recovery.exit_a.destination)
+assert player.location == recovery.exit_a.destination
+assert Door.objects.get(pk=recovery.pk).auto_close_at == 180
+normal = ObjectDB.objects.get(db_tags__db_key="dock:동", db_tags__db_category="primal_zone_exit")
+player.location = normal.location
+normal.at_traverse(player, normal.destination)
+assert player.location == normal.destination
+print("Door restart PASS: persistent damage isolated in a new process")
+'''
+
 
 class DoorSchemaTests(SimpleTestCase):
     def verify_schema(self, existing):
@@ -106,3 +186,15 @@ class DoorSchemaTests(SimpleTestCase):
 
     def test_existing_schema_preserves_profile_native_items_and_all_old_rows(self):
         self.verify_schema(True)
+
+    def test_p1_08_damaged_door_survives_new_process_server_start(self):
+        with TemporaryDirectory(prefix="pz-door-restart-") as directory:
+            environment = {**os.environ, "DJANGO_SETTINGS_MODULE": "server.conf.settings_test", "PYTHONUTF8": "1",
+                           "PZ_DOOR_SCHEMA_DB": str(Path(directory) / "isolated.sqlite3"),
+                           "PZ_DOOR_SCHEMA_EXISTING": "0", "PZ_DOOR_RESTART_PROOF": str(Path(directory) / "proof.json")}
+            for source, success in ((SCHEMA_CHECK + RESTART_SEED, "Door schema PASS"),
+                                    (RESTART_CHECK, "Door restart PASS")):
+                result = subprocess.run([sys.executable, "-c", source], cwd=Path(__file__).resolve().parents[1],
+                                        env=environment, capture_output=True, text=True, encoding="utf-8", timeout=90)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn(success, result.stdout)

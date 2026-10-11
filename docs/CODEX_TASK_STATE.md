@@ -1,5 +1,15 @@
 # 원시구역 개발 작업 및 검증 이력
 
+## PR #56 — D13 장애 격리 P1 리뷰 보완 (병합 전 기록)
+
+기존 [PR #56](https://github.com/wonmin82/primal-zone/pull/56)의 `c90866cdef44035543c04e780b193d2801c83d9b`에서 설치된 Door endpoint가 DefaultExit로 손상되면 런타임 가드는 차단하지만 다음 서버 시작의 관리 Exit preflight가 전체 월드 초기화를 중단하는 P1을 격리 재현했다. 수정 전 1개 ERROR와 수정 후 PASS는 [실제 검증 기록](playtest.md#pr-56-d13-장애-격리-p1-보완)에 보존한다.
+
+`doors.proven_installed_endpoint()`의 영속 소속 증거를 이용해 `bootstrap.validate_managed_exits()`가 원본 endpoint의 국소 속성 손상만 격리하고 `_build_world()`가 원본을 그대로 보존한다. 손상된 Typeclass·PK·위치/목적지·Door 상태/예약·설치 이력을 리셋하거나 추측 복구하지 않는다. 일반 관리 Exit의 Typeclass·identity·Tag·방향/Alias 충돌과 설치 증거가 불명확한 경우의 전역 차단은 유지한다. 손상 문의 양쪽 실제 이동/조작/원거리 관찰은 fail-closed이며 회복실 문/일반 Exit는 독립적으로 이용 가능하다.
+
+신규 TEST-P1-01~08은 서버 시작 Hook·반복 Bootstrap·정상 문 양쪽 통과/연장/sweep·손상 분류·전역 충돌 DB/cache 롤백·별도 OS 프로세스의 격리 DB 재오픈을 검사한다. 기존 RT-07~11/59·CV-08/17에 [추가 근거](issue49-requirement-tests.md#pr-56-d13-p1-추가-검사)를 연결하고 원래 D01~D14·VIEW·RT/CV 번호와 설계 전문은 변경하지 않는다. 코드/테스트 안정 후 전체 회귀를 한 번 성공시키고 정확한 새 커밋 HEAD의 Quick/Smoke 및 최신 원격 test/smoke를 확인하는 제출 게이트를 유지한다. 실제 SHA·결과는 PR/Issue에 확정한다.
+
+최종 리뷰 대기이며 PR #56·Issue #49는 OPEN, 소스 브랜치는 유지한다. Merge·브랜치 삭제·Issue Close는 수행하지 않는다. 실 브라우저·OS IME·복수 실세션·장기 운영/재시작·Cross-Issue E2E는 #50에 남기며 새로운 정책·마이그레이션·기능·UI·플레이 DB 변경은 없다. 아래 최초 구현과 과거 실패/검증 기록은 당시 상태를 보존한다.
+
 ## Issue #49 — 문·열쇠 v1.3 FREEZE 구현 (제출 전 기록)
 
 [Issue #49](https://github.com/wonmin82/primal-zone/issues/49)의 최신 전체 본문·부록을 기준으로 origin/main `bd18e6ff4e9f1d2e345015eba805353be0e1cae1`에서 `codex/issue-49-door-key-system`을 생성했다. 선행 #48/PR #53 및 #54/PR #55의 병합·종료를 확인했다. 아래 기존 미착수·실패·병합 전 기록은 당시 사실을 보존한다.

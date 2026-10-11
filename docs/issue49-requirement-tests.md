@@ -13,6 +13,8 @@
 
 ## RT-01~RT-66
 
+표의 최초 구현 실행 이력은 보존한다. PR #56 D13 P1 리뷰 후의 추가 근거와 최신 실행은 아래 [장애 격리 추가 검사](#pr-56-d13-p1-추가-검사) 및 [playtest](playtest.md#pr-56-d13-장애-격리-p1-보완)를 따른다.
+
 | RT | 원래 정책 | 실제 테스트 파일/메서드 | 명령 | 결과 | 추가 근거 |
 | --- | --- | --- | --- | --- | --- |
 | RT-01 | Door SSOT | `tests.test_doors.DoorTest.test_single_state_fixed_contents_and_real_exit_pk` | T | PASS | 실제 상태/출력 assertion |
@@ -136,6 +138,23 @@
 | VIEW-07 | 49 |
 | VIEW-08 | 52/65 |
 | VIEW-09 | 23/45/49/50/61/63 |
+
+## PR #56 D13 P1 추가 검사
+
+번호와 원래 수용 조건을 변경하지 않고, 설치된 문 손상 시 전체 Bootstrap 중단에 대한 추가 실행 증거를 연결한다. `DoorTest`는 `tests.test_doors`, `DoorSchemaTests`는 `tests.test_door_schema`, `BootstrapExitTests`는 `tests.test_bootstrap_exits`의 실제 클래스다.
+
+| 추가 검사 | 실제 메서드 | 기존 RT/CV | 확인하는 계약 |
+| --- | --- | --- | --- |
+| TEST-P1-01 | `tests.test_doors.DoorTest.test_p1_01_installed_typeclass_damage_is_local_after_bootstrap` | RT-10/59, CV-08/17 | 수정 전 ValueError 재현, 수정 후 원본 상태 보존·양쪽 실제 이동/조작/관찰 차단·정상 이동 |
+| TEST-P1-02 | `tests.test_doors.DoorTest.test_p1_02_actual_server_start_keeps_damage_local` | RT-10/59, CV-08/17 | 실제 at_server_start의 Bootstrap·runtime·restart reconcile, 정상 조작/통과 |
+| TEST-P1-03 | `tests.test_doors.DoorTest.test_p1_03_repeated_bootstrap_never_replaces_quarantined_objects` | RT-07/08/59, CV-08 | 반복 후 Door/설치 이력/모든 객체 PK·관계·Typeclass 불변 |
+| TEST-P1-04 | `tests.test_doors.DoorTest.test_p1_04_normal_door_both_sides_extend_and_sweep_independently` | RT-59, D04, CV-08/10 | 회복실 양쪽 닫기/열기·실제 통과 완료+60초·경계 sweep·일반 Exit |
+| TEST-P1-05/07 | `tests.test_bootstrap_exits.BootstrapExitTests.test_p1_05_p1_07_quarantined_door_does_not_bypass_global_conflicts` | RT-07/11/59, CV-08/17 | identity·Tag·Alias·미입증 endpoint 충돌 차단, 모든 DB 행·Door/이력·객체 cache·profile 보존 |
+| TEST-P1-06 | `tests.test_doors.DoorTest.test_p1_06_local_relation_damage_and_unique_reference_repair` | RT-09/10/59, CV-08/17 | 목적지/위치 손상 국소 격리, 폐지 방 이전 금지, 유일 원본 속성 참조만 복원 |
+| TEST-P1-06 | `tests.test_doors.DoorTest.test_p1_06_ambiguous_or_missing_installation_cannot_bypass_preflight` | RT-07/08/10/11, CV-08/17 | 원본 PK 불일치·이력 소실·이력 간 중복 소유는 전역 차단, 기존 상태 보존 |
+| TEST-P1-08 | `tests.test_door_schema.DoorSchemaTests.test_p1_08_damaged_door_survives_new_process_server_start` | RT-08/10/59, CV-08/17 | 두 OS 프로세스에서 동일 격리 DB 재오픈·실제 서버 시작·영속 손상 보존·진단·정상/차단 이동 |
+
+수정 전 재현 실패와 수정 후 결과, 경량/확장/전체 검사의 실제 명령·건수는 playtest에 기록한다. 기존 Bootstrap Typeclass·identity·Tag·방향/Alias·비관리 충돌 검사의 assertion은 유지하며 DB 스냅샷에 Door와 DoorInstallation을 추가했다. 기존 D11/D12·VIEW·Gate/Credential·일행/전투/전리품 회귀는 전체 검사로 확인한다. JavaScript는 이번 수정에서 변경하지 않는다.
 
 ## 남은 통합 게이트
 

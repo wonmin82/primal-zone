@@ -52,7 +52,18 @@
 
 정적 `content/integrity.py::door_errors()`는 정의만 검사한다. `doors.installation_errors()`는 원본 PK·Typeclass·유일 Room tag·방향·목적지·설치 증거·상태·예약을 읽기 전용으로 검사한다. 정상 신규 설치, 정상 Door의 표시명/Alias 동기화, 원본 관계가 유일하게 입증된 참조 복원만 허용한다.
 
-중복 결부, 설치 후 소실, 잘못된 상태·시각, 다른 Exit 결부, 목적지 손상은 OPEN 초기화·객체 재생성·임의 삭제·재연결로 해결하지 않는다. 해당 endpoint의 이동·조작·원거리 실시간 조회를 차단하고 서버 진단을 남긴다. 사용자에게 내부 PK·손상 상세·민감한 Quest 조건을 공개하지 않는다. 관계없는 정상 문/출구는 계속 동작한다. 기존 전체 bootstrap의 관리 Exit 충돌 preflight는 변경 전 실패를 유지하므로 관리자에게 진단을 확인하도록 한다.
+중복 결부, 설치 후 소실, 잘못된 상태·시각, 다른 Exit 결부, 목적지 손상은 OPEN 초기화·객체 재생성·임의 삭제·재연결로 해결하지 않는다. 해당 endpoint의 이동·조작·원거리 실시간 조회를 차단하고 서버 진단을 남긴다. 사용자에게 내부 PK·손상 상세·민감한 Quest 조건을 공개하지 않는다. 관계없는 정상 문/출구는 계속 동작한다.
+
+Bootstrap의 `validate_managed_exits()`는 `doors.proven_installed_endpoint()`로 설치 이력과 Door의 원본 PK·양쪽 endpoint·유일 Room 관계를 대조한다. 소속이 유일하게 입증된 원본 Exit의 Typeclass·위치·방향 손상만 국소 격리하고 초기화를 계속한다. `_build_world()`는 격리된 endpoint를 폐지 방의 일반 콘텐츠로 이전하지 않으며 기존 `preserved_endpoint()`로 재생성·재연결을 막는다. Typeclass를 정상 값으로 바꾸거나 상태·예약·설치 이력을 초기화하지 않는다. 양쪽 문은 계속 UNAVAILABLE이며 DefaultExit의 엔진 통과도 기존 Explorer 가드가 차단한다.
+
+| 증거와 손상 | 처리 |
+| --- | --- |
+| 설치 이력·원본 Door/Exit PK·양쪽 Room 관계가 유일하고 Typeclass/위치/목적지 손상 | 해당 문만 fail-closed, 진단 후 Bootstrap 계속 |
+| 정상 원본에서 `door_id` 속성 참조만 소실 | 기존 무손실 참조 복원, 상태·예약 보존 |
+| 일반 관리 Exit의 Typeclass 오류, 관리 identity/Tag 중복, 방향/Alias 충돌 | 기존 전역 사전 검사로 변경 전 Bootstrap 차단 |
+| 손상 endpoint의 설치 이력 소실·원본 PK 불일치·다른 설치 이력과 중복 소유 | 국소 격리를 입증할 수 없으므로 사전 검사 차단 |
+
+이 격리는 복구 권한을 부여하지 않는다. 운영 중 Door 소실을 최초 설치로 오인하지 않는 기존 계약도 유지한다. PR #56 리뷰에서 재시작 시 Typeclass 손상이 전체 Bootstrap을 중단하던 P1을 격리 재현했고, 서버 시작 Hook·재Bootstrap·새 프로세스 DB 재오픈·실제 이동과 관찰·전역 충돌 롤백을 추가 검증한다. 실행 결과는 [P1 검증 기록](playtest.md#pr-56-d13-장애-격리-p1-보완)을 따른다.
 
 ## 트랜잭션과 전송
 

@@ -130,6 +130,174 @@ class DoorTest(WorldCommandTest):
         context = DistantViewContext(self.char1, self.char1.location, self.rooms["hq_admin_office"], obj, "동", observed_at=100)
         self.assertEqual(str(distant_appearance(context)), "그 너머는 살펴볼 수 없다.")
 
+    def test_p1_01_installed_typeclass_damage_is_local_after_bootstrap(self):
+        from evennia.objects.models import ObjectDB
+        from world.distant_presentation import DistantViewContext, distant_appearance
+
+        door = self.opened(deadline=777)
+        obj = door.exit_a
+        original = (obj.pk, obj.db_location_id, obj.db_destination_id)
+        records = list(Door.objects.order_by("pk").values())
+        journals = list(DoorInstallation.objects.order_by("pk").values())
+        obj.swap_typeclass("evennia.objects.objects.DefaultExit", clean_attributes=False, run_start_hooks=None)
+        with self.assertLogs("world.doors", level="ERROR") as diagnosis:
+            result = build_world()
+        self.assertIn("hq_concourse", result)
+        self.assertTrue(any("hq_admin_door" in line for line in diagnosis.output))
+        self.assertEqual((obj.pk, obj.db_location_id, obj.db_destination_id), original)
+        self.assertEqual(obj.typeclass_path, "evennia.objects.objects.DefaultExit")
+        self.assertEqual(list(Door.objects.order_by("pk").values()), records)
+        self.assertEqual(list(DoorInstallation.objects.order_by("pk").values()), journals)
+        for player, endpoint in ((self.char1, obj), (self.char2, door.exit_b)):
+            before = player.profile_snapshot()
+            origin = player.location
+            endpoint.at_traverse(player, endpoint.destination)
+            self.assertEqual(player.location, origin)
+            self.assertEqual(player.profile_snapshot(), before)
+            self.assertEqual(doors.state_for_exit(endpoint, 100), doors.UNAVAILABLE)
+            with self.assertRaises(rules.RuleError):
+                doors.operate(player, "문", "닫아", 100)
+            context = DistantViewContext(player, origin, endpoint.destination, endpoint, endpoint.key, observed_at=100)
+            self.assertEqual(str(distant_appearance(context)), "그 너머는 살펴볼 수 없다.")
+        recovery = self.opened("recovery_room_door")
+        self.char1.location = recovery.exit_a.location
+        recovery.exit_a.at_traverse(self.char1, recovery.exit_a.destination)
+        self.assertEqual(self.char1.location, self.rooms["recovery_room"])
+        self.char1.location = self.rooms["dock"]
+        normal = ObjectDB.objects.get(db_tags__db_key="dock:동", db_tags__db_category="primal_zone_exit")
+        normal.at_traverse(self.char1, normal.destination)
+        self.assertEqual(self.char1.location, self.rooms["hq_concourse"])
+
+    def test_p1_02_actual_server_start_keeps_damage_local(self):
+        from server.conf.at_server_startstop import at_server_start
+
+        door = self.opened(deadline=777)
+        door.exit_a.swap_typeclass("evennia.objects.objects.DefaultExit", clean_attributes=False, run_start_hooks=None)
+        records = list(Door.objects.order_by("pk").values())
+        journals = list(DoorInstallation.objects.order_by("pk").values())
+        with patch("evennia.create_script") as scripts, patch("world.lifecycle.time", return_value=100):
+            with self.assertLogs("world.doors", level="ERROR"):
+                at_server_start()  # Bootstrap/runtime/restart reconcile는 실제로 실행한다.
+            scripts.assert_called_once()
+        self.assertEqual(list(Door.objects.order_by("pk").values()), records)
+        self.assertEqual(list(DoorInstallation.objects.order_by("pk").values()), journals)
+        self.assertEqual(doors.state_for_exit(door.exit_b), doors.UNAVAILABLE)
+        self.char1.location = self.rooms["support_3f_e1"]
+        doors.operate(self.char1, "문", "닫아", 100)
+        doors.operate(self.char1, "문", "열어", 110)
+        with patch("world.doors.time", return_value=120):
+            recovery = self.door("recovery_room_door")
+            recovery.exit_a.at_traverse(self.char1, recovery.exit_a.destination)
+        self.assertEqual(self.char1.location, self.rooms["recovery_room"])
+        self.assertEqual(self.door("recovery_room_door").auto_close_at, 180)
+
+    def test_p1_03_repeated_bootstrap_never_replaces_quarantined_objects(self):
+        from evennia.objects.models import ObjectDB
+
+        door = self.opened(deadline=777)
+        door.exit_a.swap_typeclass("evennia.objects.objects.DefaultExit", clean_attributes=False, run_start_hooks=None)
+        before = (list(Door.objects.order_by("pk").values()), list(DoorInstallation.objects.order_by("pk").values()),
+                  list(ObjectDB.objects.order_by("pk").values_list("pk", "db_location_id", "db_destination_id", "db_typeclass_path")))
+        for now in (120, 130, 140):
+            with patch("world.doors.time", return_value=now), self.assertLogs("world.doors", level="ERROR"):
+                build_world()
+            self.assertEqual((list(Door.objects.order_by("pk").values()), list(DoorInstallation.objects.order_by("pk").values()),
+                              list(ObjectDB.objects.order_by("pk").values_list("pk", "db_location_id", "db_destination_id", "db_typeclass_path"))), before)
+
+    def test_p1_04_normal_door_both_sides_extend_and_sweep_independently(self):
+        broken = self.opened(deadline=777)
+        broken.exit_a.swap_typeclass("evennia.objects.objects.DefaultExit", clean_attributes=False, run_start_hooks=None)
+        build_world()
+        record = list(Door.objects.filter(pk=broken.pk).values())
+        recovery = self.opened("recovery_room_door")
+        for player, endpoint, close_at, open_at, pass_at in (
+                (self.char1, recovery.exit_a, 110, 120, 130),
+                (self.char2, recovery.exit_b, 140, 145, 150)):
+            player.location = endpoint.location
+            self.assertTrue(doors.operate(player, "문", "닫아", close_at))
+            self.assertTrue(doors.operate(player, "문", "열어", open_at))
+            self.assertEqual(self.door("recovery_room_door").auto_close_at, open_at + 60)
+            with patch("world.doors.time", return_value=pass_at):
+                endpoint.at_traverse(player, endpoint.destination)
+            self.assertEqual(player.location, endpoint.destination)
+            self.assertEqual(self.door("recovery_room_door").auto_close_at, pass_at + 60)
+        self.assertEqual(doors.effective_door_state("recovery_room_door", 209.999), "OPEN")
+        doors.reconcile_doors(210)
+        self.assertEqual((self.door("recovery_room_door").state, self.door("recovery_room_door").auto_close_at), ("CLOSED", None))
+        self.assertEqual(list(Door.objects.filter(pk=broken.pk).values()), record)
+        self.char1.location = self.rooms["dock"]
+        ordinary = next(obj for obj in self.char1.location.exits if obj.key == "동")
+        ordinary.at_traverse(self.char1, ordinary.destination)
+        self.assertEqual(self.char1.location, self.rooms["hq_concourse"])
+
+    def test_p1_06_local_relation_damage_and_unique_reference_repair(self):
+        from evennia import create_object
+
+        door = self.opened(deadline=777)
+        obj = door.exit_a
+        records = list(Door.objects.order_by("pk").values())
+        journals = list(DoorInstallation.objects.order_by("pk").values())
+        for field, damaged, original in (("destination", self.rooms["dock"], obj.destination),
+                                         ("location", self.rooms["hq_lounge"], obj.location)):
+            with self.subTest(field=field):
+                setattr(obj, field, damaged)
+                with self.assertLogs("world.doors", level="ERROR"):
+                    build_world()
+                self.assertEqual(getattr(obj, field), damaged)
+                self.assertEqual(doors.state_for_exit(obj), doors.UNAVAILABLE)
+                self.assertEqual(doors.state_for_exit(door.exit_b), doors.UNAVAILABLE)
+                self.assertEqual(doors.effective_door_state("recovery_room_door"), "OPEN")
+                self.assertEqual(list(Door.objects.order_by("pk").values()), records)
+                self.assertEqual(list(DoorInstallation.objects.order_by("pk").values()), journals)
+                setattr(obj, field, original)
+        # 폐지 방의 일반 콘텐츠 이전 처리도 격리된 원본 endpoint를 옮기면 안 된다.
+        retired = create_object("typeclasses.zone_rooms.ZoneRoom", key="폐지 복도")
+        retired.db.zone_id = "support_1f_c"
+        retired.tags.add("support_1f_c", category="primal_zone_room")
+        origin, target = obj.location, obj.destination
+        obj.location, obj.destination = retired, None
+        with self.assertLogs("world.doors", level="ERROR"):
+            build_world()
+        self.assertEqual((obj.location, obj.destination), (retired, None))
+        self.assertEqual(doors.state_for_exit(obj), doors.UNAVAILABLE)
+        self.assertEqual(list(Door.objects.order_by("pk").values()), records)
+        self.assertEqual(list(DoorInstallation.objects.order_by("pk").values()), journals)
+        obj.location, obj.destination = origin, target
+        obj.attributes.remove("door_id")
+        build_world()  # 속성 참조만 소실된 유일 원본은 기존 무손실 복원 계약을 유지한다.
+        self.assertEqual(obj.db.door_id, door.door_id)
+        self.assertEqual(doors.state_for_exit(obj), "OPEN")
+        self.assertEqual(list(Door.objects.order_by("pk").values()), records)
+
+    def test_p1_06_ambiguous_or_missing_installation_cannot_bypass_preflight(self):
+        door = self.opened(deadline=777)
+        obj = door.exit_a
+        obj.swap_typeclass("evennia.objects.objects.DefaultExit", clean_attributes=False, run_start_hooks=None)
+        journal = DoorInstallation.objects.get(door_id=door.door_id)
+        original = dict(DoorInstallation.objects.values().get(pk=journal.pk))
+        for damage in ("original_pk", "missing", "overlap"):
+            with self.subTest(damage=damage):
+                extra = None
+                if damage == "original_pk":
+                    proofs = [dict(p) for p in original["endpoints"]]
+                    proofs[0]["exit_pk"] = door.exit_b_id
+                    DoorInstallation.objects.filter(pk=journal.pk).update(endpoints=proofs)
+                elif damage == "missing":
+                    journal.delete()
+                else:
+                    extra = DoorInstallation.objects.create(door_id="unknown_fixture", door_pk=999999,
+                                                            installed_at=100, endpoints=original["endpoints"])
+                before = (list(Door.objects.order_by("pk").values()), list(DoorInstallation.objects.order_by("pk").values()),
+                          obj.typeclass_path, obj.location, obj.destination, self.char1.profile_snapshot())
+                with self.assertRaisesRegex(ValueError, "태그/위치 충돌"):
+                    build_world()
+                self.assertEqual((list(Door.objects.order_by("pk").values()), list(DoorInstallation.objects.order_by("pk").values()),
+                                  obj.typeclass_path, obj.location, obj.destination, self.char1.profile_snapshot()), before)
+                if extra:
+                    extra.delete()
+                DoorInstallation.objects.update_or_create(pk=original["id"], defaults={k: v for k, v in original.items() if k != "id"})
+                journal = DoorInstallation.objects.get(pk=original["id"])
+
     def test_invalid_states_and_expiry_are_read_only(self):
         for fields in (dict(state="INVALID"), dict(state="OPEN", auto_close_at=None),
                        dict(state="CLOSED", auto_close_at=160), dict(state="LOCKED", lockable=False)):

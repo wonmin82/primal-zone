@@ -132,6 +132,41 @@ def preserved_endpoint(zone, direction):
             or Door.objects.filter(door_id__in=identities).exists())
 
 
+def proven_installed_endpoint(exit_obj, managed_identity):
+    """손상 속성과 별개로 원본 소속을 입증한다. 추측 편입/복구 권한은 부여하지 않는다."""
+    for identity, definition in DOORS.items():
+        for index, (origin, direction, _) in enumerate(definition["endpoints"]):
+            if managed_identity != f"{origin}:{direction}":
+                continue
+            journal = DoorInstallation.objects.filter(door_id=identity).first()
+            door = Door.objects.filter(door_id=identity).first()
+            if not journal or not door or door.pk != journal.door_pk or not timestamp(journal.installed_at):
+                return None
+            proofs = journal.endpoints
+            if (not isinstance(proofs, list) or len(proofs) != 2
+                    or any(not isinstance(p, dict) or set(p) != {"exit_pk", "room_pk", "target_pk"}
+                           or any(type(v) is not int or v < 1 for v in p.values()) for p in proofs)):
+                return None
+            ids = [p["exit_pk"] for p in proofs]
+            if ids[index] != exit_obj.pk or len(set(ids)) != 2 or ids != [door.exit_a_id, door.exit_b_id]:
+                return None
+            for proof, (room, _, target) in zip(proofs, definition["endpoints"]):
+                for field, zone in (("room_pk", room), ("target_pk", target)):
+                    matches = list(ObjectDB.objects.filter(db_tags__db_key=zone,
+                                   db_tags__db_category="primal_zone_room").distinct())
+                    if (len(matches) != 1 or matches[0].pk != proof[field] or matches[0].db.zone_id != zone
+                            or not matches[0].is_typeclass("typeclasses.zone_rooms.ZoneRoom", exact=True)):
+                        return None
+            if Door.objects.exclude(pk=door.pk).filter(Q(exit_a_id__in=ids) | Q(exit_b_id__in=ids)).exists():
+                return None
+            for other in DoorInstallation.objects.exclude(pk=journal.pk):
+                if other.door_pk == journal.door_pk or (isinstance(other.endpoints, list) and any(
+                        isinstance(p, dict) and p.get("exit_pk") in ids for p in other.endpoints)):
+                    return None
+            return identity
+    return None
+
+
 def install_doors(now=None):
     """최초 설치만 상태를 생성. 이후에는 유일한 원본 증거로 무손실 참조만 복원한다."""
     from world.bootstrap import EXIT_CATEGORY

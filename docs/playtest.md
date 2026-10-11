@@ -2,6 +2,28 @@
 
 ## Issue #49 문과 열쇠 검증
 
+### PR #56 D13 장애 격리 P1 보완
+
+아래는 최초 구현 기록 이후의 리뷰 수정이다. 기준 PR HEAD는 `c90866cdef44035543c04e780b193d2801c83d9b`, base는 `bd18e6ff4e9f1d2e345015eba805353be0e1cae1`이다. 실제 운영 장애 발생 건수가 아닌 격리 DB의 재현이며 기존 실패·검증 기록은 보존한다.
+
+수정 전 `uv run python scripts/dev.py test tests.test_doors.DoorTest.test_p1_01_installed_typeclass_damage_is_local_after_bootstrap --parallel 1`은 **1개 ERROR·종료 1, 5.021초**였다. 정상 설치된 관리실 Door 원본 Exit를 `DefaultExit`로 손상시키고 `build_world()`를 실행하면 `validate_managed_exits()`의 `관리 Exit 태그/위치 충돌` ValueError가 전체 Bootstrap을 중단했다. 수정 후 같은 검사는 **1개 PASS·종료 0, 8.279초**이며 손상 상태 보존과 양쪽 실제 이동/조작/원거리 차단, 회복실·일반 Exit 실제 이동을 검증했다.
+
+`doors.proven_installed_endpoint()`는 독립 설치 이력·원본 Door/양쪽 Exit PK·유일 Room 증거·다른 이력과의 중복 소유 부재를 읽기 전용으로 입증한다. `validate_managed_exits()`는 입증된 endpoint 속성 손상만 진단 후 국소 격리한다. `_build_world()`는 격리 원본을 폐지 방의 일반 콘텐츠로 이전하지 않는다. Typeclass·PK·목적지·상태·예약·설치 이력을 자동 복구/리셋하지 않는다. 일반 관리 Exit 오류·identity/Tag·방향/Alias 충돌과 불명확한 설치 증거는 기존 전역 차단을 유지한다.
+
+신규 8개 메서드는 TEST-P1-01~08을 실제 API로 검사하며 [추적표](issue49-requirement-tests.md#pr-56-d13-p1-추가-검사)에 RT-07~11/59·CV-08/17을 연결했다. TEST-P1-08은 첫 OS 프로세스에서 임시 SQLite를 설치하고 손상을 저장한 뒤, 별도 OS 프로세스가 같은 DB를 다시 열어 실제 `at_server_start()`를 실행한다. Script 생성과 외부 메시지만 격리하며 Bootstrap·runtime·restart reconcile·Door 검증·실제 통과는 대체하지 않는다.
+
+| 실제 실행 | 결과 |
+| --- | --- |
+| `uv run python scripts/dev.py test tests.test_doors tests.test_bootstrap_exits --parallel 2` | 61개 PASS·종료 0, 90.693초. 기존 일반 관리 Exit 보호와 손상 분류·재Bootstrap·실제 시작 Hook을 검사했다. |
+| `uv run python scripts/dev.py test tests.test_door_schema.DoorSchemaTests.test_p1_08_damaged_door_survives_new_process_server_start --parallel 1` | 1개 PASS·종료 0, 28.171초. 실제 새 프로세스의 영속 손상/정상 기능 분리를 검사했다. |
+| `uv run python scripts/dev.py test tests.test_doors tests.test_bootstrap_exits tests.test_door_schema tests.test_headquarters tests.test_medical tests.test_exit_policy tests.test_distant_view tests.test_party_overhaul --parallel 4` | 143개 PASS·종료 0, 158.024초(runner 169.096초). 기존 스키마/빈 DB·본부·의료·Exit/원거리·일행 회귀를 포함했다. |
+
+폐지 방으로 옮겨지고 목적지도 소실된 원본 endpoint의 이전 금지 검사를 추가하는 과정에서 새 테스트의 `create_object` import 누락을 코드 검사가 발견했다. import만 보완했으며 실행된 확장 검사의 결과와 최종 전체 검사를 아래에 구분해 기록한다. 운영 DB의 hash·size·mtime은 전후 대조한다. JavaScript·CSS·프로토콜은 변경하지 않아 Node·정적 수집/브라우저 검사는 새로 반복하지 않는다. 실제 OS 브라우저/IME·복수 실세션·장기 restart·Cross-Issue 수동 E2E는 #50의 별도 범위다. 최종 커밋 Quick과 최신 원격 CI는 실제 SHA·URL과 함께 PR/Issue 기록에 확정한다.
+
+최종 안정 코드의 `uv run python scripts/dev.py test --parallel 4`: **순수 229개(3.471초) + 통합 811개(516.224초) PASS·종료 0**, 통합 runner 527.342초. 기존 전체 1,032개에 이번 신규 8개를 더한 총 1,040개이며 TEST-P1-01~08·RT-07~11/59·D04/D11/D12·VIEW·Quest/Credential·일행/전투/전리품 회귀를 포함한다. `uv run python scripts/dev.py check`·`git diff --check`와 실제 추적 테스트 경로 검사를 통과했다. Markdown GFM 렌더링·상대 링크/앵커도 확인하며 결과 기록 이후 실행 코드/테스트는 변경하지 않는다. 커밋 후 정확한 HEAD Quick·최신 GitHub test/smoke는 PR/Issue에 실제 SHA와 함께 확정한다.
+
+### 최초 구현 기준과 검증 기록
+
 2026-10-11 Windows, Python 3.13.15, uv 0.12.13. 기준 main은 `bd18e6ff4e9f1d2e345015eba805353be0e1cae1`이며 아래 개발 검사는 해당 기준에서 Issue #49의 미커밋 코드/테스트 diff를 대상으로 실행했다. `settings_test` SQLite·기존 fixture·주입 시각을 사용하고 실제 지급/이동/권한을 검사한다. 실제 60초 sleep·운영 DB bootstrap/migration은 하지 않았다. [RT/CV 연결](issue49-requirement-tests.md)과 [운영 계약](doors-and-keys.md)을 따른다.
 
 ### 경량 검사와 실패 보정

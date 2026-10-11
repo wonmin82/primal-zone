@@ -10,6 +10,7 @@ from typeclasses.exits import Exit
 from typeclasses.explorers import Explorer
 from typeclasses.zone_rooms import ZoneRoom
 from world.bootstrap import CATEGORY, EXIT_CATEGORY, build_world, validate_managed_exits
+from world.door_entities.models import Door, DoorInstallation
 from world.item_entities.models import ItemEntity, ItemRuntime, ItemSequence
 
 from tests.base import WorldCommandTest
@@ -25,7 +26,7 @@ class BootstrapExitTests(WorldCommandTest):
         self.char1.push_state = Mock()
 
     def snapshot(self):
-        models = (ObjectDB, Attribute, Tag, ObjectDB.db_tags.through, ItemEntity, ItemSequence, ItemRuntime)
+        models = (ObjectDB, Attribute, Tag, ObjectDB.db_tags.through, ItemEntity, ItemSequence, ItemRuntime, Door, DoorInstallation)
         return {model._meta.label: list(model.objects.order_by("pk").values()) for model in models}
 
     def assert_conflict_preserves_database(self, expression):
@@ -104,6 +105,37 @@ class BootstrapExitTests(WorldCommandTest):
         before = self.snapshot()
         validate_managed_exits()
         self.assertEqual(self.snapshot(), before)
+
+    def test_p1_05_p1_07_quarantined_door_does_not_bypass_global_conflicts(self):
+        from evennia.objects.objects import DefaultExit
+
+        obj = Door.objects.get(door_id="hq_admin_door").exit_a
+        obj.swap_typeclass(DefaultExit, clean_attributes=False, run_start_hooks=None)
+        original = (obj.pk, obj.location, obj.destination, obj.typeclass_path, obj.db.door_id,
+                    self.char1.profile_snapshot(), self.rooms["hq_concourse"].key)
+        for damage in ("duplicate", "tags", "alias", "foreign_endpoint"):
+            with self.subTest(damage=damage):
+                if damage == "tags":
+                    obj.tags.add("dock:남", category=EXIT_CATEGORY)
+                    extra = None
+                    expected = "태그/위치 충돌"
+                else:
+                    extra = create_object(DefaultExit if damage == "foreign_endpoint" else Exit,
+                                          key="사유 통로", location=self.rooms["hq_concourse"], destination=self.rooms["dock"])
+                    if damage in ("duplicate", "foreign_endpoint"):
+                        extra.key = "동"
+                        extra.tags.add("hq_concourse:동", category=EXIT_CATEGORY)
+                        expected = "identity 중복|태그/위치 충돌"
+                    else:
+                        extra.aliases.add("E")
+                        expected = "Exit 명령 충돌"
+                self.assert_conflict_preserves_database(expected)
+                self.assertEqual((obj.pk, obj.location, obj.destination, obj.typeclass_path, obj.db.door_id,
+                                  self.char1.profile_snapshot(), self.rooms["hq_concourse"].key), original)
+                if extra:
+                    extra.delete()
+                else:
+                    obj.tags.remove("dock:남", category=EXIT_CATEGORY)
 
     def test_vertical_alias_collision_and_wrong_managed_type_are_rejected(self):
         from evennia.objects.objects import DefaultExit
