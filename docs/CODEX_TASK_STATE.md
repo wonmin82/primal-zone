@@ -1,5 +1,15 @@
 # 원시구역 개발 작업 및 검증 이력
 
+## PR #57 — Phase 50-A P2 리뷰 보완 (Push 전 기록)
+
+마지막 리뷰 HEAD `7ddf8d5`에서 P2-01 인증 파일 정리, P2-02 입력 원문/자동 실패 context 비수집, P2-03 소유 Puppet 실제 해제 확인을 보완했다. 코드 커밋 `b0fd1b2a4fe776d6d173793854eddc54ac352f42`, 기존 Source `codex/issue-50-integration-validation`이며 새 PR/브랜치를 만들지 않는다. 게임/프로토콜/콘텐츠/영속 구조·타이머·실제 DB와 공통 Smoke Harness는 변경하지 않는다.
+
+Python Runner 12개·Node 계약 26개·관련 Harness 통합 18개가 성공했다. 동일 브라우저 Fixture/시나리오 9개를 3회 연속 성공시킨 뒤 자동 실패 context 비수집/보고서 정리 경계를 추가로 검증했다. 최종 정상 실행은 9 PASS·종료 0, E2E 62.735초 / 전체 105.839초이며 실제 Assertion 음성 1개는 예상 FAIL·종료 1로 구분한다. 실제 실패에서도 Context/Puppet·인증 파일·프로세스 정리와 원문 비수집을 확인했다. 개발 중 실패·보정과 기존 최초 제출 기록은 [검증 이력](playtest.md#pr-57-p2-리뷰-보완)에 보존한다.
+
+[리뷰 추적/RF-01~20](issue50-integration-matrix.md#pr-57-리뷰-보완), [브라우저·증거 보안](issue50-browser-validation.md), [실측](issue50-test-performance.md)을 연결한다. 정확한 최종 Push SHA의 Quick/Smoke와 최신 네 원격 CI는 이 문서 커밋 이후 게이트이며 [PR #57](https://github.com/wonmin82/primal-zone/pull/57) Review Fixes 및 Issue #50 진행 기록에서 실제 결과로 확정한다. 이전 HEAD CI를 새 결과로 대신하지 않는다.
+
+PR #57 OPEN/Ready, Source 유지, Issue #50/#45 OPEN을 유지한다. 자동 Merge·브랜치 삭제·Issue 종료는 수행하지 않는다. 50-B~F/실제 장기 시간·서버 재시작·최종 RELEASE는 NOT RUN, OS IME는 기존 사용자 수동 검증 PRIOR VERIFIED다.
+
 ## Issue #50 — Phase 50-A 자동 브라우저 기반 (제출 전 기록)
 
 [Issue #50 v1.2 DESIGN FREEZE](https://github.com/wonmin82/primal-zone/issues/50)의 50-A만 구현했다. 착수 main `7afc09d064ea0e45dc68f77ab7ede6c5e7237202`, Source `codex/issue-50-integration-validation`, 코드 커밋 `f63a12756346aae5dc841b208bacc3113267436d`. 선행 #46~49/#54와 PR #51~53/#55/#56의 병합·최종 PR 및 main CI를 재조회했다. 아래 역사적 병합 전·실패 기록은 당시 사실로 보존한다.

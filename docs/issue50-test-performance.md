@@ -23,3 +23,20 @@ Windows / Python 3.13.15 / Node 24.19.0. 실행 기준은 착수 HEAD `7afc09d06
 | 관련 Python Harness 회귀 | 18 PASS | 12.545초 / runner 27.741초 |
 
 정확한 최종 Push HEAD의 Quick/Smoke와 설치·업로드를 포함한 원격 Job 시간은 실제 실행 이후 연결 PR Validation에 기록한다. 이 표의 89.154초를 CI Job 전체 시간이나 Full Gameplay 검증 시간으로 해석하지 않는다.
+
+## PR #57 리뷰 보완 측정
+
+실행 환경은 위 Windows/Node/Python/Playwright 버전을 유지한다. 기준은 `7ddf8d5` + 리뷰 수정 diff이며 코드 커밋 `b0fd1b2a4fe776d6d173793854eddc54ac352f42`에 연결한다. 기존 최초 구현·실패 시간은 삭제하지 않는다.
+
+| 검사 | 건수·결과 | 실제 시간 |
+| --- | --- | --- |
+| Python Runner 직접 회귀 | 기존 3 + 신규 9 = 12 PASS | 0.544초 |
+| Node 계약 | 기존 16 + 신규 10 = 26 PASS | 0.229초 |
+| 기존 Python Harness 통합 | 18 PASS | 테스트 12.533초 / runner 23.506초 |
+| 정상 Chromium 연속 1회 | 9 PASS | E2E 62.703초 / 전체 106.081초 |
+| 정상 Chromium 연속 2회 | 9 PASS | E2E 62.624초 / 전체 106.446초 |
+| 정상 Chromium 연속 3회 | 9 PASS | E2E 62.652초 / 전체 106.320초 |
+| 최종 비수집 경계 정상 실행 | 9 PASS·종료 0 | E2E 62.735초 / 전체 105.839초 |
+| 실제 Assertion 음성 검사 | 1개 예상 FAIL·종료 1, 비수집/정리 검증 성공 | E2E 8.943초 / 전체 50.316초 |
+
+초기 수정 실행의 9 FAIL/278.124초, favicon 분류 보정 전 6 FAIL·3 PASS/107.575초 및 음성 선택 패턴 오류의 0개 실행/50.636초를 [실패 이력](playtest.md#pr-57-p2-리뷰-보완)에 별도로 남긴다. 음성 검사의 FAIL을 일반 브라우저 PASS 수에 합산하지 않는다. 정확한 최종 Push HEAD Quick 및 원격 네 Job의 SHA·경과 시간·URL은 [PR #57](https://github.com/wonmin82/primal-zone/pull/57) Review Fixes에서 실제 실행 후 기록한다. 성공 Artifact 14일/실패 30일과 기존 네 Job의 시간 제한은 유지한다.

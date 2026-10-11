@@ -4,6 +4,34 @@
 
 2026-10-12, 최신 main `7afc09d064ea0e45dc68f77ab7ede6c5e7237202`에서 `codex/issue-50-integration-validation`로 시작했다. v1.2 DESIGN FREEZE 및 선행 #46~49/#54의 실제 PR HEAD·Merge·CI를 감사했다. 아래 최초 구현·실패·병합 전 이력은 삭제하지 않는다. 이번 범위는 50-A 기반이며 50-B~F와 최종 RELEASE를 완료했다고 표현하지 않는다.
 
+### PR #57 P2 리뷰 보완
+
+2026-10-12, 리뷰 HEAD `7ddf8d5de5d2437de14d06f91a4cc38c5e1fda22`, 최신 base `7afc09d` 및 OPEN/Ready PR #57을 재조회했다. 기존 구현·실패 기록과 Issue #50 v1.2 D01~D28/P-01/P-02는 보존한다. 아래 검사는 해당 HEAD + 코드 커밋 `b0fd1b2a4fe776d6d173793854eddc54ac352f42`에 대응하는 수정 diff이며 커밋 후 새 실행으로 표현하지 않는다.
+
+| 실제 실행 | 결과 |
+| --- | --- |
+| `uv run python -m unittest discover -s scripts/tests -p test_browser_runner.py` | 12 PASS·종료 0, 0.544초. Popen/정상·비정상/stop·unlink 오류/Timeout·취소/엄격한 export·자동 context 폐기를 포함한다. |
+| `npm run test:contracts` | 기존 16 + 신규 10 = 26 PASS·종료 0, 0.229초. 입력·URL·보고서 비수집 및 소유 세션·정리 오류 회귀다. |
+| `uv run python scripts/dev.py test world.test_smoke tests.test_smoke_infrastructure --parallel 2` | 기존 18 PASS·종료 0, 12.533초 / runner 23.506초. |
+| `npm run test:browser` 3회 연속 | 매회 기존 6 + 신규 3 = 9 PASS. E2E 62.703/62.624/62.652초, 준비·종료 포함 106.081/106.446/106.320초. 실제 소유 ID 해제·A 종료/B 유지·Desktop 후 Narrow·재접속을 Assert한다. |
+| 최종 정상 `npm run test:browser` | 9 PASS·종료 0, E2E 62.735초 / 전체 105.839초. 이후 보안 경계/보고서 정리 판정을 추가로 확인했다. |
+| `PRIMAL_BROWSER_FAILURE_PROBE=1`의 별도 `npm run test:browser` | 실제 TEST-P2-02-D Assertion 1개 예상 FAIL·종료 1. E2E 8.943초 / 전체 50.316초. 실패 JSON 상태를 유지하며 Context/Puppet·인증 파일·소유 프로세스 정리와 비공개 입력 비수집·자동 context 부재를 별도 확인했다. |
+| `uv run python scripts/dev.py check`, 변경 JS/설정 `node --check`, `git diff --check` | PASS. |
+
+P2-01은 프로세스 생성 이전부터 인증 파일의 finally를 적용하고 stop·unlink를 독립적으로 실행한다. P2-02는 입력 원문·인증 프레임·자유 오류 대신 안전한 메타데이터만 저장하며 Playwright 자체 DOM snapshot도 중지하고 자동 오류 context를 폐기한다. P2-03은 실제 인증 전후 ID 차이만 추적하고 Context 종료 뒤 읽기 전용 DB Probe로 소유 Puppet 해제를 확인한다. 다른 세션을 종료하거나 공통 helper에서 캐릭터 전체 0을 강요하지 않는다.
+
+수정 과정의 실패는 다음과 같다.
+
+- `run-8mljvy1u`: 9 FAIL·종료 1, 전체 278.124초. Context 종료 뒤 Playwright WebSocket close 이벤트가 전달되지 않아 10초 대기가 실패했다. 실제 DB에는 Puppet이 남지 않았다. 브라우저 채널 종료는 닫힌 Page도 인정하되 실제 서버 해제는 별도 Probe로 계속 확인하도록 보정했다.
+- `run-7kwsxcfv`: 6 FAIL/3 PASS·종료 1, 전체 107.575초. URL 허용 경로가 기존 static favicon 404를 일반 오류로 오분류했다. 원래 suffix/404 조건을 복원하고 비수집 메타데이터 및 분류 회귀를 유지했다.
+- 첫 정상 증거의 마스킹 PNG는 Playwright가 붙인 digest 파일명 때문에 업로드에서 빠졌다. 임의 파일·외부 경로를 계속 거절하면서 승인 PNG의 digest 형식만 허용했고 단위 검사와 실제 마스킹 이미지 검사를 추가했다.
+- `run-jq8jxz0j`: 음성 옵션의 정규식이 전체 제목의 파일명 prefix와 맞지 않아 0개 실행/전역 오류·종료 1, 50.636초였다. Assertion 음성 검사 성공으로 인정하지 않고 선택 패턴을 수정했다.
+- `run-381hl7qw`: 실제 Assertion 1개 FAIL·종료 1, E2E 10.199초/전체 52.779초. 원문이 업로드되지 않음은 확인했으나 로컬 자동 오류 context에 합성 메시지가 포함되는 경로를 발견했다. snapshot 중지와 Reporter/Python 폐기를 추가한 후 `run-92kr783d`에서 실제 음성 검사와 원문 비수집을 다시 확인했다.
+
+모든 실제 실행의 플레이 DB hash/mtime/size 불변, 소유 Portal/Server 종료, 인증 파일 부재를 확인했다. 정상 실행은 격리 DB를 제거하며 실패 시 로컬 원본 로그/DB를 보존한다. 이 로컬 원본은 업로드하지 않는다. 최종 정상 증거의 JSON/HTML/로그와 두 마스킹 PNG, 실제 음성 검사 증거의 7개 텍스트를 검사했다. Trace/영상/임의 실패 화면은 수집하지 않는다.
+
+전체 로컬 Python suite는 게임·공통 Harness가 변경되지 않아 반복하지 않았으며 최신 원격 `test`의 전체 회귀와 구분한다. 정확한 최종 Push HEAD의 Quick/Smoke와 원격 네 Job은 커밋 후 별도 실행하여 PR/Issue에 SHA·URL로 확정한다. RF-01~20과 실제 경로는 [리뷰 추적](issue50-integration-matrix.md#pr-57-리뷰-보완)에 연결한다. PR·Issue OPEN, Source 유지, Merge/Close 미수행이며 50-B~F·IME/장기 운영 범위는 기존 기록과 같다.
+
 ### 실제 실행과 결과
 
 Windows 10, Python 3.13.15, uv 0.12.13, Node 24.19.0, npm 11.17.0, Playwright 1.64.0 / Chromium 156.0.8078.4 (revision 1248). 성공 실행은 착수 HEAD + 미커밋 코드 기준이며 이후 `f63a12756346aae5dc841b208bacc3113267436d`와 코드가 동일하다. 이후 문서만 바뀌므로 같은 검사를 반복하지 않는다. 최종 Push HEAD Quick/Smoke와 원격 CI는 실제 실행 후 PR Validation 및 Issue #50 진행 구역에 별도 SHA·URL로 확정한다.

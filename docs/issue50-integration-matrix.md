@@ -57,6 +57,29 @@ Runner 회귀: `scripts/tests/test_browser_runner.py`의 비밀번호 제거, �
 | A-18~19 | 매트릭스·브라우저·성능·실행/실패 기록 작성, 50-B~F NOT RUN |
 | A-20 | 이 문서 작성 시 PR 제출 전. 실제 Ready PR 링크는 Issue #50 진행 구역에 추가 |
 
+## PR #57 리뷰 보완
+
+마지막 리뷰 HEAD `7ddf8d5de5d2437de14d06f91a4cc38c5e1fda22`의 P2-01~03을 테스트 인프라에서 보완했다. 위 최초 제출·당시 NOT RUN 기록은 보존한다. 아래 실행은 해당 HEAD + 수정 diff 기준이며 코드 커밋 `b0fd1b2a4fe776d6d173793854eddc54ac352f42`와 연결한다. 커밋 이후 새 실행으로 표현하지 않는다. 정확한 최종 Push HEAD Quick/Smoke와 최신 원격 네 Job은 [PR #57 Review Fixes](https://github.com/wonmin82/primal-zone/pull/57) 및 Issue #50 진행 기록에서 실제 SHA·Run URL로 확정한다.
+
+| 리뷰 ID | 원인 | 수정 파일 | 신규·보강 회귀 | 결과 |
+| --- | --- | --- | --- | --- |
+| P2-01 | Popen 이전 인증 파일 정리 영역 부족 | scripts/browser_e2e.py | BrowserCredentialTests의 Popen/OSError·비정상 종료·정상 완료·stop/unlink 오류·Timeout/취소 | PASS |
+| P2-02 | lastCommand·오류 context·임의 보고서/로그에 입력 원문 복제 가능 | fixtures/safety/reporter.cjs, browser_e2e.py | TEST-P2-02-A~D, BrowserIsolationTests의 엄격한 export·마스킹 PNG digest, 삭제 실패 회귀 | PASS |
+| P2-03 | Context 종료 후 실제 Puppet 해제 확인 없음 | fixtures/safety.cjs, phase50a.spec.cjs | TEST-50A-03/05/06·TEST-P2-03-D·helper 소유 ID/타 세션/첨부 실패 검사 | PASS |
+
+실제 경로는 `scripts/browser/`, `scripts/tests/test_browser_runner.py`, `scripts/tests/test_browser_helpers.cjs`다. 기존 TEST-50A-01~06·Node 16개·Python 격리 3개를 유지했다. 신규 메서드/테스트는 Python 9개 + Node 10개 + 실제 E2E 3개다. Mock은 외부 프로세스 실패·첨부·Probe 오류 주입에만 사용하며 실제 정상 서버/로그인/게임 명령/Puppet 관측은 대체하지 않는다.
+
+| 수용 기준 | 실제 근거 | 상태 |
+| --- | --- | --- |
+| RF-01~03 | Python 12개: Popen 실패에서도 파일 삭제, 원래 오류+정리 오류 보존, 비정상 종료/Timeout/Interrupt | PASS |
+| RF-04~07 | 개인·공개 원문 비수집, 비밀번호/토큰/URL 보호, 실제 음성 실패 보고서·자동 context 폐기·마스킹 PNG 검사 | PASS |
+| RF-08~12 | 소유 Puppet ID 해제, A 종료/B 유지, Desktop 종료 후 Narrow, 1→0→1·새 ID, Probe/첨부/Timeout 오류 명시 | PASS |
+| RF-13~15 | Runner 12·Node 26·기존 Harness 18, 정상 Chromium 9개 3회 연속 + 최종 보안 경계 재검사, DB/게임/Harness 불변 | PASS |
+| RF-16~17 | 이 기록 커밋 시 정확한 최종 Push HEAD Quick/원격 CI는 실행 전이다. PR/Issue에서 최신 SHA의 실제 결과를 확정한다. | PENDING |
+| RF-18~20 | 리뷰 추적/실행·실패 기록 보존, 코드 자체 리뷰에서 새 차단 P0/P1 없음, PR·Issue OPEN/Source 유지 | PR/Issue 갱신 후 최종 확인 |
+
+3회 정상 브라우저 실행은 동일한 Fixture/시나리오를 사용했다. 이후 변화는 업로드 PNG 명명 규칙, 별도 음성 검사 선택 옵션, 자동 오류 context 비수집 및 보고서 정리 실패 판정이며 각 경계와 최종 정상 실행을 추가로 검사했다. 실패 재시도로 성공을 숨기거나 이전 HEAD CI를 새 HEAD 결과로 대신하지 않는다. 실행 시간·개발 중 실패는 [실행 이력](playtest.md#pr-57-p2-리뷰-보완)을 따른다.
+
 ## 후속 미실행 상태
 
 | Phase / 검증 그룹 | 상태 | 남은 작업 |
