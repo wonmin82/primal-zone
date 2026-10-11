@@ -1,7 +1,8 @@
 """테스트별 DB rollback과 Evennia runtime 캐시 격리, 클래스별 월드 준비."""
 
 import gc
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 from evennia.commands import cmdhandler
 from evennia.objects.models import ObjectDB
@@ -31,6 +32,13 @@ def clear_test_caches():
 
 class GameCommandTest(EvenniaCommandTest):
     """계정·세션 정리는 기존 훅을 사용하고 GC는 rollback 뒤 한 번 실행한다."""
+
+    def connect_character(self, character):
+        """온라인 전제 테스트에 실제 puppet 속성을 가진 독립 세션을 제공한다."""
+        session = SimpleNamespace(puppet=character, logged_in=True, protocol_key="telnet", data_out=Mock())
+        self.enterContext(patch.object(character.sessions, "all", return_value=[session]))
+        self.enterContext(patch.object(character.sessions, "count", return_value=1))
+        return session
 
     def tearDown(self):
         with patch("evennia.utils.test_resources.flush_cache"):

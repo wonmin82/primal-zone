@@ -88,13 +88,7 @@ class PartyAccept(GameCommand):
     def run(self):
         from typeclasses.parties import respond
 
-        party = respond(self.caller, self.accept)
-        if self.accept:
-            announce(
-                party, ft.text(ft.named("player", self.caller.key, "이/가"), " 일행에 합류했다.")
-            )
-        else:
-            self.caller.msg(ft.text("일행 초대를 거절했다."))
+        respond(self.caller, self.accept)
 
 
 class PartyReject(PartyAccept):
@@ -123,18 +117,14 @@ class PartyLeave(GameCommand):
 
         party = party_for(self.caller)
         if not party:
-            raise rules.RuleError("소속 일행가 없습니다.")
+            raise rules.RuleError("소속 일행이 없습니다.")
         party.remove_member(self.caller)
-        message = ft.text(ft.named("player", self.caller.key, "이/가"), " 일행를 떠났다.")
-        self.caller.msg(message)
-        if party.pk:
-            announce(party, message)
 
 
 class PartyKick(GameCommand):
     category = "일행·교류"
     usage = "플레이어 일행제외"
-    summary = "리더이 멤버를 제외합니다."
+    summary = "리더가 멤버를 제외합니다."
     key = "일행제외"
     input_style = "target"
     transfer = False
@@ -145,7 +135,7 @@ class PartyKick(GameCommand):
 
         party = party_for(self.caller)
         if not party:
-            raise rules.RuleError("소속 일행가 없습니다.")
+            raise rules.RuleError("소속 일행이 없습니다.")
         members = ordered([obj for key in party.state()["members"] if (obj := object_by_id(key))])
         selector = parse_selector(self.args, [n for obj in members for n in names(obj)])
         require_single(selector, self.key)
@@ -156,19 +146,12 @@ class PartyKick(GameCommand):
             party.transfer(self.caller, target)
         else:
             party.remove_member(self.caller, target)
-        message = ft.text(
-            ft.named("player", target.key, "이/가"),
-            " 리더을 맡았다." if self.transfer else " 일행에서 제외되었다.",
-        )
-        announce(party, message)
-        if not self.transfer:
-            target.msg(message)
 
 
 class PartyTransfer(PartyKick):
     category = "일행·교류"
     usage = "플레이어 일행리더"
-    summary = "리더이 권한을 위임합니다."
+    summary = "리더가 권한을 위임합니다."
     key = "일행리더"
     transfer = True
 
@@ -187,7 +170,7 @@ class PartyLootMode(GameCommand):
         with world_change():
             party = party_for(self.caller)
             if not party:
-                raise rules.RuleError("소속 일행가 없습니다.")
+                raise rules.RuleError("소속 일행이 없습니다.")
             party.require_leader(self.caller)
             if self.args.strip() not in ("순번", "round_robin"):
                 raise rules.RuleError("현재 지원하는 전리품 방식: 순번 일행분배")
@@ -195,15 +178,6 @@ class PartyLootMode(GameCommand):
             state["loot_mode"] = "round_robin"
             party.db.state = state
         self.caller.msg("전리품을 참여자 순번으로 배분합니다.")
-
-
-def announce(party, message):
-    from world.multiplayer import object_by_id
-
-    for identity in party.state()["members"]:
-        member = object_by_id(identity)
-        if member:
-            member.msg(message)
 
 
 def required(caller):
