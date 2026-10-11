@@ -21,6 +21,8 @@ class PartyCommandContractTests(GameCommandTest):
     character_typeclass = Explorer
 
     def test_rt01_all_sixteen_commands_aliases_help_and_old_verbs_absent(self):
+        from commands.vocabulary import V14_PARTY_NAMES
+        self.assertEqual(V14_PARTY_NAMES, {name for cls in PARTY_COMMANDS for name in (cls.key, *cls.aliases)})
         expected = {
             "일행": ["무리", "그룹"], "일행모으기": ["그룹만들기", "그룹모으기"],
             "일행초청": ["그룹초청"], "일행합류": ["그룹가입"], "일행거절": [],
@@ -40,6 +42,11 @@ class PartyCommandContractTests(GameCommandTest):
             self.assertIsInstance(page, ft.Text)
             for alias in cls.aliases:
                 self.assertEqual(str(help_page(alias, COMMANDS)), str(page))
+            for name in (cls.key, *cls.aliases):
+                for suffix in ("도움", "도움말"):
+                    with patch.object(self.char1, "msg") as output:
+                        self.char1.execute_cmd(name + " " + suffix)
+                    self.assertTrue(any(cls.summary in str(call.args[0]) for call in output.call_args_list if call.args), name)
 
     def test_rt02_postfix_and_alias_preserve_arguments(self):
         from commands.default_cmdsets import CharacterCmdSet
@@ -177,6 +184,45 @@ class PartyMembershipTests(PartyFixture):
         self.assertIsNone(object_by_id(identity))
         self.assertTrue(all(obj.db.party_id is None for obj in self.people[:3]))
 
+    def test_rt07_rt08_ambiguous_request_target_and_reject_modes(self):
+        from typeclasses.parties import create_party, invite, request_join
+        party = create_party(self.char1)
+        other = create_party(self.people[2])
+        self.char1.key = self.people[2].key = '동명리더'
+        self.char2.execute_cmd('동명리더 일행요청')
+        self.assertFalse(party.state()['join_requests'])
+        self.assertFalse(other.state()['join_requests'])
+        request_join(self.char2, self.char1)
+        invite(self.char1, self.char2)
+        self.char2.execute_cmd('일행거절')
+        self.assertFalse(party.state()['invitations'])
+        self.assertIn(self.char2.pk, party.state()['join_requests'])
+        self.char2.execute_cmd(f'{self.char2.key} 일행거절')
+        self.assertIn(self.char2.pk, party.state()['join_requests'])
+        self.char1.execute_cmd(f'{self.char2.key} 일행거절')
+        self.assertFalse(party.state()['join_requests'])
+
+    def test_rt13_expired_invite_keeps_confirmation_but_leader_change_invalidates(self):
+        from typeclasses.parties import invite
+        party = self.pair()
+        invite(self.char1, self.people[2], now=90)
+        party.dissolve(self.char1, now=100)
+        party.reconcile(now=150)
+        self.assertTrue(self.char1.ndb.party_dissolve_request)
+        party.transfer(self.char1, self.char2)
+        with self.assertRaises(RuleError):
+            party.dissolve(self.char2, True, now=151)
+        party.dissolve(self.char2, now=151)
+        party.remove_member(self.char1, now=152)
+        with self.assertRaises(RuleError):
+            party.dissolve(self.char2, True, now=153)
+        party.dissolve(self.char2, now=153)
+        identity = party.pk
+        party.dissolve(self.char2, True, now=154)
+        with self.assertRaises(RuleError):
+            party.dissolve(self.char2, True, now=155)
+        self.assertIsNone(object_by_id(identity))
+
     def test_rt42_legacy_defaults_preserve_valid_data(self):
         party = self.pair()
         state = party.state()
@@ -252,6 +298,45 @@ class PartyLootRightsTests(NativeLootTest):
         self.assertEqual(party.state()['members'], [self.char1.pk, self.char2.pk])
         self.assertEqual(self.char1.db.party_id, party.pk)
 
+    def test_rt15_rt16_expired_and_legacy_currency_rights_without_shared_recovery(self):
+        from typeclasses.loot import Corpse, can_take_entry
+        from typeclasses.parties import invite, respond
+        from world.loot_entities.models import LootClaim
+        party = invite(self.char1, self.char2)
+        respond(self.char2, True)
+        root = self.loot_item(party=party, assigned=self.char2, deadline=99)
+        LootClaim.objects.filter(item_entity=root).update(assigned_player=None, reserved_player=None)
+        legacy = create_object(Corpse, key='구형 지분 시체', location=self.char1.location)
+        legacy.db.entries = [
+            {'kind':'currency','id':'credits','quantity':8,'reserved_party':party.pk,'protection_until':300,
+             'eligible_players':[self.char1.pk,self.char2.pk],'remaining_shares':{self.char1.pk:4,self.char2.pk:4}},
+            {'kind':'item','id':'bandage','quantity':1,'reserved_party':party.pk,'protection_until':300,
+             'assigned_player':self.char2.pk}]
+        party.dissolve(self.char1, now=100)
+        party.dissolve(self.char1, True, now=101)
+        claim = LootClaim.objects.get(item_entity=root)
+        self.assertEqual((claim.reserved_party_id, claim.protection_until), (None, 99))
+        currency, item = list(legacy.db.entries)
+        self.assertEqual((currency['quantity'], dict(currency['remaining_shares'])), (8,{self.char1.pk:4,self.char2.pk:4}))
+        self.assertTrue(can_take_entry(currency, self.char1, 101))
+        self.assertFalse(can_take_entry(item, self.char1, 101))
+        self.assertTrue(can_take_entry(item, self.char2, 101))
+
+    def test_rt16_partial_currency_shares_stop_deletion_without_reallocation(self):
+        from typeclasses.parties import invite, respond
+        from world import loot_service
+        party = invite(self.char1, self.char2)
+        respond(self.char2, True)
+        currency = loot_service.create_currency(self.source,20,reserved_party=party,protection_until=300,
+                                               shares={self.char1:10,self.char2:10})
+        currency.shares.filter(player=self.char2).update(remaining_amount=9)
+        before = self.all_state()
+        party.dissolve(self.char1, now=100)
+        with self.assertRaises(RuleError):
+            party.dissolve(self.char1, True, now=101)
+        self.assertEqual(self.all_state(), before)
+        self.assertIsNotNone(object_by_id(party.pk))
+
 
 class PartyChatTests(PartyFixture):
     def test_rt28_rt29_private_members_cross_rooms_and_validation(self):
@@ -296,6 +381,23 @@ class PartyChatTests(PartyFixture):
 
 
 class PartySuccessionTests(PartyFixture):
+    def test_rt25_stale_competing_succession_rechecks_current_leader_once(self):
+        from typeclasses.parties import invite, respond
+        party = self.pair()
+        invite(self.char1, self.people[2], now=100)
+        respond(self.people[2], True, now=100)
+        self.set_online(self.char1, 0)
+        party.reconcile_leader(now=100)
+        for obj in self.people:
+            obj.msg = Mock()
+        party.succeed(self.char2, now=700)
+        with self.assertRaises(RuleError):
+            party.succeed(self.people[2], automatic=True, now=700)
+        self.assertEqual(sum('승계했습니다' in str(call.args[0]) for call in self.char2.msg.call_args_list if call.args), 1)
+        party.transfer(self.char2, self.people[2])
+        party.reconcile_leader(now=1000)
+        self.assertEqual(party.state()['leader'], self.people[2].pk)
+
     def test_rt17_rt18_immediate_and_online_rejection(self):
         party = self.pair()
         with self.assertRaises(RuleError):
@@ -421,6 +523,21 @@ class PartyCombatFixture(WorldCommandTest):
 
 
 class PartyAttackTests(PartyCombatFixture):
+    def test_rt03_rt04_existing_combat_invite_and_new_combat_party_denied(self):
+        from typeclasses.parties import Party, create_party, invite
+        party = self.pair()
+        self.enemy.engage(self.char1, now=100)
+        invite(self.char1, self.people[2], now=101)
+        self.assertIn(self.people[2].pk, party.state()['invitations'])
+        self.people[3].change(lambda p: p.update(combat_target=self.enemy.pk))
+        self.enemy.db.combatants = [*self.enemy.db.combatants, self.people[3].pk]
+        before = Party.objects.count()
+        with self.assertRaises(RuleError):
+            create_party(self.people[3], now=101)
+        with self.assertRaises(RuleError):
+            invite(self.people[3], self.people[4], now=101)
+        self.assertEqual(Party.objects.count(), before)
+
     def test_rt31_rt32_rt34_partial_attack_preserves_existing_schedule(self):
         from typeclasses.parties import invite, respond
         party = self.pair()

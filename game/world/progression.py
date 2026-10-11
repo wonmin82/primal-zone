@@ -16,7 +16,7 @@ SKILLS = {
     "shooting": {"name": "사격", "max_rank": 20, "type": "active", "group": "공격", "description": "총기로 방어를 관통하는 공격"},
     "insight": {"name": "간파", "max_rank": 10, "type": "preparation", "group": "공격", "description": "공격 한 차례를 포기하고 대상의 약점 분석"},
     "suppress": {"name": "견제", "max_rank": 10, "type": "active", "group": "전술·지원", "description": "다음 공격으로 대상의 공격력 감소"},
-    "heal": {"name": "치료", "max_rank": 20, "type": "active", "group": "전술·지원", "description": "정신력으로 자신 또는 같은 방 파티원 치료"},
+    "heal": {"name": "치료", "max_rank": 20, "type": "active", "group": "전술·지원", "description": "정신력으로 자신 또는 같은 방 일행원 치료"},
     "breathing": {"name": "호흡", "max_rank": 10, "type": "preparation", "group": "전술·지원", "description": "공격 한 차례를 포기하고 정신력 회복"},
 }
 for identity, data in SKILLS.items():

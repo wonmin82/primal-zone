@@ -20,7 +20,7 @@ class LootTests(WorldCommandTest):
         for player in (self.char1, self.char2):
             player.location = self.rooms["grass"]
             player.push_state = Mock()
-            self.enterContext(patch.object(player.sessions, "count", return_value=1))
+            self.connect_character(player)
         for module in ("enemies", "explorers", "loot"):
             self.enterContext(patch(f"typeclasses.{module}.delay"))
         self.enemy = room_enemies(self.rooms["grass"])[0]

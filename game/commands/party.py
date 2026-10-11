@@ -14,7 +14,7 @@ class PartyCommand(GameCommand):
     key = "일행"
 
     def run(self):
-        from typeclasses.parties import invitation_for, party_for
+        from typeclasses.parties import invitation_for, online, party_for, request_for
         from world.multiplayer import object_by_id
 
         party = party_for(self.caller)
@@ -24,7 +24,8 @@ class PartyCommand(GameCommand):
             leader = object_by_id(state["leader"])
             summary = ft.text(
                 "리더 ",
-                ft.token("player", leader.key),
+                ft.token("player", leader.key if leader else "없음"),
+                " (온라인)" if online(leader) else " (오프라인·일행승계 가능)",
                 " · 전리품 ",
                 "순번" if state["loot_mode"] == "round_robin" else state["loot_mode"],
             )
@@ -39,6 +40,9 @@ class PartyCommand(GameCommand):
                         )
                     )
             lines.append(ft.text("멤버: ", ft.join(members, " · ")))
+            defender = object_by_id(state["tactics"].get("defender_id"))
+            lines.append(ft.text("방어 담당: ", ft.token("player", defender.key) if defender else "없음", " · 지정은 전투 밖에서도 유지"))
+            lines.append(ft.text("대기 초청 ", str(len(state["invitations"])), " · 가입 요청 ", str(len(state["join_requests"]))))
         else:
             summary = ft.text("소속 일행 없음 · 플레이어이름 ", ft.token("command", "일행초청"))
         invited, invitation = invitation_for(self.caller)
@@ -54,6 +58,9 @@ class PartyCommand(GameCommand):
                     ft.token("command", "일행거절"),
                 )
             )
+        requested, _ = request_for(self.caller)
+        if requested:
+            lines.append(ft.text("가입 요청: 일행 #", str(requested.pk), " (60초 이내)"))
         self.caller.msg(ft.compact("일행", *lines, summary=summary))
 
 

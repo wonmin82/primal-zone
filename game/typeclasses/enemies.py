@@ -156,7 +156,7 @@ class Enemy(DistantPresenceMixin, DefaultObject):
             if profile.get("combat_target") not in (None, self.id):
                 raise rules.RuleError("현재 상대에게서 먼저 도망하세요.")
             if not self.can_attack(player):
-                owner = "다른 파티" if str(self.db.claim).startswith("party:") else "다른 탐사자"
+                owner = "다른 일행" if str(self.db.claim).startswith("party:") else "다른 탐사자"
                 raise rules.RuleError(
                     f"{self.key}{ft.particle(self.key, '은/는')} {owner}와 교전 중입니다."
                 )

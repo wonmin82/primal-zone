@@ -24,6 +24,8 @@ class EconomyTests(WorldCommandTest):
 
     def setUp(self):
         super().setUp()
+        self.connect_character(self.char1)
+        self.connect_character(self.char2)
         self.rooms = self.world_rooms()
         for player in (self.char1, self.char2):
             player.location = self.rooms["storage_room"]
@@ -122,6 +124,7 @@ class EconomyTests(WorldCommandTest):
         corpse.db.entries = [self.currency_entry(21, {self.char1.id: 11, self.char2.id: 10}, 220)]
         party.transfer(self.char1, self.char2)
         party.remove_member(self.char1)
+        self.connect_character(third)
         invite(self.char2, third)
         respond(third, True)
         self.assertIn(corpse, room_loot(self.char1.location))

@@ -41,7 +41,7 @@ class SemanticTextTests(WorldCommandTest):
             player.location = self.rooms["dock"]
             player.home = self.rooms["dock"]
             player.push_state = Mock()
-            self.enterContext(patch.object(player.sessions, "count", return_value=1))
+            self.connect_character(player)
         for module in ("enemies", "explorers", "loot"):
             self.enterContext(patch(f"typeclasses.{module}.delay"))
 
@@ -231,16 +231,16 @@ class SemanticTextTests(WorldCommandTest):
                 command.run()
             return message.call_args.args[0]
 
-        self.assertIn("소속 파티 없음", output(PartyCommand(), self.char2))
+        self.assertIn("소속 일행 없음", output(PartyCommand(), self.char2))
         invite(self.char1, self.char2)
         invitation = output(PartyCommand(), self.char2)
         self.assertIn(self.char1.key, tokens(invitation, "player"))
-        self.assertTrue({"파티수락", "파티거절"}.issubset(tokens(invitation, "command")))
+        self.assertTrue({"일행합류", "일행거절"}.issubset(tokens(invitation, "command")))
         respond(self.char2, True)
         party = output(PartyCommand(), self.char1)
-        self.assertIn(f"파티장 {self.char1.key} · 전리품 순번", party)
+        self.assertIn(f"리더 {self.char1.key} (온라인) · 전리품 순번", party)
         self.assertIn(f"{self.char1.key}(장) · {self.char2.key}", party)
-        self.assertEqual(len(party.splitlines()), 2)
+        self.assertEqual(len(party.splitlines()), 4)
         help_text = output(Help(), self.char1)
         for cls in COMMANDS:
             if getattr(cls, "input_style", None):

@@ -39,7 +39,7 @@ class GrowthReviewTests(WorldCommandTest):
         for player in (self.char1, self.char2):
             player.location = self.rooms["training_room"]
             player.push_state = Mock()
-            self.enterContext(patch.object(player.sessions, "count", return_value=1))
+            self.connect_character(player)
         for module in ("enemies", "explorers", "loot"):
             self.enterContext(patch(f"typeclasses.{module}.delay"))
 
@@ -130,7 +130,7 @@ class GrowthReviewTests(WorldCommandTest):
         for index in range(6):
             player = create_object(Explorer, key=f"견제참여자{index}", location=enemy.location)
             player.push_state = Mock()
-            self.enterContext(patch.object(player.sessions, "count", return_value=1))
+            self.connect_character(player)
             players.append(player)
         for player in players:
             player.location = enemy.location
@@ -289,4 +289,4 @@ class GrowthReviewTests(WorldCommandTest):
             self.assertEqual(search_tag(enemy.db.spawn_id, category="primal_spawn")[0].id, enemy.id)
             self.assertEqual({obj.id for room in self.rooms.values() for obj in action_objects(room)}, old_ids)
             self.assertEqual(self.char1.profile(), before)
-            self.assertEqual(self.char1.profile()["version"], 13)
+            self.assertEqual(self.char1.profile()["version"], 14)

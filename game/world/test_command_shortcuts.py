@@ -142,7 +142,7 @@ class ShortcutMigrationV11Tests(TestCase):
                        storage={"scrap": 3}, visited=["dock", "ridge"], hp=30, mental=25)
             before = deepcopy(old)
             migrated = rules.migrate_profile(old)
-            self.assertEqual(migrated["version"], 13)
+            self.assertEqual(migrated["version"], 14)
             self.assertEqual(old, before)
             for key in ("xp", "credits", "storage", "visited", "hp", "mental", "quests", "inventory", "equipment"):
                 baseline = rules.migrate_profile({**before, "command_shortcuts": {}})
@@ -163,7 +163,7 @@ class ShortcutMigrationV11Tests(TestCase):
             old.update(version=7, command_shortcuts=value, credits=83)
             migrated = rules.migrate_profile(old)
             self.assertEqual(migrated["credits"], 83)
-            self.assertEqual(migrated["version"], 13)
+            self.assertEqual(migrated["version"], 14)
             expected = {"정상": "점수", "비활성": None} if isinstance(value, dict) and "정상" in value else value
             self.assertEqual(migrated["command_shortcuts"], expected)
 

@@ -25,9 +25,9 @@ async def run(harness):
         print(json.dumps(row, ensure_ascii=False), flush=True)
 
     async def join(leader, member):
-        await leader.expect_text(member.name + " 파티초대", "초대를 보냈다")
-        await member.expect_text("파티수락", "합류했다")
-        await leader.act("파티")
+        await leader.expect_text(member.name + " 일행초청", "초대를 보냈다")
+        await member.expect_text("일행합류", "합류했다")
+        await leader.act("일행")
 
     async def fight(name, participants, maximum):
         for player in participants:
@@ -95,11 +95,11 @@ async def run(harness):
         gained = [player.state["xp"] - old for player, old in zip(players, xp)]
         assert sum(gained) == 130 and all(amount > 0 for amount in gained), gained
         record("4-player XP", gained=gained, total=130)
-        await a.expect_text(d.name + " 파티제외", "제외되었다")
-        await c.expect_text("파티탈퇴", "떠났다")
-        await a.expect_text(b.name + " 파티장위임", "파티장을 맡았다")
-        await a.expect_text("파티탈퇴", "떠났다")
-        await b.expect_text("파티탈퇴", "떠났다")
+        await a.expect_text(d.name + " 일행제외", "일행에서 나갔다")
+        await c.expect_text("일행탈퇴", "일행에서 나왔습니다")
+        await a.expect_text(b.name + " 일행리더", "리더를 맡았다")
+        await a.expect_text("일행탈퇴", "일행에서 나왔습니다")
+        await b.expect_text("일행탈퇴", "일행에서 나왔습니다")
         record("party lifecycle", invite_accept_kick_leave_leader_cleanup=True)
         # 첫 Boss는 나머지 세 전투 중 production corpse/respawn 시간을 경과했다.
         await a.until(lambda s: any(row["name"] == "일인검증우두머리" and row["state"] == "alive"

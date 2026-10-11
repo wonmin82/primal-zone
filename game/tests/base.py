@@ -35,7 +35,7 @@ class GameCommandTest(EvenniaCommandTest):
 
     def connect_character(self, character):
         """온라인 전제 테스트에 실제 puppet 속성을 가진 독립 세션을 제공한다."""
-        session = SimpleNamespace(puppet=character, logged_in=True, protocol_key="telnet", data_out=Mock())
+        session = SimpleNamespace(puppet=character, logged_in=True, protocol_key="telnet", data_out=Mock(), msg=Mock(), sessid=-1)
         self.enterContext(patch.object(character.sessions, "all", return_value=[session]))
         self.enterContext(patch.object(character.sessions, "count", return_value=1))
         return session

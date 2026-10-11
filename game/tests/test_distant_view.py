@@ -181,7 +181,7 @@ class DistantViewTests(WorldCommandTest):
             "꺼내",
             "대화",
             "체력",
-            "파티",
+            "일행",
         ):
             self.assertNotIn(secret, output)
         self.assertEqual(box.db.items, {"bandage": 9, "water": 8})

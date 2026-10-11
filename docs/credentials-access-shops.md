@@ -12,7 +12,7 @@ Phase 6 현재 상태: cutover 후 일반 gameplay는 native ItemEntity만 사�
 
 ## 공간 접근과 이동 경로
 
-`world.access.can_enter(character, destination)`은 read-only다. 단일 판정 helper `entry_message()`가 available → 실제 출입증 → 기존 requires quest/flag 순으로 검사한다. availability=false인 시설은 출입증이 있어도 닫혀 있으며 특수 출입증 보유자에게 `출입 권한은 확인되지만 시설은 아직 폐쇄되어 있다.`를 표시한다. quest claimed 자체나 파티원/리더의 출입증은 접근권이 아니다. 제한은 목적지 진입에만 적용해 제한실에서 일반 복도로 나가는 것은 허용한다.
+`world.access.can_enter(character, destination)`은 read-only다. 단일 판정 helper `entry_message()`가 available → 실제 출입증 → 기존 requires quest/flag 순으로 검사한다. availability=false인 시설은 출입증이 있어도 닫혀 있으며 특수 출입증 보유자에게 `출입 권한은 확인되지만 시설은 아직 폐쇄되어 있다.`를 표시한다. quest claimed 자체나 일행원/리더의 출입증은 접근권이 아니다. 제한은 목적지 진입에만 적용해 제한실에서 일반 복도로 나가는 것은 허용한다.
 
 | 실제 경로 | 공통 접근 연결 | 범위 |
 | --- | --- | --- |

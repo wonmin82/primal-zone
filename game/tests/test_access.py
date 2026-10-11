@@ -48,6 +48,8 @@ class AccessTests(Phase5Test):
         self.assertEqual(self.char1.zone, "support_5f_w2")
 
     def test_party_does_not_share_credential(self):
+        self.connect_character(self.char1)
+        self.connect_character(self.char2)
         invite(self.char1, self.char2)
         respond(self.char2, True)
         grant_credential(self.char1, "outpost_supply_pass")

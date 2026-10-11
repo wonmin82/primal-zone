@@ -19,7 +19,7 @@ class WebStateTests(WorldCommandTest):
         for player in (self.char1, self.char2):
             player.location = self.rooms["grass"]
             player.push_state = Mock()
-            self.enterContext(patch.object(player.sessions, "count", return_value=1))
+            self.connect_character(player)
         for module in ("enemies", "explorers", "loot"):
             self.enterContext(patch(f"typeclasses.{module}.delay"))
 
@@ -38,6 +38,34 @@ class WebStateTests(WorldCommandTest):
         self.assertFalse(inside["party"]["is_leader"])
         self.assertIsNone(inside["invitation"])
         json.dumps(inside)
+
+    def test_rt45_tactics_succession_requests_and_confirm_snapshot(self):
+        from evennia import create_object
+        from typeclasses.parties import request_join
+        party = invite(self.char1, self.char2, now=100)
+        respond(self.char2, True, now=101)
+        third = create_object(Explorer, key="요청탐사자", location=self.char1.location)
+        self.connect_character(third)
+        third.push_state = Mock()
+        request_join(third, self.char1, now=102)
+        party.set_defender(self.char1, self.char2)
+        party.dissolve(self.char1, now=102)
+        before = multiplayer_state(self.char1, now=103)["party"]
+        self.assertTrue(before["confirm_dissolve"])
+        self.assertEqual(before["max_size"], 4)
+        self.assertEqual(before["join_requests"][0]["id"], third.pk)
+        self.assertEqual(before["defender"], {"id": self.char2.pk, "name": self.char2.key, "online": True, "active": False})
+        self.assertTrue(multiplayer_state(third, now=103)["join_request"])
+        with patch.object(self.char1.sessions, "all", return_value=[]), patch.object(self.char1.sessions, "count", return_value=0):
+            state = multiplayer_state(self.char2, now=103)["party"]
+            self.assertTrue(state["can_succeed"])
+            self.assertFalse(state["leader_online"])
+            party.succeed(self.char2, now=104)
+        after = multiplayer_state(self.char2, now=104)["party"]
+        self.assertTrue(after["is_leader"])
+        self.assertEqual(after["defender"]["id"], self.char2.pk)
+        self.assertFalse(after["confirm_dissolve"])
+        self.assertEqual(after["join_requests"], before["join_requests"])
 
     def test_corpse_ground_and_expired_reservation_snapshot(self):
         enemy = room_enemies(self.rooms["grass"])[0]

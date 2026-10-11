@@ -42,7 +42,7 @@ class DialogueMigrationTests(TestCase):
         old.update(version=12, command_shortcuts={"이전": "윤대장 대화", "읽기": "점수"})
         before = deepcopy(old)
         migrated = rules.migrate_profile(old)
-        self.assertEqual(migrated["version"], 13)
+        self.assertEqual(migrated["version"], 14)
         for key in before:
             if key not in ("version", "command_shortcuts"):
                 self.assertEqual(migrated[key], before[key], key)

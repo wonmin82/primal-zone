@@ -23,7 +23,7 @@ class RewardTests(WorldCommandTest):
         for player in self.players:
             player.location = self.rooms["grass"]
             player.push_state = Mock()
-            self.enterContext(patch.object(player.sessions, "count", return_value=1))
+            self.connect_character(player)
         self.enterContext(patch("typeclasses.enemies.delay"))
         self.enterContext(patch("typeclasses.explorers.delay"))
         self.enemy = room_enemies(self.rooms["grass"])[0]

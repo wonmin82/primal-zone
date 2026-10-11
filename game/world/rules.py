@@ -16,7 +16,7 @@ from world.progression import ATTRIBUTES, SKILLS
 from world.quests import progress_defaults
 
 MAX_LEVEL = pg.MAX_LEVEL
-PROFILE_VERSION = 13
+PROFILE_VERSION = 14
 DEFEAT_RECOVERY_HP = 1
 
 
@@ -597,6 +597,9 @@ def migrate_profile(profile):
         from commands.vocabulary import migrate_dialogue_shortcuts
 
         result["command_shortcuts"] = migrate_dialogue_shortcuts(result.get("command_shortcuts", {}))
+    if version < 14:
+        from commands.vocabulary import migrate_party_shortcuts
+        result["command_shortcuts"] = migrate_party_shortcuts(result.get("command_shortcuts", {}))
     normalize_growth(result)
     recovery.clamp(result, stats(result))
     return result

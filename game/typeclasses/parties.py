@@ -55,8 +55,10 @@ def in_combat(character):
     """오래된 profile target만으로 교전이라고 판정하지 않는다."""
     from typeclasses.enemies import Enemy
 
-    enemy = object_by_id(character.profile().get("combat_target"))
+    profile = character.profile()
+    enemy = object_by_id(profile.get("combat_target"))
     return bool(isinstance(enemy, Enemy) and enemy.db.state == "alive"
+                and online(character) and profile["hp"] > 0
                 and character.id in (enemy.db.combatants or []) and enemy.location == character.location)
 
 
@@ -225,7 +227,7 @@ def preserve_loot(party, now):
         shares = list(row.shares.all())
         if (row.reserved_player_id and not personal(row.reserved_player_id)
                 or any(not personal(share.player_id) for share in shares)
-                or now < row.protection_until and not (shares or row.reserved_player_id)):
+                or now < row.protection_until and (not shares or sum(share.remaining_amount for share in shares) != row.quantity)):
             raise RuleError("확정 개인 화폐 지분을 보존할 수 없어 일행 삭제를 중단합니다.")
     for source in [*Corpse.objects.all(), *DroppedLoot.objects.all()]:
         entries = deserialize(source.db.entries)
@@ -239,7 +241,9 @@ def preserve_loot(party, now):
             identities = ([entry.get("assigned_player"), entry.get("reserved_player")]
                           if entry["kind"] == "item" else [*entry["eligible_players"], entry.get("reserved_player")])
             identities = [identity for identity in identities if identity is not None]
-            if any(not personal(identity) for identity in identities) or now < entry["protection_until"] and not identities:
+            if (any(not personal(identity) for identity in identities)
+                    or now < entry["protection_until"] and (not identities or entry["kind"] == "currency"
+                    and sum(entry["remaining_shares"].values()) != entry["quantity"])):
                 raise RuleError("구형 전리품 개인 권리를 보존할 수 없어 일행 삭제를 중단합니다.")
             raw["reserved_party"] = None
             changed = True
@@ -481,7 +485,6 @@ class Party(DefaultObject):
         """최고 위협도 기본 대상과 같은 일행의 유효 참가 담당자에게만 적용한다."""
         if party_for(default) != self:
             return default
-        self.reconcile()
         defender = object_by_id(self.state()["tactics"].get("defender_id"))
         participants = enemy.active_players() if participants is None else participants
         if (defender in participants and online(defender) and party_for(defender) == self

@@ -29,7 +29,7 @@ class RegionTests(WorldCommandTest):
             player.location = self.rooms["dock"]
             player.home = self.rooms["dock"]
             player.push_state = Mock()
-            self.enterContext(patch.object(player.sessions, "count", return_value=1))
+            self.connect_character(player)
         for module in ("enemies", "explorers", "loot"):
             self.enterContext(patch(f"typeclasses.{module}.delay"))
 
@@ -291,7 +291,7 @@ class RegionTests(WorldCommandTest):
         self.assertEqual(ENEMIES["jungle_apex"]["combat_mode"], "public")
         third = create_object(Explorer, key="세번째탐사자")
         third.push_state = Mock()
-        self.enterContext(patch.object(third.sessions, "count", return_value=1))
+        self.connect_character(third)
         for player in (self.char1, self.char2, third):
             player.location = self.rooms["jungle_nest"]
         party = invite(self.char2, third, now=100)

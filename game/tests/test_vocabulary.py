@@ -123,8 +123,8 @@ class VocabularyTests(WorldCommandTest):
         self.assertTrue(set(data["alias"] for data in DIRECTIONS.values()).issubset(
             set(tokens(category_page("이동·탐사", commands), "direction"))))
         self.assertIn("가진거", self.raw("소 도움말"))
-        self.assertIn("소속 파티", self.raw("파티"))
-        self.assertIn("사용법", self.raw("파티 도움말"))
+        self.assertIn("소속 일행", self.raw("일행"))
+        self.assertIn("사용법", self.raw("일행 도움말"))
         self.assertIn("묶음 실행", self.raw("입력 도움말"))
         self.assertIn("'도움말' 대상을 찾을 수 없습니다", self.raw("도움말 공격"))
         page = shortcut_page()
