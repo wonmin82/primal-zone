@@ -253,6 +253,48 @@ class PartyLootRightsTests(NativeLootTest):
         self.assertEqual(self.char1.db.party_id, party.pk)
 
 
+class PartyChatTests(PartyFixture):
+    def test_rt28_rt29_private_members_cross_rooms_and_validation(self):
+        from world import private_messaging
+        party = self.pair()
+        self.char2.location = self.room2
+        private = private_messaging.state(self.char2)
+        private['blocked_character_ids'] = [self.char1.pk]
+        self.char2.attributes.add(private_messaging.ATTRIBUTE, private)
+        before = private_messaging.state(self.char2)
+        for obj in self.people:
+            obj.msg = Mock()
+        party.chat(self.char1, '모여 주세요')
+        messages = [obj.msg.call_args.args[0] for obj in self.people[:2]]
+        self.assertEqual([str(value) for value in messages], [f'[일행] {self.char1.key}: 모여 주세요'] * 2)
+        self.assertTrue(all(isinstance(value, ft.Text) and value.kind == 'chat' for value in messages))
+        self.assertEqual(private_messaging.state(self.char2), before)
+        self.assertTrue(all(not obj.msg.called for obj in self.people[2:]))
+        for body in ('', 'x' * 301, 'bad\x1b[31m', 'bad\x00'):
+            with self.assertRaises(RuleError):
+                party.chat(self.char1, body)
+
+    def test_rt30_delivery_rechecks_departed_recipient_and_sender(self):
+        party = self.pair()
+        callbacks = []
+        with patch('typeclasses.parties.after_change', side_effect=callbacks.append):
+            party.chat(self.char1, '윤대장에게 수락')
+        party.remove_member(self.char2)
+        for obj in self.people:
+            obj.msg = Mock()
+        callbacks[0]()
+        self.assertTrue(self.char1.msg.called)
+        self.assertFalse(self.char2.msg.called)
+        self.assertIsNone(self.char1.ndb.npc_dialogue_context)
+        self.char1.msg.reset_mock()
+        identity = party.pk
+        party.remove_member(self.char1)
+        self.char1.msg.reset_mock()
+        self.assertIsNone(object_by_id(identity))
+        callbacks[0]()
+        self.assertFalse(self.char1.msg.called)
+
+
 class PartySuccessionTests(PartyFixture):
     def test_rt17_rt18_immediate_and_online_rejection(self):
         party = self.pair()

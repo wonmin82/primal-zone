@@ -384,6 +384,29 @@ class Party(DefaultObject):
                          "이/가 일행 리더를 " + ("자동 " if automatic else "즉시 ") + "승계했습니다.")))
             return True
 
+    def chat(self, caller, value):
+        from world.npc_dialogue import validate_message
+        body = validate_message(value)
+        with world_change():
+            if party_for(caller) != self or not online(caller):
+                raise RuleError("온라인 일행 구성원만 일행대화를 보낼 수 있습니다.")
+            recipients = tuple(self.state()["members"])
+            message = ft.text("[일행] ", ft.token("player", caller.key), ": ", body, kind="chat")
+            after_change(lambda: self.deliver_chat(caller, recipients, message))
+
+    def deliver_chat(self, caller, recipients, message):
+        from evennia.utils import logger
+        for identity in recipients:
+            with world_change():
+                if not self.pk or party_for(caller) != self:
+                    return
+                recipient = object_by_id(identity)
+                if online(recipient) and party_for(recipient) == self:
+                    try:
+                        recipient.msg(message)
+                    except Exception:
+                        logger.log_trace("일행대화 전달 시도 실패 (본문 미기록)")
+
     def dissolve(self, caller, confirm=False, now=None):
         now = time() if now is None else now
         with world_change():
