@@ -85,6 +85,7 @@ def multiplayer_state(player, now=None):
     now = time() if now is None else now
     from typeclasses.interactables import ActionObject
 
+    from world.doors import web_controls as door_controls
     from world.lifecycle import reconcile_room
     from world.npc_dialogue import accessible as dialogue_accessible
     from world.npc_dialogue import supports as dialogue_supports
@@ -184,7 +185,7 @@ def multiplayer_state(player, now=None):
             }
             for obj in objects
             if isinstance(obj, ActionObject)
-        ],
+        ] + door_controls(player, now),
         "party": party_data,
         "invitation": {
             "party_id": invited.id,

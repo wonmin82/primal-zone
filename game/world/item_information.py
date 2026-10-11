@@ -10,7 +10,7 @@ from world.currency import format_currency
 from world.equipment_service import entity_runtime, resolve_item, selector_label, state_summary
 from world.item_entities.policy import can_item_operation
 
-TYPE_LABELS = {"weapon": "무기", "equipment": "방어구", "hand_equipment": "손 장비",
+TYPE_LABELS = {"key": "열쇠", "weapon": "무기", "equipment": "방어구", "hand_equipment": "손 장비",
                "credential": "출입증", "consumable": "소모품", "tool": "도구",
                "magazine": "탄창", "ammo": "탄약", "resource": "자원", "quest": "임무 물품"}
 MODIFIER_LABELS = {

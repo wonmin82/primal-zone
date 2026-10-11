@@ -15,13 +15,16 @@ def get_room(zone_id):
 
 
 def build_world():
+    from world.doors import install_doors
     from world.item_runtime import initialize_fresh, maintenance
 
     with world_change():
         validate_managed_exits()
         if not maintenance.get():
             initialize_fresh()
-        return _build_world()
+        rooms = _build_world()
+        install_doors()
+        return rooms
 
 
 def validate_managed_exits():
@@ -133,6 +136,10 @@ def _build_world():
             for existing in search_tag(f"{zone_id}:{direction}", category=EXIT_CATEGORY):
                 existing.delete()
         for direction, target in data["exits"].items():
+            from world.doors import preserved_endpoint
+            if preserved_endpoint(zone_id, direction):
+                # 운영 설치 증거가 있는 endpoint는 기존 PK/목적지를 절대 재작성하지 않는다.
+                continue
             identity = f"{zone_id}:{direction}"
             existing = next(iter(search_tag(identity, category=EXIT_CATEGORY)), None)
             if not existing:

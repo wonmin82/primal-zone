@@ -62,4 +62,9 @@ def definition_errors(identity, definition):
         if not definition.get("credential_properties", {}).get("quest"):
             issues.append(f"{identity}: 출입증 재발급 임무가 필요합니다.")
 
+    if definition.get("item_type") == "key":
+        if (definition.get("stackable") is not False or definition.get("max_stack") != 1
+                or definition.get("unique_per_owner") is not True
+                or not isinstance(policy, dict) or any(policy.get(op) is not False for op in TREE_OPERATION_SCOPES)):
+            issues.append(f"{identity}: 열쇠는 수량 1의 고유 물품이며 모든 변경 operation을 제한합니다.")
     return issues + equipment_errors(identity, definition) + state_errors(identity, definition)

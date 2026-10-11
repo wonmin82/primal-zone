@@ -471,6 +471,13 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         return deliver
 
     def at_pre_move(self, destination, move_type="move", **kwargs):
+        # 손상된 endpoint가 기본 Exit Typeclass로 바뀌어도 엔진 경로에서 문을 우회하지 않는다.
+        exit_obj = kwargs.get("exit_obj")
+        if move_type == "traverse" and exit_obj:
+            from world.doors import state_for_exit
+            if state_for_exit(exit_obj) not in (None, "OPEN"):
+                self.msg(ft.text("출구를 이용할 수 없습니다."))
+                return False
         profile = self.profile()
         if profile.get("combat_target"):
             self.msg("전투 중에는 이동할 수 없습니다. '도망'으로 교전을 끝내세요.")

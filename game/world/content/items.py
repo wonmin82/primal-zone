@@ -41,6 +41,14 @@ ITEMS = {
     },
 }
 
+ITEMS["hq_admin_key"] = {
+    "name": "관리실 열쇠", "aliases": ["관리실열쇠"], "slot": "key", "item_type": "key",
+    "stackable": False, "max_stack": 1, "unique_per_owner": True, "transferable": False,
+    "description": "관리실 문의 잠금을 조작하는 개인 열쇠다. 내부 래치로는 열쇠 없이 잠금을 풀 수 있다. 출입증이나 임무 조건을 대신하지 않는다.",
+    "operation_policy": {operation: False for operation in (
+        "drop", "give", "store", "sell", "burn", "consume", "equip", "unequip", "loot", "load", "unload", "submit")},
+}
+
 # Phase 3의 탄창·탄약 구조에 Phase 6 최종 가격과 획득 경로를 연결한다.
 for identity, name, alias, family, ammo_type, capacity in (
     ("mag_9_small", "9mm 소형탄창", "권총소형", "pistol_9mm", "9mm", 8),

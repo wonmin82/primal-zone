@@ -23,10 +23,11 @@ class GameCommand(Command):
         try:
             self.run()
             from typeclasses.explorers import Explorer
+            from world.multiplayer import after_change
 
             for player in Explorer.objects.all():
                 if player.sessions.count():
-                    player.push_state()
+                    after_change(player.push_state)
         except rules.RuleError as error:
             self.caller.msg(ft.text(ft.token("error", str(error)), kind="error"))
 

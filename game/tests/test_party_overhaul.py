@@ -21,8 +21,10 @@ class PartyCommandContractTests(GameCommandTest):
     character_typeclass = Explorer
 
     def test_rt01_all_sixteen_commands_aliases_help_and_old_verbs_absent(self):
+        from commands.doors import DOOR_COMMANDS
         from commands.vocabulary import V13_RUNTIME_NAMES, V14_PARTY_NAMES
-        self.assertSetEqual(set(V13_RUNTIME_NAMES), {name for cls in COMMANDS if cls not in PARTY_COMMANDS
+        # #49 문 명령은 v13 당시 CmdSet에 없었다. 역사적 SSOT 자체는 바꾸지 않는다.
+        self.assertSetEqual(set(V13_RUNTIME_NAMES), {name for cls in COMMANDS if cls not in (*PARTY_COMMANDS, *DOOR_COMMANDS)
                                             for name in (cls.key, *cls.aliases)})
         self.assertEqual(V14_PARTY_NAMES, {name for cls in PARTY_COMMANDS for name in (cls.key, *cls.aliases)})
         expected = {

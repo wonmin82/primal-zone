@@ -11,6 +11,7 @@ def exit_entries(viewer, room=None, observed_at=None, *, reveal_observed=True):
     """나침반·조회·지도·웹이 공유하는 공개 정보. 숨긴 목적지 ID는 반환하지 않는다."""
     from world.access import entry_message
     from world.distant_presentation import DistantViewContext
+    from world.doors import exit_block, state_for_exit
     from world.observation import can_perceive, context_for
 
     room = viewer.location if room is None else room
@@ -52,6 +53,11 @@ def exit_entries(viewer, room=None, observed_at=None, *, reveal_observed=True):
             status, reason = "전투 중 이동 불가", "전투 중에는 이동할 수 없습니다."
         else:
             status = "이동 가능"
+        door_reason = exit_block(obj, viewer, now)
+        if not reason and door_reason:
+            reason = door_reason
+            state = state_for_exit(obj, now)
+            status = "문 잠김" if state == "LOCKED" and "잠겨" in reason else "문 닫힘" if state == "CLOSED" and "닫혀" in reason else "시설 폐쇄"
         disclosed = False
         if destination and destination.access(viewer, "view"):
             visited = destination.db.zone_id in profile.get("visited", ())

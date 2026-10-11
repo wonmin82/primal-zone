@@ -72,6 +72,7 @@ INPUT_FUNC_MODULES = ["evennia.server.inputfuncs", "server.conf.primal_inputfunc
 COMMAND_PARSER = "server.conf.cmdparser.cmdparser"
 INSTALLED_APPS = [*INSTALLED_APPS, "world.item_entities.apps.ItemEntitiesConfig"]  # noqa: F405
 INSTALLED_APPS += ["world.loot_entities.apps.LootEntitiesConfig"]
+INSTALLED_APPS += ["world.door_entities.apps.DoorEntitiesConfig"]
 
 # Optional PostgreSQL configuration for the private playtest.
 if os.environ.get("PRIMAL_DB_NAME"):

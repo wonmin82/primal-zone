@@ -38,16 +38,18 @@ class BootstrapExitTests(WorldCommandTest):
         existing = search_tag("hq_concourse:북", category=EXIT_CATEGORY)[0]
         identity = existing.id
         existing.destination = self.rooms["dock"]
-        missing = search_tag("hq_concourse:동", category=EXIT_CATEGORY)[0]
+        # Door에 결부된 동 Exit는 D13에 따라 소실 후 재생성하지 않는다.
+        # 기존 일반 Exit의 자동 생성 계약은 문 없는 남 Exit에서 그대로 검사한다.
+        missing = search_tag("hq_concourse:남", category=EXIT_CATEGORY)[0]
         missing.delete()
         build_world()
         self.assertEqual(existing.id, identity)
         self.assertEqual(existing.destination, self.rooms["staging_room"])
-        created = search_tag("hq_concourse:동", category=EXIT_CATEGORY)[0].id
+        created = search_tag("hq_concourse:남", category=EXIT_CATEGORY)[0].id
         count = ObjectDB.objects.count()
         build_world()
         self.assertEqual(ObjectDB.objects.count(), count)
-        self.assertEqual(search_tag("hq_concourse:동", category=EXIT_CATEGORY)[0].id, created)
+        self.assertEqual(search_tag("hq_concourse:남", category=EXIT_CATEGORY)[0].id, created)
 
     def test_same_direction_unmanaged_exit_blocks_before_any_world_change(self):
         managed = search_tag("hq_concourse:북", category=EXIT_CATEGORY)[0]

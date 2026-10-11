@@ -16,6 +16,7 @@ from commands.character import (
 )
 from commands.combat import Attack, Breathe, Flee, Heal, Heavy, Insight, Shooting, Suppress, Use
 from commands.command_shortcuts import DeleteShortcut, Sequence, Shortcuts
+from commands.doors import DOOR_COMMANDS
 from commands.firearms import FillMagazine, LoadMagazine, Reload
 from commands.incinerator import Burn
 from commands.inventory import (
@@ -65,6 +66,7 @@ COMMANDS = [
     Retrain,
     Take,
     *PARTY_COMMANDS,
+    *DOOR_COMMANDS,
     Look,
     Exits,
     Weather,
