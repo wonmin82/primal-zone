@@ -461,6 +461,35 @@ class Party(DefaultObject):
         caller.msg(report())
         return {"new": new, "existing": existing, "skipped": skipped}
 
+    def set_defender(self, caller, target):
+        with world_change():
+            self.require_leader(caller)
+            state = self.state()
+            if target and (target.pk not in state["members"] or party_for(target) != self):
+                raise RuleError("현재 일행 구성원을 지정하세요.")
+            identity = target.pk if target else None
+            unchanged = state["tactics"].get("defender_id") == identity
+            if not unchanged:
+                state["tactics"]["defender_id"] = identity
+                self.db.state = state
+            after_change(lambda: caller.msg(ft.text("방어 담당: ", ft.token("player", target.key) if target else "없음",
+                         " (변경 없음)" if unchanged else " (영속 지정 변경)")))
+            if not unchanged:
+                after_change(lambda: announce(self, "일행 방어 담당 설정이 변경되었습니다."))
+
+    def defense_target(self, enemy, default, participants=None):
+        """최고 위협도 기본 대상과 같은 일행의 유효 참가 담당자에게만 적용한다."""
+        if party_for(default) != self:
+            return default
+        self.reconcile()
+        defender = object_by_id(self.state()["tactics"].get("defender_id"))
+        participants = enemy.active_players() if participants is None else participants
+        if (defender in participants and online(defender) and party_for(defender) == self
+                and defender.location == enemy.location and defender.profile()["hp"] > 0
+                and defender.profile().get("combat_target") == enemy.pk and enemy.can_attack(defender)):
+            return defender
+        return default
+
     def dissolve(self, caller, confirm=False, now=None):
         now = time() if now is None else now
         with world_change():

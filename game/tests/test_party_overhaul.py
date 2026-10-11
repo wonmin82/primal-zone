@@ -486,3 +486,87 @@ class PartyAttackTests(PartyCombatFixture):
         self.enemy.engage(self.char2, now=100)
         with self.assertRaises(RuleError):
             party.dissolve(self.char1, True, now=101)
+
+
+class PartyDefenseTests(PartyCombatFixture):
+    def test_rt36_rt37_offline_persistent_assignment_control_and_idempotency(self):
+        party = self.pair()
+        with patch.object(self.char2.sessions, 'all', return_value=[]), patch.object(self.char2.sessions, 'count', return_value=0):
+            party.set_defender(self.char1, self.char2)
+        self.assertEqual(party.state()['tactics']['defender_id'], self.char2.pk)
+        before = party.state()
+        party.set_defender(self.char1, self.char2)
+        self.assertEqual(party.state(), before)
+        with self.assertRaises(RuleError):
+            party.set_defender(self.char2, self.char1)
+        self.char2.key = '해제'
+        self.char1.execute_cmd('해제 1 일행방어')
+        self.assertEqual(party.state()['tactics']['defender_id'], self.char2.pk)
+        self.char1.execute_cmd('해제 일행방어')
+        self.assertIsNone(party.state()['tactics']['defender_id'])
+        party.set_defender(self.char1, None)
+        self.assertIsNone(party.state()['tactics']['defender_id'])
+
+    def test_rt38_enemy_tick_redirects_without_threat_damage_or_interval_change(self):
+        from random import Random
+        party = self.pair()
+        party.attack(self.char1, self.enemy)
+        party.set_defender(self.char1, self.char2)
+        self.enemy.db.threat = {self.char1.pk: 20, self.char2.pk: 1}
+        hp = [obj.profile()['hp'] for obj in self.people[:2]]
+        with patch('world.rules.enemy_attack', wraps=__import__('world.rules', fromlist=['enemy_attack']).enemy_attack) as attack:
+            self.enemy.enemy_tick(now=102.5, rng=Random(2))
+        self.assertEqual(self.char1.profile()['hp'], hp[0])
+        self.assertLess(self.char2.profile()['hp'], hp[1])
+        self.assertEqual(dict(self.enemy.db.threat), {self.char1.pk: 20, self.char2.pk: 1})
+        self.assertEqual(self.enemy.db.next_attack_at, 105)
+        self.assertEqual(attack.call_count, 1)
+
+    def test_rt39_solo_and_other_party_priority_not_hijacked(self):
+        from typeclasses.parties import create_party, invite, respond
+        party = self.pair()
+        party.set_defender(self.char1, self.char2)
+        # 공개 적은 여러 일행이 참여할 수 있다. AI의 기본 대상 기준만 검사한다.
+        self.enemy.db.claim = None
+        self.enemy.db.combatants = [obj.pk for obj in self.people[:4]]
+        for obj in self.people[:4]:
+            obj.change(lambda p: p.update(combat_target=self.enemy.pk))
+        self.assertEqual(party.defense_target(self.enemy, self.people[2]), self.people[2])
+        self.people[2].change(lambda p: p.update(combat_target=None))
+        self.enemy.db.combatants = [obj.pk for obj in self.people[:2]]
+        other = create_party(self.people[2])
+        self.people[2].change(lambda p: p.update(combat_target=self.enemy.pk))
+        self.enemy.db.combatants = [obj.pk for obj in self.people[:4]]
+        invite(self.people[2], self.people[3])
+        self.people[3].change(lambda p: p.update(combat_target=None))
+        respond(self.people[3], True)
+        self.people[3].change(lambda p: p.update(combat_target=self.enemy.pk))
+        other.set_defender(self.people[2], self.people[3])
+        self.assertEqual(other.defense_target(self.enemy, self.people[2]), self.people[3])
+        self.assertEqual(party.defense_target(self.enemy, self.people[2]), self.people[2])
+
+    def test_rt40_rt41_effect_inactive_keeps_assignment_and_departure_clears(self):
+        party = self.pair()
+        party.set_defender(self.char1, self.char2)
+        party.attack(self.char1, self.enemy)
+        self.char2.leave_combat(now=100)
+        self.assertEqual(party.defense_target(self.enemy, self.char1), self.char1)
+        self.assertEqual(party.state()['tactics']['defender_id'], self.char2.pk)
+        self.char2.location = self.rooms['dock']
+        self.char2.at_server_shutdown()
+        self.assertEqual(object_by_id(party.pk).state()['tactics']['defender_id'], self.char2.pk)
+        self.char2.location = self.rooms['grass']
+        self.char2.start_combat(self.enemy)
+        self.assertEqual(party.defense_target(self.enemy, self.char1), self.char2)
+        party.transfer(self.char1, self.char2)
+        self.assertEqual(party.state()['tactics']['defender_id'], self.char2.pk)
+        party.remove_member(self.char2)
+        self.assertIsNone(party.state()['tactics']['defender_id'])
+
+    def test_rt41_broken_deleted_defender_cleaned_without_reassigning(self):
+        party = self.pair()
+        state = party.state()
+        state['tactics']['defender_id'] = 999999
+        party.db.state = state
+        party.reconcile(now=100)
+        self.assertIsNone(party.state()['tactics']['defender_id'])

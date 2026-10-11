@@ -395,6 +395,10 @@ class Enemy(DistantPresenceMixin, DefaultObject):
             if self.db.state != "alive" or not players or now < self.db.next_attack_at:
                 return
             target = min(players, key=lambda player: (-self.db.threat.get(player.id, 0), player.id))
+            from typeclasses.parties import party_for
+            party = party_for(target)
+            if party:
+                target = party.defense_target(self, target, players)
             self.db.enemy_round += 1
             self.db.next_attack_at = now + COMBAT_INTERVAL
             result_profile = target.profile()
