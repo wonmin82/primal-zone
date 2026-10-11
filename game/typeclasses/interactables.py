@@ -72,6 +72,17 @@ class ActionObject(DistantPresenceMixin, DefaultObject):
         return self.act(caller, action, args)
 
 
+class AdminKeyCabinet(ActionObject):
+    detectability = "normal"
+    actions = ("조사",)
+    presence = "벽에 고정되어 있다. 관리실 예비열쇠를 보관한다."
+    description = "관리실 열쇠가 없는 탐사자에게 개인 열쇠 하나를 무료로 지급한다."
+
+    def act(self, caller, action, args):
+        from world.door_keys import issue_key
+        return issue_key(caller, self)
+
+
 class Commander(ActionObject):
     detectability = "conspicuous"
     distant_visible = True
@@ -622,6 +633,7 @@ def growth_controls(caller, observed_at=None):
 
 
 INTERACTABLES = {
+    "hq_admin_key_cabinet": {"room": "hq_lounge", "typeclass": "AdminKeyCabinet", "name": "관리실 열쇠함", "aliases": ["예비열쇠함", "관리실 예비열쇠함"]},
     "outpost_equipment_shopkeeper": {"room": "outpost_equipment", "typeclass": "Shopkeeper", "name": "전초 장비관", "aliases": ["장비관"], "shop_id": "outpost_equipment"},
     "outpost_weapon_shopkeeper": {"room": "outpost_weapon", "typeclass": "Shopkeeper", "name": "전초 병기관", "aliases": ["병기관"], "shop_id": "outpost_weapon"},
     "incinerator": {"room": "salvage_office", "typeclass": "Incinerator", "name": "폐기물 소각기", "aliases": ["소각기"]},

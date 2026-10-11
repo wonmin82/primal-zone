@@ -16,6 +16,12 @@ Quest state는 entitlement와 진행 이력이며 access authority는 실제 Cre
 
 Shopkeeper는 재고 owner가 아닌 source/sink 서비스다. `purchase_catalog`는 구매 목록, `accepts`는 매입 category다. `shop_service`는 credits와 ItemEntity 생성·삭제를 한 transaction으로 처리한다. 일반 아이템·소각·보관도 native Entity를 사용하며 archive profile 필드에 쓰지 않는다. [장비](equipment.md), [광원·총기](lighting-firearms.md), [전리품](loot-claims.md), [아이템 API](item-entities.md)는 현재 계약을 먼저 설명한다.
 
+## Door와 실제 Exit의 저장 경계
+
+독립 `Door`가 상태·예약을 소유하고 `DoorInstallation`은 최초 설치 시각과 원본 Door/Exit/Room/목적지 PK를 별도로 보관한다. 양쪽 Exit는 같은 door_id를 참조하고 기존 PK·목적지를 유지한다. 설치 증거가 있으면 bootstrap에서 endpoint를 재생성·재연결하지 않는다. 정적 content/integrity와 읽기 전용 DB installation_errors는 정의와 영속 관계를 나눠 검사한다. D13은 입증된 무손실 참조/표시 동기화만 허용하고 손상된 문은 차단·진단하며 OPEN 초기화로 해결하지 않는다.
+
+`effective_door_state()`는 조회·이동에서 `now >= auto_close_at`을 CLOSED로 공통 판정하며 조회는 저장하지 않는다. 기존 5초 WorldLifecycle sweep이 만료를 CLOSED로 영속 확정한다. 실제 Door Exit의 바깥 world_change는 이동·visited·완료 시각 재검증·60초 연장을 포함하며 성공 출력과 양쪽 상태는 after_change를 사용한다. Native key는 ItemEntity 유일 범위와 Operation Policy를 재사용한다. 프로토콜·v14·Party·전투·보상 정책은 유지한다. [문과 열쇠](doors-and-keys.md)에 상세 계약과 운영 절차가 있다.
+
 ## 지원 운영 구성과 설치
 
 현재 지원 구성은 SQLite + single Evennia server다. 현재 전환할 실제 플레이 DB는 없으며 최종 운영 시작은 fresh empty DB → schema → 첫 서버 시작의 `initialize_fresh`/ItemRuntime.version=1 → native bootstrap → 새 Explorer 순서다. 기존 DB 업그레이드는 별도 maintenance migration 경로다. [설치](installation.md), [Phase 7A/B/C 경계](phase7-final-integration-audit.md), [PostgreSQL future infrastructure](postgresql-transition.md)를 따른다.
@@ -63,7 +69,7 @@ Web command echo는 별도 `› 명령` entry가 아니다. 마지막 entry가 �
 
 ## 보급칩 경제와 전리품 자산
 
-`world/content/economy.py`의 CURRENCY는 id=credits·이름=보급칩·단위=칩·별칭·설명의 SSOT다. `world/currency.py`의 format_currency는 127칩을 만들며 profile의 credits 숫자를 유지한다. 현재 profile version은 13이며 v10의 화폐 저장 방식을 유지한다. 화폐는 ITEMS나 inventory에 넣지 않는다. Web은 서버의 currency metadata/formatted/전리품 display_label과 take_command를 표시한다. take_target은 칩/칩 2 같은 명령 선택자, display_label은 8칩 같은 표시 문자열이며 화면 문자열을 재해석해 명령을 만들지 않는다.
+`world/content/economy.py`의 CURRENCY는 id=credits·이름=보급칩·단위=칩·별칭·설명의 SSOT다. `world/currency.py`의 format_currency는 127칩을 만들며 profile의 credits 숫자를 유지한다. 현재 profile version은 14이며 v10의 화폐 저장 방식을 유지한다. 화폐는 ITEMS나 inventory에 넣지 않는다. Web은 서버의 currency metadata/formatted/전리품 display_label과 take_command를 표시한다. take_target은 칩/칩 2 같은 명령 선택자, display_label은 8칩 같은 표시 문자열이며 화면 문자열을 재해석해 명령을 만들지 않는다.
 
 `world.loot_service`가 모델을 backend-neutral snapshot으로 제공한다. ItemEntity root와 LootClaim, CurrencyLoot/Share가 authoritative하며 legacy normalize_entry는 migration·historical 호환용이다. snapshot.as_entry의 eligible_players/remaining_shares는 share rows에서 파생한 pure 계산 입력이며 CurrencyLoot에 중복 저장하지 않는다. 조회는 DB를 변경하지 않는다.
 

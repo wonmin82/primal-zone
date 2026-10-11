@@ -168,8 +168,40 @@ def shop_errors():
     return issues
 
 
+def door_errors(interactables):
+    from world.content.doors import DOORS
+    issues, endpoints = [], set()
+    expected = {
+        "hq_admin_door": (("hq_concourse", "동", "hq_admin_office"), ("hq_admin_office", "서", "hq_concourse")),
+        "recovery_room_door": (("support_3f_e1", "북", "recovery_room"), ("recovery_room", "남", "support_3f_e1")),
+    }
+    if set(DOORS) != set(expected):
+        issues.append("관리 Door stable ID가 다릅니다.")
+    for identity, definition in DOORS.items():
+        if definition.get("endpoints") != expected.get(identity):
+            issues.append(f"{identity}: 고정 endpoint가 다릅니다.")
+        for origin, direction, destination in definition.get("endpoints", ()):
+            if (origin, direction) in endpoints or ROOMS.get(origin, {}).get("exits", {}).get(direction) != destination:
+                issues.append(f"{identity}: endpoint 중복/정적 연결 손상")
+            endpoints.add((origin, direction))
+        if identity == "hq_admin_door" and (definition.get("initial_state") != "LOCKED" or definition.get("lockable") is not True
+                or definition.get("key_id") != "hq_admin_key" or definition.get("inside_room_id") != "hq_admin_office"):
+            issues.append(f"{identity}: 관리실 문 정책 불일치")
+        if identity == "recovery_room_door" and (definition.get("initial_state") != "OPEN" or definition.get("lockable") is not False
+                or definition.get("key_id") or definition.get("inside_room_id")):
+            issues.append(f"{identity}: 회복실 문 정책 불일치")
+    cabinet = interactables.get("hq_admin_key_cabinet", {})
+    if cabinet.get("room") != "hq_lounge" or cabinet.get("typeclass") != "AdminKeyCabinet" or tuple(cabinet.get("actions", ())) != ("조사",):
+        issues.append("관리실 열쇠함 배치/조사 불일치")
+    key = ITEMS.get("hq_admin_key", {})
+    if key.get("item_type") != "key":
+        issues.append("관리실 열쇠 타입 불일치")
+    issues.extend(definition_errors("hq_admin_key", key))
+    return issues
+
+
 def errors(interactables):
-    issues = headquarters_errors() + elevator_errors() + shop_errors()
+    issues = headquarters_errors() + elevator_errors() + shop_errors() + door_errors(interactables)
     from world.final_content import errors as final_errors
 
     issues.extend(final_errors())

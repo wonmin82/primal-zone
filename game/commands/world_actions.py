@@ -4,6 +4,7 @@ from world import rules
 from world.targets import TargetSelector, names, normalized, parse_selector, resolve, room_objects
 
 from commands.base import GameCommand
+from commands.help_contracts import command_sections
 
 
 class Return(GameCommand):
@@ -133,6 +134,7 @@ class Investigate(TargetAction):
     key = "조사"
     usage = "정비기록 조사 · 보급상자 조사"
     summary = "주변 단서와 보급품을 조사합니다."
+    help_sections = command_sections("조사")
 
 
 class Repair(TargetAction):

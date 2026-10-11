@@ -1,5 +1,36 @@
 # 원시구역 개발 작업 및 검증 이력
 
+## PR #56 — D13 장애 격리 P1 리뷰 보완 (병합 전 기록)
+
+기존 [PR #56](https://github.com/wonmin82/primal-zone/pull/56)의 `c90866cdef44035543c04e780b193d2801c83d9b`에서 설치된 Door endpoint가 DefaultExit로 손상되면 런타임 가드는 차단하지만 다음 서버 시작의 관리 Exit preflight가 전체 월드 초기화를 중단하는 P1을 격리 재현했다. 수정 전 1개 ERROR와 수정 후 PASS는 [실제 검증 기록](playtest.md#pr-56-d13-장애-격리-p1-보완)에 보존한다.
+
+`doors.proven_installed_endpoint()`의 영속 소속 증거를 이용해 `bootstrap.validate_managed_exits()`가 원본 endpoint의 국소 속성 손상만 격리하고 `_build_world()`가 원본을 그대로 보존한다. 손상된 Typeclass·PK·위치/목적지·Door 상태/예약·설치 이력을 리셋하거나 추측 복구하지 않는다. 일반 관리 Exit의 Typeclass·identity·Tag·방향/Alias 충돌과 설치 증거가 불명확한 경우의 전역 차단은 유지한다. 손상 문의 양쪽 실제 이동/조작/원거리 관찰은 fail-closed이며 회복실 문/일반 Exit는 독립적으로 이용 가능하다.
+
+신규 TEST-P1-01~08은 서버 시작 Hook·반복 Bootstrap·정상 문 양쪽 통과/연장/sweep·손상 분류·전역 충돌 DB/cache 롤백·별도 OS 프로세스의 격리 DB 재오픈을 검사한다. 기존 RT-07~11/59·CV-08/17에 [추가 근거](issue49-requirement-tests.md#pr-56-d13-p1-추가-검사)를 연결하고 원래 D01~D14·VIEW·RT/CV 번호와 설계 전문은 변경하지 않는다. 코드/테스트 안정 후 전체 회귀를 한 번 성공시키고 정확한 새 커밋 HEAD의 Quick/Smoke 및 최신 원격 test/smoke를 확인하는 제출 게이트를 유지한다. 실제 SHA·결과는 PR/Issue에 확정한다.
+
+최종 리뷰 대기이며 PR #56·Issue #49는 OPEN, 소스 브랜치는 유지한다. Merge·브랜치 삭제·Issue Close는 수행하지 않는다. 실 브라우저·OS IME·복수 실세션·장기 운영/재시작·Cross-Issue E2E는 #50에 남기며 새로운 정책·마이그레이션·기능·UI·플레이 DB 변경은 없다. 아래 최초 구현과 과거 실패/검증 기록은 당시 상태를 보존한다.
+
+## Issue #49 — 문·열쇠 v1.3 FREEZE 구현 (제출 전 기록)
+
+[Issue #49](https://github.com/wonmin82/primal-zone/issues/49)의 최신 전체 본문·부록을 기준으로 origin/main `bd18e6ff4e9f1d2e345015eba805353be0e1cae1`에서 `codex/issue-49-door-key-system`을 생성했다. 선행 #48/PR #53 및 #54/PR #55의 병합·종료를 확인했다. 아래 기존 미착수·실패·병합 전 기록은 당시 사실을 보존한다.
+
+| Phase | 구현 내용 | 실제 경로·검증 |
+| --- | --- | --- |
+| 49-A | Door SSOT·독립 설치 이력·원본 Exit PK·D13 무손실 복구·정적/DB 분리 | door_entities·doors·bootstrap·integrity, RT-01~11/56/59 |
+| 49-B | Native 개인 열쇠·무료 발급/재발급·유일성·금지 Operation | door_keys·items·item_entities.policy·AdminKeyCabinet, RT-12~18/60 |
+| 49-C | 열어/닫아/잠궈/풀어·공통 selector·열쇠/래치·비전투 | commands/doors·registry·help_contracts, RT-19~31/58 |
+| 49-D | 60초 논리 만료·실제 통과 완료 시각 연장·기존 Lifecycle·원자 이동 | doors.traverse/reconcile_doors·Explorer 이동 Hook, RT-32~41/56~57/64 |
+| 49-E | 자연어 상태·기존 나침반·개별 봐·실시간 정보 보호·기존 웹 버튼 | Exit·ZoneRoom·distant/exit_presentation·state, RT-42~53/58/61~65 |
+| 49-F | 새 4개/기존 5개 도움·문서·DB migration 격리·통합 회귀·RT/CV 추적 | tests/test_doors/test_door_schema·world/test_doors·기존 회귀·Node, RT-54~55/62/66 |
+
+[구현·운영 계약](doors-and-keys.md), [RT-01~66/CV-01~18 근거](issue49-requirement-tests.md), [실제 실행·실패 보정](playtest.md#issue-49-문과-열쇠-검증)을 연결한다. D01~D14·VIEW-01~09를 변경하지 않았다. v14·ItemEntity 권리/수량·Quest/Credential·Party/전투/전리품·회복실 침대·기존 Exit·3×3 출력과 웹 입력/프로토콜을 유지한다. 새 테이블 migration은 격리 DB에서만 수행하며 실제 플레이 DB는 변경하지 않는다.
+
+최종 리뷰에서 손상된 endpoint가 기본 Exit로 바뀌면 엔진 경로가 문 가드를 우회하는 문제를 격리 재현해 Explorer의 실제 Exit 이동 Hook과 원거리 경계 검사에 보완했다. 실제 열쇠함 조사 명령의 공통 상태 전송도 커밋 전에 실행되던 경계를 격리 재현해 기존 after_change에 등록하도록 보완했다. 성공 메시지·도착 화면·양쪽 상태는 최상위 커밋 이후 실행하며 Savepoint/상위 롤백에서는 폐기한다. 전송 장애 때 기존 Explorer 콜백이 예외를 전파하는 계약은 유지하고 이미 커밋된 DB는 되돌리지 않는다.
+
+이 기록은 구현·로컬 자동 검증 완료의 제출 전 상태다. 최종 전체 검사는 순수 229개(2.665초) + 통합 803개(474.796초) PASS·종료 0이며 코드/Node/문법/diff 검사도 통과했다. 실제 커밋 SHA의 Quick/Smoke 성공 후 Push·단일 Ready PR 생성·최신 GitHub CI·Issue 본문 PR 연결을 완료해야 제출 PASS다. 미래 PR 번호·SHA·CI 성공을 추정하지 않고 실제 결과는 PR Validation/Issue 진행 기록에 확정한다. Issue #49와 PR은 리뷰 대기로 OPEN 유지하며 Merge·브랜치 삭제·Issue 종료는 수행하지 않는다. 실 브라우저·OS IME·비색상 터미널·복수 실세션·장기 restart·Cross-Issue E2E는 #50 미검증 범위다.
+
+PR [#56](https://github.com/wonmin82/primal-zone/pull/56)을 Ready로 생성하고 Issue #49 본문에 연결했다. 소스 `66e67305836b2e65935849c4c404ef1d2453405e`의 Quick은 107.708초 PASS였지만 첫 원격 CI의 test는 10분 제한으로 취소되어 제출 PASS로 기록하지 않는다. 검사 범위와 코드를 유지한 채 test Job 제한만 20분으로 조정하고 새 HEAD의 Quick/CI를 확인한다. 최종 SHA와 결과는 PR/Issue 진행 기록을 따른다. 설계 전문·부록은 보존하고 PR/Issue는 OPEN으로 유지한다.
+
 ## Issue #54 — 전리품 알림 커밋 경계 수정 (제출 전 기록)
 
 [Issue #54](https://github.com/wonmin82/primal-zone/issues/54)는 [PR #53](https://github.com/wonmin82/primal-zone/pull/53) Closeout에서 별도 추적한 P2 위험이다. 병합된 main `f48a632a1dd6a56b283f3864d6a4ace7e0f3b355`에서 시작했고 운영 발생 사례가 아닌 격리된 실제 수령 API로 재현했다. 아래 과거 작업/실패/병합 전 기록은 당시 사실을 보존한다.

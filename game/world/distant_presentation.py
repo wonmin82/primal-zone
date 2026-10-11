@@ -66,6 +66,15 @@ def direction_phrase(direction):
 
 
 def distant_appearance(context):
+    from evennia.objects.objects import DefaultExit
+
+    from world.doors import state_for_exit
+
+    if isinstance(context.via, DefaultExit) and state_for_exit(context.via, context.observed_at) not in (None, "OPEN"):
+        return ft.text("그 너머는 살펴볼 수 없다.")
+    boundary = getattr(context.via, "can_observe_through", None)
+    if boundary and not boundary(context):
+        return ft.text("그 너머는 살펴볼 수 없다.")
     room = context.target_room
     if not room.access(context.viewer, "view"):
         return ft.text("그 너머는 살펴볼 수 없다.")

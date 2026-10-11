@@ -1,5 +1,77 @@
 # 테스트와 검증
 
+## Issue #49 문과 열쇠 검증
+
+### PR #56 D13 장애 격리 P1 보완
+
+아래는 최초 구현 기록 이후의 리뷰 수정이다. 기준 PR HEAD는 `c90866cdef44035543c04e780b193d2801c83d9b`, base는 `bd18e6ff4e9f1d2e345015eba805353be0e1cae1`이다. 실제 운영 장애 발생 건수가 아닌 격리 DB의 재현이며 기존 실패·검증 기록은 보존한다.
+
+수정 전 `uv run python scripts/dev.py test tests.test_doors.DoorTest.test_p1_01_installed_typeclass_damage_is_local_after_bootstrap --parallel 1`은 **1개 ERROR·종료 1, 5.021초**였다. 정상 설치된 관리실 Door 원본 Exit를 `DefaultExit`로 손상시키고 `build_world()`를 실행하면 `validate_managed_exits()`의 `관리 Exit 태그/위치 충돌` ValueError가 전체 Bootstrap을 중단했다. 수정 후 같은 검사는 **1개 PASS·종료 0, 8.279초**이며 손상 상태 보존과 양쪽 실제 이동/조작/원거리 차단, 회복실·일반 Exit 실제 이동을 검증했다.
+
+`doors.proven_installed_endpoint()`는 독립 설치 이력·원본 Door/양쪽 Exit PK·유일 Room 증거·다른 이력과의 중복 소유 부재를 읽기 전용으로 입증한다. `validate_managed_exits()`는 입증된 endpoint 속성 손상만 진단 후 국소 격리한다. `_build_world()`는 격리 원본을 폐지 방의 일반 콘텐츠로 이전하지 않는다. Typeclass·PK·목적지·상태·예약·설치 이력을 자동 복구/리셋하지 않는다. 일반 관리 Exit 오류·identity/Tag·방향/Alias 충돌과 불명확한 설치 증거는 기존 전역 차단을 유지한다.
+
+신규 8개 메서드는 TEST-P1-01~08을 실제 API로 검사하며 [추적표](issue49-requirement-tests.md#pr-56-d13-p1-추가-검사)에 RT-07~11/59·CV-08/17을 연결했다. TEST-P1-08은 첫 OS 프로세스에서 임시 SQLite를 설치하고 손상을 저장한 뒤, 별도 OS 프로세스가 같은 DB를 다시 열어 실제 `at_server_start()`를 실행한다. Script 생성과 외부 메시지만 격리하며 Bootstrap·runtime·restart reconcile·Door 검증·실제 통과는 대체하지 않는다.
+
+| 실제 실행 | 결과 |
+| --- | --- |
+| `uv run python scripts/dev.py test tests.test_doors tests.test_bootstrap_exits --parallel 2` | 61개 PASS·종료 0, 90.693초. 기존 일반 관리 Exit 보호와 손상 분류·재Bootstrap·실제 시작 Hook을 검사했다. |
+| `uv run python scripts/dev.py test tests.test_door_schema.DoorSchemaTests.test_p1_08_damaged_door_survives_new_process_server_start --parallel 1` | 1개 PASS·종료 0, 28.171초. 실제 새 프로세스의 영속 손상/정상 기능 분리를 검사했다. |
+| `uv run python scripts/dev.py test tests.test_doors tests.test_bootstrap_exits tests.test_door_schema tests.test_headquarters tests.test_medical tests.test_exit_policy tests.test_distant_view tests.test_party_overhaul --parallel 4` | 143개 PASS·종료 0, 158.024초(runner 169.096초). 기존 스키마/빈 DB·본부·의료·Exit/원거리·일행 회귀를 포함했다. |
+
+폐지 방으로 옮겨지고 목적지도 소실된 원본 endpoint의 이전 금지 검사를 추가하는 과정에서 새 테스트의 `create_object` import 누락을 코드 검사가 발견했다. import만 보완했으며 실행된 확장 검사의 결과와 최종 전체 검사를 아래에 구분해 기록한다. 운영 DB의 hash·size·mtime은 전후 대조한다. JavaScript·CSS·프로토콜은 변경하지 않아 Node·정적 수집/브라우저 검사는 새로 반복하지 않는다. 실제 OS 브라우저/IME·복수 실세션·장기 restart·Cross-Issue 수동 E2E는 #50의 별도 범위다. 최종 커밋 Quick과 최신 원격 CI는 실제 SHA·URL과 함께 PR/Issue 기록에 확정한다.
+
+최종 안정 코드의 `uv run python scripts/dev.py test --parallel 4`: **순수 229개(3.471초) + 통합 811개(516.224초) PASS·종료 0**, 통합 runner 527.342초. 기존 전체 1,032개에 이번 신규 8개를 더한 총 1,040개이며 TEST-P1-01~08·RT-07~11/59·D04/D11/D12·VIEW·Quest/Credential·일행/전투/전리품 회귀를 포함한다. `uv run python scripts/dev.py check`·`git diff --check`와 실제 추적 테스트 경로 검사를 통과했다. Markdown GFM 렌더링·상대 링크/앵커도 확인하며 결과 기록 이후 실행 코드/테스트는 변경하지 않는다. 커밋 후 정확한 HEAD Quick·최신 GitHub test/smoke는 PR/Issue에 실제 SHA와 함께 확정한다.
+
+### 최초 구현 기준과 검증 기록
+
+2026-10-11 Windows, Python 3.13.15, uv 0.12.13. 기준 main은 `bd18e6ff4e9f1d2e345015eba805353be0e1cae1`이며 아래 개발 검사는 해당 기준에서 Issue #49의 미커밋 코드/테스트 diff를 대상으로 실행했다. `settings_test` SQLite·기존 fixture·주입 시각을 사용하고 실제 지급/이동/권한을 검사한다. 실제 60초 sleep·운영 DB bootstrap/migration은 하지 않았다. [RT/CV 연결](issue49-requirement-tests.md)과 [운영 계약](doors-and-keys.md)을 따른다.
+
+### 경량 검사와 실패 보정
+
+| 실제 실행 | 결과 |
+| --- | --- |
+| `uv run python scripts/dev.py test tests.test_doors.DoorTest --parallel 1` (49-A 당시) | 10개 PASS·종료 0, 테스트 28.917초 |
+| `uv run python scripts/dev.py test tests.test_doors.DoorKeyTests --parallel 1` | 6개 PASS·종료 0, 8.455초 |
+| 초기 49-C/D 22개 | 2실패·2오류·종료 1. 기존 Legacy inventory fixture와 Native 경로 혼용, 주입 clock 기대값을 보정했다. 지급·이동 규칙을 완화하지 않았다. |
+| 49-C/D 관련 5개 재검사 | PASS·종료 0, 7.280초 |
+| 최초 49-E 39개 | 1실패·1오류. 기존 원거리 익명 탐사자 정책과 커밋 후 전송 예외 전파를 새 테스트가 잘못 가정했다. DB 커밋/익명 정책을 유지하도록 assertion을 보정했다. |
+| 49-E 관련 35개 | 1실패·1오류. 비Exit 센서 관찰까지 막던 가드를 실제 Exit 경계로 제한했고, 구 bootstrap의 출구 재생성 검사를 D13 관리 Door 대신 Door 없는 출구 fixture에서 유지했다. |
+| 직접 영향 통합 최초 실행 | Room tag category 오류로 클래스 설정 6오류. 실제 `primal_zone_room` tag로 수정했다. |
+| `uv run python scripts/dev.py test tests.test_doors tests.test_exit_policy tests.test_exit_presentation tests.test_distant_view tests.test_bootstrap_exits --parallel 2` (보정 후) | 72개 PASS·종료 0, 60.968초 |
+| `uv run python scripts/dev.py test tests.test_door_schema --parallel 1` | 처음 신규 DB home/기존 content type fixture 오류 2개. TEST_ENVIRONMENT와 구 schema post_migrate fixture를 보정한 후 2개 PASS·종료 0, 45.941초. 빈 DB와 실제 기존 schema/Room·Exit·Explorer·ItemEntity를 가진 복제 DB의 새 migration·기존 행 보존·Exit PK·재Bootstrap을 검사했다. |
+| 실제 이동 Hook 오류·두 플레이어 e/w·표시 동기화/endpoint 소실 신규 3개 | PASS·종료 0, 12.005초 |
+| 일행 구성원의 실제 Door 이동·영속 전술/비교전 제한 교차 1개 | PASS·종료 0, 4.876초 |
+| `node --test scripts/tests/test_web_prompt.cjs` | 16개 PASS·종료 0. 기존 DOM/명령 전송/한글 조합 이벤트 계약·Door 조작 버튼·새 상태 교체를 검사했다. |
+| `uv run python scripts/dev.py check` | 통과·종료 0. 원거리 경계 보완 중 import 정렬 경고 1개는 정렬 후 통과했다. |
+
+### 전체 검사와 최종 리뷰
+
+첫 `uv run python scripts/dev.py test --parallel 2`는 순수 227개에서 15개 실패·종료 1이었다. 공유 정적 fixture에 새 열쇠함이 없고 새 key에도 일반 max_stack 기대값을 적용하던 문제였다. fixture를 추가하고 key의 1개/비이동 정책을 명시적으로 검증했다. 이어 순수 229개 PASS·종료 0을 확인했다.
+
+전체 재검사 진행 중 최종 리뷰에서 **설치된 Door의 Exit Typeclass가 기본 Exit로 손상되면 실제 엔진 Traverse가 문을 우회**하는 경계를 발견했다. `tests.test_doors.DoorTest.test_damaged_exit_typeclass_cannot_bypass_guard_with_engine_traverse` 수정 전 1실패·종료 1로 실제 이동을 재현했다. 진행 중이던 이전 코드 전체 검사는 중단했으며 통과로 기록하지 않는다. Explorer의 실제 Exit 이동 Hook과 원거리 경계에 안전 가드를 추가했다. 직접 영향 77개 재검사에서는 clock 호출 횟수에 의존하던 새 fixture 1오류가 남아 완료 Hook이 모의 시각을 갱신하도록 바꿨다. 이 보정 중 진행하던 전체 검사도 중단했으며 아래 최종 실행과 구분한다.
+
+이동 완료 Hook으로 모의 시각을 주입하도록 보정한 직접 영향 77개는 PASS·종료 0, 62.278초였다. 이어 실제 `Investigate.func()`를 외부 변경에서 실행하는 새 검사에서 공통 GameCommand의 직접 상태 전송 1회를 격리 재현했다(1실패·종료 1). 이때 진행하던 이전 코드 전체 검사는 중단했으며 통과로 기록하지 않는다. 공통 상태 전송을 기존 `after_change()`에 등록하도록 최소 수정해 정상 단독 전송의 대상/횟수를 유지하고 상위/Savepoint 실패에서는 폐기하게 했다.
+
+`uv run python scripts/dev.py test tests.test_doors tests.test_loot tests.test_loot_entities tests.test_command_shortcuts tests.test_exit_policy tests.test_distant_view --parallel 2`: 최종 직접 영향 191개 PASS·종료 0, 105.836초(전체 runner 115.525초). 실제 열쇠함 명령의 커밋 후 전송, 손상된 Exit 엔진/관찰 우회 차단, Native/Legacy 지급, v14 개인 줄임말과 기존 출구/관찰을 함께 확인했다.
+
+완료된 첫 전체 실행(`uv run python scripts/dev.py test --parallel 2`)은 순수 229개 PASS, 통합 803개에서 10실패·종료 1(974.554초, runner 985.715초)이었다. 2건은 문 조회가 기존 Quest 차단보다 먼저 환경 snapshot을 읽던 회귀로, 문 이름에 해당하는 입력만 감지를 조회하고 기존 방향/객체 입력은 원래 경로로 먼저 보내도록 수정했다. 기존 환경/조명 검사의 '차단 전 환경 읽기 없음' assertion은 유지했다. 나머지는 관리실 최초 잠금과 자유 통과 기대값 5건, 회복실 새 문 컨트롤과 기존 의료/서비스 목록 기대값 2건, v13 당시 목록에 새 Door 명령을 포함한 비교 1건이었다. 실제 내부 래치/열기 명령으로 이동 조건을 준비하고 문 UI를 포함한 정확한 기대값을 검사하며 역사적 v13 어휘를 변경하지 않았다.
+
+실패한 7개 메서드(10개 실패 assertion/subtest)와 Door 45개를 묶은 `uv run python scripts/dev.py test <해당 7개 테스트 경로> tests.test_doors --parallel 4`는 52개 PASS·종료 0, 74.254초였다. 실행 경로는 test_environment의 blocked_exit_never_queries_environment_or_hidden_target, test_lighting의 exit_navigation_and_locked_privacy_before_observation, test_headquarters의 first_puppet/real_graph 두 메서드, test_medical의 hidden_and_removed_medical_objects, test_party_overhaul의 rt01_all_sixteen_commands, test_shops의 server_purchase_actions_and_existing_capabilities다.
+
+추가 선택기 경계에서 문 없는 방의 일반 객체 이름이 '관리실 문'인 경우 잘못된 모호성 거절을 격리 재현했다(개별 봐 기존 검사 확장, 1실패·종료 1). 실제 Door 후보와 객체가 함께 있을 때만 모호성을 거절하고 Door가 없으면 기존 객체 조회로 보내도록 보완했다. 이 메서드와 앞의 환경/조명 2개를 묶은 `uv run python scripts/dev.py test tests.test_doors.DoorTest.test_individual_look_direction_actual_exit_and_object_collision tests.test_environment.EnvironmentTests.test_blocked_exit_never_queries_environment_or_hidden_target tests.test_lighting.LightingTests.test_exit_navigation_and_locked_privacy_before_observation --parallel 2`는 3개 PASS·종료 0, 14.915초다.
+
+최종 `uv run python scripts/dev.py test --parallel 4`: **순수 229개(2.665초) + 통합 803개(474.796초) PASS·종료 0**, 통합 runner 485.349초. 신규 Python 49개(통합/스키마 47개 + 순수 2개)를 포함하며 Native/Legacy 전리품·일행·NPC·명령·관찰·도움·v14 및 격리 migration 전체 회귀를 확인했다. 검사 뒤에는 실행 코드/테스트 변경 없이 문서의 결과 기록만 정리했다. 커밋 이후 정확한 Push HEAD에서 `uv run python scripts/dev.py smoke`를 실행해 종료 코드·격리 PASS·서버 종료·플레이 DB 불변을 확인하고, 해당 SHA의 GitHub test/smoke를 확인한다. 실제 SHA·Quick/CI URL은 PR Validation/Issue 진행 구역에 기록한다. 이전 HEAD의 성공을 새 HEAD로 대체하지 않는다.
+
+### 원격 CI 시간 제한 보정
+
+소스 `66e67305836b2e65935849c4c404ef1d2453405e`에서 로컬 `uv run python scripts/dev.py smoke`는 107.708초 PASS·종료 0, 임시 서버 종료/정리 및 실제 플레이 DB 지문 불변이었다. [첫 GitHub CI](https://github.com/wonmin82/primal-zone/actions/runs/38130666239)는 smoke 성공(1분 6초)이었으나 test Job이 기존 10분 제한을 초과해 CANCELLED였다. 원격 로그에서 순수 229개 성공은 확인했지만 통합 803개의 최종 결과는 없으므로 이 실행의 전체 CI를 성공으로 기록하지 않는다.
+
+기준 main의 직전 test Job도 8분 13초였고 Door/스키마 검사와 공유 월드 검증이 추가되었다. `.github/workflows/tests.yml`의 test 시간 제한만 20분으로 조정한다. 전체 검사 명령·병렬 2·수용 assertion·필수 Job·smoke 제한은 그대로이며 검사 생략이나 성공 강제 처리를 추가하지 않는다. 실행 코드와 테스트가 동일하므로 로컬 전체 PASS 근거는 재사용하고, 새 커밋의 정확한 HEAD에서는 사용자 제출 게이트에 따라 Quick/Smoke를 다시 실행한다. 새 SHA와 실제 Quick/원격 결과는 PR/Issue에 확정한다.
+
+### 미실행과 #50 이관
+
+실 브라우저·OS 한글 IME·비색상 터미널·복수 실제 puppet 세션/네트워크 동시성·장기 reload/restart·production Full timing·Cross-Issue 수동 E2E는 미실행이다. 자동 DOM/세션 fixture·시각 주입·격리 schema 검증은 이 수동 검증의 완료 증거가 아니다. 정적 JS/CSS 자체는 변경하지 않았으므로 수집/실 브라우저 레이아웃 확인은 이번 자동 검증과 구분해 #50에서 수행한다. 실제 플레이 DB의 파일 hash·size·mtime을 전후 대조하며 테스트 DB와 정적 수집 결과물을 커밋하지 않는다.
+
 ## Issue #54 전리품 알림 커밋 경계
 
 Windows, Python 3.13.15, uv 0.12.13에서 `settings_test` 격리 SQLite/fixture와 실제 `take_loot()`을 사용했다. 메시지와 `push_state()`만 관찰하고 지급·권한·지분 계산은 실제 서비스를 사용한다. 지급 저장 후 예외를 주입하는 검사는 원래 저장을 실행한 다음 실패시킨다. main 기준은 `f48a632a1dd6a56b283f3864d6a4ace7e0f3b355`이다.

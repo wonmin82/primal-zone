@@ -24,6 +24,8 @@ def reconcile_world(now=None, restart=False):
 
     reconcile_facilities()
     reconcile_environment(now, restart=restart)
+    from world.doors import reconcile_doors
+    reconcile_doors(now)
     if restart:
         from typeclasses.explorers import Explorer
 

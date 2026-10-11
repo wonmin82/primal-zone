@@ -30,6 +30,14 @@ class Exit(ObjectParent, DefaultExit):
     blocks_distant_view = True
 
     def at_traverse(self, traversing_object, target_location, **kwargs):
+        from world import doors, rules
+
+        if doors.identity_for_exit(self):
+            try:
+                return doors.traverse(self, traversing_object, target_location)
+            except rules.RuleError as error:
+                traversing_object.msg(ft.text(ft.token("error", str(error)), kind="error"))
+                return False
         message = blocked_exit_message(self.location.db.zone_id, self.key)
         if message:
             traversing_object.msg(ft.text(message))
@@ -43,6 +51,9 @@ class Exit(ObjectParent, DefaultExit):
 
     def can_observe_through(self, context):
         """진행 조건과 시야는 별개다. 투명한 경계는 attribute/override로 관찰을 허용한다."""
+        from world.doors import state_for_exit
+        if state_for_exit(self, context.observed_at) not in (None, "OPEN"):
+            return False
         blocks = (
             self.db.blocks_distant_view
             if self.attributes.has("blocks_distant_view")
@@ -54,6 +65,10 @@ class Exit(ObjectParent, DefaultExit):
         return entry_block(context.viewer.profile_snapshot(), zone) is None
 
     def return_appearance(self, looker, **kwargs):
+        from world.doors import exit_block
+        message = exit_block(self, looker, kwargs.get("observed_at"))
+        if message:
+            return ft.text(message)
         message = blocked_exit_message(self.location.db.zone_id, self.key)
         if message:
             return ft.text(message)

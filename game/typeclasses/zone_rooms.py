@@ -18,6 +18,8 @@ class ZoneRoom(DefaultRoom):
         return distant_appearance(context)
 
     def return_appearance(self, looker, **kwargs):
+        from world.doors import current_doors
+        from world.doors import description as door_description
         from world.environment import description
         from world.environment_state import snapshot_for
         from world.lifecycle import reconcile_room
@@ -35,7 +37,10 @@ class ZoneRoom(DefaultRoom):
 
         environment = snapshot_for(self, observed_at)
         lines = [
-            room["desc"], *room.get("blocked_exits", {}).values(),
+            room["desc"],
+            *[door_description(target, observed_at) for target in current_doors(looker, observed_at)
+              if looker.location == self],
+            *room.get("blocked_exits", {}).values(),
             "", ft.token("muted", description(environment)), "",
             exit_diagram(exit_entries(looker, self, observed_at)), "",
         ]

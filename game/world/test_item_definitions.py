@@ -25,6 +25,11 @@ class ItemDefinitionTests(unittest.TestCase):
                     self.assertEqual(definition["max_stack"], 3)
                     self.assertTrue(can_item_operation(identity, "submit"))
                     self.assertFalse(definition["transferable"])
+                elif definition["item_type"] == "key":
+                    self.assertEqual(definition["max_stack"], 1)
+                    self.assertFalse(definition["stackable"])
+                    self.assertTrue(definition["unique_per_owner"])
+                    self.assertTrue(all(not allowed for allowed in definition["operation_policy"].values()))
                 else:
                     self.assertIsNone(definition["max_stack"])
                 for operation in ("drop", "give", "store", "sell"):

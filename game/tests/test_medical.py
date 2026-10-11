@@ -105,7 +105,8 @@ class MedicalCommandsTests(WorldCommandTest):
         self.bed.location = self.rooms["support_roof"]
         for action in ("회복", "휴식"):
             self.assertIn("이용할 대상을 찾지", self.command(action))
-        self.assertEqual({obj["name"] for obj in multiplayer_state(self.char1)["interactables"]}, set())
+        # 의료 객체를 제거해도 #49의 독립 문 조작은 회복실에 남는다.
+        self.assertEqual({obj["name"] for obj in multiplayer_state(self.char1)["interactables"]}, {"회복실 문"})
         self.assertEqual(render(context_for(self.char1)), "")
 
     def test_services_follow_actual_object_to_safe_room_and_reject_unsafe(self):

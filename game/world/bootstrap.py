@@ -15,13 +15,16 @@ def get_room(zone_id):
 
 
 def build_world():
+    from world.doors import install_doors
     from world.item_runtime import initialize_fresh, maintenance
 
     with world_change():
-        validate_managed_exits()
+        quarantined = validate_managed_exits()
         if not maintenance.get():
             initialize_fresh()
-        return _build_world()
+        rooms = _build_world(quarantined)
+        install_doors()
+        return rooms
 
 
 def validate_managed_exits():
@@ -31,20 +34,28 @@ def validate_managed_exits():
 
     from world.content.headquarters import RETIRED_ROOMS
     from world.content.headquarters import ROOMS as HQ_ROOMS
+    from world.doors import installation_errors, logger, proven_installed_endpoint
 
     rooms = {zone: get_room(zone) for zone in ROOMS}
     expected = {f"{zone}:{direction}" for zone, data in ROOMS.items() for direction in data["exits"]}
     cleanup_zones = set(RETIRED_ROOMS) | set(HQ_ROOMS)
     identities = {}
     removed = set()
+    quarantined = set()
     for obj in ObjectDB.objects.filter(db_tags__db_category=EXIT_CATEGORY).distinct():
         tags = obj.tags.get(category=EXIT_CATEGORY, return_list=True)
         identity = tags[0] if len(tags) == 1 else None
         zone, _, direction = (identity or "").partition(":")
         origin = rooms.get(zone) if zone in ROOMS else next(iter(search_tag(zone, category=CATEGORY)), None)
-        if (len(tags) != 1 or not isinstance(obj, DefaultExit) or not obj.is_typeclass("typeclasses.exits.Exit", exact=True) or
-                (zone in ROOMS or zone in RETIRED_ROOMS) and (obj.location != origin or obj.key != direction)):
+        if len(tags) != 1 or not isinstance(obj, DefaultExit):
             raise ValueError(f"관리 Exit 태그/위치 충돌: tags={tags}, Exit #{obj.id}, Room={obj.location}, 목적지={obj.destination}")
+        if (not obj.is_typeclass("typeclasses.exits.Exit", exact=True)
+                or (zone in ROOMS or zone in RETIRED_ROOMS) and (obj.location != origin or obj.key != direction)):
+            owner = proven_installed_endpoint(obj, identity)
+            if not owner:
+                raise ValueError(f"관리 Exit 태그/위치 충돌: tags={tags}, Exit #{obj.id}, Room={obj.location}, 목적지={obj.destination}")
+            quarantined.add(obj.pk)
+            logger.error("Door %s 원본 endpoint #%s 국소 격리: %s", owner, obj.pk, installation_errors(owner))
         if identity in identities:
             raise ValueError(f"관리 Exit identity 중복: {identity}, Exit #{identities[identity].id}/#{obj.id}, 목적지={obj.destination}")
         identities[identity] = obj
@@ -63,9 +74,10 @@ def validate_managed_exits():
                     continue
                 if names & {name.strip().casefold() for name in (obj.key, *obj.aliases.all())}:
                     raise ValueError(f"Exit 명령 충돌: Room {zone}, 방향 {direction}, Exit #{obj.id}, 기존 목적지={obj.destination}")
+    return quarantined
 
 
-def _build_world():
+def _build_world(quarantined_exits=()):
     rooms = {}
     for zone_id, data in ROOMS.items():
         room = get_room(zone_id)
@@ -111,7 +123,7 @@ def _build_world():
     for zone, destination in RETIRED_ROOMS.items():
         for retired in search_tag(zone, category=CATEGORY):
             for obj in list(retired.contents):
-                if not obj.destination:
+                if not obj.destination and obj.pk not in quarantined_exits:
                     obj.location = rooms[destination]
             retired.db.retired_to = destination
             retired.tags.remove(zone, category=CATEGORY)
@@ -133,6 +145,10 @@ def _build_world():
             for existing in search_tag(f"{zone_id}:{direction}", category=EXIT_CATEGORY):
                 existing.delete()
         for direction, target in data["exits"].items():
+            from world.doors import preserved_endpoint
+            if preserved_endpoint(zone_id, direction):
+                # 운영 설치 증거가 있는 endpoint는 기존 PK/목적지를 절대 재작성하지 않는다.
+                continue
             identity = f"{zone_id}:{direction}"
             existing = next(iter(search_tag(identity, category=EXIT_CATEGORY)), None)
             if not existing:

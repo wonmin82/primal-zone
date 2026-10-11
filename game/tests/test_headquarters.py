@@ -24,6 +24,7 @@ class HeadquartersTests(GameCommandTest):
 
     def setUp(self):
         self.enterContext(patch("typeclasses.explorers.time", return_value=100))
+        self.enterContext(patch("world.doors.time", return_value=100))
         super().setUp()
         self.rooms = build_world()
         for player in (self.char1, self.char2):
@@ -33,7 +34,17 @@ class HeadquartersTests(GameCommandTest):
         for module in ("enemies", "explorers", "loot"):
             self.enterContext(patch(f"typeclasses.{module}.delay"))
 
+    def open_admin_door(self):
+        # 이 검사는 이동 그래프/접속을 확인한다. 최초 LOCKED 정책을 우회하지 않고
+        # 내부 캐릭터가 실제 래치와 열기 명령으로 양쪽 통과 조건을 준비한다.
+        from world.door_entities.models import Door
+        self.char2.location = self.rooms["hq_admin_office"]
+        self.char2.execute_cmd("관리실 문 풀어")
+        self.char2.execute_cmd("관리실 문 열어")
+        self.assertEqual(Door.objects.get(door_id="hq_admin_door").state, "OPEN")
+
     def test_first_puppet_uses_staging_and_keeps_dock_as_home(self):
+        self.open_admin_door()
         with patch.object(DefaultCharacter, "at_post_puppet"):
             self.char1.at_post_puppet()
         self.assertEqual(self.char1.zone, "staging_room")
@@ -64,6 +75,7 @@ class HeadquartersTests(GameCommandTest):
         self.assertEqual(self.char1.zone, "grass")
 
     def test_real_graph_directions_and_aliases_traverse_to_exact_targets(self):
+        self.open_admin_door()
         for zone, definition in HQ_ROOMS.items():
             for direction, destination in definition["exits"].items():
                 for command in dict.fromkeys((direction, DIRECTION_ALIASES.get(direction, direction))):

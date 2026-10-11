@@ -38,6 +38,15 @@ class Look(CmdLook):
             self.caller.msg(ft.compact(CURRENCY["name"], CURRENCY["description"]))
             return
         if name and self.caller.location:
+            from world.doors import look_door
+            try:
+                door_output = look_door(self.caller, name, observed_at)
+            except rules.RuleError as error:
+                self.caller.msg(ft.text(ft.token("error", str(error)), kind="error"))
+                return
+            if door_output is not None:
+                self.caller.msg(door_output)
+                return
             from world.navigation import blocked_exit_message
 
             message = blocked_exit_message(self.caller.zone, name)

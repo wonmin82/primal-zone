@@ -325,3 +325,22 @@ test("재바인딩 중 승계 불가 스냅샷은 버튼과 상태 설명을 일
   assert.ok(commandButtons(c.byId("party-actions")).includes("일행승계"));
   assert.match(c.byId("party-state").textContent,/승계 가능/);
 });
+
+test("문 조작은 기존 상호작용 버튼과 text 명령 경로를 사용하고 새 상태로 교체", () => {
+  const c = client();
+  const door = actions => ({name:"관리실 문",label:"동 관리실 문",role:"object",look_command:"동 문 봐",actions});
+  const exit = can_move => ({name:"동",exists:true,can_move,status:can_move ? "이동 가능" : "문 닫힘",destination_name:"미탐사",reason:""});
+  c.receive("pz_state",partyState(null,{interactables:[door([{label:"열어",command:"동 문 열어"}])],exit_details:[exit(false)],exits:["동"]}));
+  const open = c.byId("context-actions").children.find(row => row.dataset.command === "동 문 열어");
+  assert.ok(open);
+  assert.equal(open.firstElementChild.className,"semantic-object");
+  c.document.fire("click",{target:open});
+  assert.deepEqual(c.socket.sent.at(-1),["text",["동 문 열어"],{}]);
+  c.receive("pz_state",partyState(null,{interactables:[door([{label:"닫아",command:"동 문 닫아"}])],exit_details:[exit(true)],exits:["동"]}));
+  assert.ok(commandButtons(c.byId("context-actions")).includes("동 문 닫아"));
+  assert.ok(!commandButtons(c.byId("context-actions")).includes("동 문 열어"));
+  c.receive("pz_state",partyState(null,{interactables:[door([])],exit_details:[exit(false)],exits:["동"]}));
+  assert.ok(!commandButtons(c.byId("context-actions")).includes("동 문 닫아"));
+  const move = c.byId("exits").firstElementChild.children.find(row => row.dataset?.command === "동");
+  assert.equal(move.disabled,true);
+});
