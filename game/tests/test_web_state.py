@@ -67,6 +67,22 @@ class WebStateTests(WorldCommandTest):
         self.assertFalse(after["confirm_dissolve"])
         self.assertEqual(after["join_requests"], before["join_requests"])
 
+    def test_rt45_member_buttons_use_member_selector_order_not_global_duplicate_order(self):
+        from evennia import create_object
+        third = create_object(Explorer, key='동명', location=self.char1.location)
+        self.connect_character(third)
+        third.push_state = Mock()
+        self.char1.key = self.char2.key = '동명'
+        party = invite(self.char2, third, now=100)
+        respond(third, True, now=101)
+        state = multiplayer_state(self.char2, now=102)['party']
+        self.assertEqual([row['label'] for row in state['members']], ['동명 1', '동명 2'])
+        self.char2.execute_cmd(state['members'][1]['label'] + ' 일행방어')
+        self.assertEqual(party.state()['tactics']['defender_id'], third.pk)
+        self.char2.execute_cmd(state['members'][1]['label'] + ' 일행리더')
+        self.assertEqual(party.state()['leader'], third.pk)
+        self.assertIsNone(self.char1.db.party_id)
+
     def test_corpse_ground_and_expired_reservation_snapshot(self):
         enemy = room_enemies(self.rooms["grass"])[0]
         rng = Mock()

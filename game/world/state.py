@@ -107,6 +107,8 @@ def multiplayer_state(player, now=None):
 
         from world.targets import ordered
         player_controls = labels(ordered(Explorer.objects.all()))
+        member_controls = labels(ordered([member for identity in state["members"]
+                                         if (member := object_by_id(identity))]))
         defender = object_by_id(state["tactics"].get("defender_id"))
         defended_enemy = defender.combat_target() if defender else None
         participants = defended_enemy.active_players() if defended_enemy else []
@@ -119,7 +121,7 @@ def multiplayer_state(player, now=None):
             "leader": state["leader"],
             "leader_name": player_name(state["leader"]),
             "is_leader": state["leader"] == player.id,
-            "members": [{"id": key, "name": player_name(key), "label": player_controls.get(key, player_name(key)),
+            "members": [{"id": key, "name": player_name(key), "label": member_controls.get(key, player_name(key)),
                          "online": online(object_by_id(key))} for key in state["members"]],
             "loot_mode": state["loot_mode"],
             "max_size": 4,

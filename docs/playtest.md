@@ -29,6 +29,12 @@ Windows, Python 3.13.15, uv 0.12.13. 저장소 루트의 uv 환경과 settings_t
 | 문서 | 일회성 GitHub GFM 렌더링 검사 13개 변경 Markdown, 저장소 Markdown 52개·상대 링크 502개·앵커 링크 159개 검사 오류 0. README 기존 11개 제목 앵커와 명시적 이전 앵커를 유지한다. `git diff --check` 통과. |
 | 코드 | `uv run python scripts/dev.py check`: 통과·종료 0. 최종 변경 이후 코드 검사와 diff를 다시 확인한다. |
 
+### 최종 자체 리뷰 보정
+
+웹 구성원 버튼의 번호를 전체 탐사자 목록이 아니라 실제 구성원 선택기와 같은 순서로 생성하도록 수정했다. 외부 동명 탐사자가 있어도 정확한 멤버를 방어 담당·리더로 지정하는 회귀 검사를 추가했다. `uv run python scripts/dev.py test tests.test_web_state --parallel 1` 5개 통과·종료 0 (7.237초), 코드 검사와 diff 검사 통과.
+
+이전 `6201a7a711a5f1a5593adf2626072e82f07bd811`의 격리 Quick은 125.319초·종료 0으로 성공했다. 웹 선택기 코드/테스트가 이후 변경됐으므로 이 결과를 새 HEAD의 검증으로 대신하지 않으며 새 커밋에서 다시 Quick을 실행한다.
+
 ### 최종 Push 및 원격 검증 기록
 
 이 문서 커밋 시점에는 최종 HEAD의 Quick/Smoke와 원격 CI를 아직 성공으로 확정하지 않는다. 커밋 후 정확한 SHA에서 Quick을 실행하며, 실제 명령·종료 코드·소요 시간·SHA와 최신 GitHub Actions 전체 CI URL/결과는 구현 PR의 Validation에 기록한다. 검사 이후 실행 코드/테스트 변경이 있으면 새 HEAD에서 다시 Quick을 통과해야 한다.
