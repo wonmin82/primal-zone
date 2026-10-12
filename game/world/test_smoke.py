@@ -19,6 +19,8 @@ from world.timing import PRODUCTION_TIMING, configured_timings
 PROJECT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT))
 sys.path.insert(0, str(PROJECT / "scripts"))
+from smoke import route  # noqa: E402
+
 from scripts import dev, smoke_harness  # noqa: E402
 from scripts.smoke_closeout import (  # noqa: E402
     Closeout,
@@ -29,6 +31,52 @@ from scripts.smoke_closeout import (  # noqa: E402
 
 
 class SmokeContractsTests(TestCase):
+    def test_recovery_route_opens_closed_door_in_both_directions_before_moving(self):
+        player = SimpleNamespace(state={'zone': 'support_3f_e1'})
+        commands, opened = [], False
+
+        async def prompt(command):
+            nonlocal opened
+            commands.append(command)
+            self.assertEqual(command, '회복실 문 열어')
+            opened = True
+
+        async def act(command, predicate):
+            commands.append(command)
+            if not opened:
+                raise AssertionError('closed recovery door')
+            player.state['zone'] = 'recovery_room' if command == '북' else 'support_3f_e1'
+            self.assertTrue(predicate(player.state))
+
+        player.expect_prompt, player.act = prompt, act
+        asyncio.run(route(player, [('북', 'recovery_room')]))
+        opened = False  # 정상 자동 닫힘 후 내부에서도 같은 사용자 경로를 사용한다.
+        asyncio.run(route(player, [('남', 'support_3f_e1')]))
+        self.assertEqual(commands, ['회복실 문 열어', '북', '회복실 문 열어', '남'])
+
+    def test_recovery_route_keeps_open_command_failure_and_does_not_move(self):
+        player = SimpleNamespace(state={'zone': 'support_3f_e1'},
+                                 expect_prompt=AsyncMock(side_effect=RuntimeError('open unavailable')),
+                                 act=AsyncMock())
+        with self.assertRaisesRegex(RuntimeError, 'open unavailable'):
+            asyncio.run(route(player, [('북', 'recovery_room')]))
+        player.act.assert_not_awaited()
+        self.assertEqual(player.state['zone'], 'support_3f_e1')
+
+    def test_route_does_not_adopt_general_or_locked_admin_exit(self):
+        player = SimpleNamespace(state={'zone': 'hq_concourse'}, expect_prompt=AsyncMock())
+        async def act(command, predicate):
+            if command == '동':
+                raise RuntimeError('locked admin exit')
+            player.state['zone'] = 'dock'
+            self.assertTrue(predicate(player.state))
+        player.act = act
+        asyncio.run(route(player, [('서', 'dock')]))
+        player.state['zone'] = 'hq_concourse'
+        with self.assertRaisesRegex(RuntimeError, 'locked admin exit'):
+            asyncio.run(route(player, [('동', 'hq_admin_office')]))
+        player.expect_prompt.assert_not_awaited()
+
     def test_shutdown_preserves_rows_and_only_settles_enabled_light_power(self):
         from copy import deepcopy
 
