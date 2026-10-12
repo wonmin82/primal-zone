@@ -1434,3 +1434,13 @@ PR #25의 최종 문서 HEAD와 병합 후 main의 test·smoke를 대조하고, 
 - 초기 테스트의 Help 범위 오분류 실패를 보존했다. 기존 명령의 간결한 Help 형식까지 새 정책으로 요구하지 않으며 신규/변경 명령의6절은 필수로 검사한다.
 - 50-C 진행: 시나리오별 새 Harness DB/서버, 실제 UI/Exit 이동, 읽기 전용 DB Probe, 소유 Harness 정상 restart, 격리 복사본의 실제 지급 뒤 상위 rollback 주입. 첫 E2E-01 PASS/73.276초(전체). 나머지 전체 PASS는 미확정.
 - 다음: 전체14 Chromium/멀티세션/재시작, 인프라 오류 경계, RELEASE 워크플로, 최종 전체 회귀·정확한 HEAD Quick·단일 PR/CI. Merge/삭제/Issue Close/최종 RELEASE 선언 금지.
+
+
+## Issue #50 50-B~E 및50-F 준비 — Pre-merge 제출
+
+- Base82641de, Source codex/issue-50-integrated-qa, 코드최신 `45d1a27a388e483e72913743c978e583b952510b`. B46b1903(계약), C/D/E043da8c(실제E2E·영속·인프라), F준비ae489ca(독립main RELEASE), 역할470c587 및 재시작경계 후속 커밋으로 분리했다.
+- 계약74/실제70 PASS, 고정metadata86/Alias75·새Help/문서/의료3 PASS. 순수229·통합814 최종전체 PASS. 최초Alias순서 실패는 역사로 보존했다.
+- 실제50-A9 및 E2E14 로컬 PASS. 독립Account/Context/WS·교전/권리/메시지·동시문·Puppet599.999/600 서비스·재접속·정상Portal/Serverrestart·상위rollback·두화면/clipboard/Focus를 확인했다.
+- Runner Windows23(정의24/POSIX1 N/A)+신규6, Node28, Harness18 PASS. P2-01~04·보안/프로세스 보호 유지. 새로운 게임정책/구현/프로토콜/운영DB/타이머 변경 없음. faviconP2 #59 이관, 새차단P0/P1 없음.
+- 필수5문서 준비. 실제60/600·Full·최종main CI/RELEASE·G14/FinalCloseout NOT RUN. IME PRIOR VERIFIED, 이미지 PENDING REVIEW, macOS 미지원/NOT RUN 유지.
+- 다음: 문서/전체diff검사 → 정확한최종HEAD Quick → Push/단일Ready PR → 최신 네CI/Artifact확인 → Issue50의 원문보존·PR/진행 구역 갱신 → 사용자리뷰. Merge/삭제/Issue50·45Close는 금지.

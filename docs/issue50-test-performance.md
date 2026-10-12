@@ -61,3 +61,18 @@ Windows / Python 3.13.15 / Node 24.19.0. 실행 기준은 착수 HEAD `7afc09d06
 ## P2-04 시작 실패 파이프 보완
 
 최초 Ubuntu Run 38187028065의 Runner는 FAIL/1.552초였고 Chromium은 NOT RUN이다. 수정 후 Windows Runner 정의 24개 중 23개 PASS·POSIX 전용 1개 N/A/5.280초를 확인했다. 새 HEAD의 Quick/Ubuntu 결과는 PR 및 Issue에서 확인하며 이전 시간 표를 새 실행으로 재사용하지 않는다. 실패·원인은 [실행 이력](playtest.md#p2-04-최초-ubuntu-ci-실패-및-수정)에 보존한다.
+## Phase 50-B~F 준비의 실측과 실행 분리
+
+- 계약74개에 연결된 실제70개 테스트: 186.579초 PASS. 최종 신규 계약3개:23.133초/전체34.899초 PASS. Frozen Alias의 순서까지 요구한 최초 전체 실행은 FAIL이며 수정 전 기록은 [실행 이력](playtest.md)에 보존한다.
+- 기존 Runner 정의24개 중 Windows 해당23 PASS/7.248초·POSIX 전용1 N/A, 새 제어/manifest/main SHA guard5 PASS/1.391초. Node27 PASS/0.336초. 플랫폼 N/A를 PASS 수에 더하지 않는다.
+- Windows 개별 Chromium 준비~정리 개발 실측: E2E-01 73.276초, E2E-03 113.085초, E2E-05 144.714초, E2E-04 129.640초, E2E-06 142.665초, E2E-07 121.022초, E2E-09 133.066초, E2E-10 70.517초, E2E-11 131.311초. 실제 NPC 버튼을 추가한 E2E-02는 다른 로컬 검사와 병행한244.529초였다. 이 값은 최신 전체 단독 실행이나 Ubuntu CI의 실측으로 표현하지 않는다.
+- 매 시나리오는 새 격리 Harness로 초기 조건/DB/타이머 간섭을 없앤다. 실제 게임 명령·WS를 Mock으로 대체하여 시간을 줄이지 않는다. 읽기 전용 Probe는 Python 초기화 비용이 있어 로컬 병행 실행의 부하를 따로 기록한다. 초기 테스트 작성/실패 수정 시간은 D21/P-02 성공1회 시간 예산과 구분한다.
+- PR의 기존 네 Job 유지. browser-e2e에서50-A와 전체14 및 실행기 회귀를 실행하며 worker1/retries0이다. Job timeout20분은 오류 발견을 위한 상한이며 수용 기준을 줄이지 않는다. 최종 네 CI Job별 시간/전체 경과는 실제 Run 완료 후 기록한다.
+- RELEASE는 test/Quick/Full/contracts/browser전체/timing/persistence를 각 독립 DB/서버에서 병렬 실행한다. timing의 최소 실제600초는 줄이지 않으며 다른 Job과 병렬이다. 일반 PR12~20분·RELEASE20~35분/30분 이내 목표를 유지한다. **실제 RELEASE 시간은 NOT RUN**, Workflow 준비만으로 목표를 달성했다고 주장하지 않는다.
+
+
+## 최종 로컬 제출 검증 (원격 CI 전)
+
+순수229/통합814 PASS, 기존50-A9 + 실제E2E01~14 PASS. Runner Windows23(정의24/POSIX1 N/A)+신규6, Harness18, Node28 PASS. 실행 SHA/개발 diff와 실제 개별 시간은 통합 매트릭스에 구분했다. 후속 NPC 역할 보강3개는83.015/152.005/92.905초, 정상 restart의 만료 sweep 분류 보강은128.467초 PASS다. 이는 원격 최신HEAD/RELEASE 실행 성공을 의미하지 않는다.
+
+이 문서 앞의 미확정/초기 실행 기록은 개발 당시 이력이다. 현재 로컬 WEB01~12 기능 수용은 PASS이며 정확한 최종 Push HEAD Quick 및 네 GitHub Job은 PR/Issue50에서 새로 확정한다. 실제60/600/Full/최종main RELEASE는 NOT RUN, IME PRIOR VERIFIED, 이미지 PENDING REVIEW 유지. 비차단 favicon은 [후속P2 #59](https://github.com/wonmin82/primal-zone/issues/59)에 이관했다.
