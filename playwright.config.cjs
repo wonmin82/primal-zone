@@ -12,7 +12,7 @@ module.exports = defineConfig({
   grep: process.env.PRIMAL_BROWSER_SCENARIO ? new RegExp('TEST-' + process.env.PRIMAL_BROWSER_SCENARIO + ' ') :
     (process.env.PRIMAL_BROWSER_FAILURE_PROBE === '1' ? /TEST-P2-02-D / : undefined),
   timeout: process.env.PRIMAL_BROWSER_SCENARIO?.startsWith('TIMING-') ? 750000 :
-    (process.env.PRIMAL_BROWSER_SCENARIO ? 180000 : 45000),
+    (process.env.PRIMAL_BROWSER_SCENARIO ? 240000 : 45000),
   expect: { timeout: 15000 },
   outputDir: path.join(process.env.PRIMAL_BROWSER_RESULTS, 'screenshots'),
   reporter: [['./scripts/browser/reporter.cjs']],

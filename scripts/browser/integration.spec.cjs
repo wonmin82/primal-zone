@@ -25,6 +25,14 @@ test('TEST-E2E-01 명령·Alias·Help·개인 변수 줄임말', async ({ actors
   await command(a, '조회 점수, 장비 해 줄임말', '추가');
   await command(a, '조회', '장비');
   expect(snapshot().players[a.name].profile.command_shortcuts['조회']).toBe('점수, 장비 해');
+  const profile = snapshot().players[a.name].profile;
+  await travel(a, 'training_room');
+  for (const npc of ['전투교관', '근력교관']) await command(a, npc + '에게 훈련 말', '서비스 명령');
+  await command(a, '강타 배워', '남은 기술 훈련');
+  await travel(a, 'training_office');
+  await command(a, '훈련관리관에게 훈련 말', '서비스 명령');
+  const after = snapshot().players[a.name].profile;
+  for (const field of ['xp', 'credits', 'skills']) expect(after[field]).toEqual(profile[field]);
   expect(a.errors).toEqual([]);
 });
 
@@ -61,6 +69,10 @@ test('TEST-E2E-02 실제 NPC 임무·수리·보고·출입증 재발급', async
   expect(reissued.players[b.name].profile.credits).toBe(lost.players[b.name].profile.credits);
   await command(b, '윤대장에게 재발급 말');
   expect(snapshot().items).toEqual(reissued.items);
+  await travel(b, 'jungle_edge');
+  await command(b, '선발대 길잡이에게 임무 말');
+  await command(b, '선발대 길잡이에게 수락 말');
+  expect(snapshot().players[b.name].profile.quests.deep_jungle.started).toBe(true);
   expect(a.errors).toEqual([]);
 });
 
@@ -79,6 +91,12 @@ test('TEST-E2E-03 상점 구매·정보 읽기·장착·해제·판매', async (
   const sold = snapshot();
   expect(itemCount(sold, a.name, 'cutting_machete')).toBe(itemCount(initial, a.name, 'cutting_machete'));
   expect(sold.players[a.name].profile.credits).toBe(initial.players[a.name].profile.credits - 28);
+  await travel(a, 'salvage_office');
+  await command(a, '정산관에게 정산 말', '10칩');
+  await command(a, '정산관에게 회수부품 1개 교환');
+  const exchanged = snapshot();
+  expect(exchanged.players[a.name].profile.credits).toBe(sold.players[a.name].profile.credits + 10);
+  expect(itemCount(exchanged, a.name, 'scrap')).toBe(itemCount(sold, a.name, 'scrap') - 1);
 });
 
 test('TEST-E2E-04 유료 회복·회복실 Door·무료 침대', async ({ actors }) => {
