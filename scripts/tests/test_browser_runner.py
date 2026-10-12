@@ -203,7 +203,8 @@ class BrowserProcessTreeTests(unittest.TestCase):
         child_code = 'import time,signal,os;' + handler + f'open({str(ready)!r},"w").close();time.sleep(120)'
         script.write_text('import subprocess,sys,time,json,os,signal\n' + handler + '\n'
                           + (f'child=subprocess.Popen([sys._base_executable,"-c",{child_code!r}],start_new_session=os.name!="nt")\n' if child else '')
-                          + f'open({str(record)!r},"w").write(json.dumps({{"parent":os.getpid(),"child":child.pid if {child!r} else None}}))\n'
+                          + f'open({str(record)+".tmp"!r},"w").write(json.dumps({{"parent":os.getpid(),"child":child.pid if {child!r} else None}}))\n'
+                          + f'os.replace({str(record)+".tmp"!r},{str(record)!r})\n'
                           + (f'while not os.path.exists({str(ready)!r}): time.sleep(0.01)\n' if child else '')
                           + ('sys.exit(2 if '+str(child)+' else 0)\n' if early else 'time.sleep(120)\n'), encoding='utf-8')
         log = (self.root/f'log-{index}').open('w')
