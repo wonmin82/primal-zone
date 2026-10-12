@@ -255,10 +255,19 @@ test('TEST-E2E-12 정상 Portal/Server 재시작·같은 DB·재인증', async (
   await restart();
   const stopped = snapshot();
   expect(stopped.items).toEqual(before.items);
+  expect(stopped.doors).toHaveLength(before.doors.length);
   // 정상 재시작의 만료 sweep은 허용한다. PK/권한/비만료 예약의 리셋은 거절한다.
-  const expectedDoors = before.doors.map(d => d.state === 'OPEN' && d.auto_close_at <= Date.now() / 1000 ?
-    { ...d, state: 'CLOSED', auto_close_at: null } : d);
-  expect(stopped.doors).toEqual(expectedDoors);
+  for (const saved of before.doors) {
+    const current = stopped.doors.find(d => d.door_id === saved.door_id);
+    if (saved.state === 'OPEN' && current.state === 'CLOSED') {
+      expect(saved.auto_close_at).toBeLessThanOrEqual(Date.now() / 1000);
+      expect(current).toEqual({ ...saved, state: 'CLOSED', auto_close_at: null });
+    } else {
+      // 만료 직후에는 sweep이 최대 한 tick 늦을 수 있다. 저장 OPEN/원래 예약을
+      // 보존해도 정상이며 논리적 차단은 Door 경계 테스트가 별도로 확인한다.
+      expect(current).toEqual(saved);
+    }
+  }
   expect(stopped.installations).toEqual(before.installations);
   expect(stopped.claims).toEqual(before.claims); expect(stopped.currency).toEqual(before.currency); expect(stopped.shares).toEqual(before.shares);
   expect(stopped.legacy_loot).toEqual(before.legacy_loot);
