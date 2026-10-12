@@ -223,3 +223,8 @@ Neo둥근모 Code v1.601을 **SIL Open Font License 1.1**로 자체 제공한다
 세부 설계: [장비](docs/equipment.md) · [광원·총기](docs/lighting-firearms.md) · [전리품](docs/loot-claims.md) · [출입증·상점](docs/credentials-access-shops.md) · [본부 배치](docs/headquarters-redesign.md) · [아이템 migration](docs/item-migration.md) · [텍스트 출력 예](docs/text-examples.md) · [NPC 대화·개인 메시지 설계](docs/npc-dialogue.md).
 
 기존 README의 상세 플레이 항목은 [플레이 가이드](docs/gameplay.md)로 모았다. 장비의 확정 수치는 [최종 콘텐츠](docs/final-content.md), 개발 이력은 [작업 상태](docs/CODEX_TASK_STATE.md)에서 확인한다.
+### Issue #50 통합 검증
+
+기존 `npm run test:browser`는 Phase 50-A를 유지한다. `npm run test:browser:integration`은 실제 Chromium E2E-01~14를 시나리오별 새 격리 Evennia 서버/DB에서 실행한다. 직접 영향 검사는 `uv run python scripts/integration_e2e.py --scenario E2E-08`처럼 선택한다. [실행 조건과 DB/메시지 Assertion](docs/issue50-e2e-validation.md), [Pre-merge/RELEASE Gate](docs/issue50-final-validation.md)를 참고한다.
+
+`test:browser:timing`(실제60/600초)과 `test:browser:persistence`는 병합 후 main RELEASE용이며 일반 PR에서 긴 타이머를 반복하지 않는다. 최종 RELEASE는 `release-validation.yml`을 main에서 dispatch하고 실제40자리 SHA를 명시한다. PR/워크플로 준비만으로 최종 RELEASE 완료를 선언하지 않는다.

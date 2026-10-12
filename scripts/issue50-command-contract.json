@@ -1,0 +1,562 @@
+[
+  {
+    "key": "소각",
+    "aliases": [
+      "소각 확정"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "재장전",
+    "aliases": [],
+    "input_style": "target"
+  },
+  {
+    "key": "장전",
+    "aliases": [],
+    "input_style": "target"
+  },
+  {
+    "key": "채워",
+    "aliases": [],
+    "input_style": "target"
+  },
+  {
+    "key": "능력",
+    "aliases": [],
+    "input_style": "standalone"
+  },
+  {
+    "key": "기술",
+    "aliases": [],
+    "input_style": "standalone"
+  },
+  {
+    "key": "경험치",
+    "aliases": [
+      "경"
+    ],
+    "input_style": "standalone"
+  },
+  {
+    "key": "장비",
+    "aliases": [
+      "장"
+    ],
+    "input_style": "standalone"
+  },
+  {
+    "key": "주무기",
+    "aliases": [],
+    "input_style": "target"
+  },
+  {
+    "key": "배워",
+    "aliases": [],
+    "input_style": "target"
+  },
+  {
+    "key": "배분",
+    "aliases": [],
+    "input_style": "target"
+  },
+  {
+    "key": "재분배",
+    "aliases": [
+      "재훈련"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "가져",
+    "aliases": [
+      "집"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "일행",
+    "aliases": [
+      "그룹",
+      "무리"
+    ],
+    "input_style": "standalone"
+  },
+  {
+    "key": "일행모으기",
+    "aliases": [
+      "그룹만들기",
+      "그룹모으기"
+    ],
+    "input_style": "standalone"
+  },
+  {
+    "key": "일행초청",
+    "aliases": [
+      "그룹초청"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "일행합류",
+    "aliases": [
+      "그룹가입"
+    ],
+    "input_style": "standalone"
+  },
+  {
+    "key": "일행거절",
+    "aliases": [],
+    "input_style": "target"
+  },
+  {
+    "key": "일행요청",
+    "aliases": [
+      "그룹요청"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "일행허락",
+    "aliases": [
+      "그룹허락"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "일행제외",
+    "aliases": [],
+    "input_style": "target"
+  },
+  {
+    "key": "일행탈퇴",
+    "aliases": [
+      "그룹탈퇴"
+    ],
+    "input_style": "standalone"
+  },
+  {
+    "key": "일행리더",
+    "aliases": [
+      "그룹리더"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "일행승계",
+    "aliases": [
+      "그룹승계"
+    ],
+    "input_style": "standalone"
+  },
+  {
+    "key": "일행해체",
+    "aliases": [
+      "그룹해체"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "일행대화",
+    "aliases": [
+      "그룹대화",
+      "무",
+      "무리말"
+    ],
+    "input_style": "chat"
+  },
+  {
+    "key": "일행공격",
+    "aliases": [
+      "일공"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "일행방어",
+    "aliases": [
+      "그룹방어"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "일행분배",
+    "aliases": [],
+    "input_style": "target"
+  },
+  {
+    "key": "열어",
+    "aliases": [],
+    "input_style": "target"
+  },
+  {
+    "key": "닫아",
+    "aliases": [],
+    "input_style": "target"
+  },
+  {
+    "key": "잠궈",
+    "aliases": [],
+    "input_style": "target"
+  },
+  {
+    "key": "풀어",
+    "aliases": [],
+    "input_style": "target"
+  },
+  {
+    "key": "봐",
+    "aliases": [
+      "`",
+      "보",
+      "본"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "출구",
+    "aliases": [
+      "exits"
+    ],
+    "input_style": "standalone"
+  },
+  {
+    "key": "날씨",
+    "aliases": [
+      "환경"
+    ],
+    "input_style": "standalone"
+  },
+  {
+    "key": "도움",
+    "aliases": [
+      "도움말"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "단축어",
+    "aliases": [],
+    "input_style": "standalone"
+  },
+  {
+    "key": "해",
+    "aliases": [],
+    "input_style": "target"
+  },
+  {
+    "key": "줄임말",
+    "aliases": [
+      "준말"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "해지",
+    "aliases": [],
+    "input_style": "target"
+  },
+  {
+    "key": "점수",
+    "aliases": [
+      "상",
+      "상태",
+      "점"
+    ],
+    "input_style": "standalone"
+  },
+  {
+    "key": "가진거",
+    "aliases": [
+      "가진",
+      "소",
+      "소지",
+      "소지품"
+    ],
+    "input_style": "standalone"
+  },
+  {
+    "key": "정보",
+    "aliases": [],
+    "input_style": "target"
+  },
+  {
+    "key": "무장",
+    "aliases": [
+      "wield"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "착용",
+    "aliases": [
+      "입",
+      "입어"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "버려",
+    "aliases": [
+      "drop"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "줘",
+    "aliases": [
+      "give"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "먹어",
+    "aliases": [
+      "eat"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "마셔",
+    "aliases": [
+      "drink"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "벗어",
+    "aliases": [
+      "벗"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "해제",
+    "aliases": [
+      "unwield"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "넣어",
+    "aliases": [
+      "store"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "꺼내",
+    "aliases": [
+      "retrieve"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "켜",
+    "aliases": [],
+    "input_style": "target"
+  },
+  {
+    "key": "꺼",
+    "aliases": [],
+    "input_style": "target"
+  },
+  {
+    "key": "확인",
+    "aliases": [],
+    "input_style": "target"
+  },
+  {
+    "key": "때려",
+    "aliases": [
+      "공격",
+      "쳐"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "강타",
+    "aliases": [
+      "heavy"
+    ],
+    "input_style": "standalone"
+  },
+  {
+    "key": "쏴",
+    "aliases": [],
+    "input_style": "standalone"
+  },
+  {
+    "key": "간파",
+    "aliases": [
+      "insight"
+    ],
+    "input_style": "standalone"
+  },
+  {
+    "key": "견제",
+    "aliases": [
+      "suppress"
+    ],
+    "input_style": "standalone"
+  },
+  {
+    "key": "치료",
+    "aliases": [
+      "heal",
+      "힐"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "호흡",
+    "aliases": [
+      "breathing"
+    ],
+    "input_style": "bare"
+  },
+  {
+    "key": "사용",
+    "aliases": [],
+    "input_style": "target"
+  },
+  {
+    "key": "도망",
+    "aliases": [
+      "flee"
+    ],
+    "input_style": "standalone"
+  },
+  {
+    "key": "귀환",
+    "aliases": [
+      "home"
+    ],
+    "input_style": "standalone"
+  },
+  {
+    "key": "휴식",
+    "aliases": [
+      "rest"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "회복",
+    "aliases": [],
+    "input_style": "target"
+  },
+  {
+    "key": "목록",
+    "aliases": [
+      "메뉴",
+      "목",
+      "품",
+      "품목"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "사",
+    "aliases": [
+      "구입"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "가치",
+    "aliases": [
+      "얼마"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "팔아",
+    "aliases": [
+      "판",
+      "팔"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "교환",
+    "aliases": [
+      "exchange"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "환율",
+    "aliases": [
+      "rate"
+    ],
+    "input_style": "target"
+  },
+  {
+    "key": "임무",
+    "aliases": [
+      "quest",
+      "퀘스트"
+    ],
+    "input_style": "standalone"
+  },
+  {
+    "key": "조사",
+    "aliases": [],
+    "input_style": "target"
+  },
+  {
+    "key": "수리",
+    "aliases": [],
+    "input_style": "target"
+  },
+  {
+    "key": "지도",
+    "aliases": [
+      "지"
+    ],
+    "input_style": "standalone"
+  },
+  {
+    "key": "말",
+    "aliases": [
+      "say"
+    ],
+    "input_style": "chat"
+  },
+  {
+    "key": "대화",
+    "aliases": [],
+    "input_style": "chat"
+  },
+  {
+    "key": "대답",
+    "aliases": [],
+    "input_style": "chat"
+  },
+  {
+    "key": "대화거부",
+    "aliases": [],
+    "input_style": "target"
+  },
+  {
+    "key": "__nomatch_command",
+    "aliases": [],
+    "input_style": "standalone"
+  },
+  {
+    "key": "누구",
+    "aliases": [
+      "누"
+    ],
+    "input_style": "standalone"
+  },
+  {
+    "key": "종료",
+    "aliases": [
+      "q",
+      "quit"
+    ],
+    "input_style": "standalone"
+  }
+]

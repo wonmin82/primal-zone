@@ -101,3 +101,20 @@ test('기존 static 경로 favicon 404만 비차단으로 분류하며 다른 �
   assert.equal(isFavicon404('http://localhost/other.js', '404'), false);
   assert.equal(isFavicon404('http://localhost/favicon.ico', '500'), false);
 });
+test('60초 keepalive는 실제 명령 횟수·원문 비교를 덮지 않는다', () => {
+  const { isCommandFrame } = require('../browser/safety.cjs');
+  assert.equal(isCommandFrame('text', ['idle']), false);
+  assert.equal(isCommandFrame('pz_auth', [{ password: 'private-fixture' }]), false);
+  assert.equal(isCommandFrame('text', ['서']), true);
+  assert.equal(isCommandFrame('text', ['']), true);
+  assert.equal(isCommandFrame('text', []), false);
+});
+
+test('차단 Console 오류는 원문 노출 없이 실패하며 모든 Context는 닫는다', async () => {
+  const closed = [];
+  const players = [0, 1].map(index => ({ errors: index ? [] : ['PRIVATE-CONSOLE-BODY'],
+    close: async () => closed.push(index), diagnostic: () => ({ player: index ? 'B' : 'A' }) }));
+  await assert.rejects(finishActors(players, { attach: async () => {} }), error =>
+    error instanceof AggregateError && error.errors[0].message === 'browser-console-failed' && !String(error).includes('PRIVATE-CONSOLE-BODY'));
+  assert.deepEqual(closed, [0, 1]);
+});

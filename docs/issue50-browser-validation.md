@@ -70,3 +70,72 @@ Context 종료 뒤 Playwright가 WebSocket close 이벤트를 전달하지 않�
 근거: [Microsoft Job Objects](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects), [Python subprocess](https://docs.python.org/3.13/library/subprocess.html), [Python pidfd](https://docs.python.org/3.13/library/os.html#os.pidfd_open). Windows 실제 OS 회귀와 Chromium은 로컬에서, Linux 실제 detached 자식·pidfd 회귀와 Chromium은 기존 Ubuntu browser-e2e Job에서 확인한다. macOS 실행 환경이 없어 **NOT RUN**이며 macOS 지원 검증 완료라고 주장하지 않는다. 외부 Chromium/Node/Evennia의 이름이나 미확인 PID를 종료하지 않는다.
 
 Linux의 Node 실행 시작 실패 시 자식 없음 증거를 기록한 보호 프로세스가 먼저 종료할 수 있다. 이미 검증된 정리 증거가 있으면 닫힌 파이프에 종료 요청을 보내지 않는다. BrokenPipe가 발생한 경우에도 보호 프로세스 종료·실제 `.clean`의 stopped=true를 확인한 경우만 정리 완료로 인정한다. 증거 없이 부모 종료만 확인된 경우는 실패다. 전체 Runner는 이 경계 추가 후 24개이며 과거 23개 기록은 보존한다.
+# Phase 50-B~F 준비의 브라우저 확장
+
+## 실행 구조와 범위
+
+`npm run test:browser`는 기존50-A9개를 유지한다. `npm run test:browser:integration`은 새 E2E-01~14를 시나리오별 새 DB/서버에서 순차 실행한다. Playwright1.64.0/Chromium156.0.8078.4·Node24 LTS·Python3.13, Windows/Linux 소유 프로세스 수명 보호는 그대로다. macOS는 기존 명시적 미지원/NOT RUN을 유지한다.
+
+실제 UI 인증·Enter·NPC 버튼 키보드/클릭·이동 버튼·독립2~3 Context·실제 WebSocket·재접속을 사용한다. 초기Fixture/읽기 전용 DB Probe/정상 Harness restart/시각 및 상위 rollback 주입은 [E2E 문서](issue50-e2e-validation.md)에 구분한다. Actor Context 종료 후 해당 소유 Puppet ID의 실제 해제를 계속 확인한다.
+
+## WEB 요구 연결
+
+| ID | 검증 책임 | 실제 위치 | 현재 판정 |
+| --- | --- | --- | --- |
+| T50-WEB-01 | Chromium·HTTP·WS·실제 인증 | TEST-50A-01/03, 모든 E2E actors.create | 개발 성공, 최종 CI 미확정 |
+| T50-WEB-02 | 입력/Enter·정확한 한 번 전송 | TEST-50A-02, E2E-01/14, Player.command | 개발 성공, 전체 미확정 |
+| T50-WEB-03 | History·Backspace·실제 clipboard paste | E2E-14 | NOT RUN (최종 결과 미확정) |
+| T50-WEB-04 | 실제 버튼·명령과 동일 서버 경로 | E2E-02 NPC selection·E2E-04 Exit 버튼·Node 기존 Action 계약 | 개별 개발 성공, 최종 코드 재확인 필요 |
+| T50-WEB-05 | Prompt·비동기 WS 상태 | E2E-06/08/14·기존 Prompt 계약 | 개별 개발 성공, 최종 전체 필요 |
+| T50-WEB-06 | Desktop1366×768 | TEST-50A-06/E2E-14 | 기존 증거 보존, 새 전체 결과 미확정 |
+| T50-WEB-07 | Narrow390×844·overflow/viewport | TEST-50A-06/E2E-14 | 기존 증거 보존, 새 전체 결과 미확정 |
+| T50-WEB-08 | Focus·이름·키보드·hit-test | E2E-02/14·TEST-50A-06 | NOT RUN (최종 결과 미확정) |
+| T50-WEB-09 | 개인 활성 키워드·중복 보상 방지 | E2E-02, NPCDialogueTests·Node 키워드 계약 | Python/Node PASS, 새 전체 Chromium 미확정 |
+| T50-WEB-10 | 독립 Context/계정·수신 범위 | E2E-05/06/07/08/11 | 개별 개발 성공, 최종 전체 필요 |
+| T50-WEB-11 | Console/HTML/Semantic Text | 기존50-A·E2E-05/14·Node27개 | Node PASS, 실제 전체 미확정 |
+| T50-WEB-12 | 재접속·세션·안전한 증거 | E2E-11/12·P2회귀·엄격한 export | Runner PASS, 실제 재시작 조사/전체 미확정 |
+
+이 표의 미확정 항목을 예상 PASS로 처리하지 않는다. 최종 실행 SHA·CI·개수·시간은 통합 매트릭스와 최종 PR Validation에서 실제 결과로 갱신한다. IME는 **PRIOR VERIFIED**, 새 수동 검사 없음. 시각 기준 이미지는 **PENDING REVIEW**, 구조적 Assertion이 주관적 UI 승인을 대신하지 않는다.
+
+## 발견한 테스트 인프라 결함
+
+긴 실제 사용자 흐름에서 기존 Player Fixture가60초 `idle` keepalive를 사용자 명령으로 세어 횟수·원문 비교를 덮었다. E2E-02에서 실제 실패를 재현하고 `isCommandFrame`으로 transport keepalive와 사용자 제출을 분리했다. 운영 keepalive/타이머/프로토콜을 수정하지 않았다. Node 음성 경계와 실제60초를 넘는 Quest 흐름으로 보완을 확인했다.
+
+인증/개인·일행/자유 입력·clipboard 원문·임의 WS Payload·Snapshot·Trace/Video·자동 오류 DOM은 수집하지 않는다. clipboard는 테스트가 쓴 값이 그대로 남아 있을 때만 원래 값으로 복원한다. 최초 실패의 Popen/Job/subreaper/Puppet/인증 제거 보호는 유지한다. 서버 복사본의 failure/clock Hook은 PRIMAL_SMOKE 경로 검사를 통과한 실행에만 설치한다.
+
+
+## 최종 로컬 제출 검증 (원격 CI 전)
+
+순수229/통합814 PASS, 기존50-A9 + 실제E2E01~14 PASS. Runner Windows23(정의24/POSIX1 N/A)+신규6, Harness18, Node28 PASS. 실행 SHA/개발 diff와 실제 개별 시간은 통합 매트릭스에 구분했다. 후속 NPC 역할 보강3개는83.015/152.005/92.905초, 정상 restart의 만료 sweep 분류 보강은128.467초 PASS다. 이는 원격 최신HEAD/RELEASE 실행 성공을 의미하지 않는다.
+
+이 문서 앞의 미확정/초기 실행 기록은 개발 당시 이력이다. 현재 로컬 WEB01~12 기능 수용은 PASS이며 정확한 최종 Push HEAD Quick 및 네 GitHub Job은 PR/Issue50에서 새로 확정한다. 실제60/600/Full/최종main RELEASE는 NOT RUN, IME PRIOR VERIFIED, 이미지 PENDING REVIEW 유지. 비차단 favicon은 [후속P2 #59](https://github.com/wonmin82/primal-zone/issues/59)에 이관했다.
+
+
+## PR #60 리뷰 보완 관측 경계
+
+실제 Windows Chromium E2E08 151.801초, E2E11 141.538초, E2E12 보완 후143.987초(각 격리 준비~정리) PASS. 기준은 리뷰HEAD d7736c54 + 해당 개발diff이며 커밋 이후 새 실행으로 표현하지 않는다. E2E08은 OPEN 당시 실제 이동 버튼 HTMLElement를 보관한다. B의 실제 닫기 후 최신 버튼이 disabled이고, 교체돼 detached인 이전 버튼만 QA 소유 컨테이너에 재연결해 실제 click → 기존 document 이벤트 → text WS → 실제 서버로 보낸다. 게임 상태를 mock하거나 새 RPC를 쓰지 않는다. A의 위치/admin Door 상태/예약 불변과 이후 최신 정상 이동 버튼의 성공을 모두 검사한다.
+
+E2E12는 실제 ObjectDB의 전체 Exit PK/Location/Destination/Typeclass/key/관리 태그/Door Attribute와 설치 원본을 재시작 전후 정확히 비교한다. 정상 만료 sweep은 Door state/예약에만 허용하고 Exit 변경은 허용하지 않는다. 정적 routes는 이동 계획 전용이다. Probe는 기존 소유 DB 검증과 query_only를 유지하며 원본 Snapshot을 Artifact로 보내지 않는다.
+
+RELEASE 관측: wall clock Date.now와 저장 deadline을 사용하고 조회 소요는 monotonic performance.now로 확인한다. 최대5초 간격으로 만료 전 상태를 관측하며 중간30/300초 이후와 예약4초 전부터의 직전 관측을 필수로 한다. Probe2초 상한, 관측 완료가 만료0.5초 전까지여야 하며 누락/지연은 FAIL이다. 정상 Tick 후 확인 상한8초는 5초 Tick+2초 Probe+1초 scheduling 여유다. 실제 통과 요청~응답 창 안에 예약-60초가 있어야 한다(시계 정밀도0.1초 허용). 오프라인 시작도 마지막 Puppet 종료 요청~완료 시각에 대조한다. 운영 타이머는 바꾸지 않는다.
+
+30/300초 조기 실행·늦은 관측은 별도 음성 회귀로 거절한다. 주입시각 E2E11와 이 순수 관측 검출 검사를 실제 RELEASE Wall Clock PASS로 합산하지 않는다. 실제60/600은 NOT RUN. IME PRIOR VERIFIED, Visual Baseline PENDING REVIEW, macOS 기존 미지원 유지. P2-01~04 자격 증명/증거/Puppet/프로세스 보호는 유지한다.
+
+
+## PR #60 P2-03 — 최종 시간 경계 관측 보완
+
+리뷰 기준 `5193aa2fd3232976eecf2a0f362cd4ec3e013fb5`, 수정 코드 `653340465930e9782a80aa6dde9154fddd71455a`, Base `82641de0ea66898676b0b29194d7918489443def`. 기존 4건 리뷰/실패/성공 이력은 당시 기록으로 보존한다. 이 보완은 게임·운영 타이머·프로토콜·영속 형식을 변경하지 않는다. 최종 문서 포함 Source HEAD의 Quick/새 네 CI는 실제 완료 후 [PR #60](https://github.com/wonmin82/primal-zone/pull/60)과 [Issue #50](https://github.com/wonmin82/primal-zone/issues/50)에 기록한다. 이 문서 커밋 시점에는 해당 게이트 PENDING이다.
+
+`review-contracts.cjs::monitorBeforeDeadline()`은 더 이상 만료4초 전에 반환하지 않는다. 시작~중간~만료4초 전은 최대5초, 마지막 구간은 최대500ms의 시작 간격을 목표로 하며 직전 monotonic 조회 비용을 대기에서 뺀다. 조회가500ms보다 오래 걸리면 추가 대기 없이 다음 조회를 시작한다. 개별 조회 전체 비용 상한은 기존2,000ms다. 스케줄러 지연·2초 초과 조회·서버/세션 오류·필수 체크포인트 누락은 FAIL이며 창을 넓히거나 재시도로 숨기지 않는다.
+
+중간 완료는 중간 시각부터7초 이내(5초 간격+최대2초 조회), 직전 반복 관측은 만료4~2초 전 구간에 실제 조회가 완료되어야 한다. **최종 유효 창은 `deadline - 1.0 <= observation.end <= deadline - 0.5`**다. 완료를 만료0.75초 전으로 맞추도록 직전 조회 비용을 고려한다. 관측 시작만 유효하거나 만료 직전 조회가 늦게 완료된 경우는 실패한다. 반환하는 `middleSeen/nearSeen/finalSeen`은 상태 원문을 포함하지 않으며 두 RELEASE 시나리오가 세 값 모두 true를 요구한다.
+
+`integration_probe.py --timing`은 소유 경로/marker/명시 DB 검사를 거친 후 SQLite `mode=ro`·`query_only`·읽기 트랜잭션으로 실제 Door/일행/위치/Puppet/아이템/Claim을 읽는다. Attribute는 현재 내장 데이터만 복원하며 전역 객체/global·중복/소실은 거절한다. 기존 전체 Snapshot의 실제 Exit/설치/Room 영속 검사는 그대로 유지한다. 시간 검사와 E2E-11의 실제 DB projection 대조만 이 경량 조회를 사용한다. 원본 Snapshot/DB·사용자 입력·인증정보는 Artifact에 포함하지 않는다.
+
+- 수정 전58초 CLOSED/598초 승계 음성2개는 `Missing expected rejection`으로 FAIL(0.149초)하여 기존 관측 공백을 재현했다. 수정 후 같은 Helper의 P203-01~12와 추가 중간/직전 누락을 모두 거절/수용한다. 기존30초/300초·2초 조회 지연 회귀를 유지한다.
+- 최종 Node 계약 **52 PASS/0.399초**, 기존43+신규9, fail/skip0. 시간 회귀16개와 Exit 회귀8개, 기존 웹/보호28개를 포함한다. Python 통합 Runner **9 PASS/2.393초**, 기존8+실제 SQLite projection/해시·mtime 비변경·손상 거절1개. 기존 Browser Runner Windows23 PASS·POSIX1 N/A/5.724초(정의24).
+- 실제 Chromium E2E-11 **PASS/80.126초**, 서버 준비~정리119.703초(명령 진입점 전체120.619초). 실제599.999/600 서비스 주입·재접속·projection과 정상 실제 DB·소유 Puppet3관측 해제 확인. Node/Chromium/Evennia 종료·인증 삭제·성공DB 삭제·실제 플레이DB hash/mtime/size 불변 true.
+- `npm run test:browser:timing`→TIMING-DOOR/PARTY→동일 관측 Helper 연결 및 RELEASE Workflow 호출을 Runner가 확인했다. 정상/조기 회귀는 주입 Clock 검증이며 **실제60초/600초 Wall Clock PASS로 합산하지 않는다**.
+- check·변경JS 구문·diff PASS. 게임/Python 전체 구현 및 의존성은 변경하지 않았다. 기존 로컬 전체229/816 성공(이전 리뷰 SHA의 기록)을 새 실행으로 표현하지 않고, 이번 직접 영향 QA 회귀와 새 HEAD의 원격 전체 Suite로 확인한다.
+
+RF-33~46은 관측 구현/검출 회귀/실제 서비스 주입/RELEASE 연결/안전성으로 확인한다. RF-47~50 최종 Quick·새 네 CI·기록·차단 결함 감사는 실제 완료 후 PR/Issue에서 확정한다. RF-51~52: **실제 Door60초·리더600초 RELEASE NOT RUN**, PR60 OPEN/Ready·Source 유지·Issue50/45 OPEN. G-12 Full·G-14 최종main CI/RELEASE·G-15 FinalCloseout NOT RUN, IME PRIOR VERIFIED, Visual Baseline PENDING REVIEW, Issue58 비범위, 기존 favicon P2 #59 추적 유지. Merge/브랜치 삭제/Issue Close는 수행하지 않는다.

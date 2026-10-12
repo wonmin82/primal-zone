@@ -2225,3 +2225,52 @@ uv run python scripts/dev.py smoke
 Node 실행 파일이 없으면 Linux 보호 프로세스는 자식이 생성되지 않았다는 `.clean` 증거를 남기고 종료한다. 기존 stop은 이 경우에도 종료된 보호 프로세스의 stdin에 요청을 써 BrokenPipeError를 냈다. 이미 검증된 정리 증거가 있으면 요청을 보내지 않고, 요청/close 중 BrokenPipe가 발생해도 보호 프로세스의 종료와 실제 정리 증거를 재확인해야만 성공한다. 증거가 없거나 stopped가 true가 아니면 계속 실패한다. 기존 실제 OS 시작 실패 assertion을 유지하고 증거 유무의 음성 회귀를 추가했다.
 
 보완된 로컬 Runner 정의 24개 중 Windows 해당 23개 PASS·POSIX 전용 1개 N/A(5.280초), dev.py check·diff 검사 PASS. Linux 새 HEAD의 실제 전체 Runner/Chromium 및 정확한 Push HEAD Quick/CI는 새로 확인한다. 기존 실패 Run/HEAD와 이전 검증 기록을 보존하고 재시도로 FAIL을 덮지 않는다.
+## Issue #50 50-B~F 준비 실행 이력 — 2026-10-12
+
+기존50-A/P2 이력은 아래/기존 구역에 보존한다. 새 브랜치 `codex/issue-50-integrated-qa`, Base `82641de0ea66898676b0b29194d7918489443def`에서 시작했다. 게임 코드/규칙/타이머/운영 데이터는 변경하지 않는다.
+
+1. 신규 Help 전수 검사 초기2회: 무관한 기존 Help와 `휴식`까지 새6절 형식으로 잘못 분류해 FAIL. #46~49의 명시적 신규/변경 범위로 고정했으며 전체 Alias/실제 dispatcher 검사는 유지했다. 신규2 PASS28.887초, T50 경로70 PASS186.579초.
+2. Chromium 초기 선택: Playwright grep의 전체 제목에 `^TEST`를 사용해 No tests found/FAIL. 실제 전체 제목에 맞춰 수정하고 지정한 시나리오1개의 실제 PASS가 있어야 실행기가 성공하도록 검사했다. 예약 이름 `확인`을 개인 정의명으로 사용한 실패도 원인 확인 후 유효 이름 `정찰`로 바꿨다.
+3. 신규 인증은 원래 정책상 출정 대기실이다. Fixture의 저장 방을 그대로 현재 접속 위치로 가정한 상점 테스트는 FAIL이었다. 실제 Exit 경로로 이동하며 게임의 인증 위치 정책을 수정하지 않았다. 미소유 절단마체테를 무장하려 했던 초기 실패는 실제 상점 구매→정보→무장→해제→판매 흐름으로 보강했다.
+4. 긴 Quest E2E의 실제60초 keepalive가 사용자 제출 관측을 덮는 Fixture 결함 재현. `isCommandFrame`으로 idle을 제외하는 신규 Node 회귀를 추가했다. 실제 Quest 성공과 P2 보안·세션·프로세스 정리를 확인했다. 게임 메시지/keepalive/타이머 변경 없음.
+5. Legacy 실물을 Native 캐릭터로 직접 회수하려 했던 초기 E2E-07은 정확한 기존 보호 규칙 때문에 FAIL이었다. 별도 historical audit DB에서 Native A와 Legacy B를 초기 준비하고 각각 자기 실제 수령 API로 검증한다. cutover 방어선·저장소 간 금지 규칙을 완화하지 않는다.
+6. E2E-10의 초기 서비스 부재/짧은 교전을 일반 정책 실패로 오인하지 않는다. 현재는 실제 문이 있는 같은 방에 합성 NPC/Doctor 및 기존 hunter 수치의 적, 정상 장비를 Fixture로 준비하고 교전 지속/거부/칩·Quest·Door 불변을 검사한다. 운영 콘텐츠나 적 정의/주기를 바꾸지 않는다.
+7. 전체 Python 최초 실행: 순수229 PASS4.509초, 통합814 중1 신규 fixed metadata Alias 순서 FAIL/673.675초(전체692.155초). Evennia6.1 Command metaclass는 Alias를 set으로 정규화한다. Alias 집합을 정확히 유지하며 순서만 정규화하고 Account의 누구/종료도 고정 metadata에 추가했다. 전체 Help/문서 비교·의료와 신규3 PASS23.133초/전체34.899초. 새 전체 실행 결과는 아직 미확정이다.
+8. 최초 정상 restart E2E-12는 이미 만료한 초기 회복실 문이 정상 sweep으로 CLOSED가 되는 것을 raw state 불변으로 잘못 요구하여 FAIL이었다. 허용되는 만료 확정만 계산하고 PK/권한/설치 이력/유효 예약은 그대로 비교한다. 실제로 관리실 문을 새로 열어 비초기 상태/예약도 검증하도록 보강했다. 새 결과는 미확정이다.
+
+`npm run test:browser:integration` 전체14, `--scenario E2E-NN` 직접 영향, `npm run test:browser:timing` 실제 RELEASE60/600, `npm run test:browser:persistence` 정상 재시작/롤백을 사용한다. 모두 기존 Harness를 재사용하며 운영 DB/외부 서버·브라우저를 종료하지 않는다. 실패 시 소유 프로세스/인증 파일은 정리하고 원본 DB/로그는 소유 로컬 경로에만 보존한다. 업로드는 기존 엄격한 안전 스키마·마스킹 PNG 허용목록뿐이다.
+
+최종 Quick은 실제 Commit HEAD에서 실행한 뒤 Push한다. 최종 main RELEASE/Full은 이번 PR 단계에서 실행하지 않는다. 모든 미실행/실패 상태를 PASS로 바꾸지 않으며 Issue #50/#45 OPEN을 유지한다.
+
+
+### 50-B~F 준비 최종 로컬 재검증
+
+초기 실패 이력은 위에 보존했다. 최종 순수229/통합814 PASS, 신규3 계약 PASS, Runner24 정의 중Windows23/POSIX1 N/A·신규6/Harness18/Node28 PASS. 기존50-A9 및 실제E2E14 모두 직접 영향 성공을 확인했다. role 보강3개와 정상 restart의 지연 sweep을 허용하면서 원본/개수/예약 리셋을 차단하는 보강도 실제 재검증했다. 상세시간·run ID는 통합 매트릭스에 연결한다. 게임 구현/프로토콜/타이머 변경 없음.
+
+최종 Push HEAD Quick/네 원격 Job은 제출 직후 새로 확인한다. 실제60/600·Full·최종main RELEASE NOT RUN, IME PRIOR VERIFIED, 초기이미지 PENDING REVIEW. favicon 경고만 후속P2 #59에 이관하고 다른 Console 오류는 실패한다.
+
+
+## PR #60 통합 검증 독립 리뷰 보완
+
+P1-01/02·P2-01/02의 원래 false-positive 공백과 보강 코드를 [매트릭스](issue50-integration-matrix.md#pr-60-독립-리뷰-보완--p1-0102-p2-0102)에 연결한다. Node43/Runner8/문서5/직접 영향70 및 실제 E2E08/11/12 PASS. RELEASE 시간은 아직 NOT RUN이며 운영60/600초 상수는 그대로다.
+
+개발 실패도 보존한다. 최초 문서 검사에서 존재하지 않는 validate_body import를 실제 validate_message로 고쳤고, Markdown 셀의 backtick을 너무 일찍 제거하거나 구조 ASCII 도표를 사용자 입력으로 해석한 검사 오류를 지정된 현행 표/절로 바로잡았다. 제거된 `20 진료` 음성 주입이 회복 수단 표의 누락으로 검출되지 않았으므로 표 범위를 확대해 같은 오류를 명확히 거절하는 새 검사를 통과시켰다. Assertion을 완화하거나 잘못된 문서를 제외하지 않았다. item/equipment 현행 Profile v13 오류는 v14로 정정했다.
+
+실제 E2E12 첫 실행은 Windows UTF-8 checkpoint/CP949 디코딩 오류로97.320초 FAIL. 소유 프로세스 종료/인증제거/플레이DB불변은 모두 확인했다. 명시 UTF-8과 실제 Unicode 자식 회귀를 추가한 뒤 새 E2E12 143.987초 PASS다. 실패의 안전한 로컬 DB/로그를 보존하며 원본을 Artifact에 포함하지 않는다. 사용자 게임 데이터/프로토콜/정책을 수정하지 않았다.
+
+
+## PR #60 P2-03 — 최종 시간 경계 관측 보완
+
+리뷰 기준 `5193aa2fd3232976eecf2a0f362cd4ec3e013fb5`, 수정 코드 `653340465930e9782a80aa6dde9154fddd71455a`, Base `82641de0ea66898676b0b29194d7918489443def`. 기존 4건 리뷰/실패/성공 이력은 당시 기록으로 보존한다. 이 보완은 게임·운영 타이머·프로토콜·영속 형식을 변경하지 않는다. 최종 문서 포함 Source HEAD의 Quick/새 네 CI는 실제 완료 후 [PR #60](https://github.com/wonmin82/primal-zone/pull/60)과 [Issue #50](https://github.com/wonmin82/primal-zone/issues/50)에 기록한다. 이 문서 커밋 시점에는 해당 게이트 PENDING이다.
+
+- 수정 전58초 CLOSED/598초 승계 음성2개는 `Missing expected rejection`으로 FAIL(0.149초)하여 기존 관측 공백을 재현했다. 수정 후 같은 Helper의 P203-01~12와 추가 중간/직전 누락을 모두 거절/수용한다. 기존30초/300초·2초 조회 지연 회귀를 유지한다.
+- 최종 Node 계약 **52 PASS/0.399초**, 기존43+신규9, fail/skip0. 시간 회귀16개와 Exit 회귀8개, 기존 웹/보호28개를 포함한다. Python 통합 Runner **9 PASS/2.393초**, 기존8+실제 SQLite projection/해시·mtime 비변경·손상 거절1개. 기존 Browser Runner Windows23 PASS·POSIX1 N/A/5.724초(정의24).
+- 실제 Chromium E2E-11 **PASS/80.126초**, 서버 준비~정리119.703초(명령 진입점 전체120.619초). 실제599.999/600 서비스 주입·재접속·projection과 정상 실제 DB·소유 Puppet3관측 해제 확인. Node/Chromium/Evennia 종료·인증 삭제·성공DB 삭제·실제 플레이DB hash/mtime/size 불변 true.
+- `npm run test:browser:timing`→TIMING-DOOR/PARTY→동일 관측 Helper 연결 및 RELEASE Workflow 호출을 Runner가 확인했다. 정상/조기 회귀는 주입 Clock 검증이며 **실제60초/600초 Wall Clock PASS로 합산하지 않는다**.
+- check·변경JS 구문·diff PASS. 게임/Python 전체 구현 및 의존성은 변경하지 않았다. 기존 로컬 전체229/816 성공(이전 리뷰 SHA의 기록)을 새 실행으로 표현하지 않고, 이번 직접 영향 QA 회귀와 새 HEAD의 원격 전체 Suite로 확인한다.
+
+추가 실측에서 기존 전체 Snapshot13회는4,065~5,822ms(중앙4,464ms), 최초 Django projection1회도3,826ms로2초 예산을 초과했다. 실제 E2E-11의 두 조회 사이 정상 회복실60초 Sweep으로 새 Door 전수 동일 비교가93.260초 실행에서 FAIL했다. 과거 실패를 보존하고, 만료 예약 없는 관리실은 정확히 비교하며 회복실의 정상 만료를 다른 조회 시점의 상태 손상으로 오인하지 않는다. 실제 회복실/Exit 보존은 기존 E2E-08/12 및 RELEASE에서 계속 검증한다.
+
+최종 SQLite 전용 조회는 같은 실제 E2E-11에서 **145.697ms(1회)**로 측정했다. 이는 Windows 한 실행의 실측이며 모든 CI 지연을 보증하지 않는다. 200ms·800ms 정상 지연/지연 초과·스케줄링 누락 음성 회귀가 별도로 있고 실제 최종 창을 놓치면 정상 PASS로 처리하지 않는다. 단위 Fixture의 Windows 연결 핸들 닫힘 누락도 실패 후 명시 close로 보완했다. 실패 DB/로그는 소유 로컬 경로에만 보존하고 자격 증명·프로세스는 제거했다.
+
+RF-33~46은 관측 구현/검출 회귀/실제 서비스 주입/RELEASE 연결/안전성으로 확인한다. RF-47~50 최종 Quick·새 네 CI·기록·차단 결함 감사는 실제 완료 후 PR/Issue에서 확정한다. RF-51~52: **실제 Door60초·리더600초 RELEASE NOT RUN**, PR60 OPEN/Ready·Source 유지·Issue50/45 OPEN. G-12 Full·G-14 최종main CI/RELEASE·G-15 FinalCloseout NOT RUN, IME PRIOR VERIFIED, Visual Baseline PENDING REVIEW, Issue58 비범위, 기존 favicon P2 #59 추적 유지. Merge/브랜치 삭제/Issue Close는 수행하지 않는다.

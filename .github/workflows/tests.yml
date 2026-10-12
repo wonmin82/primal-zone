@@ -40,7 +40,7 @@ jobs:
           PY
   browser-e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
@@ -52,7 +52,9 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps --no-shell chromium
       - run: uv run python -m unittest discover -s scripts/tests -p test_browser_runner.py
+      - run: uv run python -m unittest discover -s scripts/tests -p test_integration_runner.py
       - run: npm run test:browser
+      - run: npm run test:browser:integration
       - name: Sanitized 브라우저 검증 증거
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -66,7 +68,10 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
       - run: npm run test:contracts
+      - run: uv sync --locked --python 3.13
+      - run: uv run python scripts/issue50_contracts.py

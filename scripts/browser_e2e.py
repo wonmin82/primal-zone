@@ -51,18 +51,30 @@ async def browser(harness, results):
                'PRIMAL_BROWSER_PYTHON': sys.executable,
                'PRIMAL_BROWSER_CREDENTIALS': str(credentials),
                'PLAYWRIGHT_NO_COPY_PROMPT': '1'}
+        scenario = harness.env.get('PRIMAL_INTEGRATION_SCENARIO')
+        if scenario:
+            env.update(PRIMAL_BROWSER_SCENARIO=scenario,
+                       PRIMAL_BROWSER_CONTROL=str(harness.run_dir/'integration-control'))
         # subprocess 출력도 자유 입력을 포함할 수 있어 업로드 영역에 생성하지 않는다.
         with (harness.run_dir/'browser-private.log').open('w', encoding='utf-8') as log:
             process = OwnedBrowser(['node', str(ROOT/'node_modules/playwright/cli.js'), 'test',
                                         '--config', str(ROOT/'playwright.config.cjs')],
                                    cwd=ROOT, env=env, stdout=log,
                                    control=harness.run_dir/'browser-process-exit.json')
-            await asyncio.to_thread(process.wait, 300)
+            if scenario:
+                from integration_e2e import wait_browser
+                await wait_browser(process, harness)
+            else:
+                await asyncio.to_thread(process.wait, 300)
             if process.returncode:
                 raise RuntimeError(f'Playwright 종료 코드 {process.returncode}; {results}')
             report = json.loads((results/'results.json').read_text(encoding='utf-8'))
             if report.get('status') != 'passed' or report.get('errors') != 0:
                 raise RuntimeError('브라우저 보고서/증거 정리 실패')
+            if scenario and (len(report.get('tests', [])) != 1
+                             or report['tests'][0].get('id') != 'TEST-'+scenario
+                             or report['tests'][0].get('status') != 'passed'):
+                raise RuntimeError('지정한 실제 E2E 한 건의 성공 근거가 없음')
     except BaseException as failure:
         original = failure
         raise
@@ -114,7 +126,7 @@ def public_report(report):
                  'observations': [observation(value) for value in test.get('observations', [])],
                  'evidenceCleanupFailed': test.get('evidenceCleanupFailed') is True,
                  'failureStages': [stage for stage in test.get('failureStages', []) if stage in (
-                     'context-close-failed', 'websocket-close: timeout', 'puppet-detach: timeout',
+                     'browser-console-failed', 'context-close-failed', 'websocket-close: timeout', 'puppet-detach: timeout',
                      'puppet-detach: probe-failed', 'puppet-login: timeout', 'puppet-login: probe-failed',
                      'observations: attach-failed', 'test-failure', 'evidence-cleanup-failed')]}
         if re.fullmatch(r'\d+(\.\d+){3}', str(test.get('chromium'))):
@@ -153,7 +165,11 @@ def publish_evidence(results, evidence, metadata, run_dir):
             shutil.copyfile(source, evidence/name)
 
 
-def main():
+def main(scenario=None):
+    if scenario:
+        from integration_e2e import SCENARIOS
+        if scenario not in SCENARIOS:
+            raise ValueError('알 수 없는 격리 E2E')
     harness = Harness('full')  # 브라우저 QA는 production 타이머를 유지한다.
     parent = ROOT/'work/browser-e2e'
     parent.mkdir(parents=True, exist_ok=True)
@@ -164,7 +180,15 @@ def main():
     error = None
     previous = signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
     try:
-        harness.prepare()
+        if scenario:
+            os.environ['PRIMAL_INTEGRATION_SCENARIO'] = scenario
+        harness.prepare(setup_script=ROOT/'scripts/integration_setup.py' if scenario else None)
+        if scenario:
+            shutil.copyfile(ROOT/'scripts/integration_hooks.py', harness.run_dir/'game/server/conf/integration_hooks.py')
+            with (harness.run_dir/'game/server/conf/settings_smoke.py').open('a', encoding='utf-8') as config:
+                config.write('\nAT_SERVER_STARTSTOP_MODULE = "server.conf.integration_hooks"\n')
+                if scenario in ('E2E-07', 'E2E-12', 'E2E-13'):
+                    config.write('ITEM_MIGRATION_AUDIT = True\n')
         harness.start()
         asyncio.run(harness.supervise(browser(harness, results)))
         success = True
@@ -179,6 +203,8 @@ def main():
         finally:
             signal.signal(signal.SIGTERM, previous)
             sanitize_artifacts(results, [password for _, password in harness.credentials])
+            if scenario:
+                os.environ.pop('PRIMAL_INTEGRATION_SCENARIO', None)
         after = fingerprint(ROOT/'game/server/evennia.db3')
         if before != after:
             raise RuntimeError('플레이 DB hash/mtime/size 변경: 격리 실패')
@@ -187,7 +213,7 @@ def main():
                     'processes_stopped': all(p.poll() is not None for _, p in harness.processes),
                     'browser_processes_stopped': getattr(harness, 'browser_processes_stopped', False),
                     'credentials_removed': not (harness.run_dir/'browser-credentials.json').exists() if harness.run_dir else True,
-                    'mode': 'full', 'python': sys.version.split()[0], 'platform': sys.platform}
+                    'mode': 'full', 'scenario': scenario or 'phase50a', 'python': sys.version.split()[0], 'platform': sys.platform}
         if not all(metadata[key] for key in ('credentials_removed', 'processes_stopped', 'browser_processes_stopped')):
             success = metadata['success'] = False
             failure = RuntimeError('자격 증명 또는 소유 프로세스 정리 미완료')

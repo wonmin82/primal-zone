@@ -61,3 +61,55 @@ Windows / Python 3.13.15 / Node 24.19.0. 실행 기준은 착수 HEAD `7afc09d06
 ## P2-04 시작 실패 파이프 보완
 
 최초 Ubuntu Run 38187028065의 Runner는 FAIL/1.552초였고 Chromium은 NOT RUN이다. 수정 후 Windows Runner 정의 24개 중 23개 PASS·POSIX 전용 1개 N/A/5.280초를 확인했다. 새 HEAD의 Quick/Ubuntu 결과는 PR 및 Issue에서 확인하며 이전 시간 표를 새 실행으로 재사용하지 않는다. 실패·원인은 [실행 이력](playtest.md#p2-04-최초-ubuntu-ci-실패-및-수정)에 보존한다.
+## Phase 50-B~F 준비의 실측과 실행 분리
+
+- 계약74개에 연결된 실제70개 테스트: 186.579초 PASS. 최종 신규 계약3개:23.133초/전체34.899초 PASS. Frozen Alias의 순서까지 요구한 최초 전체 실행은 FAIL이며 수정 전 기록은 [실행 이력](playtest.md)에 보존한다.
+- 기존 Runner 정의24개 중 Windows 해당23 PASS/7.248초·POSIX 전용1 N/A, 새 제어/manifest/main SHA guard5 PASS/1.391초. Node27 PASS/0.336초. 플랫폼 N/A를 PASS 수에 더하지 않는다.
+- Windows 개별 Chromium 준비~정리 개발 실측: E2E-01 73.276초, E2E-03 113.085초, E2E-05 144.714초, E2E-04 129.640초, E2E-06 142.665초, E2E-07 121.022초, E2E-09 133.066초, E2E-10 70.517초, E2E-11 131.311초. 실제 NPC 버튼을 추가한 E2E-02는 다른 로컬 검사와 병행한244.529초였다. 이 값은 최신 전체 단독 실행이나 Ubuntu CI의 실측으로 표현하지 않는다.
+- 매 시나리오는 새 격리 Harness로 초기 조건/DB/타이머 간섭을 없앤다. 실제 게임 명령·WS를 Mock으로 대체하여 시간을 줄이지 않는다. 읽기 전용 Probe는 Python 초기화 비용이 있어 로컬 병행 실행의 부하를 따로 기록한다. 초기 테스트 작성/실패 수정 시간은 D21/P-02 성공1회 시간 예산과 구분한다.
+- PR의 기존 네 Job 유지. browser-e2e에서50-A와 전체14 및 실행기 회귀를 실행하며 worker1/retries0이다. Job timeout20분은 오류 발견을 위한 상한이며 수용 기준을 줄이지 않는다. 최종 네 CI Job별 시간/전체 경과는 실제 Run 완료 후 기록한다.
+- RELEASE는 test/Quick/Full/contracts/browser전체/timing/persistence를 각 독립 DB/서버에서 병렬 실행한다. timing의 최소 실제600초는 줄이지 않으며 다른 Job과 병렬이다. 일반 PR12~20분·RELEASE20~35분/30분 이내 목표를 유지한다. **실제 RELEASE 시간은 NOT RUN**, Workflow 준비만으로 목표를 달성했다고 주장하지 않는다.
+
+
+## 최종 로컬 제출 검증 (원격 CI 전)
+
+순수229/통합814 PASS, 기존50-A9 + 실제E2E01~14 PASS. Runner Windows23(정의24/POSIX1 N/A)+신규6, Harness18, Node28 PASS. 실행 SHA/개발 diff와 실제 개별 시간은 통합 매트릭스에 구분했다. 후속 NPC 역할 보강3개는83.015/152.005/92.905초, 정상 restart의 만료 sweep 분류 보강은128.467초 PASS다. 이는 원격 최신HEAD/RELEASE 실행 성공을 의미하지 않는다.
+
+이 문서 앞의 미확정/초기 실행 기록은 개발 당시 이력이다. 현재 로컬 WEB01~12 기능 수용은 PASS이며 정확한 최종 Push HEAD Quick 및 네 GitHub Job은 PR/Issue50에서 새로 확정한다. 실제60/600/Full/최종main RELEASE는 NOT RUN, IME PRIOR VERIFIED, 이미지 PENDING REVIEW 유지. 비차단 favicon은 [후속P2 #59](https://github.com/wonmin82/primal-zone/issues/59)에 이관했다.
+
+
+## PR #60 리뷰 보완 실측
+
+직접 영향: Node 기존28+관측15=43 PASS/0.337초, Runner 기존통합6+신규2=8 PASS/1.357초, 기존브라우저Runner Windows23 PASS·POSIX1 N/A/5.445초. 문서계약 기존3+신규2=5 PASS/19.449초(전체28.661초), Door/Bootstrap/스키마/Exit/Smoke 영향70 PASS/102.156초(전체113.213초). 실제 E2E08/11/12 각151.801/141.538/143.987초 전체 PASS. 재시작 Unicode 실패97.320초는 별도로 보존하며 최종 성공 시간에 합치지 않는다.
+
+최종 Python 전체·정확한 Push HEAD Quick·원격 네 Job은 실제 실행 완료 후 PR/Issue50에 개수/시간/SHA를 확정한다. RELEASE 실제60/600/Full 및 최종main 실행은 NOT RUN. 샘플5초/중간·직전필수·조회상한2초는 비용 절감으로 타이밍 조건을 완화하기 위한 것이 아니다. 지연으로 필수 관측을 놓치면 FAIL이다.
+
+
+### 리뷰 보완 최종 로컬 결과
+
+관측/버튼/Probe/checkpoint `51f418bc409ba637e2d27b3db64894d4fc7e2bdb`, 기능 문서 계약/정정 `52e630047ca5cb0172c6c779709b13b7ce4af310`. 검증은 리뷰HEAD d7736c54+동일 개발diff에서 시작했으며 해당 코드가 그대로 이 두 커밋에 포함됨을 확인했다. 이후 검증 문서만 추가했으므로 같은 전체 회귀를 다시 실행하지 않는다.
+
+- 최종 전체 `uv run python scripts/dev.py test --parallel 4`: 순수229 PASS/2.534초, 통합816 PASS/513.301초, 전체523.943초. 기존814에 문서 검사2개 추가, 실패0.
+- Node43 PASS/0.518초(시간7·Exit8 신규 음성/정상 포함), 통합Runner8 PASS/1.713초, 기존브라우저Runner Windows23 PASS·POSIX1 N/A/5.445초. 문서5/19.449초·직접영향70/102.156초·실제08/11/12 전체151.801/141.538/143.987초 PASS.
+- `check`·변경JS구문·`git diff --check` PASS. GFM 변경10문서 렌더, 전체Markdown59/상대링크567/앵커194/기존README앵커12 오류0.
+- 실제 플레이DB hash/mtime/size 불변과 실제브라우저 소유프로세스/인증/Puppet 정리를 확인했다. 정확한 최종 문서 포함 HEAD의 Quick 및 새 원격 CI는 실제 완료 후 PR/Issue50에 기록한다. 현재 문서 작성 시점에는 아직 실행 전이다.
+- 실제60/600·Full·최종main CI/RELEASE·FinalCloseout은 NOT RUN이다. 기존 성공/개발 FAIL·최초CI38204318598은 역사 기록으로 보존한다. PR60/Source/Issue50·45 유지, Issue58 비범위, #59 추적.
+
+
+## PR #60 P2-03 — 최종 시간 경계 관측 보완
+
+리뷰 기준 `5193aa2fd3232976eecf2a0f362cd4ec3e013fb5`, 수정 코드 `653340465930e9782a80aa6dde9154fddd71455a`, Base `82641de0ea66898676b0b29194d7918489443def`. 기존 4건 리뷰/실패/성공 이력은 당시 기록으로 보존한다. 이 보완은 게임·운영 타이머·프로토콜·영속 형식을 변경하지 않는다. 최종 문서 포함 Source HEAD의 Quick/새 네 CI는 실제 완료 후 [PR #60](https://github.com/wonmin82/primal-zone/pull/60)과 [Issue #50](https://github.com/wonmin82/primal-zone/issues/50)에 기록한다. 이 문서 커밋 시점에는 해당 게이트 PENDING이다.
+
+추가 실측에서 기존 전체 Snapshot13회는4,065~5,822ms(중앙4,464ms), 최초 Django projection1회도3,826ms로2초 예산을 초과했다. 실제 E2E-11의 두 조회 사이 정상 회복실60초 Sweep으로 새 Door 전수 동일 비교가93.260초 실행에서 FAIL했다. 과거 실패를 보존하고, 만료 예약 없는 관리실은 정확히 비교하며 회복실의 정상 만료를 다른 조회 시점의 상태 손상으로 오인하지 않는다. 실제 회복실/Exit 보존은 기존 E2E-08/12 및 RELEASE에서 계속 검증한다.
+
+최종 SQLite 전용 조회는 같은 실제 E2E-11에서 **145.697ms(1회)**로 측정했다. 이는 Windows 한 실행의 실측이며 모든 CI 지연을 보증하지 않는다. 200ms·800ms 정상 지연/지연 초과·스케줄링 누락 음성 회귀가 별도로 있고 실제 최종 창을 놓치면 정상 PASS로 처리하지 않는다. 단위 Fixture의 Windows 연결 핸들 닫힘 누락도 실패 후 명시 close로 보완했다. 실패 DB/로그는 소유 로컬 경로에만 보존하고 자격 증명·프로세스는 제거했다.
+
+- 수정 전58초 CLOSED/598초 승계 음성2개는 `Missing expected rejection`으로 FAIL(0.149초)하여 기존 관측 공백을 재현했다. 수정 후 같은 Helper의 P203-01~12와 추가 중간/직전 누락을 모두 거절/수용한다. 기존30초/300초·2초 조회 지연 회귀를 유지한다.
+- 최종 Node 계약 **52 PASS/0.399초**, 기존43+신규9, fail/skip0. 시간 회귀16개와 Exit 회귀8개, 기존 웹/보호28개를 포함한다. Python 통합 Runner **9 PASS/2.393초**, 기존8+실제 SQLite projection/해시·mtime 비변경·손상 거절1개. 기존 Browser Runner Windows23 PASS·POSIX1 N/A/5.724초(정의24).
+- 실제 Chromium E2E-11 **PASS/80.126초**, 서버 준비~정리119.703초(명령 진입점 전체120.619초). 실제599.999/600 서비스 주입·재접속·projection과 정상 실제 DB·소유 Puppet3관측 해제 확인. Node/Chromium/Evennia 종료·인증 삭제·성공DB 삭제·실제 플레이DB hash/mtime/size 불변 true.
+- `npm run test:browser:timing`→TIMING-DOOR/PARTY→동일 관측 Helper 연결 및 RELEASE Workflow 호출을 Runner가 확인했다. 정상/조기 회귀는 주입 Clock 검증이며 **실제60초/600초 Wall Clock PASS로 합산하지 않는다**.
+- check·변경JS 구문·diff PASS. 게임/Python 전체 구현 및 의존성은 변경하지 않았다. 기존 로컬 전체229/816 성공(이전 리뷰 SHA의 기록)을 새 실행으로 표현하지 않고, 이번 직접 영향 QA 회귀와 새 HEAD의 원격 전체 Suite로 확인한다.
+
+시간 관측 추가 대기는 이전4초 전 반환 대비 정상최종 완료까지 약3~3.5초/시나리오이며 실제60/600 운영 시간 자체는 증가하지 않는다. 일반PR은 Wall Clock 검사를 실행하지 않아 새52개 Node 계약의 비용만 수백ms 수준으로 증가한다. 새 GitHub 전체Job/RELEASE의 실시간은 실행 후 기록하며 추정치를 실제 결과로 표시하지 않는다.
+
+RF-33~46은 관측 구현/검출 회귀/실제 서비스 주입/RELEASE 연결/안전성으로 확인한다. RF-47~50 최종 Quick·새 네 CI·기록·차단 결함 감사는 실제 완료 후 PR/Issue에서 확정한다. RF-51~52: **실제 Door60초·리더600초 RELEASE NOT RUN**, PR60 OPEN/Ready·Source 유지·Issue50/45 OPEN. G-12 Full·G-14 최종main CI/RELEASE·G-15 FinalCloseout NOT RUN, IME PRIOR VERIFIED, Visual Baseline PENDING REVIEW, Issue58 비범위, 기존 favicon P2 #59 추적 유지. Merge/브랜치 삭제/Issue Close는 수행하지 않는다.

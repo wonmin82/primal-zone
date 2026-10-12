@@ -1425,3 +1425,55 @@ PR #25의 최종 문서 HEAD와 병합 후 main의 test·smoke를 대조하고, 
 - 수정 전 Windows 실제 부모 조기 종료 뒤 자식 STILL_ACTIVE를 재현했다. 실제 소유 자식·강제 종료·외부 프로세스 보호·재정리·Job 마지막 핸들 종료를 확인했다. P2-01~03의 인증 삭제·비수집·Puppet 해제 보호는 유지한다.
 - 이 구역은 커밋 전 준비 기록이다. 최종 Push HEAD Quick/PR CI 및 Merge Commit/main 네 CI/Source 삭제는 실제 완료 후 PR #57/Issue #50의 P2-04 구역에 SHA와 URL로 확정한다. 사용자 조건부 Merge/삭제 승인을 받았지만 게이트를 우회하지 않는다.
 - Issue #50/#45는 OPEN 유지. Phase 50-A만 마감하고 다음은 50-B 기능 계약/매트릭스 공백 감사다. 50-B~F/RELEASE는 NOT RUN, OS IME는 기존 PRIOR VERIFIED, macOS 프로세스 실행 검증은 NOT RUN이다.
+
+
+## Issue #50 50-B~F 준비 착수 — 2026-10-12
+
+- 최신 main/PR #57 병합 및 main 네 CI SUCCESS 감사: Base `82641de0ea66898676b0b29194d7918489443def`. 새 Source `codex/issue-50-integrated-qa`, 미커밋/다른 OPEN PR 없음. Issue #50/#45 OPEN 유지, Issue #58 비범위.
+- 50-B: 계약74개 → 실제70개 테스트 연결, 실행70 PASS/186.579초. 신규 전수 Help/의료 경계2 PASS/28.887초. 이력과 자세한 표는 통합 매트릭스에 추가했다.
+- 초기 테스트의 Help 범위 오분류 실패를 보존했다. 기존 명령의 간결한 Help 형식까지 새 정책으로 요구하지 않으며 신규/변경 명령의6절은 필수로 검사한다.
+- 50-C 진행: 시나리오별 새 Harness DB/서버, 실제 UI/Exit 이동, 읽기 전용 DB Probe, 소유 Harness 정상 restart, 격리 복사본의 실제 지급 뒤 상위 rollback 주입. 첫 E2E-01 PASS/73.276초(전체). 나머지 전체 PASS는 미확정.
+- 다음: 전체14 Chromium/멀티세션/재시작, 인프라 오류 경계, RELEASE 워크플로, 최종 전체 회귀·정확한 HEAD Quick·단일 PR/CI. Merge/삭제/Issue Close/최종 RELEASE 선언 금지.
+
+
+## Issue #50 50-B~E 및50-F 준비 — Pre-merge 제출
+
+- Base82641de, Source codex/issue-50-integrated-qa, 코드최신 `45d1a27a388e483e72913743c978e583b952510b`. B46b1903(계약), C/D/E043da8c(실제E2E·영속·인프라), F준비ae489ca(독립main RELEASE), 역할470c587 및 재시작경계 후속 커밋으로 분리했다.
+- 계약74/실제70 PASS, 고정metadata86/Alias75·새Help/문서/의료3 PASS. 순수229·통합814 최종전체 PASS. 최초Alias순서 실패는 역사로 보존했다.
+- 실제50-A9 및 E2E14 로컬 PASS. 독립Account/Context/WS·교전/권리/메시지·동시문·Puppet599.999/600 서비스·재접속·정상Portal/Serverrestart·상위rollback·두화면/clipboard/Focus를 확인했다.
+- Runner Windows23(정의24/POSIX1 N/A)+신규6, Node28, Harness18 PASS. P2-01~04·보안/프로세스 보호 유지. 새로운 게임정책/구현/프로토콜/운영DB/타이머 변경 없음. faviconP2 #59 이관, 새차단P0/P1 없음.
+- 필수5문서 준비. 실제60/600·Full·최종main CI/RELEASE·G14/FinalCloseout NOT RUN. IME PRIOR VERIFIED, 이미지 PENDING REVIEW, macOS 미지원/NOT RUN 유지.
+- 다음: 문서/전체diff검사 → 정확한최종HEAD Quick → Push/단일Ready PR → 최신 네CI/Artifact확인 → Issue50의 원문보존·PR/진행 구역 갱신 → 사용자리뷰. Merge/삭제/Issue50·45Close는 금지.
+
+
+## PR #60 리뷰 보완 진행
+
+- 리뷰HEAD d7736c54, Source codex/issue-50-integrated-qa/Base82641de 유지. P1-01/02 및 P2-01/02를 QA·관측/문서 계약에서 보완했다. Node43/통합Runner8/문서5/직접영향70, 실제08/11/12 PASS. 기존 브라우저Runner Windows23·POSIX1 N/A PASS.
+- 실제 ObjectDB Exit/Room·설치 증거 비교와 음성 구조 손상, 이전 버튼 actual click/dispatcher/WS 거절, 조기30/300 검출·관측 누락FAIL, 기능 문서9개/실제 parser·Metadata·중요 정책 오류 검출. checkpoint Unicode 디코딩 오류 최소 수정 및 실패 기록 보존.
+- 다음: 최종 전체 성공 확인 → 명시 stage/한국어 commit → 정확한최종HEAD Quick → 기존PR60에Push → 새HEAD 네CI/Artifact확인 → PR/Issue 원문보존 Review Fixes 갱신. Merge/Source삭제/Issue50·45Close/Issue58 구현 금지. 실제 RELEASE/60/600/Full은 NOT RUN. favicon P2 #59 유지.
+
+
+### 리뷰 보완 최종 로컬 결과
+
+관측/버튼/Probe/checkpoint `51f418bc409ba637e2d27b3db64894d4fc7e2bdb`, 기능 문서 계약/정정 `52e630047ca5cb0172c6c779709b13b7ce4af310`. 검증은 리뷰HEAD d7736c54+동일 개발diff에서 시작했으며 해당 코드가 그대로 이 두 커밋에 포함됨을 확인했다. 이후 검증 문서만 추가했으므로 같은 전체 회귀를 다시 실행하지 않는다.
+
+- 최종 전체 `uv run python scripts/dev.py test --parallel 4`: 순수229 PASS/2.534초, 통합816 PASS/513.301초, 전체523.943초. 기존814에 문서 검사2개 추가, 실패0.
+- Node43 PASS/0.518초(시간7·Exit8 신규 음성/정상 포함), 통합Runner8 PASS/1.713초, 기존브라우저Runner Windows23 PASS·POSIX1 N/A/5.445초. 문서5/19.449초·직접영향70/102.156초·실제08/11/12 전체151.801/141.538/143.987초 PASS.
+- `check`·변경JS구문·`git diff --check` PASS. GFM 변경10문서 렌더, 전체Markdown59/상대링크567/앵커194/기존README앵커12 오류0.
+- 실제 플레이DB hash/mtime/size 불변과 실제브라우저 소유프로세스/인증/Puppet 정리를 확인했다. 정확한 최종 문서 포함 HEAD의 Quick 및 새 원격 CI는 실제 완료 후 PR/Issue50에 기록한다. 현재 문서 작성 시점에는 아직 실행 전이다.
+- 실제60/600·Full·최종main CI/RELEASE·FinalCloseout은 NOT RUN이다. 기존 성공/개발 FAIL·최초CI38204318598은 역사 기록으로 보존한다. PR60/Source/Issue50·45 유지, Issue58 비범위, #59 추적.
+
+
+## PR #60 P2-03 — 최종 시간 경계 관측 보완
+
+리뷰 기준 `5193aa2fd3232976eecf2a0f362cd4ec3e013fb5`, 수정 코드 `653340465930e9782a80aa6dde9154fddd71455a`, Base `82641de0ea66898676b0b29194d7918489443def`. 기존 4건 리뷰/실패/성공 이력은 당시 기록으로 보존한다. 이 보완은 게임·운영 타이머·프로토콜·영속 형식을 변경하지 않는다. 최종 문서 포함 Source HEAD의 Quick/새 네 CI는 실제 완료 후 [PR #60](https://github.com/wonmin82/primal-zone/pull/60)과 [Issue #50](https://github.com/wonmin82/primal-zone/issues/50)에 기록한다. 이 문서 커밋 시점에는 해당 게이트 PENDING이다.
+
+- 수정 전58초 CLOSED/598초 승계 음성2개는 `Missing expected rejection`으로 FAIL(0.149초)하여 기존 관측 공백을 재현했다. 수정 후 같은 Helper의 P203-01~12와 추가 중간/직전 누락을 모두 거절/수용한다. 기존30초/300초·2초 조회 지연 회귀를 유지한다.
+- 최종 Node 계약 **52 PASS/0.399초**, 기존43+신규9, fail/skip0. 시간 회귀16개와 Exit 회귀8개, 기존 웹/보호28개를 포함한다. Python 통합 Runner **9 PASS/2.393초**, 기존8+실제 SQLite projection/해시·mtime 비변경·손상 거절1개. 기존 Browser Runner Windows23 PASS·POSIX1 N/A/5.724초(정의24).
+- 실제 Chromium E2E-11 **PASS/80.126초**, 서버 준비~정리119.703초(명령 진입점 전체120.619초). 실제599.999/600 서비스 주입·재접속·projection과 정상 실제 DB·소유 Puppet3관측 해제 확인. Node/Chromium/Evennia 종료·인증 삭제·성공DB 삭제·실제 플레이DB hash/mtime/size 불변 true.
+- `npm run test:browser:timing`→TIMING-DOOR/PARTY→동일 관측 Helper 연결 및 RELEASE Workflow 호출을 Runner가 확인했다. 정상/조기 회귀는 주입 Clock 검증이며 **실제60초/600초 Wall Clock PASS로 합산하지 않는다**.
+- check·변경JS 구문·diff PASS. 게임/Python 전체 구현 및 의존성은 변경하지 않았다. 기존 로컬 전체229/816 성공(이전 리뷰 SHA의 기록)을 새 실행으로 표현하지 않고, 이번 직접 영향 QA 회귀와 새 HEAD의 원격 전체 Suite로 확인한다.
+
+현재 관측 구현/정상·음성 검출/경량 실제 DB 대조 완료. 이전 P1-01/02·P2-01/02와 Phase50-A 보호는 유지한다. 문서 다음 Gate는 정확한 최종 Source HEAD Quick, 기존PR Push, 최신 네CI/Artifact 및 PR/Issue 기록 갱신이다.
+
+RF-33~46은 관측 구현/검출 회귀/실제 서비스 주입/RELEASE 연결/안전성으로 확인한다. RF-47~50 최종 Quick·새 네 CI·기록·차단 결함 감사는 실제 완료 후 PR/Issue에서 확정한다. RF-51~52: **실제 Door60초·리더600초 RELEASE NOT RUN**, PR60 OPEN/Ready·Source 유지·Issue50/45 OPEN. G-12 Full·G-14 최종main CI/RELEASE·G-15 FinalCloseout NOT RUN, IME PRIOR VERIFIED, Visual Baseline PENDING REVIEW, Issue58 비범위, 기존 favicon P2 #59 추적 유지. Merge/브랜치 삭제/Issue Close는 수행하지 않는다.

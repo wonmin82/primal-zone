@@ -9,7 +9,7 @@ class SafeReporter {
   onTestEnd(test, result) {
     const id = test.title.match(/^TEST-[A-Z0-9-]+/)?.[0] || 'unknown';
     const statuses = ['passed', 'failed', 'timedOut', 'skipped', 'interrupted'];
-    const stages = ['context-close-failed', 'websocket-close: timeout', 'puppet-detach: timeout', 'puppet-detach: probe-failed', 'puppet-login: timeout', 'puppet-login: probe-failed', 'observations: attach-failed'];
+    const stages = ['browser-console-failed', 'context-close-failed', 'websocket-close: timeout', 'puppet-detach: timeout', 'puppet-detach: probe-failed', 'puppet-login: timeout', 'puppet-login: probe-failed', 'observations: attach-failed'];
     const entry = { id, status: statuses.includes(result.status) ? result.status : 'failed', seconds: result.duration / 1000, errors: result.errors.length,
       failureStages: [...new Set(result.errors.flatMap(error => {
         const found = stages.filter(stage => String(error.message).includes(stage));
@@ -38,6 +38,16 @@ class SafeReporter {
     if (entry.evidenceCleanupFailed) { entry.status = 'failed'; entry.failureStages.push('evidence-cleanup-failed'); }
     this.tests.push(entry);
     process.stdout.write(`${id}: ${entry.status} (${entry.seconds.toFixed(3)}s)\n`);
+    // 자유 입력/오류 본문 대신 실패한 테스트의 숫자 행만 로컬 진단에 남긴다.
+    for (const error of result.errors) {
+      const locations = String(error.stack || '').match(/integration(?:-helpers)?\.spec\.cjs:\d+:\d+/g) || [];
+      for (const location of locations) process.stdout.write(`failure-location: ${location}\n`);
+    }
+    for (const chunk of result.stderr || []) {
+      for (const line of String(chunk).split('\n')) {
+        if (/^route-boundary: [a-z0-9_]+->[a-z0-9_]+; observed=[a-z0-9_]+$/.test(line)) process.stdout.write(line + '\n');
+      }
+    }
   }
   onEnd(result) {
     fs.writeFileSync(path.join(process.env.PRIMAL_BROWSER_RESULTS, 'results.json'), JSON.stringify({ status: this.errors ? 'failed' : (['passed', 'failed', 'timedout', 'interrupted'].includes(result.status) ? result.status : 'failed'), errors: this.errors, tests: this.tests, screenshots: this.screenshots }, null, 2));
