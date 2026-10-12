@@ -1,6 +1,9 @@
 """D03/D04: 실제 Registry·Help·CmdSet을 전수 비교하는 통합 계약."""
 
 import json
+import re
+import sys
+from collections import Counter
 from copy import deepcopy
 from pathlib import Path
 from unittest.mock import patch
@@ -18,6 +21,122 @@ from tests.base import WorldCommandTest
 
 
 class IntegratedContractTests(WorldCommandTest):
+    def _audit_feature_documents(self, documents):
+        root = Path(__file__).resolve().parents[2]
+        sys.path.insert(0, str(root / 'scripts'))
+        from commands import shortcuts as s
+        from issue50_document_contracts import number, tables, verify
+        from server.conf.cmdparser import select_command
+        from typeclasses import interactables
+        from typeclasses.interactables import INTERACTABLES
+        from world.content import DIRECTION_ALIASES, DIRECTION_SHORTCUTS, ROOMS
+        from world.content.doors import AUTO_CLOSE_SECONDS, DOORS
+        from world.dialogue_intents import intents_for
+        from world.equipment import SLOT_CAPACITY
+        from world.multiplayer import PARTY_INVITE_TTL_SECONDS, PARTY_MAX_SIZE
+        from world.npc_dialogue import validate_message
+        cmdset = CharacterCmdSet()
+        cmdset.add(Who())
+        cmdset.add(Quit())
+        commands = [*COMMANDS, Who, Quit]
+        directions = set(DIRECTION_ALIASES) | set(DIRECTION_ALIASES.values()) | set(DIRECTION_SHORTCUTS)
+        directions.update(direction for room in ROOMS.values() for direction in room['exits'])
+        def example(text, definitions):
+            if text in directions:
+                return  # 경로/권한은 실제 Exit 및 브라우저 회귀가 별도로 검증한다.
+            selected = select_command(text, cmdset, self.char1, shortcuts=definitions)
+            if not selected.matches:
+                raise ValueError('문서 예시의 미등록/제거된 행동: ' + text)
+            if text.endswith((' 도움', ' 도움말')):
+                query = text.rsplit(None, 1)[0]
+                if help_page(query, commands) is None:
+                    raise ValueError('문서 예시의 없는 Help')
+        def medical(level, hp):
+            p = rules.new_profile()
+            p.update(xp=rules.xp_threshold(level), credits=100000)
+            p['hp'] = rules.stats(p)['max_hp'] - hp
+            return rules.treatment_quote(p, hp, safe=True)[1]
+        counts = Counter(data['typeclass'] for data in INTERACTABLES.values())
+        roles = {'윤대장·선발대 길잡이': counts['Commander'] + counts['Pathfinder'], '기술 교관': counts['SkillTrainer'],
+                 '특성 교관': counts['AttributeTrainer'], '훈련관리관': counts['TrainingManager'], '상인': counts['Shopkeeper'],
+                 '의무관': counts['Doctor'], '정산관': counts['SettlementOfficer']}
+        self.assertEqual(sum(roles.values()), 22)
+        role_types = {'윤대장·선발대 길잡이': 'Commander', '기술 교관': 'SkillTrainer', '특성 교관': 'AttributeTrainer',
+                      '훈련관리관': 'TrainingManager', '상인': 'Shopkeeper', '의무관': 'Doctor', '정산관': 'SettlementOfficer'}
+        for header, row in tables(documents['docs/npc-dialogue.md']):
+            if header[:2] != ['역할', '수']:
+                continue
+            kind = role_types[row[0]]
+            intents = intents_for(kind)
+            tokens = set(re.findall(r'[가-힣]+', row[2]))
+            allowed = {word for i in intents if not i.mutates_state for word in (i.keyword, *i.aliases)}
+            self.assertTrue(tokens <= allowed, row[0])
+            self.assertTrue({i.keyword for i in intents if not i.mutates_state} <= tokens, row[0])
+            actions = {s.strip() for s in row[3].removesuffix(' Intent').split('·')}
+            expected_actions = {i.keyword for i in intents if i.mutates_state} if kind == 'Commander' else set(getattr(interactables, kind).actions)
+            self.assertEqual(actions, expected_actions, row[0])
+        capacities = {}
+        for header, row in tables(documents['docs/equipment.md']):
+            if header == ['slot', '표시', 'capacity']:
+                for slot in row[0].split(' / '):
+                    capacities[slot] = number(row[2])
+        self.assertEqual(capacities, SLOT_CAPACITY)
+        party_document = documents['docs/party-and-tactics.md']
+        self.assertEqual(re.findall(r'정원 (\d+)명', party_document), [str(PARTY_MAX_SIZE)])
+        self.assertEqual(re.findall(r'TTL은 (\d+)초', party_document), [str(PARTY_INVITE_TTL_SECONDS)])
+        self.assertEqual(re.findall(r'연속 (\d+)초가 경과', party_document), ['600'])
+        self.assertEqual(re.findall(r'발화 1~(\d+)자', documents['docs/npc-dialogue.md']), ['300'])
+        self.assertEqual((DOORS['hq_admin_door']['initial_state'], DOORS['recovery_room_door']['initial_state'],
+                          DOORS['recovery_room_door']['lockable']), ('LOCKED', 'OPEN', False))
+        self.assertEqual(len(validate_message('가' * 300)), 300)
+        with self.assertRaises(rules.RuleError):
+            validate_message('가' * 301)
+        result = verify(documents, {c.key: list(c.aliases) for c in commands},
+                        {'이름': s.MAX_NAME_CHARACTERS, '저장 개수': s.MAX_SHORTCUTS, '원본 정의': s.MAX_DEFINITION_CHARACTERS,
+                         '호출 인자': s.MAX_ARGUMENT_CHARACTERS, '직접 즉석 묶음 입력': s.MAX_DEFINITION_CHARACTERS,
+                         '실제 하위 실행 시도': s.MAX_COMMANDS, '개인 정의 깊이': s.MAX_DEPTH, '최종 하위 문자열 합계': s.MAX_EXPANDED_CHARACTERS},
+                        AUTO_CLOSE_SECONDS, rules.PROFILE_VERSION, roles, example, medical)
+        # 실제 템플릿 Action은 동일 parser/Help 계약을 통과해야 한다.
+        html = (root / 'game/web/templates/webclient/webclient.html').read_text(encoding='utf-8')
+        actions = re.findall(r'data-command="([^"]+)"', html)
+        for action in actions:
+            example(action, {})
+        self.assertGreater(len(actions), 20)
+        self.assertIn('웹 조작은 기존 SURROUNDINGS/이동 버튼과 같은 텍스트 명령', documents['docs/doors-and-keys.md'])
+        return result
+
+    def _feature_documents(self):
+        sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
+        from issue50_document_contracts import PATHS
+        root = Path(__file__).resolve().parents[2]
+        return {name: (root / name).read_text(encoding='utf-8') for name in PATHS}
+
+    def test_feature_document_tables_examples_policy_and_web_actions(self):
+        result = self._audit_feature_documents(self._feature_documents())
+        self.assertEqual(len(result['documents']), 9)
+        self.assertGreater(result['examples'], 40)
+        self.assertEqual(result['npc_roles'], 7)
+        self.assertEqual(result['shortcut_limits'], 8)
+        self.assertEqual(result['medical_rows'], 5)
+
+    def test_feature_document_corruption_is_rejected(self):
+        documents = self._feature_documents()
+        cases = [
+            ('docs/commands.md', '| 점수 | 상태, 상, 점 |', '| 점수 | 틀린별칭 |', 'Alias'),
+            ('docs/gameplay.md', '`20 회복`', '`20 진료`', '미등록/제거'),
+            ('docs/command-shortcuts.md', '| 실제 하위 실행 시도 | 10개 |', '| 실제 하위 실행 시도 | 11개 |', '한도'),
+            ('docs/doors-and-keys.md', '| 열쇠 필요 | 열쇠 필요 | 잠금 불가 |', '| 열쇠 필요 | 열쇠 필요 | 열쇠 필요 |', '잠금/래치'),
+            ('docs/item-entities.md', '현재 profile version은 14', '현재 profile version은 13', '버전'),
+            ('docs/gameplay.md', '| 100 | 20 | 24칩 |', '| 100 | 20 | 14칩 |', '가격'),
+            ('docs/gameplay.md', 'P = 2*H + (L if L < 100 else 2*L)', 'P = H + L', '공식'),
+        ]
+        for name, old, new, error in cases:
+            with self.subTest(document=name, error=error):
+                self.assertIn(old, documents[name])
+                corrupted = {**documents, name: documents[name].replace(old, new)}
+                with self.assertRaisesRegex(ValueError, error):
+                    self._audit_feature_documents(corrupted)
+
     def test_frozen_all_keys_aliases_and_input_styles(self):
         expected = json.loads((Path(__file__).resolve().parents[2]/'scripts/issue50-command-contract.json').read_text(encoding='utf-8'))
         # Evennia 6.1은 Alias를 set에서 정규화한다. Alias 순서는 계약이 아니지만
