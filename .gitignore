@@ -22,3 +22,6 @@ game/server/ssh-private.key
 game/server/ssh-public.key
 *.egg-info/
 work/
+node_modules/
+playwright-report/
+test-results/

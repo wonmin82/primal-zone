@@ -1,0 +1,120 @@
+# Issue #50 통합 검증 추적
+
+[v1.2 DESIGN FREEZE](https://github.com/wonmin82/primal-zone/issues/50)의 D01~D28 및 P-01/P-02를 유지한다. 이 PR은 **50-A만** 구현한다. 일반 PR CI는 test/smoke/browser-e2e/contracts이며 최종 RELEASE와 구분한다.
+
+## 기준선 감사
+
+착수 main: `7afc09d064ea0e45dc68f77ab7ede6c5e7237202`. #45/#50 OPEN, #46~#49/#54 CLOSED 및 아래 PR MERGED를 GitHub에서 재조회했다. 기존 기록을 새 실행으로 표현하지 않는다.
+
+| 선행 | 최종 PR HEAD | Merge Commit | PR CI / 병합 main CI |
+| --- | --- | --- | --- |
+| #46 / #51 | `261cf95952ac409e2dcee97433d4b06b5793efb5` | `06c90ac92974dfcaf7ef6c2564ed9207e8dee8e8` | [성공](https://github.com/wonmin82/primal-zone/actions/runs/38045483861) / [성공](https://github.com/wonmin82/primal-zone/actions/runs/38046992168) |
+| #47 / #52 | `37b70f22b4cc73a42d9aac8330c7cfc7b9f27b6b` | `49669e24ebccfc7d876a6027e175a2e4e3d85382` | [성공](https://github.com/wonmin82/primal-zone/actions/runs/38093587658) / [성공](https://github.com/wonmin82/primal-zone/actions/runs/38094190782) |
+| #48 / #53 | `119272247d2e0e4936d447a9c5554e562fcd74d9` | `f48a632a1dd6a56b283f3864d6a4ace7e0f3b355` | [성공](https://github.com/wonmin82/primal-zone/actions/runs/38111536068) / [성공](https://github.com/wonmin82/primal-zone/actions/runs/38112582794) |
+| #54 / #55 | `d68995287a1d6b10753a06a4aa06f487c074cbb3` | `bd18e6ff4e9f1d2e345015eba805353be0e1cae1` | [성공](https://github.com/wonmin82/primal-zone/actions/runs/38114034353) / [성공](https://github.com/wonmin82/primal-zone/actions/runs/38115248134) |
+| #49 / #56 | `c80a14ba0b2316901da1adae2e81cd3a0da7fba3` | `7afc09d064ea0e45dc68f77ab7ede6c5e7237202` | [성공](https://github.com/wonmin82/primal-zone/actions/runs/38134927725) / [성공](https://github.com/wonmin82/primal-zone/actions/runs/38146739731) |
+
+선행 로컬 전체/Quick 결과와 실패 이력은 기존 `docs/playtest.md` 및 각 PR/Issue 검증 기록을 보존한다. #46의 당시 전체 검사와 이후 정확한 Push HEAD Quick/Smoke는 같은 종류의 검증으로 합산하지 않는다.
+
+## 50-A 수용 테스트
+
+실행: `npm run test:browser`. 실제 테스트 경로: `scripts/browser/phase50a.spec.cjs`의 아래 제목. 상태는 다음 실행 기록과 연결한다. CI 링크는 [Issue #50 Phase 50-A 진행 구역](https://github.com/wonmin82/primal-zone/issues/50)의 연결 PR에서 **실제 최신 SHA**로 갱신한다.
+
+| 테스트 | Decision | 검증 Assertion | 후속 연결 |
+| --- | --- | --- | --- |
+| TEST-50A-01 | D06/D07/D12/D13 | Chromium HTTP 200, 실제 WS, 인증·초기 상태·이름·입력·차단 Console 오류 없음 | 50-C / T50-WEB |
+| TEST-50A-02 | D03/D11 | 점수 Enter 실제 전송 1회, 서버 sheet·상태·새 Prompt | 50-B/C / CMD·WEB |
+| TEST-50A-03 | D10/D12 | 서로 다른 Account/Context/WS, 실제 Puppet 각 1, 이름 혼동 없음 | 50-D |
+| TEST-50A-04 | D10/D11 | 같은 방 공개 원문 동일, 두 화면 각 1회, HTML 문자열 비실행 | 50-C/D / MSG |
+| TEST-50A-05 | D10/D12 | 실제 종료·재연결·재인증, Puppet 1→0→1, 새 ID | 50-D / DATA |
+| TEST-50A-06 | D08/D09/D11/P-01 | 두 Viewport, 가로 overflow 없음, 입력/출력·접근 가능한 버튼·PNG | 50-C |
+
+Runner 회귀: `scripts/tests/test_browser_runner.py`의 비밀번호 제거, 외부 DB 거절, 실제 SQLite 읽기 전용 세션 조회 3개. Node 계약은 기존 `scripts/tests/test_web_prompt.cjs` 16개를 유지한다. 기존 Harness 회귀는 `world.test_smoke` 및 `tests.test_smoke_infrastructure` 18개다.
+
+### 실행 증거와 제출 Gate
+
+2026-10-12 Windows 실행 HEAD는 `7afc09d064ea0e45dc68f77ab7ede6c5e7237202` + 미커밋 인프라였으며 이후 코드 커밋 `f63a12756346aae5dc841b208bacc3113267436d`와 실행 코드가 동일하다. 이를 커밋 후 새 실행으로 표현하지 않는다. 이후 변경은 문서이며 동일 브라우저 회귀를 반복하지 않는다. 최종 Push HEAD의 Quick/Smoke 및 원격 네 Job은 연결 PR/Issue에 실제 SHA와 URL로 별도 확정한다.
+
+| 테스트 | 상태 | 실제 시간 | 근거 |
+| --- | --- | --- | --- |
+| TEST-50A-01 | PASS | 3.972초 | 실제 Chromium 156.0.8078.4 인증·초기 상태 |
+| TEST-50A-02 | PASS | 3.481초 | 점수 1회 전송·새 Prompt·서버 sheet |
+| TEST-50A-03 | PASS | 8.063초 | 서로 다른 두 Account/Context/WS·Puppet 각 1 |
+| TEST-50A-04 | PASS | 8.269초 | 두 세션 동일 공개 원문·각 1회·HTML 비실행 |
+| TEST-50A-05 | PASS | 8.477초 | Puppet 1→0→1·새 세션 ID |
+| TEST-50A-06 | PASS | 7.708초 | 두 Viewport·입력/버튼/overflow·리뷰용 PNG |
+
+로컬 `run-8m2ki8dx/results.json` 및 `run.json`: 6개 성공, 건너뜀/예상치 못한 실패/Flaky 0, Playwright 41.921초 / 준비·종료 포함 89.154초, 플레이 DB 불변·소유 프로세스 종료. 이 ignored 증거 경로는 영구 배포물이 아니며 최종 CI Artifact가 원격 증거다. [실패 이력](playtest.md#issue-50-phase-50-a)을 함께 보존한다.
+
+| Gate | 로컬 근거 / 제출 확인 |
+| --- | --- |
+| A-01~02 | 최신 main·선행 5개 PR/CI 감사, 기존 Harness 재사용, 게임 파일 diff 없음 |
+| A-03~07 | TEST-50A-01/02 실제 서버·Chromium·HTTP/WS·UI 인증·명령·Prompt PASS |
+| A-08~10 | TEST-50A-03/04/05 독립 두 플레이어·공개 메시지·재접속 PASS |
+| A-11~13 | TEST-50A-06 두 Viewport·PNG 및 실패 결과/로그 수집 PASS. 이미지 승인 미실행 |
+| A-14~15 | DB hash/mtime/size 불변, 서버 종료, 기존 Node 16개/Python 18개 및 신규 격리 3개 PASS |
+| A-16~17 | 이 문서 작성 시 NOT RUN. 최종 Push HEAD Quick 및 최신 원격 test/smoke/browser-e2e/contracts 결과는 PR/Issue에서 확정 |
+| A-18~19 | 매트릭스·브라우저·성능·실행/실패 기록 작성, 50-B~F NOT RUN |
+| A-20 | 이 문서 작성 시 PR 제출 전. 실제 Ready PR 링크는 Issue #50 진행 구역에 추가 |
+
+## PR #57 리뷰 보완
+
+마지막 리뷰 HEAD `7ddf8d5de5d2437de14d06f91a4cc38c5e1fda22`의 P2-01~03을 테스트 인프라에서 보완했다. 위 최초 제출·당시 NOT RUN 기록은 보존한다. 아래 실행은 해당 HEAD + 수정 diff 기준이며 코드 커밋 `b0fd1b2a4fe776d6d173793854eddc54ac352f42`와 연결한다. 커밋 이후 새 실행으로 표현하지 않는다. 정확한 최종 Push HEAD Quick/Smoke와 최신 원격 네 Job은 [PR #57 Review Fixes](https://github.com/wonmin82/primal-zone/pull/57) 및 Issue #50 진행 기록에서 실제 SHA·Run URL로 확정한다.
+
+| 리뷰 ID | 원인 | 수정 파일 | 신규·보강 회귀 | 결과 |
+| --- | --- | --- | --- | --- |
+| P2-01 | Popen 이전 인증 파일 정리 영역 부족 | scripts/browser_e2e.py | BrowserCredentialTests의 Popen/OSError·비정상 종료·정상 완료·stop/unlink 오류·Timeout/취소 | PASS |
+| P2-02 | lastCommand·오류 context·임의 보고서/로그에 입력 원문 복제 가능 | fixtures/safety/reporter.cjs, browser_e2e.py | TEST-P2-02-A~D, BrowserIsolationTests의 엄격한 export·마스킹 PNG digest, 삭제 실패 회귀 | PASS |
+| P2-03 | Context 종료 후 실제 Puppet 해제 확인 없음 | fixtures/safety.cjs, phase50a.spec.cjs | TEST-50A-03/05/06·TEST-P2-03-D·helper 소유 ID/타 세션/첨부 실패 검사 | PASS |
+
+실제 경로는 `scripts/browser/`, `scripts/tests/test_browser_runner.py`, `scripts/tests/test_browser_helpers.cjs`다. 기존 TEST-50A-01~06·Node 16개·Python 격리 3개를 유지했다. 신규 메서드/테스트는 Python 9개 + Node 10개 + 실제 E2E 3개다. Mock은 외부 프로세스 실패·첨부·Probe 오류 주입에만 사용하며 실제 정상 서버/로그인/게임 명령/Puppet 관측은 대체하지 않는다.
+
+| 수용 기준 | 실제 근거 | 상태 |
+| --- | --- | --- |
+| RF-01~03 | Python 12개: Popen 실패에서도 파일 삭제, 원래 오류+정리 오류 보존, 비정상 종료/Timeout/Interrupt | PASS |
+| RF-04~07 | 개인·공개 원문 비수집, 비밀번호/토큰/URL 보호, 실제 음성 실패 보고서·자동 context 폐기·마스킹 PNG 검사 | PASS |
+| RF-08~12 | 소유 Puppet ID 해제, A 종료/B 유지, Desktop 종료 후 Narrow, 1→0→1·새 ID, Probe/첨부/Timeout 오류 명시 | PASS |
+| RF-13~15 | Runner 12·Node 26·기존 Harness 18, 정상 Chromium 9개 3회 연속 + 최종 보안 경계 재검사, DB/게임/Harness 불변 | PASS |
+| RF-16~17 | 이 기록 커밋 시 정확한 최종 Push HEAD Quick/원격 CI는 실행 전이다. PR/Issue에서 최신 SHA의 실제 결과를 확정한다. | PENDING |
+| RF-18~20 | 리뷰 추적/실행·실패 기록 보존, 코드 자체 리뷰에서 새 차단 P0/P1 없음, PR·Issue OPEN/Source 유지 | PR/Issue 갱신 후 최종 확인 |
+
+3회 정상 브라우저 실행은 동일한 Fixture/시나리오를 사용했다. 이후 변화는 업로드 PNG 명명 규칙, 별도 음성 검사 선택 옵션, 자동 오류 context 비수집 및 보고서 정리 실패 판정이며 각 경계와 최종 정상 실행을 추가로 검사했다. 실패 재시도로 성공을 숨기거나 이전 HEAD CI를 새 HEAD 결과로 대신하지 않는다. 실행 시간·개발 중 실패는 [실행 이력](playtest.md#pr-57-p2-리뷰-보완)을 따른다.
+
+## 후속 미실행 상태
+
+| Phase / 검증 그룹 | 상태 | 남은 작업 |
+| --- | --- | --- |
+| 50-B / T50-CMD·ALIAS·GAME·NPC·MSG·PARTY·DOOR·HELP·DATA 전수 | NOT RUN | 현행 테스트 연결·공백 및 교차 계약 추가 |
+| 50-C / E2E-01~14 및 T50-WEB 전수 | NOT RUN | 실제 역할별 기능·버튼·Focus·승인 이미지·접근성 확대 |
+| 50-D / 전체 동시성·600초·60초·정상 서버 Restart | NOT RUN | 실제 시간·다중 세션·영속 비교 / RELEASE |
+| 50-E / 기능 결함 Closeout | NOT RUN | 별도 재현·영향 평가·수정 PR 및 사용자 승인 |
+| 50-F / 최종 main RELEASE·G-01~15·상위 #45 종료 | NOT RUN | 최종 병합 main 별도 검증·5개 산출물·승인 |
+| OS 한국어 IME | PRIOR VERIFIED | 기존 사용자 Windows 수동 성공, 신규 PASS 합산 제외 |
+
+50-A 성공을 Issue #50 전체 구현/통합 검증 완료로 해석하지 않는다. PR/Issue는 OPEN 유지하며 자동 Merge·브랜치 삭제·Close를 수행하지 않는다.
+
+
+## P2-04 최종 프로세스 수명 보완
+
+기준은 리뷰 HEAD `9651918018517527cdfa96fb694ab09bc66f298e`와 이 보완 diff다. 부모 종료 뒤에도 소유 자식을 정리하도록 `scripts/browser_processes.py`, `scripts/browser_e2e.py`, `scripts/tests/test_browser_runner.py`를 보완했다. 게임·Harness·WebSocket·운영 타이머 변경은 없다.
+
+| 수용 기준 | 실제 회귀 경로 | 상태 |
+| --- | --- | --- |
+| TEST-P2-04-A / F-04 | test_p204_a_normal_parent_no_child_needs_no_forced_termination, 기존 정상 수령/인증 파일 정리 | Windows PASS |
+| TEST-P2-04-B / F-01·05 | test_p204_b_abnormal_parent_leaves_real_child_then_cleanup_removes_it: 실제 부모 종료·자식 STILL_ACTIVE/그룹 잔류 → 실제 종료 | Windows PASS / Linux CI 확인 예정 |
+| TEST-P2-04-C / F-06 | test_p204_c_live_parent_and_child_timeout_cleanup, test_p204_c_stubborn_child_requires_owned_forced_termination | Windows PASS / Linux CI 확인 예정 |
+| TEST-P2-04-D / F-07 | test_p204_d_repeated_cleanup_is_safe | Windows PASS |
+| TEST-P2-04-E / F-09 | test_p204_e_termination_error_is_reported_and_not_marked_stopped, 기존 원래 오류+stop/unlink 오류 보존 | Windows PASS |
+| TEST-P2-04-F / F-08 | test_p204_f_non_owned_process_remains_alive | Windows PASS |
+| 소유권·등록·최후 핸들 / F-02·03 | test_p204_launch_failure_still_cleans_ownership_container, test_p204_job_assignment_failure_never_creates_child, test_p204_windows_last_job_handle_close_kills_owned_child, test_p204_lost_posix_guardian_does_not_signal_unproven_group | Windows 해당 항목 PASS / POSIX 전용 CI 확인 예정 / macOS NOT RUN |
+| TEST-P2-04-G / F-10~16 | 기존 Chromium 9개 및 P2-01~03, run.json의 브라우저·Evennia 각각 정리·자격 증명·DB 불변 | Windows 연속 3회 9개 PASS·각 정리 true (성능/실행 이력 참조) |
+| F-17~24 | 정확한 Push HEAD Quick → 최신 PR 네 Job → Merge Commit → 실제 main 네 Job → 정확한 Source 정리 | 커밋 후 PR/Issue 실제 SHA·URL로 확정 |
+| F-25~27 | Issue #50의 Phase 50-A 완료 기록, #50/#45 OPEN 유지, 50-B~F/RELEASE NOT RUN | 병합 후 Issue 기록에서 확정 |
+
+Python Runner는 기존 12개를 유지하고 P2-04 메서드 11개를 추가해 총 23개다. Windows에서는 22개 성공·POSIX 전용 1개 제외, Linux에서는 Windows 전용 마지막 Job 핸들 항목 1개를 제외하고 나머지 22개를 실행한다. 플랫폼 제외를 실패 재시도나 flaky 은폐로 해석하지 않으며 macOS 실행 성공을 주장하지 않는다. Windows Job 등록 실패는 자식 생성 이전에 차단하고, POSIX 보호 프로세스 소실은 미확인 그룹에 신호를 보내지 않는다.
+
+기존 P2-01~03·최초 제출 기록은 위에 보존한다. 이번 사용자 요청은 필수 검증 성공 후 조건부 Merge Commit 및 Source 삭제를 승인했지만, Issue #50 전체 종료나 50-B~F 완료는 승인/검증 범위가 아니다. 최종 병합/CI/정리 결과는 [PR #57](https://github.com/wonmin82/primal-zone/pull/57) 및 [Issue #50](https://github.com/wonmin82/primal-zone/issues/50)에 남긴다.
+
+### P2-04 시작 실패 제어 파이프 회귀
+
+최초 Ubuntu CI Runner FAIL을 [실행 이력](playtest.md#p2-04-최초-ubuntu-ci-실패-및-수정)에 연결한다. TEST-P2-04-E/F-09에 test_p204_closed_control_pipe_requires_verified_cleanup_proof를 추가해 정리 증거가 있을 때만 닫힌 파이프를 처리하고, 증거가 없으면 실패하는 것을 검증한다. 기존 실제 OS launch-failure 검사를 유지한다. Runner는 정의 24개/Windows 해당 23개 PASS·POSIX 1개 N/A, 새 Linux CI는 확인 전이다.

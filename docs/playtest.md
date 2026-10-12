@@ -1,5 +1,72 @@
 # 테스트와 검증
 
+## Issue #50 Phase 50-A
+
+2026-10-12, 최신 main `7afc09d064ea0e45dc68f77ab7ede6c5e7237202`에서 `codex/issue-50-integration-validation`로 시작했다. v1.2 DESIGN FREEZE 및 선행 #46~49/#54의 실제 PR HEAD·Merge·CI를 감사했다. 아래 최초 구현·실패·병합 전 이력은 삭제하지 않는다. 이번 범위는 50-A 기반이며 50-B~F와 최종 RELEASE를 완료했다고 표현하지 않는다.
+
+### PR #57 P2 리뷰 보완
+
+2026-10-12, 리뷰 HEAD `7ddf8d5de5d2437de14d06f91a4cc38c5e1fda22`, 최신 base `7afc09d` 및 OPEN/Ready PR #57을 재조회했다. 기존 구현·실패 기록과 Issue #50 v1.2 D01~D28/P-01/P-02는 보존한다. 아래 검사는 해당 HEAD + 코드 커밋 `b0fd1b2a4fe776d6d173793854eddc54ac352f42`에 대응하는 수정 diff이며 커밋 후 새 실행으로 표현하지 않는다.
+
+| 실제 실행 | 결과 |
+| --- | --- |
+| `uv run python -m unittest discover -s scripts/tests -p test_browser_runner.py` | 12 PASS·종료 0, 0.544초. Popen/정상·비정상/stop·unlink 오류/Timeout·취소/엄격한 export·자동 context 폐기를 포함한다. |
+| `npm run test:contracts` | 기존 16 + 신규 10 = 26 PASS·종료 0, 0.229초. 입력·URL·보고서 비수집 및 소유 세션·정리 오류 회귀다. |
+| `uv run python scripts/dev.py test world.test_smoke tests.test_smoke_infrastructure --parallel 2` | 기존 18 PASS·종료 0, 12.533초 / runner 23.506초. |
+| `npm run test:browser` 3회 연속 | 매회 기존 6 + 신규 3 = 9 PASS. E2E 62.703/62.624/62.652초, 준비·종료 포함 106.081/106.446/106.320초. 실제 소유 ID 해제·A 종료/B 유지·Desktop 후 Narrow·재접속을 Assert한다. |
+| 최종 정상 `npm run test:browser` | 9 PASS·종료 0, E2E 62.735초 / 전체 105.839초. 이후 보안 경계/보고서 정리 판정을 추가로 확인했다. |
+| `PRIMAL_BROWSER_FAILURE_PROBE=1`의 별도 `npm run test:browser` | 실제 TEST-P2-02-D Assertion 1개 예상 FAIL·종료 1. E2E 8.943초 / 전체 50.316초. 실패 JSON 상태를 유지하며 Context/Puppet·인증 파일·소유 프로세스 정리와 비공개 입력 비수집·자동 context 부재를 별도 확인했다. |
+| `uv run python scripts/dev.py check`, 변경 JS/설정 `node --check`, `git diff --check` | PASS. |
+
+P2-01은 프로세스 생성 이전부터 인증 파일의 finally를 적용하고 stop·unlink를 독립적으로 실행한다. P2-02는 입력 원문·인증 프레임·자유 오류 대신 안전한 메타데이터만 저장하며 Playwright 자체 DOM snapshot도 중지하고 자동 오류 context를 폐기한다. P2-03은 실제 인증 전후 ID 차이만 추적하고 Context 종료 뒤 읽기 전용 DB Probe로 소유 Puppet 해제를 확인한다. 다른 세션을 종료하거나 공통 helper에서 캐릭터 전체 0을 강요하지 않는다.
+
+수정 과정의 실패는 다음과 같다.
+
+- `run-8mljvy1u`: 9 FAIL·종료 1, 전체 278.124초. Context 종료 뒤 Playwright WebSocket close 이벤트가 전달되지 않아 10초 대기가 실패했다. 실제 DB에는 Puppet이 남지 않았다. 브라우저 채널 종료는 닫힌 Page도 인정하되 실제 서버 해제는 별도 Probe로 계속 확인하도록 보정했다.
+- `run-7kwsxcfv`: 6 FAIL/3 PASS·종료 1, 전체 107.575초. URL 허용 경로가 기존 static favicon 404를 일반 오류로 오분류했다. 원래 suffix/404 조건을 복원하고 비수집 메타데이터 및 분류 회귀를 유지했다.
+- 첫 정상 증거의 마스킹 PNG는 Playwright가 붙인 digest 파일명 때문에 업로드에서 빠졌다. 임의 파일·외부 경로를 계속 거절하면서 승인 PNG의 digest 형식만 허용했고 단위 검사와 실제 마스킹 이미지 검사를 추가했다.
+- `run-jq8jxz0j`: 음성 옵션의 정규식이 전체 제목의 파일명 prefix와 맞지 않아 0개 실행/전역 오류·종료 1, 50.636초였다. Assertion 음성 검사 성공으로 인정하지 않고 선택 패턴을 수정했다.
+- `run-381hl7qw`: 실제 Assertion 1개 FAIL·종료 1, E2E 10.199초/전체 52.779초. 원문이 업로드되지 않음은 확인했으나 로컬 자동 오류 context에 합성 메시지가 포함되는 경로를 발견했다. snapshot 중지와 Reporter/Python 폐기를 추가한 후 `run-92kr783d`에서 실제 음성 검사와 원문 비수집을 다시 확인했다.
+
+모든 실제 실행의 플레이 DB hash/mtime/size 불변, 소유 Portal/Server 종료, 인증 파일 부재를 확인했다. 정상 실행은 격리 DB를 제거하며 실패 시 로컬 원본 로그/DB를 보존한다. 이 로컬 원본은 업로드하지 않는다. 최종 정상 증거의 JSON/HTML/로그와 두 마스킹 PNG, 실제 음성 검사 증거의 7개 텍스트를 검사했다. Trace/영상/임의 실패 화면은 수집하지 않는다.
+
+전체 로컬 Python suite는 게임·공통 Harness가 변경되지 않아 반복하지 않았으며 최신 원격 `test`의 전체 회귀와 구분한다. 정확한 최종 Push HEAD의 Quick/Smoke와 원격 네 Job은 커밋 후 별도 실행하여 PR/Issue에 SHA·URL로 확정한다. RF-01~20과 실제 경로는 [리뷰 추적](issue50-integration-matrix.md#pr-57-리뷰-보완)에 연결한다. PR·Issue OPEN, Source 유지, Merge/Close 미수행이며 50-B~F·IME/장기 운영 범위는 기존 기록과 같다.
+
+### 실제 실행과 결과
+
+Windows 10, Python 3.13.15, uv 0.12.13, Node 24.19.0, npm 11.17.0, Playwright 1.64.0 / Chromium 156.0.8078.4 (revision 1248). 성공 실행은 착수 HEAD + 미커밋 코드 기준이며 이후 `f63a12756346aae5dc841b208bacc3113267436d`와 코드가 동일하다. 이후 문서만 바뀌므로 같은 검사를 반복하지 않는다. 최종 Push HEAD Quick/Smoke와 원격 CI는 실제 실행 후 PR Validation 및 Issue #50 진행 구역에 별도 SHA·URL로 확정한다.
+
+| 실제 명령 | 결과·시간 |
+| --- | --- |
+| `npm ci` | Lockfile 설치 성공, 취약점 0 |
+| `npx playwright install --no-shell chromium` | 성공, 실제 Chromium 설치. 첫 CDN 인증서 오류는 아래 기록 |
+| `npm run test:browser` | TEST-50A-01~06 6개 PASS, 0 skip/flaky, Playwright 41.921초 / 전체 89.154초 |
+| `npm run test:contracts` | 기존 Node DOM/프로토콜 16개 PASS, 0.486초 |
+| `uv run python -m unittest discover -s scripts/tests -p test_browser_runner.py` | 신규 격리·비밀 제거 3개 PASS, 최종 0.173초 |
+| `uv run python scripts/dev.py test world.test_smoke tests.test_smoke_infrastructure --parallel 2` | 기존 18개 PASS, 테스트 12.545초 / runner 27.741초 |
+| `uv run python scripts/dev.py check` | PASS, 종료 0 |
+| `node --check playwright.config.cjs` 및 `scripts/browser/fixtures.cjs`, `scripts/browser/phase50a.spec.cjs` | 모두 PASS, 종료 0 |
+| `git diff --check` | PASS |
+
+실제 UI 로그인·Enter 점수 1회·서버 sheet/Prompt·독립 두 Account/Context/WS·공개 메시지 각 1회·HTML 안전성·Puppet 1→0→1 재접속·두 Viewport 구조/입력을 검사했다. [각 테스트 시간과 Gate 추적](issue50-integration-matrix.md), [실행 구조·Artifact 보안](issue50-browser-validation.md), [성능 기록](issue50-test-performance.md)을 연결한다.
+
+`work/browser-e2e/run-8m2ki8dx`의 JSON·로그·Desktop 1366×768 / Narrow 390×844 PNG를 확인했다. 최초 PNG는 리뷰 증거이며 승인 Visual Baseline이 아니다. 총 실행 시간은 DB/Fixture/정적 파일 준비 및 종료를 포함한다. 성공 후 소유 Portal/Server가 종료되고 격리 DB 디렉터리가 제거됐다. 실제 플레이 DB hash/mtime/size는 실행 전후 같았다. 업로드 대상에는 DB/인증 파일/secret 설정/Trace/영상이 없다.
+
+### 개발 중 실패와 수정 이력
+
+- Chromium 설치의 첫 CDN에서 `SELF_SIGNED_CERT_IN_CHAIN`이 발생했다. 공식 대체 CDN의 Chromium/FFmpeg/Winldd와 `--no-shell` 설치로 성공했으며 TLS 검증을 끄지 않았다.
+- 첫 실제 브라우저 실행은 Playwright Worker에 전달한 stdin이 비어 인증 Fixture JSON 읽기에 실패했다(1개 실패/5개 미실행). 비공개 임시 파일로 전달하고 Node 종료 후 삭제하도록 고쳤다.
+- 다음 실행은 실제 인증 성공 후 WS URL의 브라우저 정규화(`/`) 때문에 6개 실패했다. URL을 같은 방식으로 정규화해 비교하며 실제 WS 확인은 유지했다.
+- 다음 실행은 기존 `/favicon.ico` 404만 Console 오류 검사에 걸렸다(6개 실패). 이 비차단 리소스 경고는 원 URL과 내용을 증거에 보존하고 다른 Console/JS 오류는 계속 실패로 처리한다. 리소스 누락의 정리는 50-E에서 평가하며 게임 코드에 섞지 않는다.
+- 다음 실행은 5개 성공/1개 실패였다. Narrow CSS가 원래 숨기는 탐사 수첩 버튼을 검사했고, 닫힌 Page에서 실패 스크린샷을 만들려다 부수 오류가 발생했다. 실제 공유 실행/전투 버튼과 모든 노출 버튼의 접근 가능한 이름을 검사하고 실패 증거 수집은 닫힌 Page를 구분한다. 기존 CSS와 수용 조건은 바꾸지 않았다.
+- 격리 SQLite Probe 단위 검사 첫 실행은 연결 context가 DB 연결 자체를 닫지 않아 Windows 임시 파일 정리가 실패했다. `closing()`으로 연결 종료를 보장한 후 3개 성공했다.
+
+### CI 및 미실행 범위
+
+기존 `test`/`smoke`는 그대로 유지한다. 새 `browser-e2e`는 실제 Chromium/production 타이머 Harness·3개 격리 검사를 실행하고, `contracts`는 실제 기존 Node 16개를 실행한다. 공식 Actions SHA를 고정했다. 저장소 Actions 허용목록은 사용자 승인 후 기존 checkout/setup-uv에 setup-node/upload-artifact 두 항목만 추가했다. 브랜치 보호를 변경하지 않았다. 성공 증거 14일/실패 30일이며 cleanup·비밀 제거를 완료한 디렉터리만 업로드한다.
+
+로컬 전체 Python 회귀는 게임·공통 Harness 코드가 동일해 반복하지 않았다. 최종 원격 `test`가 기존 전체 회귀를 실행한다. 50-B 전수 계약, 50-C E2E-01~14, 50-D 실제 60초/600초·정상 서버 재시작, 50-E 기능 결함 Closeout, 50-F RELEASE/Issue 종료는 NOT RUN이다. OS 한글 IME는 기존 사용자 수동 성공 PRIOR VERIFIED이며 신규 PASS 합산·재검증 대상이 아니다. PR 제출 후 Merge·브랜치 삭제·Issue Close는 수행하지 않는다.
+
 ## Issue #49 문과 열쇠 검증
 
 ### PR #56 D13 장애 격리 P1 보완
@@ -2127,3 +2194,34 @@ uv run python scripts/dev.py smoke
 - 기준은 `c0789ac4acb1b119eabb2373f0cbf92420c3030a` 이후 가격 출력·도움말·테스트·검증 정책의 미커밋 수정이다. Windows 10 build 19045, Python 3.13.15, uv 0.12.13에서 `uv run python scripts/dev.py test tests.test_command_overhaul --parallel 1`: 5개/42.051초 성공, runner 58.544초, 종료 코드 0. 기존 A/B/C와 새 가격/거래 검사를 포함하며 이후 문서만 보완했다.
 - `uv run python scripts/dev.py check`: 성공, 종료 코드 0. GitHub GFM 렌더링과 저장소 Markdown 상대경로/앵커 검사를 성공시켰다. 새 안내의 잘못된 프로필 문서 앵커 1건은 수정 후 재검사해 오류 0을 확인했다. `git diff --check`: 성공.
 - 이 경량 결과는 Push 허용 근거가 아니다. 다음 로컬 커밋의 정확한 SHA에서 위 전체 CI 네 명령을 수행하고, 확인된 결과만 PR Validation에 추가한다. 전체 로컬 검사·원격 CI·미검증 #50 범위를 구분한다.
+
+
+### PR #57 P2-04 소유 자식 수명 보완
+
+- 이전 리뷰 HEAD `9651918018517527cdfa96fb694ab09bc66f298e`에서 Windows 격리 Python 부모가 먼저 종료 코드 2로 끝나고 자식이 STILL_ACTIVE인 실제 OS 조건을 만들었다. 기존 stop_browser는 종료된 부모를 보고 반환해 자식이 남았다. 재현 Fixture는 자신의 보유 process HANDLE로 직접 정리했다. 실제 정상 CI에서 잔류했다거나 운영 빈도를 확인한 것으로 표현하지 않는다.
+- 개발 중 Windows 회귀 최초 실행은 21개 중 부모 종료/자식 관측 1 FAIL·강제 자식 관측 1 ERROR(15.185초), 직접 부모 Fixture 변경 후에도 1 FAIL·1 ERROR(14.806초)였다. 가상환경 Python 런처가 종료하는 PID와 실제 Python 수명을 혼동했으며 보호 프로세스도 런처를 통과했다. 표준 라이브러리 보호 프로세스를 sys._base_executable로 직접 실행해 이 관측·수명 경계를 해결했다. 핵심 자식 생존/종료 assertion을 삭제하거나 약화하지 않았다.
+- 소유권 등록 완료를 자식 생성 전에 확인하고, Windows Job의 마지막 핸들을 실행기만 보유하도록 보강했다. Job 등록 실패 시 자식 생성 없음, 최후 핸들 닫힘의 실제 자식 종료, PID 재사용을 피하는 POSIX 보호 그룹의 정체성 오류를 검사한다. 단순 부모 poll()·이름·전역 taskkill/pkill에 의존하지 않는다.
+- Python Runner는 총 23개 중 Windows 해당 22개 PASS·POSIX 전용 1개 N/A, 최종 검사 5.870초. 신규 메서드는 11개이며 Windows 해당 10개를 실제 실행했다. Linux의 Windows 전용 1개 N/A 및 POSIX 실제 실행 결과는 원격 CI에서 별도 확인한다. macOS는 NOT RUN이다. 기존 Node 계약 26개 PASS/0.242초·코드 검사/diff 검사 PASS, JavaScript 실행 코드 변경이 없어 새 node --check는 반복하지 않았다.
+- 개발 중 실제 Chromium 최초 9개 PASS/전체119.953초, 추가 안정화 3회 각 9개 PASS(전체104.454/104.646/108.420초, E2E63.224/63.723/64.133초)를 확인했다. 이 실행 중 보호 경계를 최종 보강한 이력이 있어 최종 안정성 증거와 구분한다. P2-01~03의 비수집·Puppet/인증 정리와 새 browser_processes_stopped 및 기존 processes_stopped, 플레이 DB 불변은 모두 true였다.
+- 최종 코드의 연속 3회·실제 Push HEAD Quick·PR 및 Merge Commit CI는 아래 최종 실행 결과와 PR/Issue 기록에서 확정한다. 병합 후 코드/문서만을 위해 main 직접 커밋하지 않는다. 50-B~F/전체 RELEASE 및 장기 타이밍 검증은 이번 완료에 포함하지 않는다.
+
+- 추가 POSIX 소스 감사에서 Playwright 1.64.0의 `detached: process.platform !== "win32"`를 확인했다. 따라서 초기 Node 그룹 종료 설계를 Linux subreaper/pidfd 기반으로 보강하고 실제 자식 Fixture도 별도 새 세션으로 만들어 잔류를 검사한다. 기존 정상 Windows 수명 경계는 유지하며 Ubuntu CI가 Linux 분기와 detached 잔류의 필수 검증을 수행한다. 초기 그룹 설계만으로 Linux Chromium 정리가 보장됐다고 기록하지 않는다. 등록 오류 분기 변경 중 Job 핸들 close 회귀 1 FAIL을 확인해 실제 오류 경로의 close를 복원했고 23개 Runner 재검사에 성공했다.
+
+#### P2-04 최종 로컬 브라우저 결과
+
+| 최종 Windows 반복 | 실제 E2E | 서버·브라우저 정리 포함 | 결과 |
+| --- | --- | --- | --- |
+| 1 / run-cgrozeie | 9개 / 63.419초 | 106.729초 | PASS |
+| 2 / run-h_8pirtg | 9개 / 64.531초 | 108.734초 | PASS |
+| 3 / run-m3fyai8u | 9개 / 61.993초 | 106.195초 | PASS |
+
+세 실행의 모든 정리/격리 메타데이터와 Puppet 해제는 true였다. 이후 Linux 전용 detached 입양 분기를 추가했고 Windows 정상 경로는 동일하다. 최종 Runner 23개 중 Windows 22개 PASS·POSIX 1개 N/A(5.462초), 기존 Harness 통합 18개 PASS(10.166초)다. 정확한 커밋 후 Quick/원격 및 병합 검증은 PR/Issue에서 확정한다.
+
+
+#### P2-04 최초 Ubuntu CI 실패 및 수정
+
+[Run 38187028065](https://github.com/wonmin82/primal-zone/actions/runs/38187028065), Source `7fe7df23e8e67b02701562a2177b5a5ab66e029e`: browser-e2e의 Runner는 23개 중 실행 시작 실패/정리 재호출의 BrokenPipeError 2건으로 FAIL(1.552초, Windows 전용 1개 N/A)이었다. 따라서 실제 Chromium 단계는 실행되지 않았고 병합하지 않았다. 다른 실제 detached 자식·강제 종료·비소유 보호 회귀에서 오류는 보고되지 않았지만 전체 Runner PASS로 표기하지 않는다.
+
+Node 실행 파일이 없으면 Linux 보호 프로세스는 자식이 생성되지 않았다는 `.clean` 증거를 남기고 종료한다. 기존 stop은 이 경우에도 종료된 보호 프로세스의 stdin에 요청을 써 BrokenPipeError를 냈다. 이미 검증된 정리 증거가 있으면 요청을 보내지 않고, 요청/close 중 BrokenPipe가 발생해도 보호 프로세스의 종료와 실제 정리 증거를 재확인해야만 성공한다. 증거가 없거나 stopped가 true가 아니면 계속 실패한다. 기존 실제 OS 시작 실패 assertion을 유지하고 증거 유무의 음성 회귀를 추가했다.
+
+보완된 로컬 Runner 정의 24개 중 Windows 해당 23개 PASS·POSIX 전용 1개 N/A(5.280초), dev.py check·diff 검사 PASS. Linux 새 HEAD의 실제 전체 Runner/Chromium 및 정확한 Push HEAD Quick/CI는 새로 확인한다. 기존 실패 Run/HEAD와 이전 검증 기록을 보존하고 재시도로 FAIL을 덮지 않는다.

@@ -1,5 +1,33 @@
 # 원시구역 개발 작업 및 검증 이력
 
+## PR #57 — Phase 50-A P2 리뷰 보완 (Push 전 기록)
+
+마지막 리뷰 HEAD `7ddf8d5`에서 P2-01 인증 파일 정리, P2-02 입력 원문/자동 실패 context 비수집, P2-03 소유 Puppet 실제 해제 확인을 보완했다. 코드 커밋 `b0fd1b2a4fe776d6d173793854eddc54ac352f42`, 기존 Source `codex/issue-50-integration-validation`이며 새 PR/브랜치를 만들지 않는다. 게임/프로토콜/콘텐츠/영속 구조·타이머·실제 DB와 공통 Smoke Harness는 변경하지 않는다.
+
+Python Runner 12개·Node 계약 26개·관련 Harness 통합 18개가 성공했다. 동일 브라우저 Fixture/시나리오 9개를 3회 연속 성공시킨 뒤 자동 실패 context 비수집/보고서 정리 경계를 추가로 검증했다. 최종 정상 실행은 9 PASS·종료 0, E2E 62.735초 / 전체 105.839초이며 실제 Assertion 음성 1개는 예상 FAIL·종료 1로 구분한다. 실제 실패에서도 Context/Puppet·인증 파일·프로세스 정리와 원문 비수집을 확인했다. 개발 중 실패·보정과 기존 최초 제출 기록은 [검증 이력](playtest.md#pr-57-p2-리뷰-보완)에 보존한다.
+
+[리뷰 추적/RF-01~20](issue50-integration-matrix.md#pr-57-리뷰-보완), [브라우저·증거 보안](issue50-browser-validation.md), [실측](issue50-test-performance.md)을 연결한다. 정확한 최종 Push SHA의 Quick/Smoke와 최신 네 원격 CI는 이 문서 커밋 이후 게이트이며 [PR #57](https://github.com/wonmin82/primal-zone/pull/57) Review Fixes 및 Issue #50 진행 기록에서 실제 결과로 확정한다. 이전 HEAD CI를 새 결과로 대신하지 않는다.
+
+PR #57 OPEN/Ready, Source 유지, Issue #50/#45 OPEN을 유지한다. 자동 Merge·브랜치 삭제·Issue 종료는 수행하지 않는다. 50-B~F/실제 장기 시간·서버 재시작·최종 RELEASE는 NOT RUN, OS IME는 기존 사용자 수동 검증 PRIOR VERIFIED다.
+
+## Issue #50 — Phase 50-A 자동 브라우저 기반 (제출 전 기록)
+
+[Issue #50 v1.2 DESIGN FREEZE](https://github.com/wonmin82/primal-zone/issues/50)의 50-A만 구현했다. 착수 main `7afc09d064ea0e45dc68f77ab7ede6c5e7237202`, Source `codex/issue-50-integration-validation`, 코드 커밋 `f63a12756346aae5dc841b208bacc3113267436d`. 선행 #46~49/#54와 PR #51~53/#55/#56의 병합·최종 PR 및 main CI를 재조회했다. 아래 역사적 병합 전·실패 기록은 당시 사실로 보존한다.
+
+| 작업 | 실제 구현 |
+| --- | --- |
+| 50-A-01 | Node 24·Playwright 1.64.0·Chromium·npm Lockfile·최소 JS 설정 |
+| 50-A-02 | 기존 Harness('full') production 타이머·동적 포트·격리 DB·소유 프로세스 cleanup |
+| 50-A-03~05 | 실제 DOM 인증/명령 Helper·독립 Account/Context·WS 관찰·읽기 전용 Puppet Probe |
+| 50-A-06 | 기존 test/smoke 유지·실제 browser-e2e/contracts·비밀 제거 후 증거·성공14/실패30일 |
+| 50-A-07 | 통합 매트릭스·브라우저/성능·실행/실패 기록·README 실행 안내 |
+
+최소 E2E 6개, 신규 격리 검사 3개, 기존 Node 16개 및 관련 Python 18개가 로컬에서 성공했다. 커밋 전 실행 기준·시간·실패 보정·미실행은 [검증 기록](playtest.md#issue-50-phase-50-a)과 [매트릭스](issue50-integration-matrix.md)에 연결한다. 게임 구현·프로토콜·운영 타이머·콘텐츠·영속 데이터 구조를 변경하지 않았다. 플레이 DB 불변, 실제 Portal/Server 종료 및 성공 실행의 격리 DB 삭제를 확인했다.
+
+정확한 최종 Push HEAD의 Quick/Smoke 성공 후 단일 Ready PR을 제출하고 네 GitHub Job을 확인한다. 이 제출 전 기록에서 아직 실행하지 않은 검증은 PASS로 확정하지 않는다. 최신 SHA·PR 링크·Quick·CI 및 A-01~20 판정은 Issue #50 Phase 50-A 진행 구역과 PR Validation에서 실제 결과로 갱신한다.
+
+50-B~F·전체 E2E·실제 600초/60초·정상 서버 재시작·최종 RELEASE는 NOT RUN이다. OS 한글 IME는 기존 사용자 수동 성공 PRIOR VERIFIED이며 새 검증 성공과 구분한다. Issue #50/#45 OPEN, 제출 PR OPEN/Ready 및 Source 브랜치를 유지한다. Merge/Closeout/운영 DB 적용은 이번 범위 밖이다.
+
 ## PR #56 — D13 장애 격리 P1 리뷰 보완 (병합 전 기록)
 
 기존 [PR #56](https://github.com/wonmin82/primal-zone/pull/56)의 `c90866cdef44035543c04e780b193d2801c83d9b`에서 설치된 Door endpoint가 DefaultExit로 손상되면 런타임 가드는 차단하지만 다음 서버 시작의 관리 Exit preflight가 전체 월드 초기화를 중단하는 P1을 격리 재현했다. 수정 전 1개 ERROR와 수정 후 PASS는 [실제 검증 기록](playtest.md#pr-56-d13-장애-격리-p1-보완)에 보존한다.
@@ -1388,3 +1416,12 @@ PR #25의 최종 문서 HEAD와 병합 후 main의 test·smoke를 대조하고, 
 - P2 문서: [명령 기준](commands.md#검증-범위)과 [검증 정책](playtest.md#issue-46-pr-51-리뷰-후-검증-정책-2026-10-10)에 최신 정책을 반영한다. 최초 구현 당시 최소 Smoke·전체 로컬 검사 미실행·실패 기록은 역사적 사실로 구분해 보존한다.
 - P1 게이트: 경량 검사와 로컬 커밋 이후 실제 Push할 HEAD에서 현행 CI의 `uv sync --locked --python 3.13`, `check`, `test --parallel 2`, `smoke`를 전부 성공시켜야 한다. 실패·미실행 시 Push하지 않고 수정한 새 HEAD에서 전체 검사를 다시 수행한다. 환경·명령·종료 코드·테스트 수·검증 SHA와 같은 HEAD의 원격 `test`·`smoke` 결과는 [PR #51 Validation](https://github.com/wonmin82/primal-zone/pull/51)에 최종 기록한다. 실행 전 성공이나 향후 병합 결과를 미리 기록하지 않는다.
 - 남은 별도 범위: #50의 Cross-Issue 통합·실 브라우저·한글 IME·복수 플레이어/세션 경합·도움말/UI 종단 간·최종 통합 회귀. 기존 PR #51만 갱신하며 사용자 승인 전에는 Merge·브랜치 삭제·Issue #46 종료·#47 착수를 하지 않는다.
+
+
+## PR #57 P2-04 최종 보완 및 조건부 병합 준비 (2026-10-12)
+
+- 착수 Source HEAD `9651918018517527cdfa96fb694ab09bc66f298e`, 최신 main `7afc09d064ea0e45dc68f77ab7ede6c5e7237202`. 작업 트리 깨끗함, 기존 PR #57/4개 원본 커밋 유지. 새 PR/브랜치·게임 구현 변경 없음.
+- Windows Job(등록 후 자식 생성/kill-on-close/active count 0) 및 보호 프로세스가 PGID를 유지하는 POSIX 그룹 정리를 구현했다. 부모 종료 코드를 자식 종료로 간주하지 않는다. 메타데이터는 브라우저 전체 `browser_processes_stopped`와 Evennia `processes_stopped`를 구분한다.
+- 수정 전 Windows 실제 부모 조기 종료 뒤 자식 STILL_ACTIVE를 재현했다. 실제 소유 자식·강제 종료·외부 프로세스 보호·재정리·Job 마지막 핸들 종료를 확인했다. P2-01~03의 인증 삭제·비수집·Puppet 해제 보호는 유지한다.
+- 이 구역은 커밋 전 준비 기록이다. 최종 Push HEAD Quick/PR CI 및 Merge Commit/main 네 CI/Source 삭제는 실제 완료 후 PR #57/Issue #50의 P2-04 구역에 SHA와 URL로 확정한다. 사용자 조건부 Merge/삭제 승인을 받았지만 게이트를 우회하지 않는다.
+- Issue #50/#45는 OPEN 유지. Phase 50-A만 마감하고 다음은 50-B 기능 계약/매트릭스 공백 감사다. 50-B~F/RELEASE는 NOT RUN, OS IME는 기존 PRIOR VERIFIED, macOS 프로세스 실행 검증은 NOT RUN이다.

@@ -1,0 +1,10 @@
+{
+  "name": "primal-zone-validation",
+  "private": true,
+  "engines": {"node": ">=24 <25"},
+  "scripts": {
+    "test:browser": "uv run python scripts/browser_e2e.py",
+    "test:contracts": "node --test scripts/tests/test_web_prompt.cjs scripts/tests/test_browser_helpers.cjs"
+  },
+  "devDependencies": {"@playwright/test": "1.64.0"}
+}
