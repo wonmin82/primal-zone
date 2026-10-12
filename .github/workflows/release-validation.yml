@@ -1,0 +1,137 @@
+name: Issue 50 RELEASE validation
+on:
+  workflow_dispatch:
+    inputs:
+      target_sha:
+        description: '검증할 현재 main의 40자리 SHA (병합 후 사용)'
+        required: true
+        type: string
+permissions:
+  contents: read
+env:
+  PRIMAL_RELEASE_SHA: ${{ inputs.target_sha }}
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: python scripts/release_guard.py
+  test:
+    needs: baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          enable-cache: true
+      - run: python scripts/release_guard.py
+      - run: uv sync --locked --python 3.13
+      - run: uv run python scripts/dev.py check
+      - run: uv run python scripts/dev.py test --parallel 4
+  smoke:
+    needs: baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - run: python scripts/release_guard.py
+      - run: uv sync --locked --python 3.13
+      - run: uv run python scripts/dev.py smoke
+  smoke-full:
+    needs: baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - run: python scripts/release_guard.py
+      - run: uv sync --locked --python 3.13
+      - run: uv run python scripts/dev.py smoke-full
+  contracts:
+    needs: baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - run: python scripts/release_guard.py
+      - run: uv sync --locked --python 3.13
+      - run: npm run test:contracts
+      - run: uv run python scripts/issue50_contracts.py
+  browser-e2e-full:
+    needs: baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: python scripts/release_guard.py
+      - run: uv sync --locked --python 3.13
+      - run: npm ci
+      - run: npx playwright install --with-deps --no-shell chromium
+      - run: uv run python -m unittest discover -s scripts/tests -p 'test_*runner.py'
+      - run: npm run test:browser
+      - run: npm run test:browser:integration
+      - name: 허용목록의 안전한 증거
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-browser-${{ github.sha }}
+          path: work/browser-evidence/
+          retention-days: ${{ job.status == 'success' && 14 || 30 }}
+  timing-e2e:
+    needs: baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: python scripts/release_guard.py
+      - run: uv sync --locked --python 3.13
+      - run: npm ci
+      - run: npx playwright install --with-deps --no-shell chromium
+      - run: npm run test:browser:timing
+      - name: 실제 60/600초 안전한 증거
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-timing-${{ github.sha }}
+          path: work/browser-evidence/
+          retention-days: ${{ job.status == 'success' && 14 || 30 }}
+  persistence-e2e:
+    needs: baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: python scripts/release_guard.py
+      - run: uv sync --locked --python 3.13
+      - run: npm ci
+      - run: npx playwright install --with-deps --no-shell chromium
+      - run: npm run test:browser:persistence
+      - name: 영속·재시작 안전한 증거
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-persistence-${{ github.sha }}
+          path: work/browser-evidence/
+          retention-days: ${{ job.status == 'success' && 14 || 30 }}
