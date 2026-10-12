@@ -55,3 +55,16 @@ Context 종료 뒤 Playwright가 WebSocket close 이벤트를 전달하지 않�
 실제 실행 SHA·시간·실패 수정 이력은 [검증 매트릭스](issue50-integration-matrix.md), [실행 기록](playtest.md#issue-50-phase-50-a), [성능 기록](issue50-test-performance.md)에 남긴다. 최신 PR HEAD의 원격 CI URL과 최종 A-01~20 판정은 Issue #50의 Phase 50-A 진행 구역 및 연결 PR Validation에서 확정한다. 이전 SHA의 성공을 새 SHA의 결과로 대체하지 않는다.
 
 한국어 OS IME는 사용자의 기존 Windows 수동 성공 **PRIOR VERIFIED**다. 신규 자동 PASS 수에 포함하지 않고 재검증을 요구하지 않는다. E2E-01~14, 전체 명령/Help 전수, 실제 Door 60초·리더 600초·서버 재시작·RELEASE는 후속 단계 **NOT RUN**이다.
+
+
+## P2-04 — 소유 브라우저 프로세스 트리 정리
+
+이전 리뷰 HEAD `9651918018517527cdfa96fb694ab09bc66f298e`에서 `stop_browser()`는 부모 `poll()` 종료를 이유로 즉시 반환했다. Windows 격리 Python 부모가 종료 코드 2로 먼저 끝난 뒤 실제 자식이 STILL_ACTIVE인 상태를 재현했으며, 기존 정리를 호출한 뒤에도 자식이 남았다. 운영 발생 빈도나 정상 CI의 Chromium 잔류를 확인한 것으로 과장하지 않는다.
+
+`scripts/browser_processes.py`의 `OwnedBrowser`가 소유 수명만 관리한다. 새 게임 서버/큐/프로토콜이 아니다. 보호 프로세스는 표준 라이브러리만 필요하므로 Windows venv 런처 대신 `sys._base_executable`을 직접 사용한다. 자식 시작 전 `.ready`로 소유권 확정을 확인하고 원본 실행 결과는 비공개 격리 디렉터리의 숫자 종료 코드로 전달한다. 기존 결과/ready 파일을 소유 증거로 재사용하지 않는다.
+
+- Windows: 실행기가 UUID Job 핸들을 만들고 kill-on-close를 설정한다. 보호 프로세스가 자신을 Job에 먼저 등록한 후 임시 Job 핸들을 닫고 Node를 생성한다. 자식은 Job을 상속하며 breakaway를 허용하지 않는다. 부모 Node/보호 프로세스가 이미 종료됐어도 Job active count를 확인한다. 가능하면 CTRL_BREAK로 정상 종료를 요청하고, 잔류 Job만 TerminateJobObject로 종료한 뒤 active count 0을 확인한다. 마지막 Job 핸들은 실행기만 보유한다. Job 등록 실패 시 자식을 만들지 않고 실패한다. 기존 외부 Job과 양립할 수 없는 환경에서는 검증을 우회하지 않는다.
+- Linux/POSIX: `start_new_session=True`의 보호 프로세스가 PGID를 유지한다. 다만 Playwright 1.64.0은 Chromium을 별도 detached 그룹으로 실행하므로 Node 그룹 종료만으로는 충분하지 않다. 자식 생성 전에 Linux PR_SET_CHILD_SUBREAPER를 설정하고, Node 종료 뒤 보호 프로세스가 입양한 실제 자식을 /proc의 커널 부모 관계로 확인한다. 각 자식의 pidfd를 열어 소유 부모를 재확인한 뒤 그 핸들에만 SIGTERM/필요 시 SIGKILL을 보낸다. 이후 입양되는 하위 자식까지 종료·reap하고 정리 증거를 기록해야 보호 프로세스가 종료한다. 외부 PGID나 미확인 PID에 신호를 보내지 않고 PID 재사용에 의존하지 않는다. PID/명령행/환경은 Artifact에 포함하지 않는다. 보호 프로세스 소실로 소유 증거를 잃으면 실패한다. macOS는 같은 입양/pidfd 보증을 검증할 환경이 없어 현재 실행기가 명시적으로 차단하며 지원 완료를 주장하지 않는다.
+- `browser_processes_stopped`는 Node/Chromium을 포함한 위 소유 컨테이너의 실제 정리 완료다. 기존 `processes_stopped`는 Evennia Portal/Server 결과다. 부모 종료 코드만으로 둘을 대신하지 않으며 어느 정리가 미완료여도 전체 실행은 실패한다. P2-01의 인증 파일 삭제와 원래 오류+cleanup 오류 보존, P2-02의 비수집/허용목록, P2-03의 Puppet 해제는 유지한다.
+
+근거: [Microsoft Job Objects](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects), [Python subprocess](https://docs.python.org/3.13/library/subprocess.html), [Python pidfd](https://docs.python.org/3.13/library/os.html#os.pidfd_open). Windows 실제 OS 회귀와 Chromium은 로컬에서, Linux 실제 detached 자식·pidfd 회귀와 Chromium은 기존 Ubuntu browser-e2e Job에서 확인한다. macOS 실행 환경이 없어 **NOT RUN**이며 macOS 지원 검증 완료라고 주장하지 않는다. 외부 Chromium/Node/Evennia의 이름이나 미확인 PID를 종료하지 않는다.

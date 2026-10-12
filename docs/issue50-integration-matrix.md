@@ -92,3 +92,25 @@ Runner 회귀: `scripts/tests/test_browser_runner.py`의 비밀번호 제거, �
 | OS 한국어 IME | PRIOR VERIFIED | 기존 사용자 Windows 수동 성공, 신규 PASS 합산 제외 |
 
 50-A 성공을 Issue #50 전체 구현/통합 검증 완료로 해석하지 않는다. PR/Issue는 OPEN 유지하며 자동 Merge·브랜치 삭제·Close를 수행하지 않는다.
+
+
+## P2-04 최종 프로세스 수명 보완
+
+기준은 리뷰 HEAD `9651918018517527cdfa96fb694ab09bc66f298e`와 이 보완 diff다. 부모 종료 뒤에도 소유 자식을 정리하도록 `scripts/browser_processes.py`, `scripts/browser_e2e.py`, `scripts/tests/test_browser_runner.py`를 보완했다. 게임·Harness·WebSocket·운영 타이머 변경은 없다.
+
+| 수용 기준 | 실제 회귀 경로 | 상태 |
+| --- | --- | --- |
+| TEST-P2-04-A / F-04 | test_p204_a_normal_parent_no_child_needs_no_forced_termination, 기존 정상 수령/인증 파일 정리 | Windows PASS |
+| TEST-P2-04-B / F-01·05 | test_p204_b_abnormal_parent_leaves_real_child_then_cleanup_removes_it: 실제 부모 종료·자식 STILL_ACTIVE/그룹 잔류 → 실제 종료 | Windows PASS / Linux CI 확인 예정 |
+| TEST-P2-04-C / F-06 | test_p204_c_live_parent_and_child_timeout_cleanup, test_p204_c_stubborn_child_requires_owned_forced_termination | Windows PASS / Linux CI 확인 예정 |
+| TEST-P2-04-D / F-07 | test_p204_d_repeated_cleanup_is_safe | Windows PASS |
+| TEST-P2-04-E / F-09 | test_p204_e_termination_error_is_reported_and_not_marked_stopped, 기존 원래 오류+stop/unlink 오류 보존 | Windows PASS |
+| TEST-P2-04-F / F-08 | test_p204_f_non_owned_process_remains_alive | Windows PASS |
+| 소유권·등록·최후 핸들 / F-02·03 | test_p204_launch_failure_still_cleans_ownership_container, test_p204_job_assignment_failure_never_creates_child, test_p204_windows_last_job_handle_close_kills_owned_child, test_p204_lost_posix_guardian_does_not_signal_unproven_group | Windows 해당 항목 PASS / POSIX 전용 CI 확인 예정 / macOS NOT RUN |
+| TEST-P2-04-G / F-10~16 | 기존 Chromium 9개 및 P2-01~03, run.json의 브라우저·Evennia 각각 정리·자격 증명·DB 불변 | Windows 연속 3회 9개 PASS·각 정리 true (성능/실행 이력 참조) |
+| F-17~24 | 정확한 Push HEAD Quick → 최신 PR 네 Job → Merge Commit → 실제 main 네 Job → 정확한 Source 정리 | 커밋 후 PR/Issue 실제 SHA·URL로 확정 |
+| F-25~27 | Issue #50의 Phase 50-A 완료 기록, #50/#45 OPEN 유지, 50-B~F/RELEASE NOT RUN | 병합 후 Issue 기록에서 확정 |
+
+Python Runner는 기존 12개를 유지하고 P2-04 메서드 11개를 추가해 총 23개다. Windows에서는 22개 성공·POSIX 전용 1개 제외, Linux에서는 Windows 전용 마지막 Job 핸들 항목 1개를 제외하고 나머지 22개를 실행한다. 플랫폼 제외를 실패 재시도나 flaky 은폐로 해석하지 않으며 macOS 실행 성공을 주장하지 않는다. Windows Job 등록 실패는 자식 생성 이전에 차단하고, POSIX 보호 프로세스 소실은 미확인 그룹에 신호를 보내지 않는다.
+
+기존 P2-01~03·최초 제출 기록은 위에 보존한다. 이번 사용자 요청은 필수 검증 성공 후 조건부 Merge Commit 및 Source 삭제를 승인했지만, Issue #50 전체 종료나 50-B~F 완료는 승인/검증 범위가 아니다. 최종 병합/CI/정리 결과는 [PR #57](https://github.com/wonmin82/primal-zone/pull/57) 및 [Issue #50](https://github.com/wonmin82/primal-zone/issues/50)에 남긴다.

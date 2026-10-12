@@ -1416,3 +1416,12 @@ PR #25의 최종 문서 HEAD와 병합 후 main의 test·smoke를 대조하고, 
 - P2 문서: [명령 기준](commands.md#검증-범위)과 [검증 정책](playtest.md#issue-46-pr-51-리뷰-후-검증-정책-2026-10-10)에 최신 정책을 반영한다. 최초 구현 당시 최소 Smoke·전체 로컬 검사 미실행·실패 기록은 역사적 사실로 구분해 보존한다.
 - P1 게이트: 경량 검사와 로컬 커밋 이후 실제 Push할 HEAD에서 현행 CI의 `uv sync --locked --python 3.13`, `check`, `test --parallel 2`, `smoke`를 전부 성공시켜야 한다. 실패·미실행 시 Push하지 않고 수정한 새 HEAD에서 전체 검사를 다시 수행한다. 환경·명령·종료 코드·테스트 수·검증 SHA와 같은 HEAD의 원격 `test`·`smoke` 결과는 [PR #51 Validation](https://github.com/wonmin82/primal-zone/pull/51)에 최종 기록한다. 실행 전 성공이나 향후 병합 결과를 미리 기록하지 않는다.
 - 남은 별도 범위: #50의 Cross-Issue 통합·실 브라우저·한글 IME·복수 플레이어/세션 경합·도움말/UI 종단 간·최종 통합 회귀. 기존 PR #51만 갱신하며 사용자 승인 전에는 Merge·브랜치 삭제·Issue #46 종료·#47 착수를 하지 않는다.
+
+
+## PR #57 P2-04 최종 보완 및 조건부 병합 준비 (2026-10-12)
+
+- 착수 Source HEAD `9651918018517527cdfa96fb694ab09bc66f298e`, 최신 main `7afc09d064ea0e45dc68f77ab7ede6c5e7237202`. 작업 트리 깨끗함, 기존 PR #57/4개 원본 커밋 유지. 새 PR/브랜치·게임 구현 변경 없음.
+- Windows Job(등록 후 자식 생성/kill-on-close/active count 0) 및 보호 프로세스가 PGID를 유지하는 POSIX 그룹 정리를 구현했다. 부모 종료 코드를 자식 종료로 간주하지 않는다. 메타데이터는 브라우저 전체 `browser_processes_stopped`와 Evennia `processes_stopped`를 구분한다.
+- 수정 전 Windows 실제 부모 조기 종료 뒤 자식 STILL_ACTIVE를 재현했다. 실제 소유 자식·강제 종료·외부 프로세스 보호·재정리·Job 마지막 핸들 종료를 확인했다. P2-01~03의 인증 삭제·비수집·Puppet 해제 보호는 유지한다.
+- 이 구역은 커밋 전 준비 기록이다. 최종 Push HEAD Quick/PR CI 및 Merge Commit/main 네 CI/Source 삭제는 실제 완료 후 PR #57/Issue #50의 P2-04 구역에 SHA와 URL로 확정한다. 사용자 조건부 Merge/삭제 승인을 받았지만 게이트를 우회하지 않는다.
+- Issue #50/#45는 OPEN 유지. Phase 50-A만 마감하고 다음은 50-B 기능 계약/매트릭스 공백 감사다. 50-B~F/RELEASE는 NOT RUN, OS IME는 기존 PRIOR VERIFIED, macOS 프로세스 실행 검증은 NOT RUN이다.

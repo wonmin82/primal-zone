@@ -13,6 +13,7 @@ import tempfile
 from pathlib import Path
 from time import monotonic
 
+from browser_processes import OwnedBrowser
 from smoke_harness import ROOT, Harness, fingerprint
 
 
@@ -27,22 +28,8 @@ def sanitize_artifacts(directory, passwords):
 
 
 def stop_browser(process):
-    if process is None or process.poll() is not None:
-        return
-    try:
-        if os.name == 'nt':
-            process.send_signal(signal.CTRL_BREAK_EVENT)
-        else:
-            os.killpg(process.pid, signal.SIGTERM)
-        process.wait(timeout=15)
-    except (OSError, subprocess.TimeoutExpired):
-        # 종료 대상은 이 실행기에서 생성한 Node와 그 자식뿐이다.
-        if os.name == 'nt':
-            subprocess.run(['taskkill', '/PID', str(process.pid), '/T', '/F'], check=True,
-                           stdout=subprocess.DEVNULL)
-        else:
-            os.killpg(process.pid, signal.SIGKILL)
-        process.wait(timeout=15)
+    if process is not None:
+        process.stop()
 
 
 async def browser(harness, results):
@@ -52,6 +39,7 @@ async def browser(harness, results):
             or not (harness.run_dir/'.primal-smoke').is_file()):
         raise RuntimeError('브라우저 자격 증명 경로가 소유 격리 디렉터리가 아님')
     process = None
+    harness.browser_processes_stopped = False
     original = None
     try:
         with credentials.open('x', encoding='utf-8') as private:
@@ -63,14 +51,12 @@ async def browser(harness, results):
                'PRIMAL_BROWSER_PYTHON': sys.executable,
                'PRIMAL_BROWSER_CREDENTIALS': str(credentials),
                'PLAYWRIGHT_NO_COPY_PROMPT': '1'}
-        flags = {'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == 'nt' else {
-            'start_new_session': True}
         # subprocess 출력도 자유 입력을 포함할 수 있어 업로드 영역에 생성하지 않는다.
         with (harness.run_dir/'browser-private.log').open('w', encoding='utf-8') as log:
-            process = subprocess.Popen(['node', str(ROOT/'node_modules/playwright/cli.js'), 'test',
+            process = OwnedBrowser(['node', str(ROOT/'node_modules/playwright/cli.js'), 'test',
                                         '--config', str(ROOT/'playwright.config.cjs')],
-                                       cwd=ROOT, env=env, stdin=subprocess.DEVNULL,
-                                       stdout=log, stderr=subprocess.STDOUT, text=True, **flags)
+                                   cwd=ROOT, env=env, stdout=log,
+                                   control=harness.run_dir/'browser-process-exit.json')
             await asyncio.to_thread(process.wait, 300)
             if process.returncode:
                 raise RuntimeError(f'Playwright 종료 코드 {process.returncode}; {results}')
@@ -84,6 +70,7 @@ async def browser(harness, results):
         failures = []
         try:
             stop_browser(process)
+            harness.browser_processes_stopped = process is None or process.stopped is True
         except BaseException as failure:
             failures.append(failure)
         try:
@@ -198,9 +185,10 @@ def main():
         metadata = {'success': success, 'head': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
                     'seconds': round(monotonic()-started, 3), 'play_db_unchanged': True,
                     'processes_stopped': all(p.poll() is not None for _, p in harness.processes),
+                    'browser_processes_stopped': getattr(harness, 'browser_processes_stopped', False),
                     'credentials_removed': not (harness.run_dir/'browser-credentials.json').exists() if harness.run_dir else True,
                     'mode': 'full', 'python': sys.version.split()[0], 'platform': sys.platform}
-        if not metadata['credentials_removed'] or not metadata['processes_stopped']:
+        if not all(metadata[key] for key in ('credentials_removed', 'processes_stopped', 'browser_processes_stopped')):
             success = metadata['success'] = False
             failure = RuntimeError('자격 증명 또는 소유 프로세스 정리 미완료')
             error = BaseExceptionGroup('실행 및 정리 실패', [error, failure]) if error else failure

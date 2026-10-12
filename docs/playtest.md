@@ -2194,3 +2194,25 @@ uv run python scripts/dev.py smoke
 - 기준은 `c0789ac4acb1b119eabb2373f0cbf92420c3030a` 이후 가격 출력·도움말·테스트·검증 정책의 미커밋 수정이다. Windows 10 build 19045, Python 3.13.15, uv 0.12.13에서 `uv run python scripts/dev.py test tests.test_command_overhaul --parallel 1`: 5개/42.051초 성공, runner 58.544초, 종료 코드 0. 기존 A/B/C와 새 가격/거래 검사를 포함하며 이후 문서만 보완했다.
 - `uv run python scripts/dev.py check`: 성공, 종료 코드 0. GitHub GFM 렌더링과 저장소 Markdown 상대경로/앵커 검사를 성공시켰다. 새 안내의 잘못된 프로필 문서 앵커 1건은 수정 후 재검사해 오류 0을 확인했다. `git diff --check`: 성공.
 - 이 경량 결과는 Push 허용 근거가 아니다. 다음 로컬 커밋의 정확한 SHA에서 위 전체 CI 네 명령을 수행하고, 확인된 결과만 PR Validation에 추가한다. 전체 로컬 검사·원격 CI·미검증 #50 범위를 구분한다.
+
+
+### PR #57 P2-04 소유 자식 수명 보완
+
+- 이전 리뷰 HEAD `9651918018517527cdfa96fb694ab09bc66f298e`에서 Windows 격리 Python 부모가 먼저 종료 코드 2로 끝나고 자식이 STILL_ACTIVE인 실제 OS 조건을 만들었다. 기존 stop_browser는 종료된 부모를 보고 반환해 자식이 남았다. 재현 Fixture는 자신의 보유 process HANDLE로 직접 정리했다. 실제 정상 CI에서 잔류했다거나 운영 빈도를 확인한 것으로 표현하지 않는다.
+- 개발 중 Windows 회귀 최초 실행은 21개 중 부모 종료/자식 관측 1 FAIL·강제 자식 관측 1 ERROR(15.185초), 직접 부모 Fixture 변경 후에도 1 FAIL·1 ERROR(14.806초)였다. 가상환경 Python 런처가 종료하는 PID와 실제 Python 수명을 혼동했으며 보호 프로세스도 런처를 통과했다. 표준 라이브러리 보호 프로세스를 sys._base_executable로 직접 실행해 이 관측·수명 경계를 해결했다. 핵심 자식 생존/종료 assertion을 삭제하거나 약화하지 않았다.
+- 소유권 등록 완료를 자식 생성 전에 확인하고, Windows Job의 마지막 핸들을 실행기만 보유하도록 보강했다. Job 등록 실패 시 자식 생성 없음, 최후 핸들 닫힘의 실제 자식 종료, PID 재사용을 피하는 POSIX 보호 그룹의 정체성 오류를 검사한다. 단순 부모 poll()·이름·전역 taskkill/pkill에 의존하지 않는다.
+- Python Runner는 총 23개 중 Windows 해당 22개 PASS·POSIX 전용 1개 N/A, 최종 검사 5.870초. 신규 메서드는 11개이며 Windows 해당 10개를 실제 실행했다. Linux의 Windows 전용 1개 N/A 및 POSIX 실제 실행 결과는 원격 CI에서 별도 확인한다. macOS는 NOT RUN이다. 기존 Node 계약 26개 PASS/0.242초·코드 검사/diff 검사 PASS, JavaScript 실행 코드 변경이 없어 새 node --check는 반복하지 않았다.
+- 개발 중 실제 Chromium 최초 9개 PASS/전체119.953초, 추가 안정화 3회 각 9개 PASS(전체104.454/104.646/108.420초, E2E63.224/63.723/64.133초)를 확인했다. 이 실행 중 보호 경계를 최종 보강한 이력이 있어 최종 안정성 증거와 구분한다. P2-01~03의 비수집·Puppet/인증 정리와 새 browser_processes_stopped 및 기존 processes_stopped, 플레이 DB 불변은 모두 true였다.
+- 최종 코드의 연속 3회·실제 Push HEAD Quick·PR 및 Merge Commit CI는 아래 최종 실행 결과와 PR/Issue 기록에서 확정한다. 병합 후 코드/문서만을 위해 main 직접 커밋하지 않는다. 50-B~F/전체 RELEASE 및 장기 타이밍 검증은 이번 완료에 포함하지 않는다.
+
+- 추가 POSIX 소스 감사에서 Playwright 1.64.0의 `detached: process.platform !== "win32"`를 확인했다. 따라서 초기 Node 그룹 종료 설계를 Linux subreaper/pidfd 기반으로 보강하고 실제 자식 Fixture도 별도 새 세션으로 만들어 잔류를 검사한다. 기존 정상 Windows 수명 경계는 유지하며 Ubuntu CI가 Linux 분기와 detached 잔류의 필수 검증을 수행한다. 초기 그룹 설계만으로 Linux Chromium 정리가 보장됐다고 기록하지 않는다. 등록 오류 분기 변경 중 Job 핸들 close 회귀 1 FAIL을 확인해 실제 오류 경로의 close를 복원했고 23개 Runner 재검사에 성공했다.
+
+#### P2-04 최종 로컬 브라우저 결과
+
+| 최종 Windows 반복 | 실제 E2E | 서버·브라우저 정리 포함 | 결과 |
+| --- | --- | --- | --- |
+| 1 / run-cgrozeie | 9개 / 63.419초 | 106.729초 | PASS |
+| 2 / run-h_8pirtg | 9개 / 64.531초 | 108.734초 | PASS |
+| 3 / run-m3fyai8u | 9개 / 61.993초 | 106.195초 | PASS |
+
+세 실행의 모든 정리/격리 메타데이터와 Puppet 해제는 true였다. 이후 Linux 전용 detached 입양 분기를 추가했고 Windows 정상 경로는 동일하다. 최종 Runner 23개 중 Windows 22개 PASS·POSIX 1개 N/A(5.462초), 기존 Harness 통합 18개 PASS(10.166초)다. 정확한 커밋 후 Quick/원격 및 병합 검증은 PR/Issue에서 확정한다.
