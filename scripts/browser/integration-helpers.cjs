@@ -4,9 +4,9 @@ const { execFileSync } = require('node:child_process');
 const { expect } = require('@playwright/test');
 const { pollUntil } = require('./safety.cjs');
 
-function snapshot() {
+function snapshot(timing = false) {
   const script = path.resolve(__dirname, '..', 'integration_probe.py');
-  return JSON.parse(execFileSync(process.env.PRIMAL_BROWSER_PYTHON, [script], {
+  return JSON.parse(execFileSync(process.env.PRIMAL_BROWSER_PYTHON, timing ? [script, '--timing'] : [script], {
     cwd: path.join(process.env.PRIMAL_SMOKE_RUN_DIR, 'game'), env: process.env,
     encoding: 'utf8', timeout: 15000,
   }).trim().split('\n').at(-1));
@@ -61,4 +61,4 @@ async function control(operation) {
   expect(response.ready).toBe(true);
   if (operation !== 'restart') expect(response.boundary).toBe(operation);
 }
-module.exports = { snapshot, command, travel, itemCount, party, restart: () => control('restart'), control };
+module.exports = { snapshot, timingSnapshot: () => snapshot(true), command, travel, itemCount, party, restart: () => control('restart'), control };

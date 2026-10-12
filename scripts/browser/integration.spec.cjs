@@ -1,5 +1,5 @@
 const { test: base, expect, sessions } = require('./fixtures.cjs');
-const { snapshot, command, travel, itemCount, party, restart, control } = require('./integration-helpers.cjs');
+const { snapshot, timingSnapshot, command, travel, itemCount, party, restart, control } = require('./integration-helpers.cjs');
 const { pollUntil } = require('./safety.cjs');
 const { extensionWindow, monitorBeforeDeadline, exitIntegrity, preservedExits } = require('./review-contracts.cjs');
 // 신규 인증은 정책상 출정 대기실로 이동한다. fixture 방에 teleport하지 않고
@@ -254,7 +254,16 @@ test('TEST-E2E-11 마지막 Puppet 해제·즉시 승계·재접속', async ({ a
   await control('party-before');
   expect(snapshot().parties[id].leader).toBe(offline.leader);
   await control('party-at');
-  const state = snapshot().parties[id];
+  const saved = snapshot(), state = saved.parties[id];
+  // RELEASE의 경량 읽기도 PR에서 실제 격리 DB와 대조한다. 실제600초 검사를 대체하지 않는다.
+  const observed = timingSnapshot();
+  expect(observed.parties).toEqual(saved.parties);
+  // 회복실의 정상60초 sweep은 두 조회 사이에 진행될 수 있다. 만료 없는 관리실을 정확히 대조한다.
+  expect(observed.doors.find(d => d.door_id === 'hq_admin_door')).toEqual(saved.doors.find(d => d.door_id === 'hq_admin_door'));
+  expect(observed.claims).toEqual(saved.claims); expect(observed.items).toEqual(saved.items);
+  expect(observed.sessions[a.name]).toEqual([]);
+  expect(observed.sessions[b.name]).toEqual(expect.arrayContaining([...b.ownedSessionIds]));
+  expect(observed.players[b.name].zone).toBe(saved.players[b.name].zone);
   expect(state.leader).toBe(snapshot().players[b.name].id);
   const reconnected = await actors.create(0);
   await command(reconnected, '일행');
@@ -381,14 +390,15 @@ test('TEST-TIMING-DOOR 실제 60초·통과 연장·자동 닫힘', async ({ act
   expect(passed.auto_close_at).toBeGreaterThan(opened.auto_close_at);
   await command(a, '관리실 문 열어');
   expect(snapshot().doors.find(d => d.door_id === 'hq_admin_door').auto_close_at).toBe(passed.auto_close_at);
-  await monitorBeforeDeadline(() => {
-    const db = snapshot(), door = db.doors.find(d => d.door_id === 'hq_admin_door');
+  const checkpoints = await monitorBeforeDeadline(() => {
+    const db = timingSnapshot(), door = db.doors.find(d => d.door_id === 'hq_admin_door');
     expect(db.players[a.name].zone).toBe('hq_concourse');
     expect(db.players[b.name].zone).toBe('hq_admin_office');
     expect(a.state.exit_details.find(e => e.name === '동').can_move).toBe(true);
     expect(b.state.exit_details.find(e => e.name === '서').can_move).toBe(true);
     return door;
   }, { since: passed.auto_close_at - 60, deadline: passed.auto_close_at, kind: 'door' });
+  expect(checkpoints).toEqual({ middleSeen: true, nearSeen: true, finalSeen: true });
   await pollUntil(() => Date.now() / 1000 >= passed.auto_close_at, { timeout: 65000, interval: 100 });
   await command(a, '동');
   expect(snapshot().players[a.name].zone).toBe('hq_concourse');
@@ -417,15 +427,16 @@ test('TEST-TIMING-PARTY 실제 600초 오프라인 자동 승계', async ({ acto
   expect(original.leader_offline_since).toBeLessThanOrEqual(Date.now() / 1000 + 0.1);
   expect(sessions()[a.name]).toEqual([]);
   expect(original.leader).toBe(saved.players[a.name].id);
-  await monitorBeforeDeadline(() => {
-    const db = snapshot();
-    expect(sessions()[b.name]).toEqual(expect.arrayContaining([...b.ownedSessionIds]));
+  const checkpoints = await monitorBeforeDeadline(() => {
+    const db = timingSnapshot();
+    expect(db.sessions[b.name]).toEqual(expect.arrayContaining([...b.ownedSessionIds]));
     expect(db.parties[id].members).toEqual(original.members);
     expect(db.parties[id].tactics).toEqual(original.tactics);
     expect(db.claims).toEqual(saved.claims); expect(db.items).toEqual(saved.items);
     return db.parties[id];
   }, { since: original.leader_offline_since, deadline: original.leader_offline_since + 600,
     kind: 'party', expected: original });
+  expect(checkpoints).toEqual({ middleSeen: true, nearSeen: true, finalSeen: true });
   await pollUntil(() => Date.now() / 1000 >= original.leader_offline_since + 600, { timeout: 605000, interval: 1000 });
   await pollUntil(() => snapshot().parties[id].leader === snapshot().players[b.name].id, { timeout: 8000, interval: 500 });
   const again = await actors.create(0);

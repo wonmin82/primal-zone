@@ -15,21 +15,40 @@ function preDeadline(value, window, deadline, kind, expected) {
   else requireCondition(value.leader === expected.leader && value.leader_offline_since === expected.leader_offline_since,
     'timing-party-early-succession');
 }
+// 게임 상수가 아닌 QA 관측 예산. 조회 완료 시각이 최종 창 안에 있어야 한다.
+const TIMING_OBSERVATION = Object.freeze({
+  nearSeconds: 4, nearUntilSeconds: 2, finalFromSeconds: 1, finalUntilSeconds: 0.5,
+  finalTargetSeconds: 0.75, intervalMs: 5000, nearIntervalMs: 500, maxProbeMs: 2000,
+});
 async function monitorBeforeDeadline(read, { since, deadline, kind, expected, wall = () => Date.now() / 1000,
   mono = () => performance.now(), pause = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
-  requireCondition(deadline > since && Number.isFinite(deadline), 'timing-deadline-invalid');
-  const middle = since + (deadline - since) / 2, near = deadline - 4;
-  let middleSeen = false;
+  requireCondition(Number.isFinite(since) && deadline > since && Number.isFinite(deadline), 'timing-deadline-invalid');
+  const budget = TIMING_OBSERVATION;
+  const middle = since + (deadline - since) / 2, near = deadline - budget.nearSeconds;
+  const finalFrom = deadline - budget.finalFromSeconds, finalUntil = deadline - budget.finalUntilSeconds;
+  let middleSeen = false, nearSeen = false;
   while (true) {
-    const start = wall(), tick = mono(), value = await read(), end = wall();
-    requireCondition(mono() - tick <= 2000, 'timing-probe-too-slow');
+    const start = wall(), tick = mono();
+    requireCondition(Number.isFinite(start) && start <= finalUntil, 'timing-final-checkpoint-missed');
+    let value;
+    try { value = await read(); }
+    catch { throw new Error('timing-observation-unavailable'); }
+    const end = wall(), elapsedMs = mono() - tick;
+    requireCondition(Number.isFinite(elapsedMs) && elapsedMs >= 0 && elapsedMs <= budget.maxProbeMs,
+      'timing-probe-too-slow');
+    requireCondition(Number.isFinite(end), 'timing-final-checkpoint-missed');
     preDeadline(value, { start, end }, deadline, kind, expected);
-    if (start >= middle && start < near) middleSeen = true;
-    if (start >= near) {
-      requireCondition(middleSeen && end <= deadline - 0.5, 'timing-required-checkpoint-missed');
-      return { middleSeen: true, nearSeen: true }; // 상태 원문은 반환/첨부하지 않는다.
+    if (end >= middle && end <= middle + (budget.intervalMs + budget.maxProbeMs) / 1000 && end < near) middleSeen = true;
+    if (start >= near && end <= deadline - budget.nearUntilSeconds) nearSeen = true;
+    requireCondition(end <= finalUntil, 'timing-final-checkpoint-missed');
+    if (end >= finalFrom) {
+      requireCondition(middleSeen && nearSeen, 'timing-required-checkpoint-missed');
+      return { middleSeen: true, nearSeen: true, finalSeen: true }; // 상태 원문은 반환/첨부하지 않는다.
     }
-    await pause(Math.min(5000, Math.max(0, near - end) * 1000));
+    // 직전 조회 비용을 빼서 최종 창 중앙을 목표로 한다. 지연을 허용 창 확대로 숨기지 않는다.
+    const next = end < near ? near : deadline - budget.finalTargetSeconds - elapsedMs / 1000;
+    const interval = end < near ? budget.intervalMs : budget.nearIntervalMs;
+    await pause(Math.min(Math.max(0, interval - elapsedMs), Math.max(0, next - end) * 1000));
   }
 }
 function exitIntegrity(db) {
@@ -65,4 +84,4 @@ function preservedExits(before, after) {
   try { assert.deepEqual(after.exits, before.exits); assert.deepEqual(after.rooms, before.rooms); }
   catch { throw new Error('exit-pk-location-destination-type-or-reference-changed'); }
 }
-module.exports = { extensionWindow, preDeadline, monitorBeforeDeadline, exitIntegrity, preservedExits };
+module.exports = { extensionWindow, preDeadline, monitorBeforeDeadline, TIMING_OBSERVATION, exitIntegrity, preservedExits };

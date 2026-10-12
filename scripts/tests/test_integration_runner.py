@@ -19,6 +19,63 @@ from release_guard import validate  # noqa: E402
 
 
 class IntegrationContractManifestTests(unittest.TestCase):
+    def test_timing_projection_reads_real_sqlite_without_mutation_or_django(self):
+        import base64
+        import hashlib
+        import pickle
+        import sqlite3
+        from contextlib import closing
+        from uuid import UUID
+        parent = ROOT / 'work/smoke'
+        parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=parent) as directory:
+            run = Path(directory)
+            (run / '.primal-smoke').touch()
+            db = run / 'evennia-smoke.sqlite3'
+            with closing(sqlite3.connect(db)) as connection, connection:
+                connection.executescript('''
+                    CREATE TABLE objects_objectdb(id, db_key, db_typeclass_path, db_location_id, db_sessid);
+                    CREATE TABLE typeclasses_attribute(id, db_key, db_category, db_value);
+                    CREATE TABLE objects_objectdb_db_attributes(objectdb_id, attribute_id);
+                    CREATE TABLE door_entities_door(door_id, aliases, lockable, state, auto_close_at);
+                    CREATE TABLE item_entities_itementity(id, parent_item_id, state, sequence);
+                    CREATE TABLE loot_entities_lootclaim(id, item_entity_id);
+                    INSERT INTO objects_objectdb VALUES (1,'fixture','typeclasses.explorers.Explorer',10,'7,8');
+                    INSERT INTO objects_objectdb VALUES (2,'party','typeclasses.parties.Party',NULL,NULL);
+                    INSERT INTO door_entities_door VALUES ('door','["alias"]',0,'OPEN',60);
+                ''')
+                party = {'leader': 1, 'leader_offline_since': None, 'members': [1], 'tactics': {'defender_id': 1}}
+                for number, owner, key, value in ((1, 10, 'zone_id', 'outside'), (2, 2, 'state', party)):
+                    encoded = base64.b64encode(pickle.dumps(value)).decode()
+                    connection.execute('INSERT INTO typeclasses_attribute VALUES (?,?,NULL,?)', (number, key, encoded))
+                    connection.execute('INSERT INTO objects_objectdb_db_attributes VALUES (?,?)', (owner, number))
+                identity = UUID('12345678-1234-5678-1234-567812345678')
+                connection.execute('INSERT INTO item_entities_itementity VALUES (?,NULL,?,1)', (identity.hex, '{"charge":2}'))
+                connection.execute('INSERT INTO loot_entities_lootclaim VALUES (1,?)', (identity.hex,))
+            before = (hashlib.sha256(db.read_bytes()).hexdigest(), db.stat().st_mtime_ns)
+            with patch.dict(os.environ, PRIMAL_SMOKE_RUN_DIR=str(run), PRIMAL_BROWSER_DB=str(db)):
+                observed = snapshot(timing=True)
+            self.assertEqual(observed['players'], {'fixture': {'zone': 'outside'}})
+            self.assertEqual(observed['sessions'], {'fixture': ['7', '8']})
+            self.assertEqual(observed['parties'], {'2': party})
+            self.assertEqual(observed['doors'], [{'door_id': 'door', 'aliases': ['alias'], 'lockable': False, 'state': 'OPEN', 'auto_close_at': 60}])
+            self.assertEqual(observed['items'][0]['id'], str(identity))
+            self.assertEqual(observed['items'][0]['state'], {'charge': 2})
+            self.assertEqual(observed['claims'][0]['item_entity_id'], str(identity))
+            self.assertEqual(before, (hashlib.sha256(db.read_bytes()).hexdigest(), db.stat().st_mtime_ns))
+            # 압축되지 않은 내장 Attribute만 읽는다. 객체/global 복원 및 중복은 실패한다.
+            with closing(sqlite3.connect(db)) as connection, connection:
+                encoded = base64.b64encode(pickle.dumps(complex(1, 2))).decode()
+                connection.execute('UPDATE typeclasses_attribute SET db_value=? WHERE id=2', (encoded,))
+            with patch.dict(os.environ, PRIMAL_SMOKE_RUN_DIR=str(run), PRIMAL_BROWSER_DB=str(db)):
+                with self.assertRaisesRegex(ValueError, '내장 데이터'):
+                    snapshot(timing=True)
+            with closing(sqlite3.connect(db)) as connection, connection:
+                connection.execute('INSERT INTO objects_objectdb_db_attributes VALUES (10,1)')
+            with patch.dict(os.environ, PRIMAL_SMOKE_RUN_DIR=str(run), PRIMAL_BROWSER_DB=str(db)):
+                with self.assertRaisesRegex(ValueError, '소실 또는 중복'):
+                    snapshot(timing=True)
+
     def test_release_profile_connects_two_wall_clock_observers_not_normal_pr(self):
         package = json.loads((ROOT / 'package.json').read_text(encoding='utf-8'))
         self.assertEqual(package['scripts']['test:browser:timing'], 'uv run python scripts/integration_e2e.py --profile timing')
@@ -31,6 +88,8 @@ class IntegrationContractManifestTests(unittest.TestCase):
         for scenario in ('DOOR', 'PARTY'):
             section = spec.split("test('TEST-TIMING-" + scenario, 1)[1].split("test('")[0]
             self.assertIn('monitorBeforeDeadline', section)
+            self.assertIn('timingSnapshot()', section)
+            self.assertIn('finalSeen: true', section)
         self.assertIn("control('party-before')", spec)
         self.assertIn("control('party-at')", spec)
 
@@ -56,8 +115,9 @@ class IntegrationContractManifestTests(unittest.TestCase):
             (run/'.primal-smoke').touch()
             with patch.dict(os.environ, PRIMAL_SMOKE_RUN_DIR=str(run),
                             PRIMAL_BROWSER_DB=str(ROOT/'game/server/evennia.db3')):
-                with self.assertRaisesRegex(RuntimeError, '불일치'):
-                    snapshot()
+                for timing in (False, True):
+                    with self.subTest(timing=timing), self.assertRaisesRegex(RuntimeError, '불일치'):
+                        snapshot(timing=timing)
 
     def test_release_rejects_pr_unmatched_sha_or_implicit_branch(self):
         head = 'a'*40
