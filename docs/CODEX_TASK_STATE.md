@@ -1,5 +1,22 @@
 # 원시구역 개발 작업 및 검증 이력
 
+## 2026-10-12 최초 성공 RELEASE 및 최종 Closeout 준비
+
+[PR #60](https://github.com/wonmin82/primal-zone/pull/60)은 Merge Commit `855ada380e5276334f0744797a86a5aef300297c`으로 병합됐다. 첫 부모는 `82641de0ea66898676b0b29194d7918489443def`, 둘째 부모는 검토 Source `26da18221f890f3405aca84b746741e3da7f747b`이며 임시 병합 결과와 Tree가 같고 원본 이력이 보존됐다. [당시 main CI](https://github.com/wonmin82/primal-zone/actions/runs/38239786496)의 네 Job은 모두 SUCCESS다.
+
+[최초 RELEASE 실패](https://github.com/wonmin82/primal-zone/actions/runs/38241057595)는 삭제하지 않는다. 8개 중 7개 Job은 SUCCESS였지만 Full Smoke가 60초 후 정상 닫힌 회복실 문을 열지 않고 이동해 실패했다. 이는 QA 이동 경로의 누락이며 게임의 차단은 정상이다. [최소 수정 PR #61](https://github.com/wonmin82/primal-zone/pull/61)의 `0a03b44612822796f703e4d077916330e909a4fb`는 실제 `회복실 문 열어`를 양쪽 이동 전에 실행한다. 정상·실패·비관련 출구 회귀3개를 추가했으며 게임 정책·타이머·프로토콜·저장 형식은 바꾸지 않았다. 수정 Merge는 `11a1c6bce91a5499292f8fbabff3e308663814fe`이고 부모는 `855ada380e5276334f0744797a86a5aef300297c`와 `0a03b44612822796f703e4d077916330e909a4fb`다.
+
+**최초 성공 RELEASE SHA: `11a1c6bce91a5499292f8fbabff3e308663814fe`.** [main CI](https://github.com/wonmin82/primal-zone/actions/runs/38244636657) 네 Job SUCCESS, [RELEASE](https://github.com/wonmin82/primal-zone/actions/runs/38251167392) 8개 Job SUCCESS, main/workflow_dispatch/attempt1 및 입력·GITHUB_SHA·실제 Checkout SHA 일치를 모든 Job의 Guard8개로 확인했다. RELEASE 전체 병렬 경과는 819초다. Job 로그·Assertion 및 안전한 Artifact를 직접 검토했다. 아래 최초 실패/성공과 과거 로컬 검증을 서로 다른 실행으로 보존한다.
+
+**최종 SHA Closeout은 아직 대기 중이다.** 이 문서 PR을 Merge Commit으로 병합한 뒤 새 `FINAL_MAIN_SHA`의 push CI 네 Job과 RELEASE8개 Job을 다시 실행한다. 같은 SHA의 성공으로 대체하지 않는다. 최종 실행 증거는 [Issue #50 공식 Final Closeout 기록](https://github.com/wonmin82/primal-zone/issues/50#issuecomment-6124806608)에 추가하고, 결과 때문에 새 Git Commit을 만들어 SHA를 다시 바꾸지 않는다. 최종 Gate를 확인한 뒤에만 #50·#45를 종료하고 병합된 작업 브랜치를 안전하게 정리한다.
+
+다음 작업은 문서 Closeout PR·최종main4CI·동일SHA RELEASE8Job·Issue50/45완료·브랜치정리다. 이전 구현/리뷰 기록은 아래 그대로 보존한다.
+
+
+## 아래 기록의 시점
+
+아래 기존 NOT RUN·PENDING·OPEN·Pre-merge 및 Phase 범위 표기는 해당 구현·리뷰 당시의 역사적 기록이다. 삭제하거나 새 SHA의 실행 결과로 재작성하지 않는다. 현재 결과와 최종 확인 절차는 위 기록 및 연결된 Final Closeout 기록을 따른다.
+
 ## PR #57 — Phase 50-A P2 리뷰 보완 (Push 전 기록)
 
 마지막 리뷰 HEAD `7ddf8d5`에서 P2-01 인증 파일 정리, P2-02 입력 원문/자동 실패 context 비수집, P2-03 소유 Puppet 실제 해제 확인을 보완했다. 코드 커밋 `b0fd1b2a4fe776d6d173793854eddc54ac352f42`, 기존 Source `codex/issue-50-integration-validation`이며 새 PR/브랜치를 만들지 않는다. 게임/프로토콜/콘텐츠/영속 구조·타이머·실제 DB와 공통 Smoke Harness는 변경하지 않는다.
