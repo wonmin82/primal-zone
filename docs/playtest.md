@@ -2216,3 +2216,12 @@ uv run python scripts/dev.py smoke
 | 3 / run-m3fyai8u | 9개 / 61.993초 | 106.195초 | PASS |
 
 세 실행의 모든 정리/격리 메타데이터와 Puppet 해제는 true였다. 이후 Linux 전용 detached 입양 분기를 추가했고 Windows 정상 경로는 동일하다. 최종 Runner 23개 중 Windows 22개 PASS·POSIX 1개 N/A(5.462초), 기존 Harness 통합 18개 PASS(10.166초)다. 정확한 커밋 후 Quick/원격 및 병합 검증은 PR/Issue에서 확정한다.
+
+
+#### P2-04 최초 Ubuntu CI 실패 및 수정
+
+[Run 38187028065](https://github.com/wonmin82/primal-zone/actions/runs/38187028065), Source `7fe7df23e8e67b02701562a2177b5a5ab66e029e`: browser-e2e의 Runner는 23개 중 실행 시작 실패/정리 재호출의 BrokenPipeError 2건으로 FAIL(1.552초, Windows 전용 1개 N/A)이었다. 따라서 실제 Chromium 단계는 실행되지 않았고 병합하지 않았다. 다른 실제 detached 자식·강제 종료·비소유 보호 회귀에서 오류는 보고되지 않았지만 전체 Runner PASS로 표기하지 않는다.
+
+Node 실행 파일이 없으면 Linux 보호 프로세스는 자식이 생성되지 않았다는 `.clean` 증거를 남기고 종료한다. 기존 stop은 이 경우에도 종료된 보호 프로세스의 stdin에 요청을 써 BrokenPipeError를 냈다. 이미 검증된 정리 증거가 있으면 요청을 보내지 않고, 요청/close 중 BrokenPipe가 발생해도 보호 프로세스의 종료와 실제 정리 증거를 재확인해야만 성공한다. 증거가 없거나 stopped가 true가 아니면 계속 실패한다. 기존 실제 OS 시작 실패 assertion을 유지하고 증거 유무의 음성 회귀를 추가했다.
+
+보완된 로컬 Runner 정의 24개 중 Windows 해당 23개 PASS·POSIX 전용 1개 N/A(5.280초), dev.py check·diff 검사 PASS. Linux 새 HEAD의 실제 전체 Runner/Chromium 및 정확한 Push HEAD Quick/CI는 새로 확인한다. 기존 실패 Run/HEAD와 이전 검증 기록을 보존하고 재시도로 FAIL을 덮지 않는다.

@@ -114,3 +114,7 @@ Runner 회귀: `scripts/tests/test_browser_runner.py`의 비밀번호 제거, �
 Python Runner는 기존 12개를 유지하고 P2-04 메서드 11개를 추가해 총 23개다. Windows에서는 22개 성공·POSIX 전용 1개 제외, Linux에서는 Windows 전용 마지막 Job 핸들 항목 1개를 제외하고 나머지 22개를 실행한다. 플랫폼 제외를 실패 재시도나 flaky 은폐로 해석하지 않으며 macOS 실행 성공을 주장하지 않는다. Windows Job 등록 실패는 자식 생성 이전에 차단하고, POSIX 보호 프로세스 소실은 미확인 그룹에 신호를 보내지 않는다.
 
 기존 P2-01~03·최초 제출 기록은 위에 보존한다. 이번 사용자 요청은 필수 검증 성공 후 조건부 Merge Commit 및 Source 삭제를 승인했지만, Issue #50 전체 종료나 50-B~F 완료는 승인/검증 범위가 아니다. 최종 병합/CI/정리 결과는 [PR #57](https://github.com/wonmin82/primal-zone/pull/57) 및 [Issue #50](https://github.com/wonmin82/primal-zone/issues/50)에 남긴다.
+
+### P2-04 시작 실패 제어 파이프 회귀
+
+최초 Ubuntu CI Runner FAIL을 [실행 이력](playtest.md#p2-04-최초-ubuntu-ci-실패-및-수정)에 연결한다. TEST-P2-04-E/F-09에 test_p204_closed_control_pipe_requires_verified_cleanup_proof를 추가해 정리 증거가 있을 때만 닫힌 파이프를 처리하고, 증거가 없으면 실패하는 것을 검증한다. 기존 실제 OS launch-failure 검사를 유지한다. Runner는 정의 24개/Windows 해당 23개 PASS·POSIX 1개 N/A, 새 Linux CI는 확인 전이다.

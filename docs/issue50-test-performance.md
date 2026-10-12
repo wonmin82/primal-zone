@@ -57,3 +57,7 @@ Windows / Python 3.13.15 / Node 24.19.0. 실행 기준은 착수 HEAD `7afc09d06
 - 최종 Runner: 정의 23개, Windows 해당 22개 PASS·POSIX 전용 1개 N/A, 5.462초. 신규 11개 중 Windows 해당 10개 실제 실행. Ubuntu에서는 Windows 전용 1개 N/A 및 Linux detached/강제 종료/소유권 실패를 실행한다.
 - Node 계약 26개 PASS/0.242초, 관련 Python Harness 18개 PASS/10.166초, dev.py check/git diff --check PASS. 게임·Harness·JavaScript 변경 없음.
 - 최초 Chromium 및 개발 안정화 시간/실패는 playtest.md에 보존한다. 정확한 Push HEAD Quick, PR 네 Job, Merge Commit/main 네 Job 시간은 PR #57/Issue #50 P2-04 기록에서 실제 SHA·URL로 확정한다. CI 전/병합 전 결과를 미리 PASS로 쓰지 않는다.
+
+## P2-04 시작 실패 파이프 보완
+
+최초 Ubuntu Run 38187028065의 Runner는 FAIL/1.552초였고 Chromium은 NOT RUN이다. 수정 후 Windows Runner 정의 24개 중 23개 PASS·POSIX 전용 1개 N/A/5.280초를 확인했다. 새 HEAD의 Quick/Ubuntu 결과는 PR 및 Issue에서 확인하며 이전 시간 표를 새 실행으로 재사용하지 않는다. 실패·원인은 [실행 이력](playtest.md#p2-04-최초-ubuntu-ci-실패-및-수정)에 보존한다.

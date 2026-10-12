@@ -68,3 +68,5 @@ Context 종료 뒤 Playwright가 WebSocket close 이벤트를 전달하지 않�
 - `browser_processes_stopped`는 Node/Chromium을 포함한 위 소유 컨테이너의 실제 정리 완료다. 기존 `processes_stopped`는 Evennia Portal/Server 결과다. 부모 종료 코드만으로 둘을 대신하지 않으며 어느 정리가 미완료여도 전체 실행은 실패한다. P2-01의 인증 파일 삭제와 원래 오류+cleanup 오류 보존, P2-02의 비수집/허용목록, P2-03의 Puppet 해제는 유지한다.
 
 근거: [Microsoft Job Objects](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects), [Python subprocess](https://docs.python.org/3.13/library/subprocess.html), [Python pidfd](https://docs.python.org/3.13/library/os.html#os.pidfd_open). Windows 실제 OS 회귀와 Chromium은 로컬에서, Linux 실제 detached 자식·pidfd 회귀와 Chromium은 기존 Ubuntu browser-e2e Job에서 확인한다. macOS 실행 환경이 없어 **NOT RUN**이며 macOS 지원 검증 완료라고 주장하지 않는다. 외부 Chromium/Node/Evennia의 이름이나 미확인 PID를 종료하지 않는다.
+
+Linux의 Node 실행 시작 실패 시 자식 없음 증거를 기록한 보호 프로세스가 먼저 종료할 수 있다. 이미 검증된 정리 증거가 있으면 닫힌 파이프에 종료 요청을 보내지 않는다. BrokenPipe가 발생한 경우에도 보호 프로세스 종료·실제 `.clean`의 stopped=true를 확인한 경우만 정리 완료로 인정한다. 증거 없이 부모 종료만 확인된 경우는 실패다. 전체 Runner는 이 경계 추가 후 24개이며 과거 23개 기록은 보존한다.

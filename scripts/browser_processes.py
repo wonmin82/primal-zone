@@ -250,9 +250,21 @@ class OwnedBrowser:
             if self.process.poll() is None and os.getpgid(self.process.pid) != self.process.pid:
                 raise RuntimeError('POSIX 소유 그룹 불일치')
             if not self.process.stdin.closed:
-                self.process.stdin.write((str(timeout)+'\n').encode())
-                self.process.stdin.flush()
-                self.process.stdin.close()
+                try:
+                    if self.process.poll() is None and not proof.exists():
+                        self.process.stdin.write((str(timeout)+'\n').encode())
+                        self.process.stdin.flush()
+                except BrokenPipeError:
+                    self.process.wait(timeout=max(5, timeout * 2 + 3))
+                    if not proof.exists():
+                        raise
+                finally:
+                    try:
+                        self.process.stdin.close()
+                    except BrokenPipeError:
+                        self.process.wait(timeout=max(5, timeout * 2 + 3))
+                        if not proof.exists():
+                            raise
             self.process.wait(timeout=max(5, timeout * 2 + 3))
             if not proof.exists():
                 raise RuntimeError('Linux 소유 자식 정리 증거 없음')

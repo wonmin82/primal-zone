@@ -363,6 +363,28 @@ class BrowserProcessTreeTests(unittest.TestCase):
                 browser_processes.OwnedBrowser.stop(owner)
             kill.assert_not_called()
 
+    def test_p204_closed_control_pipe_requires_verified_cleanup_proof(self):
+        for verified in (True, False):
+            with self.subTest(verified=verified):
+                control = self.root/f'pipe-{verified}.json'
+                if verified:
+                    control.with_suffix('.clean').write_text(json.dumps({'stopped': True, 'forced': 0}))
+                process = Mock(pid=999, returncode=1)
+                process.poll.return_value = 1 if verified else None
+                process.stdin.closed = False
+                process.stdin.flush.side_effect = BrokenPipeError('controlled dead pipe')
+                process.stdin.close.side_effect = BrokenPipeError('controlled dead pipe')
+                owner = SimpleNamespace(stopped=False, job=None, process=process, control=control)
+                with patch.object(browser_processes.os, 'getpgid', return_value=999, create=True):
+                    if verified:
+                        browser_processes.OwnedBrowser.stop(owner)
+                        self.assertTrue(owner.stopped)
+                        process.stdin.write.assert_not_called()
+                    else:
+                        with self.assertRaises(BrokenPipeError):
+                            browser_processes.OwnedBrowser.stop(owner)
+                        self.assertFalse(owner.stopped)
+
 
 if __name__ == '__main__':
     unittest.main()
