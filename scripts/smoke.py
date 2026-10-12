@@ -171,6 +171,9 @@ async def travel_to(player, target):
 
 async def route(player, steps):
     for command, zone in steps:
+        if zone == 'recovery_room' or player.state['zone'] == 'recovery_room':
+            # Full에서는 초기 OPEN의60초가 이미 지날 수 있다. 양쪽에서 실제 사용자 명령으로 연다.
+            await player.expect_prompt('회복실 문 열어')
         await player.act(command, lambda state, zone=zone: state["zone"] == zone)
 
 

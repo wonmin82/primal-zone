@@ -2274,3 +2274,13 @@ P1-01/02·P2-01/02의 원래 false-positive 공백과 보강 코드를 [매트�
 최종 SQLite 전용 조회는 같은 실제 E2E-11에서 **145.697ms(1회)**로 측정했다. 이는 Windows 한 실행의 실측이며 모든 CI 지연을 보증하지 않는다. 200ms·800ms 정상 지연/지연 초과·스케줄링 누락 음성 회귀가 별도로 있고 실제 최종 창을 놓치면 정상 PASS로 처리하지 않는다. 단위 Fixture의 Windows 연결 핸들 닫힘 누락도 실패 후 명시 close로 보완했다. 실패 DB/로그는 소유 로컬 경로에만 보존하고 자격 증명·프로세스는 제거했다.
 
 RF-33~46은 관측 구현/검출 회귀/실제 서비스 주입/RELEASE 연결/안전성으로 확인한다. RF-47~50 최종 Quick·새 네 CI·기록·차단 결함 감사는 실제 완료 후 PR/Issue에서 확정한다. RF-51~52: **실제 Door60초·리더600초 RELEASE NOT RUN**, PR60 OPEN/Ready·Source 유지·Issue50/45 OPEN. G-12 Full·G-14 최종main CI/RELEASE·G-15 FinalCloseout NOT RUN, IME PRIOR VERIFIED, Visual Baseline PENDING REVIEW, Issue58 비범위, 기존 favicon P2 #59 추적 유지. Merge/브랜치 삭제/Issue Close는 수행하지 않는다.
+
+
+## Issue #50 최초 RELEASE — Full Smoke 경로 보완
+
+PR #60은 `855ada380e5276334f0744797a86a5aef300297c`로 Merge Commit 병합됐고 [main CI38239786496](https://github.com/wonmin82/primal-zone/actions/runs/38239786496)의 네 Job이 성공했다. [최초 RELEASE38241057595](https://github.com/wonmin82/primal-zone/actions/runs/38241057595/job/114783513394)의 Full Smoke는 실제30/45/120초·재접속·적 회복을 통과한 뒤 defeat 단계에서 실패했다. outsider는 HP1·비전투 상태로 `support_3f_e1`까지 이동했지만 정상60초 만료로 닫힌 회복실 문 앞에서 이동만 요청해10초 상태 대기가 만료됐다. 게임 규칙 결함이 아닌 기존 Full 이동 Helper의 문 조작 누락이다.
+
+- 수정 전 신규 닫힌 문/열기 실패 회귀2개가 FAIL(0.052초). 이후 양방향 회복실 경계에서 기존 실제 `회복실 문 열어`→방향 이동을 실행한다. 일반 Exit/관리실 문을 자동 개방하거나 권한·타이머를 변경하지 않는다. 열기/이동 실패를 숨기지 않는다.
+- 기존 `world.test_smoke`와 신규3개 총18 PASS(1.657초). 정상 일반 이동·관리실 거절 보존, 닫힌 회복실 양방향 열기 순서·열기 실패시 이동 없음 확인. check/diff PASS.
+- 실제 production 타이머의 격리 Evennia/WS에서 회복실을 닫고 양쪽 정상 사용자 경로로 재개방·통과:50.580초 PASS. 소유 서버 종료·성공DB 정리·실제 플레이DB hash/mtime/size 불변 확인. Door는 실제 명령으로 닫았다.
+- 기존 최초 RELEASE 실패 로그와 URL을 보존한다. 다른 Job의 성공을 전체 RELEASE PASS로 합산하지 않으며, 수정 PR의 정확한 HEAD Quick·네 CI·병합된 main CI 후 새 SHA에서 전체 RELEASE를 실행한다. Issue50/45는 아직 OPEN, Source 유지, Final Closeout 미완료다.
