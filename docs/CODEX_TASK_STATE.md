@@ -1425,3 +1425,12 @@ PR #25의 최종 문서 HEAD와 병합 후 main의 test·smoke를 대조하고, 
 - 수정 전 Windows 실제 부모 조기 종료 뒤 자식 STILL_ACTIVE를 재현했다. 실제 소유 자식·강제 종료·외부 프로세스 보호·재정리·Job 마지막 핸들 종료를 확인했다. P2-01~03의 인증 삭제·비수집·Puppet 해제 보호는 유지한다.
 - 이 구역은 커밋 전 준비 기록이다. 최종 Push HEAD Quick/PR CI 및 Merge Commit/main 네 CI/Source 삭제는 실제 완료 후 PR #57/Issue #50의 P2-04 구역에 SHA와 URL로 확정한다. 사용자 조건부 Merge/삭제 승인을 받았지만 게이트를 우회하지 않는다.
 - Issue #50/#45는 OPEN 유지. Phase 50-A만 마감하고 다음은 50-B 기능 계약/매트릭스 공백 감사다. 50-B~F/RELEASE는 NOT RUN, OS IME는 기존 PRIOR VERIFIED, macOS 프로세스 실행 검증은 NOT RUN이다.
+
+
+## Issue #50 50-B~F 준비 착수 — 2026-10-12
+
+- 최신 main/PR #57 병합 및 main 네 CI SUCCESS 감사: Base `82641de0ea66898676b0b29194d7918489443def`. 새 Source `codex/issue-50-integrated-qa`, 미커밋/다른 OPEN PR 없음. Issue #50/#45 OPEN 유지, Issue #58 비범위.
+- 50-B: 계약74개 → 실제70개 테스트 연결, 실행70 PASS/186.579초. 신규 전수 Help/의료 경계2 PASS/28.887초. 이력과 자세한 표는 통합 매트릭스에 추가했다.
+- 초기 테스트의 Help 범위 오분류 실패를 보존했다. 기존 명령의 간결한 Help 형식까지 새 정책으로 요구하지 않으며 신규/변경 명령의6절은 필수로 검사한다.
+- 50-C 진행: 시나리오별 새 Harness DB/서버, 실제 UI/Exit 이동, 읽기 전용 DB Probe, 소유 Harness 정상 restart, 격리 복사본의 실제 지급 뒤 상위 rollback 주입. 첫 E2E-01 PASS/73.276초(전체). 나머지 전체 PASS는 미확정.
+- 다음: 전체14 Chromium/멀티세션/재시작, 인프라 오류 경계, RELEASE 워크플로, 최종 전체 회귀·정확한 HEAD Quick·단일 PR/CI. Merge/삭제/Issue Close/최종 RELEASE 선언 금지.
