@@ -1444,3 +1444,21 @@ PR #25의 최종 문서 HEAD와 병합 후 main의 test·smoke를 대조하고, 
 - Runner Windows23(정의24/POSIX1 N/A)+신규6, Node28, Harness18 PASS. P2-01~04·보안/프로세스 보호 유지. 새로운 게임정책/구현/프로토콜/운영DB/타이머 변경 없음. faviconP2 #59 이관, 새차단P0/P1 없음.
 - 필수5문서 준비. 실제60/600·Full·최종main CI/RELEASE·G14/FinalCloseout NOT RUN. IME PRIOR VERIFIED, 이미지 PENDING REVIEW, macOS 미지원/NOT RUN 유지.
 - 다음: 문서/전체diff검사 → 정확한최종HEAD Quick → Push/단일Ready PR → 최신 네CI/Artifact확인 → Issue50의 원문보존·PR/진행 구역 갱신 → 사용자리뷰. Merge/삭제/Issue50·45Close는 금지.
+
+
+## PR #60 리뷰 보완 진행
+
+- 리뷰HEAD d7736c54, Source codex/issue-50-integrated-qa/Base82641de 유지. P1-01/02 및 P2-01/02를 QA·관측/문서 계약에서 보완했다. Node43/통합Runner8/문서5/직접영향70, 실제08/11/12 PASS. 기존 브라우저Runner Windows23·POSIX1 N/A PASS.
+- 실제 ObjectDB Exit/Room·설치 증거 비교와 음성 구조 손상, 이전 버튼 actual click/dispatcher/WS 거절, 조기30/300 검출·관측 누락FAIL, 기능 문서9개/실제 parser·Metadata·중요 정책 오류 검출. checkpoint Unicode 디코딩 오류 최소 수정 및 실패 기록 보존.
+- 다음: 최종 전체 성공 확인 → 명시 stage/한국어 commit → 정확한최종HEAD Quick → 기존PR60에Push → 새HEAD 네CI/Artifact확인 → PR/Issue 원문보존 Review Fixes 갱신. Merge/Source삭제/Issue50·45Close/Issue58 구현 금지. 실제 RELEASE/60/600/Full은 NOT RUN. favicon P2 #59 유지.
+
+
+### 리뷰 보완 최종 로컬 결과
+
+관측/버튼/Probe/checkpoint `51f418bc409ba637e2d27b3db64894d4fc7e2bdb`, 기능 문서 계약/정정 `52e630047ca5cb0172c6c779709b13b7ce4af310`. 검증은 리뷰HEAD d7736c54+동일 개발diff에서 시작했으며 해당 코드가 그대로 이 두 커밋에 포함됨을 확인했다. 이후 검증 문서만 추가했으므로 같은 전체 회귀를 다시 실행하지 않는다.
+
+- 최종 전체 `uv run python scripts/dev.py test --parallel 4`: 순수229 PASS/2.534초, 통합816 PASS/513.301초, 전체523.943초. 기존814에 문서 검사2개 추가, 실패0.
+- Node43 PASS/0.518초(시간7·Exit8 신규 음성/정상 포함), 통합Runner8 PASS/1.713초, 기존브라우저Runner Windows23 PASS·POSIX1 N/A/5.445초. 문서5/19.449초·직접영향70/102.156초·실제08/11/12 전체151.801/141.538/143.987초 PASS.
+- `check`·변경JS구문·`git diff --check` PASS. GFM 변경10문서 렌더, 전체Markdown59/상대링크567/앵커194/기존README앵커12 오류0.
+- 실제 플레이DB hash/mtime/size 불변과 실제브라우저 소유프로세스/인증/Puppet 정리를 확인했다. 정확한 최종 문서 포함 HEAD의 Quick 및 새 원격 CI는 실제 완료 후 PR/Issue50에 기록한다. 현재 문서 작성 시점에는 아직 실행 전이다.
+- 실제60/600·Full·최종main CI/RELEASE·FinalCloseout은 NOT RUN이다. 기존 성공/개발 FAIL·최초CI38204318598은 역사 기록으로 보존한다. PR60/Source/Issue50·45 유지, Issue58 비범위, #59 추적.

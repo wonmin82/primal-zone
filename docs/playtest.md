@@ -2248,3 +2248,12 @@ Node 실행 파일이 없으면 Linux 보호 프로세스는 자식이 생성되
 초기 실패 이력은 위에 보존했다. 최종 순수229/통합814 PASS, 신규3 계약 PASS, Runner24 정의 중Windows23/POSIX1 N/A·신규6/Harness18/Node28 PASS. 기존50-A9 및 실제E2E14 모두 직접 영향 성공을 확인했다. role 보강3개와 정상 restart의 지연 sweep을 허용하면서 원본/개수/예약 리셋을 차단하는 보강도 실제 재검증했다. 상세시간·run ID는 통합 매트릭스에 연결한다. 게임 구현/프로토콜/타이머 변경 없음.
 
 최종 Push HEAD Quick/네 원격 Job은 제출 직후 새로 확인한다. 실제60/600·Full·최종main RELEASE NOT RUN, IME PRIOR VERIFIED, 초기이미지 PENDING REVIEW. favicon 경고만 후속P2 #59에 이관하고 다른 Console 오류는 실패한다.
+
+
+## PR #60 통합 검증 독립 리뷰 보완
+
+P1-01/02·P2-01/02의 원래 false-positive 공백과 보강 코드를 [매트릭스](issue50-integration-matrix.md#pr-60-독립-리뷰-보완--p1-0102-p2-0102)에 연결한다. Node43/Runner8/문서5/직접 영향70 및 실제 E2E08/11/12 PASS. RELEASE 시간은 아직 NOT RUN이며 운영60/600초 상수는 그대로다.
+
+개발 실패도 보존한다. 최초 문서 검사에서 존재하지 않는 validate_body import를 실제 validate_message로 고쳤고, Markdown 셀의 backtick을 너무 일찍 제거하거나 구조 ASCII 도표를 사용자 입력으로 해석한 검사 오류를 지정된 현행 표/절로 바로잡았다. 제거된 `20 진료` 음성 주입이 회복 수단 표의 누락으로 검출되지 않았으므로 표 범위를 확대해 같은 오류를 명확히 거절하는 새 검사를 통과시켰다. Assertion을 완화하거나 잘못된 문서를 제외하지 않았다. item/equipment 현행 Profile v13 오류는 v14로 정정했다.
+
+실제 E2E12 첫 실행은 Windows UTF-8 checkpoint/CP949 디코딩 오류로97.320초 FAIL. 소유 프로세스 종료/인증제거/플레이DB불변은 모두 확인했다. 명시 UTF-8과 실제 Unicode 자식 회귀를 추가한 뒤 새 E2E12 143.987초 PASS다. 실패의 안전한 로컬 DB/로그를 보존하며 원본을 Artifact에 포함하지 않는다. 사용자 게임 데이터/프로토콜/정책을 수정하지 않았다.

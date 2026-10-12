@@ -109,3 +109,14 @@ Linux의 Node 실행 시작 실패 시 자식 없음 증거를 기록한 보호 
 순수229/통합814 PASS, 기존50-A9 + 실제E2E01~14 PASS. Runner Windows23(정의24/POSIX1 N/A)+신규6, Harness18, Node28 PASS. 실행 SHA/개발 diff와 실제 개별 시간은 통합 매트릭스에 구분했다. 후속 NPC 역할 보강3개는83.015/152.005/92.905초, 정상 restart의 만료 sweep 분류 보강은128.467초 PASS다. 이는 원격 최신HEAD/RELEASE 실행 성공을 의미하지 않는다.
 
 이 문서 앞의 미확정/초기 실행 기록은 개발 당시 이력이다. 현재 로컬 WEB01~12 기능 수용은 PASS이며 정확한 최종 Push HEAD Quick 및 네 GitHub Job은 PR/Issue50에서 새로 확정한다. 실제60/600/Full/최종main RELEASE는 NOT RUN, IME PRIOR VERIFIED, 이미지 PENDING REVIEW 유지. 비차단 favicon은 [후속P2 #59](https://github.com/wonmin82/primal-zone/issues/59)에 이관했다.
+
+
+## PR #60 리뷰 보완 관측 경계
+
+실제 Windows Chromium E2E08 151.801초, E2E11 141.538초, E2E12 보완 후143.987초(각 격리 준비~정리) PASS. 기준은 리뷰HEAD d7736c54 + 해당 개발diff이며 커밋 이후 새 실행으로 표현하지 않는다. E2E08은 OPEN 당시 실제 이동 버튼 HTMLElement를 보관한다. B의 실제 닫기 후 최신 버튼이 disabled이고, 교체돼 detached인 이전 버튼만 QA 소유 컨테이너에 재연결해 실제 click → 기존 document 이벤트 → text WS → 실제 서버로 보낸다. 게임 상태를 mock하거나 새 RPC를 쓰지 않는다. A의 위치/admin Door 상태/예약 불변과 이후 최신 정상 이동 버튼의 성공을 모두 검사한다.
+
+E2E12는 실제 ObjectDB의 전체 Exit PK/Location/Destination/Typeclass/key/관리 태그/Door Attribute와 설치 원본을 재시작 전후 정확히 비교한다. 정상 만료 sweep은 Door state/예약에만 허용하고 Exit 변경은 허용하지 않는다. 정적 routes는 이동 계획 전용이다. Probe는 기존 소유 DB 검증과 query_only를 유지하며 원본 Snapshot을 Artifact로 보내지 않는다.
+
+RELEASE 관측: wall clock Date.now와 저장 deadline을 사용하고 조회 소요는 monotonic performance.now로 확인한다. 최대5초 간격으로 만료 전 상태를 관측하며 중간30/300초 이후와 예약4초 전부터의 직전 관측을 필수로 한다. Probe2초 상한, 관측 완료가 만료0.5초 전까지여야 하며 누락/지연은 FAIL이다. 정상 Tick 후 확인 상한8초는 5초 Tick+2초 Probe+1초 scheduling 여유다. 실제 통과 요청~응답 창 안에 예약-60초가 있어야 한다(시계 정밀도0.1초 허용). 오프라인 시작도 마지막 Puppet 종료 요청~완료 시각에 대조한다. 운영 타이머는 바꾸지 않는다.
+
+30/300초 조기 실행·늦은 관측은 별도 음성 회귀로 거절한다. 주입시각 E2E11와 이 순수 관측 검출 검사를 실제 RELEASE Wall Clock PASS로 합산하지 않는다. 실제60/600은 NOT RUN. IME PRIOR VERIFIED, Visual Baseline PENDING REVIEW, macOS 기존 미지원 유지. P2-01~04 자격 증명/증거/Puppet/프로세스 보호는 유지한다.

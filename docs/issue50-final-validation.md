@@ -53,3 +53,12 @@
 - 새 Snapshot의 초기화 전 소유 DB 거절·query_only·Console 강제 실패·버전 기록은 Runner/Node/실제 직접 영향/기존 관측 오류0으로 검토했다. 동일 전체를 단순 커밋/문서 수정 때문에 반복하지 않는다.
 - 운영 DB SHA256 a33b102000a62dfe761fc8db5a90f1c4c4ffa012d9aec14a716c1d3784a592c3, hash/mtime/size 불변을 실행기마다 확인했다. 성공 격리 DB 삭제, 실패 DB/로그만 소유 로컬 경로 보존·인증 제거·프로세스 종료.
 - 비차단 favicon404는 [후속Issue59](https://github.com/wonmin82/primal-zone/issues/59). P0/P1 없음. Issue50/45 OPEN, Source 유지, Merge/Close 미수행.
+
+
+## PR #60 리뷰 보완 — Pre-merge
+
+P1-01 시간 조기 실행 검출, P1-02 실제 Exit 영속 데이터, P2-01 오래된 실제 버튼 요청, P2-02 기능별 문서/Metadata 계약을 보완했다. 실제 코드와 정상/음성 검출 근거는 [리뷰 추적표](issue50-integration-matrix.md#pr-60-독립-리뷰-보완--p1-0102-p2-0102)에 연결한다. 최초 CI SUCCESS는 당시 결과이며 새로운 HEAD의 성공을 대신하지 않는다.
+
+게임 정책·영속 형식·프로토콜·운영 타이머/DB 변경 없음. 테스트 인프라의 Windows checkpoint UTF-8 디코딩을 최소 보완했고 실제 Unicode 자식·정상 재시작으로 검증했다. 문서의 현행 Profile v13 표기2곳은 실제 v14로 정정하되 과거 v10/마이그레이션 기록은 보존했다.
+
+최종 제출HEAD/Quick/네 CI 및 안전한 Artifact는 실제 완료 후 PR60/Issue50의 Review Fixes에 기록한다. 이 절 작성만으로 새 HEAD CI PASS를 주장하지 않는다. G09 실제60초·G10 실제600초·G12 Full·G14 최종main/RELEASE·G15 FinalCloseout은 NOT RUN. PR60 OPEN/Ready, Source 유지, Issue50/45 OPEN. Issue58 변경 없음, 비차단 favicon #59 추적 유지.

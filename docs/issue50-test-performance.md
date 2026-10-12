@@ -76,3 +76,21 @@ Windows / Python 3.13.15 / Node 24.19.0. 실행 기준은 착수 HEAD `7afc09d06
 순수229/통합814 PASS, 기존50-A9 + 실제E2E01~14 PASS. Runner Windows23(정의24/POSIX1 N/A)+신규6, Harness18, Node28 PASS. 실행 SHA/개발 diff와 실제 개별 시간은 통합 매트릭스에 구분했다. 후속 NPC 역할 보강3개는83.015/152.005/92.905초, 정상 restart의 만료 sweep 분류 보강은128.467초 PASS다. 이는 원격 최신HEAD/RELEASE 실행 성공을 의미하지 않는다.
 
 이 문서 앞의 미확정/초기 실행 기록은 개발 당시 이력이다. 현재 로컬 WEB01~12 기능 수용은 PASS이며 정확한 최종 Push HEAD Quick 및 네 GitHub Job은 PR/Issue50에서 새로 확정한다. 실제60/600/Full/최종main RELEASE는 NOT RUN, IME PRIOR VERIFIED, 이미지 PENDING REVIEW 유지. 비차단 favicon은 [후속P2 #59](https://github.com/wonmin82/primal-zone/issues/59)에 이관했다.
+
+
+## PR #60 리뷰 보완 실측
+
+직접 영향: Node 기존28+관측15=43 PASS/0.337초, Runner 기존통합6+신규2=8 PASS/1.357초, 기존브라우저Runner Windows23 PASS·POSIX1 N/A/5.445초. 문서계약 기존3+신규2=5 PASS/19.449초(전체28.661초), Door/Bootstrap/스키마/Exit/Smoke 영향70 PASS/102.156초(전체113.213초). 실제 E2E08/11/12 각151.801/141.538/143.987초 전체 PASS. 재시작 Unicode 실패97.320초는 별도로 보존하며 최종 성공 시간에 합치지 않는다.
+
+최종 Python 전체·정확한 Push HEAD Quick·원격 네 Job은 실제 실행 완료 후 PR/Issue50에 개수/시간/SHA를 확정한다. RELEASE 실제60/600/Full 및 최종main 실행은 NOT RUN. 샘플5초/중간·직전필수·조회상한2초는 비용 절감으로 타이밍 조건을 완화하기 위한 것이 아니다. 지연으로 필수 관측을 놓치면 FAIL이다.
+
+
+### 리뷰 보완 최종 로컬 결과
+
+관측/버튼/Probe/checkpoint `51f418bc409ba637e2d27b3db64894d4fc7e2bdb`, 기능 문서 계약/정정 `52e630047ca5cb0172c6c779709b13b7ce4af310`. 검증은 리뷰HEAD d7736c54+동일 개발diff에서 시작했으며 해당 코드가 그대로 이 두 커밋에 포함됨을 확인했다. 이후 검증 문서만 추가했으므로 같은 전체 회귀를 다시 실행하지 않는다.
+
+- 최종 전체 `uv run python scripts/dev.py test --parallel 4`: 순수229 PASS/2.534초, 통합816 PASS/513.301초, 전체523.943초. 기존814에 문서 검사2개 추가, 실패0.
+- Node43 PASS/0.518초(시간7·Exit8 신규 음성/정상 포함), 통합Runner8 PASS/1.713초, 기존브라우저Runner Windows23 PASS·POSIX1 N/A/5.445초. 문서5/19.449초·직접영향70/102.156초·실제08/11/12 전체151.801/141.538/143.987초 PASS.
+- `check`·변경JS구문·`git diff --check` PASS. GFM 변경10문서 렌더, 전체Markdown59/상대링크567/앵커194/기존README앵커12 오류0.
+- 실제 플레이DB hash/mtime/size 불변과 실제브라우저 소유프로세스/인증/Puppet 정리를 확인했다. 정확한 최종 문서 포함 HEAD의 Quick 및 새 원격 CI는 실제 완료 후 PR/Issue50에 기록한다. 현재 문서 작성 시점에는 아직 실행 전이다.
+- 실제60/600·Full·최종main CI/RELEASE·FinalCloseout은 NOT RUN이다. 기존 성공/개발 FAIL·최초CI38204318598은 역사 기록으로 보존한다. PR60/Source/Issue50·45 유지, Issue58 비범위, #59 추적.

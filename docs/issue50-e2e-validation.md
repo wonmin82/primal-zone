@@ -51,3 +51,13 @@ OS IME는 PRIOR VERIFIED, 최초 Visual Baseline은 PENDING REVIEW다. Trace/Vid
 정상 재시작의 만료 확정은 도달한 원래 deadline에서만 허용한다. 지연 sweep의 raw OPEN/원래 예약은 그대로 보존할 수 있으며 조기 닫힘/초기값/예약 리셋/자동 잠금/중복 Door는 허용하지 않는다. 논리적 만료 차단은 PR의 정확한 Door 경계 회귀 및 RELEASE 실제60초에서도 검사한다.
 
 모든 직접 영향 성공의 SHA/개발 diff·실제시간·안전한 run ID는 통합 매트릭스에 있다. 최종 PR HEAD CI는 아직 PENDING이며 최종main RELEASE/실제60/600/Full은 NOT RUN이다.
+
+
+## PR #60 리뷰 보완
+
+- E2E08: 이전 실제 버튼을 보관하고 B 닫기 후 최신 UI 거절과 오래된 click 요청의 실제 서버 거절·위치/예약 불변을 확인한다. 재개방 뒤 최신 정상 버튼 통과도 검사한다. 텍스트 입력만으로 stale 버튼 PASS를 대체하지 않는다.
+- E2E12: 실제 DB Exit/Room 및 DoorInstallation 교차 비교. PK/위치/목적지/Typeclass/관리ID/door_id/설치 증거를 정확히 보존하며 일반 출구 편입·중복/재생성은 거절한다. 잘못된 Snapshot의 음성 회귀도 포함한다.
+- TIMING-DOOR/PARTY: 중간·만료 직전과 최대5초 간격의 pre-deadline 관측, 실제60초 연장 창, 실제 마지막 Puppet 해제·B 온라인·600초 미만 원리더 유지, 정상 Tick 이후 결과. 필수 관측 누락/늦음은 FAIL이다. 읽기2초/직전 시작-4초·완료최소-0.5초/정상Tick8초 상한은 브라우저 검증 문서에 기록한다.
+- Windows 정상 restart 첫 보완 실행에서 checkpoint의 UTF-8 출력이 부모 CP949 기본 디코딩과 충돌했다. Harness.checkpoint에 encoding=utf-8를 명시하고 실제 자식 프로세스의 Unicode 출력 회귀 및 새 E2E12 성공으로 재검증했다. 실패97.320초와 안전한 정리 기록을 보존한다. 게임 구현 결함이나 정책 변경은 아니다.
+
+정상 관측 및 조기30초 닫힘/300초 승계·Exit 구조 손상 음성 검출 PASS와 실제 RELEASE NOT RUN을 구분한다. E2E11의599.999/600 실제 서비스 주입 검사는 유지했다. 원본 DB/Snapshot/인증/입력/개인 메시지/Trace/Video는 공개 증거로 수집하지 않는다.

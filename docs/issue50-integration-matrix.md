@@ -303,3 +303,45 @@ GitHub에서 PR51/52/53/55/56 MERGED와 각 실제 Merge SHA의 push test/smoke 
 |57 |82641de0ea66898676b0b29194d7918489443def |[38188294387](https://github.com/wonmin82/primal-zone/actions/runs/38188294387) |
 
 G-01~15의 현재 판정은 [Pre-merge 최종 문서](issue50-final-validation.md)에 있다. 실제60/600·Full·최종main CI/RELEASE·Issue Closeout은 NOT RUN이다.
+
+
+## PR #60 독립 리뷰 보완 — P1-01/02, P2-01/02
+
+리뷰 기준 HEAD `d7736c54c9fef0c1ebcebe644e792c162465d70e`, Base `82641de0ea66898676b0b29194d7918489443def`. 이전 제출의 네 CI 성공과 아래 보완 후 실행을 구분한다. 변경은 QA·문서 및 checkpoint 인코딩이며 게임 정책/프로토콜/영속 형식/운영 타이머는 그대로다.
+
+| ID | 원인 | 실제 수정 및 검증 위치 | 보완 결과 |
+| --- | --- | --- | --- |
+| P1-01 | 만료 이후 결과만 확인해 조기 실행을 놓침 | `scripts/browser/review-contracts.cjs`의 `extensionWindow/preDeadline/monitorBeforeDeadline`, `integration.spec.cjs` TIMING-DOOR/PARTY, `scripts/tests/test_integration_observations.cjs` 시간 회귀7개 | 30초 조기 닫힘·300초 조기 승계·직전 관측 누락/지연 거절, 정상 관측 PASS. 실제 Wall Clock은 NOT RUN |
+| P1-02 | routes가 정적 정의여서 실제 Exit 손상을 놓침 | `integration_probe.py` ObjectDB/Tag/Attribute `exits/rooms`, `review-contracts.cjs` `exitIntegrity/preservedExits`, E2E-08/12, Node Exit 회귀8개 | 실제 PK/Location/Destination/Typeclass/방향/관리ID/Door 참조/설치 증거 보존. 손상/재생성/중복/일반 Exit 편입 거절 |
+| P2-01 | 거절을 텍스트 입력만으로 검사 | E2E-08의 실제 이전 HTMLElement 보관·click·기존 document dispatcher·실제 WS/서버 | 최신 버튼 비활성화, 이전 버튼 요청1회/Prompt, 이동 거절·위치/상태/예약 불변, 최신 정상 버튼 통과 PASS |
+| P2-02 | commands 표 밖 기능 문서 검증 부족 | `scripts/issue50_document_contracts.py`, `tests.test_issue50_contracts.IntegratedContractTests.test_feature_document_tables_examples_policy_and_web_actions/test_feature_document_corruption_is_rejected` | 문서9개·실제 parser/Help/metadata·정책/웹 Action, 오류 주입7사례 검출. item/equipment 현행 v13 표기를 v14로 수정 |
+
+### 기능 문서 감사 범위
+
+| 읽는 문서 | 자동 검증 | 교차 감사·기존 실제 Assertion |
+| --- | --- | --- |
+| commands.md | 현행 모든 정식 명령/Alias 표, 일행16개, Help/관련 페이지 | T50-CMD/HELP 실제 CmdSet/dispatcher·제거된 어휘 거절 |
+| gameplay.md | 명령/기술/회복 예시, 의료 공식 AST·경계 가격5행 | T50-GAME/NPC/PARTY/DOOR 및 E2E01~14의 실제 서비스/권한/비공개성 |
+| command-shortcuts.md | 공식 입력 표/첫 현행 예시 블록, 실제 개인 선택, 한도8행 | 변수·삭제/60초 확인·중첩/부분 실행은 기존 `world.test_command_shortcuts` Assertion. 과거 마이그레이션/오류 예시는 현행 입력으로 재해석하지 않음 |
+| npc-dialogue.md | 실제22 NPC 역할7행·Intent 키워드/별칭·class.actions·300자 | 공개 원문/개인 안내/접근/수신자·180초 선택 토큰은 T50-NPC/MSG 및 실제 E2E02/05 |
+| party-and-tactics.md | 정원4·초청60·자동600 정책 대조 | 리더/전술/해체 후 Native·Legacy 개인 권리는 T50-PARTY/DATA·E2E06/07/11 |
+| doors-and-keys.md | 현행 명령 예시·60초·외부/내부 래치/회복실 잠금불가 표 | D13·감지/조회·권한·양방향·원자성은 `tests.test_doors/test_bootstrap_exits/test_exit_policy`와 E2E08/12 |
+| item-entities.md / equipment.md | 실제 PROFILE_VERSION14·실제 SLOT_CAPACITY 표 | 정보의 읽기 전용/권한·장착·상점·storage/loot contract는 T50-GAME/DATA, E2E03/07/13. Phase2/6 당시 v10 기록 보존 |
+| lighting-firearms.md | `명령과 재장전` 절의 실제 사용자 예시 선택 | 상태/탄약/재장전/권한·예약 사격은 기존 총기·장비 회귀. 구조 ASCII 도표를 사용자 입력으로 오인하지 않음 |
+
+실제 `webclient.html`의 모든 정적 data-command는 동일 select_command 경로로 판정한다. 동적 Door/Party/Item/NPC Action은 기존 Node의 실행 프레임 Assertion과 실제 E2E의 click/Enter/서버 상태로 대조한다. 수량·대상·재고 등 실행 전제는 각 실제 서비스 테스트가 검증하며 모든 자연어/예시의 모든 장소 실행을 자동 증명했다고 주장하지 않는다.
+
+음성 회귀: 잘못된 Alias, 현행 `20 회복`을 제거된 `20 진료`로 변경, 실행 한도10→11, 회복실 잠금 제한 변경, 현행 Profile14→13, 의료 가격/공식 변경 모두 FAIL을 검출한다. 파일은 손상하지 않고 복사한 문서 문자열에만 주입한다. 단순 문구 존재로 기능 전체 PASS를 처리하지 않는다.
+
+RF-01~14의 검출 능력과 직접 영향 실행은 보완됐다. RF-15~26 최신 전체/Quick/네 CI/Artifact는 실제 최종 HEAD 실행 후 PR/Issue50에 갱신한다. RF-27~32: PR/Source/Issue50·45 유지, 실제 RELEASE NOT RUN, Issue58 비범위, favicon P2 #59 추적. 새로운 필수 테스트를 Skip하지 않는다.
+
+
+### 리뷰 보완 최종 로컬 결과
+
+관측/버튼/Probe/checkpoint `51f418bc409ba637e2d27b3db64894d4fc7e2bdb`, 기능 문서 계약/정정 `52e630047ca5cb0172c6c779709b13b7ce4af310`. 검증은 리뷰HEAD d7736c54+동일 개발diff에서 시작했으며 해당 코드가 그대로 이 두 커밋에 포함됨을 확인했다. 이후 검증 문서만 추가했으므로 같은 전체 회귀를 다시 실행하지 않는다.
+
+- 최종 전체 `uv run python scripts/dev.py test --parallel 4`: 순수229 PASS/2.534초, 통합816 PASS/513.301초, 전체523.943초. 기존814에 문서 검사2개 추가, 실패0.
+- Node43 PASS/0.518초(시간7·Exit8 신규 음성/정상 포함), 통합Runner8 PASS/1.713초, 기존브라우저Runner Windows23 PASS·POSIX1 N/A/5.445초. 문서5/19.449초·직접영향70/102.156초·실제08/11/12 전체151.801/141.538/143.987초 PASS.
+- `check`·변경JS구문·`git diff --check` PASS. GFM 변경10문서 렌더, 전체Markdown59/상대링크567/앵커194/기존README앵커12 오류0.
+- 실제 플레이DB hash/mtime/size 불변과 실제브라우저 소유프로세스/인증/Puppet 정리를 확인했다. 정확한 최종 문서 포함 HEAD의 Quick 및 새 원격 CI는 실제 완료 후 PR/Issue50에 기록한다. 현재 문서 작성 시점에는 아직 실행 전이다.
+- 실제60/600·Full·최종main CI/RELEASE·FinalCloseout은 NOT RUN이다. 기존 성공/개발 FAIL·최초CI38204318598은 역사 기록으로 보존한다. PR60/Source/Issue50·45 유지, Issue58 비범위, #59 추적.
