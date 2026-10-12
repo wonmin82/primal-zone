@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const { execFileSync } = require('node:child_process');
 const { test: base, expect } = require('@playwright/test');
-const { actionMetadata, safePath, isFavicon404, safeObservation, pollUntil, waitDetached, finishActors } = require('./safety.cjs');
+const { actionMetadata, safePath, isFavicon404, isCommandFrame, safeObservation, pollUntil, waitDetached, finishActors } = require('./safety.cjs');
 // 인증 파일/프레임 원문은 보고서·Artifact·Trace에 복사하지 않는다.
 const credentials = JSON.parse(fs.readFileSync(process.env.PRIMAL_BROWSER_CREDENTIALS, 'utf8'));
 function sessions() {
@@ -39,7 +39,7 @@ class Player {
       });
       socket.on('framesent', ({ payload }) => {
         const [kind, args] = JSON.parse(String(payload));
-        if (kind === 'text') { this.sentCount++; this.exactSubmission = args[0] === this.pendingCommand; }
+        if (isCommandFrame(kind, args)) { this.sentCount++; this.exactSubmission = args[0] === this.pendingCommand; }
       });
     });
     return this;
@@ -65,13 +65,16 @@ class Player {
     expect(this.sockets.at(-1).expectedUrl).toBe(true);
     return this;
   }
-  async command(command) {
+  async command(command, { prepare, submit } = {}) {
     this.lastAction = actionMetadata(command);
     const prompts = this.prompts, sent = this.sentCount;
     this.pendingCommand = command;
     try {
-      await this.page.locator('#command').fill(command);
-      await this.page.locator('#command').press('Enter');
+      const input = this.page.locator('#command');
+      if (prepare) await prepare(input);
+      else await input.fill(command);
+      if (submit) await submit();
+      else await input.press('Enter');
       await expect.poll(() => this.sentCount).toBe(sent + 1);
       expect(this.exactSubmission).toBe(true);
       await expect.poll(() => this.prompts).toBeGreaterThan(prompts);
@@ -107,7 +110,10 @@ const test = base.extend({
       await player.initialize();
       return player.login();
     };
-    try { await use({ create, close: player => player.close(), credentials: credentials.map(([name]) => name) }); }
+    try {
+      await testInfo.attach('chromium-version', { body: browser.version(), contentType: 'text/plain' });
+      await use({ create, close: player => player.close(), credentials: credentials.map(([name]) => name) });
+    }
     finally { await finishActors(players, testInfo); }
   },
 });

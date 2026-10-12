@@ -4,6 +4,9 @@
   "engines": {"node": ">=24 <25"},
   "scripts": {
     "test:browser": "uv run python scripts/browser_e2e.py",
+    "test:browser:integration": "uv run python scripts/integration_e2e.py --profile pr",
+    "test:browser:timing": "uv run python scripts/integration_e2e.py --profile timing",
+    "test:browser:persistence": "uv run python scripts/integration_e2e.py --profile persistence",
     "test:contracts": "node --test scripts/tests/test_web_prompt.cjs scripts/tests/test_browser_helpers.cjs"
   },
   "devDependencies": {"@playwright/test": "1.64.0"}

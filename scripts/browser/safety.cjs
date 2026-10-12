@@ -9,6 +9,10 @@ function safePath(url) {
 function isFavicon404(location, message) {
   return location.endsWith('/favicon.ico') && message.includes('404');
 }
+function isCommandFrame(kind, args) {
+  // 실제 클라이언트의 60초 keepalive는 사용자 제출/Prompt 계약에 포함하지 않는다.
+  return kind === 'text' && Array.isArray(args) && typeof args[0] === 'string' && args[0] !== 'idle';
+}
 function safeObservation(value) {
   const number = n => Number.isFinite(n) && n >= 0 ? n : 0;
   const action = value.lastAction;
@@ -43,10 +47,11 @@ async function finishActors(players, testInfo) {
   const failures = [];
   for (const player of players) {
     try { await player.close(); } catch (error) { failures.push(error); }
+    if ((player.errors || []).length) failures.push(new Error('browser-console-failed'));
   }
   // 정리 완료 상태를 기록한다. 진단/첨부 실패로 Context 정리를 건너뛰지 않는다.
   try { await testInfo.attach('observations', { body: JSON.stringify(players.map(p => safeObservation(p.diagnostic()))), contentType: 'application/json' }); }
   catch { failures.push(new Error('observations: attach-failed')); }
   if (failures.length) throw new AggregateError(failures, 'actor-cleanup-failed');
 }
-module.exports = { actionMetadata, safePath, isFavicon404, safeObservation, pollUntil, waitDetached, finishActors };
+module.exports = { actionMetadata, safePath, isFavicon404, isCommandFrame, safeObservation, pollUntil, waitDetached, finishActors };
