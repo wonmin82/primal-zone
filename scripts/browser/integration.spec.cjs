@@ -1,6 +1,7 @@
 const { test: base, expect, sessions } = require('./fixtures.cjs');
 const { snapshot, command, travel, itemCount, party, restart, control } = require('./integration-helpers.cjs');
 const { pollUntil } = require('./safety.cjs');
+const { extensionWindow, monitorBeforeDeadline, exitIntegrity, preservedExits } = require('./review-contracts.cjs');
 // 신규 인증은 정책상 출정 대기실로 이동한다. fixture 방에 teleport하지 않고
 // 실제 Exit 명령으로 각 시나리오의 장소에 도착한다.
 const starts = { 'E2E-02': 'dock', 'E2E-03': 'weapon_shop', 'E2E-04': 'infirmary',
@@ -183,18 +184,39 @@ async function adminDoor(a, b) {
 test('TEST-E2E-08 두 방향 조작·통과·상태·오래된 요청 거절', async ({ actors }) => {
   const a = await actors.create(0), b = await actors.create(1);
   await adminDoor(a, b);
-  const endpoints = snapshot().doors.find(d => d.door_id === 'hq_admin_door');
+  const initial = snapshot(); exitIntegrity(initial);
+  const endpoints = initial.doors.find(d => d.door_id === 'hq_admin_door');
+  const liveButton = a.page.locator('#exits [data-command="동"]');
+  await expect(liveButton).toBeEnabled();
+  const staleButton = await liveButton.elementHandle();
+  expect(await staleButton.getAttribute('data-command')).toBe('동');
   await Promise.all([command(a, '동 문 닫아'), command(b, '서 문 닫아')]);
   await expect.poll(() => snapshot().doors.find(d => d.door_id === 'hq_admin_door').state).toBe('CLOSED');
   await expect.poll(() => a.state.exit_details.find(e => e.name === '동')?.can_move).toBe(false);
-  await command(a, '동');
-  expect(snapshot().players[a.name].zone).toBe('hq_concourse');
+  await expect(a.page.locator('#exits [data-command="동"]')).toBeDisabled();
+  const closed = snapshot().doors.find(d => d.door_id === 'hq_admin_door');
+  // 교체되기 전 실제 버튼을 보관한 stale UI를 재현한다. 게임/WS를 mock하지
+  // 않고 동일 HTMLElement click → 기존 document dispatcher → 실제 서버다.
+  expect(await staleButton.evaluate(el => el.isConnected)).toBe(false);
+  await staleButton.evaluate(el => {
+    const holder = document.createElement('section'); holder.id = 'qa-owned-stale-action';
+    holder.append(el); document.body.append(holder);
+  });
+  try {
+    await a.command('동', { prepare: async () => {}, submit: () => staleButton.click() });
+    const rejected = snapshot();
+    expect(rejected.players[a.name].zone).toBe('hq_concourse');
+    expect(rejected.doors.find(d => d.door_id === 'hq_admin_door')).toEqual(closed);
+    await expect(a.page.locator('#exits [data-command="동"]')).toBeDisabled();
+  } finally { await a.page.locator('#qa-owned-stale-action').evaluate(el => el.remove()); }
   await command(b, '서 문 열어');
-  await command(a, '동');
+  await expect(a.page.locator('#exits [data-command="동"]')).toBeEnabled();
+  await a.command('동', { prepare: async () => {}, submit: () => a.page.locator('#exits [data-command="동"]').click() });
   await expect.poll(() => a.state.zone).toBe('hq_admin_office');
   const final = snapshot().doors.find(d => d.door_id === 'hq_admin_door');
   expect(final.exit_a_id).toBe(endpoints.exit_a_id); expect(final.exit_b_id).toBe(endpoints.exit_b_id);
   expect(final.auto_close_at).toBeGreaterThan(endpoints.auto_close_at);
+  preservedExits(initial, snapshot());
 });
 
 test('TEST-E2E-09 이동하는 개인 묶음·현재 CmdSet·잠긴 Exit', async ({ actors }) => {
@@ -252,8 +274,10 @@ test('TEST-E2E-12 정상 Portal/Server 재시작·같은 DB·재인증', async (
   await command(a, '관리실 문 풀어'); await command(a, '관리실 문 열어');
   await actors.close(a); await actors.close(b);
   const before = snapshot();
+  exitIntegrity(before);
   await restart();
   const stopped = snapshot();
+  preservedExits(before, stopped);
   expect(stopped.items).toEqual(before.items);
   expect(stopped.doors).toHaveLength(before.doors.length);
   // 정상 재시작의 만료 sweep은 허용한다. PK/권한/비만료 예약의 리셋은 거절한다.
@@ -284,6 +308,7 @@ test('TEST-E2E-12 정상 Portal/Server 재시작·같은 DB·재인증', async (
   await command(again, '영속조회', '체력');
   expect(again.state.party.id).toBe(member.state.party.id);
   expect(snapshot().parties[again.state.party.id].tactics).toEqual(before.parties[again.state.party.id].tactics);
+  preservedExits(before, snapshot());
 });
 
 test('TEST-E2E-13 실제 Native/Legacy 지급 뒤 상위 Rollback·성공 알림 없음', async ({ actors }) => {
@@ -345,19 +370,34 @@ test('TEST-E2E-14 연속 입력·History·Backspace·HTML·Focus·두 화면', a
 test('TEST-TIMING-DOOR 실제 60초·통과 연장·자동 닫힘', async ({ actors }) => {
   const a = await actors.create(0), b = await actors.create(1);
   await adminDoor(a, b);
+  await expect.poll(() => a.state.exit_details.find(e => e.name === '동')?.can_move).toBe(true);
+  await expect.poll(() => b.state.exit_details.find(e => e.name === '서')?.can_move).toBe(true);
   const opened = snapshot().doors.find(d => d.door_id === 'hq_admin_door');
   await command(b, '서');
+  const passingStarted = Date.now() / 1000;
   await command(b, '동');
   const passed = snapshot().doors.find(d => d.door_id === 'hq_admin_door');
+  extensionWindow(passed.auto_close_at, passingStarted, Date.now() / 1000);
   expect(passed.auto_close_at).toBeGreaterThan(opened.auto_close_at);
   await command(a, '관리실 문 열어');
   expect(snapshot().doors.find(d => d.door_id === 'hq_admin_door').auto_close_at).toBe(passed.auto_close_at);
+  await monitorBeforeDeadline(() => {
+    const db = snapshot(), door = db.doors.find(d => d.door_id === 'hq_admin_door');
+    expect(db.players[a.name].zone).toBe('hq_concourse');
+    expect(db.players[b.name].zone).toBe('hq_admin_office');
+    expect(a.state.exit_details.find(e => e.name === '동').can_move).toBe(true);
+    expect(b.state.exit_details.find(e => e.name === '서').can_move).toBe(true);
+    return door;
+  }, { since: passed.auto_close_at - 60, deadline: passed.auto_close_at, kind: 'door' });
   await pollUntil(() => Date.now() / 1000 >= passed.auto_close_at, { timeout: 65000, interval: 100 });
   await command(a, '동');
   expect(snapshot().players[a.name].zone).toBe('hq_concourse');
   await command(b, '서');
   expect(snapshot().players[b.name].zone).toBe('hq_admin_office');
-  await pollUntil(() => snapshot().doors.find(d => d.door_id === 'hq_admin_door').state === 'CLOSED', { timeout: 10000, interval: 500 });
+  const rejected = snapshot().doors.find(d => d.door_id === 'hq_admin_door');
+  expect(['OPEN', 'CLOSED']).toContain(rejected.state);
+  expect(rejected.auto_close_at).toBe(rejected.state === 'OPEN' ? passed.auto_close_at : null);
+  await pollUntil(() => snapshot().doors.find(d => d.door_id === 'hq_admin_door').state === 'CLOSED', { timeout: 8000, interval: 500 });
   expect(snapshot().doors.find(d => d.door_id === 'hq_admin_door').auto_close_at).toBeNull();
   await expect.poll(() => a.state.exit_details.find(e => e.name === '동')?.can_move).toBe(false);
   await expect.poll(() => b.state.exit_details.find(e => e.name === '서')?.can_move).toBe(false);
@@ -367,12 +407,27 @@ test('TEST-TIMING-PARTY 실제 600초 오프라인 자동 승계', async ({ acto
   const a = await actors.create(0), b = await actors.create(1);
   const id = a.state.party.id;
   expect(b.state.party.id).toBe(id);
-  await command(a, b.name + ' 일행방어'); await actors.close(a);
+  await command(a, b.name + ' 일행방어');
+  const disconnectStarted = Date.now() / 1000;
+  await actors.close(a);
   const saved = snapshot(), original = saved.parties[id];
   expect(saved.claims.length).toBeGreaterThan(0);
   expect(original.leader_offline_since).toBeGreaterThan(0);
+  expect(original.leader_offline_since).toBeGreaterThanOrEqual(disconnectStarted - 0.1);
+  expect(original.leader_offline_since).toBeLessThanOrEqual(Date.now() / 1000 + 0.1);
+  expect(sessions()[a.name]).toEqual([]);
+  expect(original.leader).toBe(saved.players[a.name].id);
+  await monitorBeforeDeadline(() => {
+    const db = snapshot();
+    expect(sessions()[b.name]).toEqual(expect.arrayContaining([...b.ownedSessionIds]));
+    expect(db.parties[id].members).toEqual(original.members);
+    expect(db.parties[id].tactics).toEqual(original.tactics);
+    expect(db.claims).toEqual(saved.claims); expect(db.items).toEqual(saved.items);
+    return db.parties[id];
+  }, { since: original.leader_offline_since, deadline: original.leader_offline_since + 600,
+    kind: 'party', expected: original });
   await pollUntil(() => Date.now() / 1000 >= original.leader_offline_since + 600, { timeout: 605000, interval: 1000 });
-  await pollUntil(() => snapshot().parties[id].leader === snapshot().players[b.name].id, { timeout: 15000, interval: 500 });
+  await pollUntil(() => snapshot().parties[id].leader === snapshot().players[b.name].id, { timeout: 8000, interval: 500 });
   const again = await actors.create(0);
   await command(again, '일행');
   expect(snapshot().parties[id].leader).toBe(snapshot().players[b.name].id);

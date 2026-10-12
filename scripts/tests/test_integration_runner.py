@@ -19,6 +19,35 @@ from release_guard import validate  # noqa: E402
 
 
 class IntegrationContractManifestTests(unittest.TestCase):
+    def test_release_profile_connects_two_wall_clock_observers_not_normal_pr(self):
+        package = json.loads((ROOT / 'package.json').read_text(encoding='utf-8'))
+        self.assertEqual(package['scripts']['test:browser:timing'], 'uv run python scripts/integration_e2e.py --profile timing')
+        self.assertEqual(SCENARIOS[-2:], ('TIMING-DOOR', 'TIMING-PARTY'))
+        workflow = (ROOT / '.github/workflows/release-validation.yml').read_text(encoding='utf-8')
+        self.assertIn('run: npm run test:browser:timing', workflow)
+        pr = (ROOT / '.github/workflows/tests.yml').read_text(encoding='utf-8')
+        self.assertNotIn('test:browser:timing', pr)
+        spec = (ROOT / 'scripts/browser/integration.spec.cjs').read_text(encoding='utf-8')
+        for scenario in ('DOOR', 'PARTY'):
+            section = spec.split("test('TEST-TIMING-" + scenario, 1)[1].split("test('")[0]
+            self.assertIn('monitorBeforeDeadline', section)
+        self.assertIn("control('party-before')", spec)
+        self.assertIn("control('party-at')", spec)
+
+    def test_restart_checkpoint_utf8_child_output_is_not_windows_locale(self):
+        from smoke_harness import Harness
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'scripts').mkdir()
+            (root / 'game').mkdir()
+            (root / 'scripts/smoke_snapshot.py').write_text(
+                "import json; print(json.dumps({'unicode': '\\u2500'}, ensure_ascii=False))", encoding='utf-8')
+            harness = Harness('full')
+            harness.run_dir = root
+            harness.env = {**os.environ, 'PYTHONUTF8': '1'}
+            with patch('smoke_harness.ROOT', root):
+                self.assertEqual(harness.checkpoint(), {'unicode': '\u2500'})
+
     def test_integrated_snapshot_rejects_foreign_database_before_django_load(self):
         parent = ROOT/'work/smoke'
         parent.mkdir(parents=True, exist_ok=True)

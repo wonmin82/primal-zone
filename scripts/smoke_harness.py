@@ -166,7 +166,7 @@ class Harness:
     def checkpoint(self):
         output = subprocess.check_output(
             [sys.executable, str(ROOT / "scripts" / "smoke_snapshot.py")],
-            cwd=self.run_dir / "game", env=self.env, text=True, timeout=SETUP_TIMEOUT)
+            cwd=self.run_dir / "game", env=self.env, text=True, encoding="utf-8", timeout=SETUP_TIMEOUT)
         return json.loads(output.splitlines()[-1])
 
     def stop(self):
