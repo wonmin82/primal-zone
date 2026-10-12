@@ -1,5 +1,66 @@
 # Issue #50 검증 성능 기록
 
+## 2026-10-12 최초 성공 RELEASE 및 최종 Closeout 준비
+
+[PR #60](https://github.com/wonmin82/primal-zone/pull/60)은 Merge Commit `855ada380e5276334f0744797a86a5aef300297c`으로 병합됐다. 첫 부모는 `82641de0ea66898676b0b29194d7918489443def`, 둘째 부모는 검토 Source `26da18221f890f3405aca84b746741e3da7f747b`이며 임시 병합 결과와 Tree가 같고 원본 이력이 보존됐다. [당시 main CI](https://github.com/wonmin82/primal-zone/actions/runs/38239786496)의 네 Job은 모두 SUCCESS다.
+
+[최초 RELEASE 실패](https://github.com/wonmin82/primal-zone/actions/runs/38241057595)는 삭제하지 않는다. 8개 중 7개 Job은 SUCCESS였지만 Full Smoke가 60초 후 정상 닫힌 회복실 문을 열지 않고 이동해 실패했다. 이는 QA 이동 경로의 누락이며 게임의 차단은 정상이다. [최소 수정 PR #61](https://github.com/wonmin82/primal-zone/pull/61)의 `0a03b44612822796f703e4d077916330e909a4fb`는 실제 `회복실 문 열어`를 양쪽 이동 전에 실행한다. 정상·실패·비관련 출구 회귀3개를 추가했으며 게임 정책·타이머·프로토콜·저장 형식은 바꾸지 않았다. 수정 Merge는 `11a1c6bce91a5499292f8fbabff3e308663814fe`이고 부모는 `855ada380e5276334f0744797a86a5aef300297c`와 `0a03b44612822796f703e4d077916330e909a4fb`다.
+
+**최초 성공 RELEASE SHA: `11a1c6bce91a5499292f8fbabff3e308663814fe`.** [main CI](https://github.com/wonmin82/primal-zone/actions/runs/38244636657) 네 Job SUCCESS, [RELEASE](https://github.com/wonmin82/primal-zone/actions/runs/38251167392) 8개 Job SUCCESS, main/workflow_dispatch/attempt1 및 입력·GITHUB_SHA·실제 Checkout SHA 일치를 모든 Job의 Guard8개로 확인했다. RELEASE 전체 병렬 경과는 819초다. Job 로그·Assertion 및 안전한 Artifact를 직접 검토했다. 아래 최초 실패/성공과 과거 로컬 검증을 서로 다른 실행으로 보존한다.
+
+**최종 SHA Closeout은 아직 대기 중이다.** 이 문서 PR을 Merge Commit으로 병합한 뒤 새 `FINAL_MAIN_SHA`의 push CI 네 Job과 RELEASE8개 Job을 다시 실행한다. 같은 SHA의 성공으로 대체하지 않는다. 최종 실행 증거는 [Issue #50 공식 Final Closeout 기록](https://github.com/wonmin82/primal-zone/issues/50#issuecomment-6124806608)에 추가하고, 결과 때문에 새 Git Commit을 만들어 SHA를 다시 바꾸지 않는다. 최종 Gate를 확인한 뒤에만 #50·#45를 종료하고 병합된 작업 브랜치를 안전하게 정리한다.
+
+### 병합 main CI 실측
+
+| Job | 실제 결과 | 경과 시간 | 실행 증거 |
+| --- | --- | --- | --- |
+| contracts | SUCCESS | 13초 | [Job](https://github.com/wonmin82/primal-zone/actions/runs/38244636657/job/114795369005) |
+| test | SUCCESS | 690초 | [Job](https://github.com/wonmin82/primal-zone/actions/runs/38244636657/job/114795369391) |
+| smoke | SUCCESS | 72초 | [Job](https://github.com/wonmin82/primal-zone/actions/runs/38244636657/job/114795369480) |
+| browser-e2e | SUCCESS | 694초 | [Job](https://github.com/wonmin82/primal-zone/actions/runs/38244636657/job/114795369504) |
+
+병렬 전체 698초.
+
+### 최초 성공 RELEASE 실측
+
+| Job | 실제 결과 | 경과 시간 | 실행 증거 |
+| --- | --- | --- | --- |
+| baseline | SUCCESS | 5초 | [Job](https://github.com/wonmin82/primal-zone/actions/runs/38251167392/job/114817552240) |
+| test | SUCCESS | 426초 | [Job](https://github.com/wonmin82/primal-zone/actions/runs/38251167392/job/114817597631) |
+| timing-e2e | SUCCESS | 808초 | [Job](https://github.com/wonmin82/primal-zone/actions/runs/38251167392/job/114817597684) |
+| contracts | SUCCESS | 13초 | [Job](https://github.com/wonmin82/primal-zone/actions/runs/38251167392/job/114817597752) |
+| smoke | SUCCESS | 74초 | [Job](https://github.com/wonmin82/primal-zone/actions/runs/38251167392/job/114817597770) |
+| persistence-e2e | SUCCESS | 132초 | [Job](https://github.com/wonmin82/primal-zone/actions/runs/38251167392/job/114817597853) |
+| browser-e2e-full | SUCCESS | 718초 | [Job](https://github.com/wonmin82/primal-zone/actions/runs/38251167392/job/114817597895) |
+| smoke-full | SUCCESS | 514초 | [Job](https://github.com/wonmin82/primal-zone/actions/runs/38251167392/job/114817597957) |
+
+병렬 전체 819초. 설치·업로드를 포함한 Job 경과와 각 테스트의 시간은 구분한다. 최초 실패 RELEASE805초는 별도 실패 이력이며 성공 실행에 합산하지 않는다. 목표시간을 맞추기 위해 필수 검사/실제600초를 줄이지 않았다. 문서 병합 뒤 다른 SHA에서 실행하는 두 번째 성공 RELEASE는 필수 최종 검증이며 동일 코드의 불필요한 로컬 전체 반복과 구분한다.
+
+### 로그의 실제 건수/시간
+
+- `Ran 232 tests in 1.195s`
+- `Ran 816 tests in 406.650s`
+- `{"profile": "timing", "tests": 2, "seconds": 771.064}`
+- `ℹ tests 52`
+- `ℹ duration_ms 110.876848`
+- `PASS [quick] 완료 / process stop / temp cleanup: 60.549s`
+- `{"profile": "persistence", "tests": 2, "seconds": 92.719}`
+- `Ran 33 tests in 2.249s`
+- `{"profile": "pr", "tests": 14, "seconds": 635.77}`
+- `PASS [full] 완료 / process stop / temp cleanup: 504.680s`
+
+### 실제 시간과 정상 재시작
+
+- TEST-TIMING-DOOR **PASS/100.737초**: 실제 열기/양방향OPEN·통과 완료 기준+60초·중복 열기/실패 통과 예약 불변·중간 관측·만료4초 전 이후 최대500ms 목표 반복·최종 `deadline-1.0 <= end <= deadline-0.5` 완료·만료후 실제 이동 거절·정상 Tick CLOSED·웹 양쪽 동기화. 단위 Clock 주입으로 대체하지 않았다.
+- TEST-TIMING-PARTY **PASS/640.504초**: A 마지막 소유 Puppet 종료·실제 offline_since·B온라인·300초 부근/직전/최종 완료 창까지 A 유지·실제600초 이후 정상 Tick 승계·A재접속 권한 자동복원 없음·구성/전술/아이템/Claim 보존.
+- 같은 RELEASE Helper의 Node 시간16개는30/58초 CLOSED·58초LOCKED·예약변경·300/598초승계·필수관측 누락/지연/조회오류를 실제로 거절한다. 조회 상한2초/최종 유효 창은 완화하지 않았고 누락 시FAIL이다. E2E11의599.999/600 서비스 주입과 실제 시간 검사를 별도로 기록한다.
+- 독립 persistence 재검증 E2E12 **45.936초**, E2E13 **16.846초**: 실제 Exit 및 DoorInstallation·Profile/줄임말·Item UUID/장착/수량·Party·Quest/Credential·Native/Legacy/Claim·정상 만료와 데이터 손실 구분·상위 Rollback/알림 차단. 일반 Exit의 독립성도 비교한다.
+
+
+## 아래 기록의 시점
+
+아래 기존 NOT RUN·PENDING·OPEN·Pre-merge 및 Phase 범위 표기는 해당 구현·리뷰 당시의 역사적 기록이다. 삭제하거나 새 SHA의 실행 결과로 재작성하지 않는다. 현재 결과와 최종 확인 절차는 위 기록 및 연결된 Final Closeout 기록을 따른다.
+
 이번 범위는 Phase 50-A다. P-02의 시간 예산은 성공한 **한 번 실행**의 경과 시간이고 개발·실패 수정·다운로드 재시도 시간을 숨기는 기준이 아니다.
 
 `npm run test:browser`의 `run.json`은 DB 준비부터 실제 브라우저, Portal/Server 종료와 격리 확인까지 총 경과 시간을 기록한다. `results.json`은 각 TEST-50A-01~06의 실제 시간을 가진다. CI Job 시작/종료·설치 시간을 포함한 경과 시간은 연결 PR Validation에서 실제 Run URL·SHA와 함께 기록한다.

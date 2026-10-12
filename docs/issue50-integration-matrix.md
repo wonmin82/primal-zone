@@ -1,5 +1,48 @@
 # Issue #50 통합 검증 추적
 
+## 2026-10-12 최초 성공 RELEASE 및 최종 Closeout 준비
+
+[PR #60](https://github.com/wonmin82/primal-zone/pull/60)은 Merge Commit `855ada380e5276334f0744797a86a5aef300297c`으로 병합됐다. 첫 부모는 `82641de0ea66898676b0b29194d7918489443def`, 둘째 부모는 검토 Source `26da18221f890f3405aca84b746741e3da7f747b`이며 임시 병합 결과와 Tree가 같고 원본 이력이 보존됐다. [당시 main CI](https://github.com/wonmin82/primal-zone/actions/runs/38239786496)의 네 Job은 모두 SUCCESS다.
+
+[최초 RELEASE 실패](https://github.com/wonmin82/primal-zone/actions/runs/38241057595)는 삭제하지 않는다. 8개 중 7개 Job은 SUCCESS였지만 Full Smoke가 60초 후 정상 닫힌 회복실 문을 열지 않고 이동해 실패했다. 이는 QA 이동 경로의 누락이며 게임의 차단은 정상이다. [최소 수정 PR #61](https://github.com/wonmin82/primal-zone/pull/61)의 `0a03b44612822796f703e4d077916330e909a4fb`는 실제 `회복실 문 열어`를 양쪽 이동 전에 실행한다. 정상·실패·비관련 출구 회귀3개를 추가했으며 게임 정책·타이머·프로토콜·저장 형식은 바꾸지 않았다. 수정 Merge는 `11a1c6bce91a5499292f8fbabff3e308663814fe`이고 부모는 `855ada380e5276334f0744797a86a5aef300297c`와 `0a03b44612822796f703e4d077916330e909a4fb`다.
+
+**최초 성공 RELEASE SHA: `11a1c6bce91a5499292f8fbabff3e308663814fe`.** [main CI](https://github.com/wonmin82/primal-zone/actions/runs/38244636657) 네 Job SUCCESS, [RELEASE](https://github.com/wonmin82/primal-zone/actions/runs/38251167392) 8개 Job SUCCESS, main/workflow_dispatch/attempt1 및 입력·GITHUB_SHA·실제 Checkout SHA 일치를 모든 Job의 Guard8개로 확인했다. RELEASE 전체 병렬 경과는 819초다. Job 로그·Assertion 및 안전한 Artifact를 직접 검토했다. 아래 최초 실패/성공과 과거 로컬 검증을 서로 다른 실행으로 보존한다.
+
+**최종 SHA Closeout은 아직 대기 중이다.** 이 문서 PR을 Merge Commit으로 병합한 뒤 새 `FINAL_MAIN_SHA`의 push CI 네 Job과 RELEASE8개 Job을 다시 실행한다. 같은 SHA의 성공으로 대체하지 않는다. 최종 실행 증거는 [Issue #50 공식 Final Closeout 기록](https://github.com/wonmin82/primal-zone/issues/50#issuecomment-6124806608)에 추가하고, 결과 때문에 새 Git Commit을 만들어 SHA를 다시 바꾸지 않는다. 최종 Gate를 확인한 뒤에만 #50·#45를 종료하고 병합된 작업 브랜치를 안전하게 정리한다.
+
+### 결정 및 기능 추적의 최종 적용
+
+D01~D28·P-01/P-02 및 원래 ID를 변경하지 않았다. 아래 기존 전체 매트릭스의 T50-CMD01~06/ALIAS01~07/GAME01~09/NPC01~08/MSG01~06/PARTY01~12/DOOR01~10/HELP01~07/DATA01~09 총74개는 scripts/issue50_contracts.py의 실제 Assertion70개와 전체 Python 회귀에서 실행됐다. T50-WEB01~12와 E2E01~14는 실제 Chromium 회귀에 연결된다. 테스트 파일 존재 확인만을 실행 PASS로 사용하지 않는다. 기존 P1-01/02·P2-01/02/03, Phase50-A P2-01~04 정상/음성·세션·소유 프로세스 회귀는 그대로 실행됐다. 50-A~E 구현/자동 수용은 완료했고50-F의 최초 RELEASE는 성공했다. 최종 문서 SHA에서의 RELEASE/Closeout은 다음 절차다.
+
+| Gate | 1차 감사 | 실제 근거와 최종 절차 | 실행 증거 |
+| --- | --- | --- | --- |
+| G-01 | PASS | 선행 PR51/52/53/55/56/57 Merge·main CI 및60/61 부모·Tree 감사 | [baseline](https://github.com/wonmin82/primal-zone/actions/runs/38251167392/job/114817552240) |
+| G-02 | PASS | T50-CMD/ALIAS·Registry86/Alias75·프로필v11~14·제한/권한 실제 회귀 | [test](https://github.com/wonmin82/primal-zone/actions/runs/38251167392/job/114817597631) |
+| G-03 | PASS | 기능별 문서·Alias·Help6섹션·웹 Action 및 문서 오류 음성 계약 | [contracts](https://github.com/wonmin82/primal-zone/actions/runs/38251167392/job/114817597752) |
+| G-04 | PASS | Python 순수232·Evennia 통합816 전체 | [test](https://github.com/wonmin82/primal-zone/actions/runs/38251167392/job/114817597631) |
+| G-05 | PASS | 실제 E2E-01~14 전부 | [browser-e2e-full](https://github.com/wonmin82/primal-zone/actions/runs/38251167392/job/114817597895) |
+| G-06 | PASS | Chromium 실제 UI/WS·50-A9+통합14 | [browser-e2e-full](https://github.com/wonmin82/primal-zone/actions/runs/38251167392/job/114817597895) |
+| G-07 | PASS (객관적) | Desktop1366×768/Narrow390×844·Focus/이름/overflow/입력. 이미지 승인 별도 | [browser-e2e-full](https://github.com/wonmin82/primal-zone/actions/runs/38251167392/job/114817597895) |
+| G-08 | PASS | 독립2~3 Account/Context/WS·수신자·실제 Puppet 해제 | [browser-e2e-full](https://github.com/wonmin82/primal-zone/actions/runs/38251167392/job/114817597895) |
+| G-09 | PASS | 실제 Door60초·통과연장·중간/직전/최종 완료 창·만료후 차단 | [timing-e2e](https://github.com/wonmin82/primal-zone/actions/runs/38251167392/job/114817597684) |
+| G-10 | PASS | 실제 마지막 Puppet 해제·600초·조기승계 없음·재접속/권리 보존 | [timing-e2e](https://github.com/wonmin82/primal-zone/actions/runs/38251167392/job/114817597684) |
+| G-11 | PASS | 동일DB 정상 Restart·실제 Exit PK/위치/목적지/Typeclass·설치·Rollback | [persistence-e2e](https://github.com/wonmin82/primal-zone/actions/runs/38251167392/job/114817597853) |
+| G-12 | PASS | 실제 Quick 및 production Full Gameplay Smoke | [smoke-full](https://github.com/wonmin82/primal-zone/actions/runs/38251167392/job/114817597957) |
+| G-13 | PASS | 차단 P0/P1 없음·최초 Full 실패 최소 수정61. 기존P2#59 추적 | [test](https://github.com/wonmin82/primal-zone/actions/runs/38251167392/job/114817597631) |
+| G-14 | 최종 NOT RUN | 최초 성공 SHA의 CI/RELEASE는 PASS. 문서 Merge 후 새 최종 SHA CI/RELEASE 필요 | [baseline](https://github.com/wonmin82/primal-zone/actions/runs/38251167392/job/114817552240) |
+| G-15 | 최종 대기 | 필수5문서 작성. 최종 공식 댓글·Issue/브랜치 정리 이후 확정 | [baseline](https://github.com/wonmin82/primal-zone/actions/runs/38251167392/job/114817552240) |
+
+### 안전성과 별도 검증 상태
+
+시나리오/Job마다 새 marker·SQLite·동적 포트·합성 일반 계정·독립 Browser Context/실제 WS를 사용한다. 공개 증거의 run.json은 SHA·자격 증명 제거·Node/Chromium 및 Evennia 소유 프로세스 종료·플레이 DB 불변을 모두 true로 확인한다. observations의 모든 Context가 종료되고 소유 Puppet ID가 해제됐다. Artifact는 허용된 JSON/HTML·원문 비수집 로그 요약과 명시 마스킹 PNG2개만 포함하며 인증·개인 메시지·임의 입력·DB·원본 Snapshot·Trace/Video는 없다. 성공14일/실패30일 정책을 유지하고 실제 성공 Artifact의 만료 시각도 대조했다. 실패 원본 DB/로그는 운영 DB와 구분된 소유 로컬 경로에만 보존한다.
+
+실제 플레이 DB의 SHA256은 `a33b102000a62dfe761fc8db5a90f1c4c4ffa012d9aec14a716c1d3784a592c3`이며 size/mtime/hash 불변이다. 운영 서버·운영 데이터 적용/마이그레이션은 수행하지 않았다. 신규 미해결 P0/P1은 없고 비차단 favicon P2는 [#59](https://github.com/wonmin82/primal-zone/issues/59)에서 OPEN 추적한다. #58은 변경하지 않았다. OS 한글 IME는 **PRIOR VERIFIED**, 최초 Visual Baseline은 **PENDING REVIEW**이며 객관적 DOM·접근성 PASS와 주관적 이미지 승인은 구분한다. Ubuntu는 실제 RELEASE, Windows는 보존된 실제 로컬 증거이며 macOS는 미지원/NOT RUN이다.
+
+
+## 아래 기록의 시점
+
+아래 기존 NOT RUN·PENDING·OPEN·Pre-merge 및 Phase 범위 표기는 해당 구현·리뷰 당시의 역사적 기록이다. 삭제하거나 새 SHA의 실행 결과로 재작성하지 않는다. 현재 결과와 최종 확인 절차는 위 기록 및 연결된 Final Closeout 기록을 따른다.
+
 [v1.2 DESIGN FREEZE](https://github.com/wonmin82/primal-zone/issues/50)의 D01~D28 및 P-01/P-02를 유지한다. 이 PR은 **50-A만** 구현한다. 일반 PR CI는 test/smoke/browser-e2e/contracts이며 최종 RELEASE와 구분한다.
 
 ## 기준선 감사
