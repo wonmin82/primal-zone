@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const { execFileSync } = require('node:child_process');
 const { test: base, expect } = require('@playwright/test');
-const { actionMetadata, safePath, isFavicon404, isCommandFrame, safeObservation, pollUntil, waitDetached, finishActors } = require('./safety.cjs');
+const { actionMetadata, safePath, observeBrowserErrors, isCommandFrame, safeObservation, pollUntil, waitDetached, finishActors } = require('./safety.cjs');
 // 인증 파일/프레임 원문은 보고서·Artifact·Trace에 복사하지 않는다.
 const credentials = JSON.parse(fs.readFileSync(process.env.PRIMAL_BROWSER_CREDENTIALS, 'utf8'));
 function sessions() {
@@ -13,18 +13,13 @@ class Player {
     this.context = context; this.index = index;
     [this.name, this.password] = credentials[index];
     this.state = null; this.revision = 0; this.prompts = 0; this.sentCount = 0;
-    this.sockets = []; this.errors = []; this.warnings = []; this.lastAction = null;
+    this.sockets = []; this.errors = []; this.lastAction = null;
     this.ownedSessionIds = new Set(); this.detached = false;
   }
   async initialize() {
     this.page = await this.context.newPage();
     const page = this.page;
-    page.on('pageerror', () => this.errors.push('browser-error'));
-    page.on('console', message => {
-      if (message.type() !== 'error') return;
-      if (isFavicon404(message.location().url, message.text())) this.warnings.push('favicon-404');
-      else this.errors.push('browser-error');
-    });
+    observeBrowserErrors(page, this.errors);
     page.on('websocket', socket => {
       const observation = { closed: false, frames: 0, ready: false, expectedUrl: new URL(socket.url()).href === new URL(process.env.PRIMAL_BROWSER_WS).href };
       this.sockets.push(observation);
@@ -84,7 +79,7 @@ class Player {
   diagnostic() {
     return safeObservation({ player: ['A', 'B', 'C'][this.index], path: safePath(this.page?.url() || ''), lastAction: this.lastAction,
       hasState: !!this.state, revision: this.revision, sockets: this.sockets, contextClosed: this.page?.isClosed() === true,
-      ownedSessions: this.ownedSessionIds.size, detached: this.detached, errors: this.errors, warnings: this.warnings });
+      ownedSessions: this.ownedSessionIds.size, detached: this.detached, errors: this.errors });
   }
   async close({ probe = sessions, timeout = 10000 } = {}) {
     if (this.detached) return;

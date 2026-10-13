@@ -2,6 +2,33 @@ const { test, expect, sessions, finishActors } = require('./fixtures.cjs');
 
 test('TEST-50A-01 실제 Chromium HTTP·WebSocket·인증·초기 상태', async ({ actors, browser }, testInfo) => {
   const a = await actors.create(0);
+  const icon = a.page.locator('link[rel="icon"]');
+  await expect(icon).toHaveAttribute('href', '/static/website/images/favicon.ico');
+  await expect(icon).toHaveAttribute('type', 'image/x-icon');
+  // Headless Chromium의 자동 favicon 요청에 의존하지 않고 최종 DOM 참조를 실제 브라우저로 로드한다.
+  const iconUrl = await icon.evaluate(link => {
+    const url = new URL(link.href);
+    // 새 Context에서 자동 favicon 요청과 다른 URL로 실제 서버 응답을 검증한다.
+    url.searchParams.set('favicon-check', '1');
+    return url.href;
+  });
+  const [response, size] = await Promise.all([
+    a.page.waitForResponse(response => response.url() === iconUrl),
+    a.page.evaluate(async url => {
+      const image = new Image();
+      image.src = url;
+      await image.decode();
+      return [image.naturalWidth, image.naturalHeight];
+    }, iconUrl),
+  ]);
+  expect(new URL(response.url()).origin).toBe(new URL(a.page.url()).origin);
+  expect(response.status()).toBe(200);
+  const bytes = await response.body();
+  expect(bytes.readUInt16LE(0)).toBe(0); // ICONDIR reserved
+  expect(bytes.readUInt16LE(2)).toBe(1); // 실제 ICO
+  expect(bytes.readUInt16LE(4)).toBe(2);
+  expect([0, 1].map(index => [bytes[6 + index * 16], bytes[7 + index * 16]])).toEqual([[16, 16], [32, 32]]);
+  expect([[16, 16], [32, 32]]).toContainEqual(size);
   expect(a.state.zone).toBe('staging_room');
   await expect(a.page.locator('#room-name')).toHaveText(a.state.room);
   expect(a.state.hp).toBeGreaterThan(0);

@@ -115,8 +115,7 @@ def public_report(report):
                 'hasState': value.get('hasState') is True, 'contextClosed': value.get('contextClosed') is True, 'revision': number(value.get('revision')),
                 'sockets': [{'closed': s.get('closed') is True, 'frames': number(s.get('frames'))} for s in value.get('sockets', [])],
                 'ownedSessions': number(value.get('ownedSessions')), 'detached': value.get('detached') is True,
-                'errors': ['browser-error' for _ in value.get('errors', [])],
-                'warnings': ['favicon-404' for _ in value.get('warnings', [])]}
+                'errors': ['browser-error' for _ in value.get('errors', [])]}
 
     tests = []
     for test in report.get('tests', []):
