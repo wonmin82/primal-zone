@@ -6,8 +6,13 @@ function safePath(url) {
   try { const pathname = new URL(url).pathname; return ['/webclient/', '/favicon.ico', '/'].includes(pathname) ? pathname : '/other'; }
   catch { return '/invalid'; }
 }
-function isFavicon404(location, message) {
-  return location.endsWith('/favicon.ico') && message.includes('404');
+function observeBrowserErrors(page, errors) {
+  // URL·메시지·실패 원문을 읽거나 보존하지 않고 모든 리소스/JS 오류를 차단한다.
+  const failed = () => errors.push('browser-error');
+  page.on('pageerror', failed);
+  page.on('console', message => { if (message.type() === 'error') failed(); });
+  page.on('response', response => { if (response.status() >= 400) failed(); });
+  page.on('requestfailed', failed);
 }
 function isCommandFrame(kind, args) {
   // 실제 클라이언트의 60초 keepalive는 사용자 제출/Prompt 계약에 포함하지 않는다.
@@ -23,7 +28,7 @@ function safeObservation(value) {
     hasState: value.hasState === true, contextClosed: value.contextClosed === true, revision: number(value.revision),
     sockets: (value.sockets || []).map(s => ({ closed: s.closed === true, frames: number(s.frames) })),
     ownedSessions: number(value.ownedSessions), detached: value.detached === true,
-    errors: (value.errors || []).map(() => 'browser-error'), warnings: (value.warnings || []).map(() => 'favicon-404'),
+    errors: (value.errors || []).map(() => 'browser-error'),
   };
 }
 async function pollUntil(condition, { timeout = 10000, interval = 50, now = Date.now, pause = ms => new Promise(resolve => setTimeout(resolve, ms)), stage = 'cleanup' } = {}) {
@@ -54,4 +59,4 @@ async function finishActors(players, testInfo) {
   catch { failures.push(new Error('observations: attach-failed')); }
   if (failures.length) throw new AggregateError(failures, 'actor-cleanup-failed');
 }
-module.exports = { actionMetadata, safePath, isFavicon404, isCommandFrame, safeObservation, pollUntil, waitDetached, finishActors };
+module.exports = { actionMetadata, safePath, observeBrowserErrors, isCommandFrame, safeObservation, pollUntil, waitDetached, finishActors };

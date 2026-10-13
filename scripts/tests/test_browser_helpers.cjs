@@ -3,7 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { actionMetadata, safePath, isFavicon404, safeObservation, waitDetached, finishActors } = require('../browser/safety.cjs');
+const { EventEmitter } = require('node:events');
+const { actionMetadata, safePath, observeBrowserErrors, safeObservation, waitDetached, finishActors } = require('../browser/safety.cjs');
 const SafeReporter = require('../browser/reporter.cjs');
 
 test('TEST-P2-02-A 개인 메시지 입력은 분류와 길이만 보존', () => {
@@ -96,10 +97,37 @@ test('TEST-P2-03-D 첨부와 일부 Context 정리가 실패해도 모든 Contex
 test('TEST-P2-03-A 이미 닫힌 세션은 추가 대기 없이 완료', async () => {
   await waitDetached(() => ({ A: [] }), 'A', new Set(['old']));
 });
-test('기존 static 경로 favicon 404만 비차단으로 분류하며 다른 오류는 차단', () => {
-  assert.equal(isFavicon404('http://localhost/static/website/images/favicon.ico', 'Failed to load resource: 404'), true);
-  assert.equal(isFavicon404('http://localhost/other.js', '404'), false);
-  assert.equal(isFavicon404('http://localhost/favicon.ico', '500'), false);
+test('favicon 404·다른 404·500·JS·전송 오류는 원문 비수집으로 실패', async () => {
+  const secret = 'PRIVATE-RESOURCE-SENTINEL';
+  for (const [event, details] of [
+    ['response', { status: () => 404, url: () => '/favicon.ico?token=' + secret }],
+    ['response', { status: () => 404, url: () => '/static/website/images/favicon.ico' }],
+    ['response', { status: () => 404, url: () => '/other.js?token=' + secret }],
+    ['response', { status: () => 500, url: () => '/other.js?token=' + secret }],
+    ['console', { type: () => 'error', text: () => secret, location: () => ({ url: secret }) }],
+    ['pageerror', new Error(secret)], ['requestfailed', { failure: () => secret }],
+  ]) {
+    const page = new EventEmitter(), errors = [];
+    observeBrowserErrors(page, errors);
+    // 감지 과정 자체가 원문 getter를 호출하지 않는 것도 검증한다.
+    for (const key of ['url', 'text', 'location', 'failure']) if (key in details) details[key] = () => { throw new Error('원문 접근 금지'); };
+    page.emit(event, details);
+    assert.deepEqual(errors, ['browser-error']);
+    let observation, closed = false;
+    await assert.rejects(finishActors([{ errors, close: async () => { closed = true; }, diagnostic: () => ({ errors, warnings: [secret] }) }],
+      { attach: async (_, attachment) => { observation = JSON.parse(attachment.body); } }), /actor-cleanup-failed/);
+    assert.equal(closed, true);
+    assert.equal(JSON.stringify(observation).includes(secret), false);
+    assert.equal('warnings' in observation[0], false);
+    assert.deepEqual(observation[0].errors, ['browser-error']);
+  }
+});
+test('성공 리소스와 일반 Console 메시지는 오류로 기록하지 않음', () => {
+  const page = new EventEmitter(), errors = [];
+  observeBrowserErrors(page, errors);
+  for (const status of [200, 204, 301, 304]) page.emit('response', { status: () => status });
+  for (const type of ['log', 'info', 'warning']) page.emit('console', { type: () => type });
+  assert.deepEqual(errors, []);
 });
 test('60초 keepalive는 실제 명령 횟수·원문 비교를 덮지 않는다', () => {
   const { isCommandFrame } = require('../browser/safety.cjs');

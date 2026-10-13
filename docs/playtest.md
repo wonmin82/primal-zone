@@ -1,5 +1,11 @@
 # 테스트와 검증
 
+## Issue #59 Favicon 및 브라우저 오류 검증
+
+웹 클라이언트는 Django `{% static %}`으로 `/static/website/images/favicon.ico`를 명시한다. ICO는 16×16과 32×32 이미지를 포함한다. 기존 #50의 favicon 404 허용 및 실행 결과는 당시 이력으로 보존하며, 현재 검증에서는 favicon을 포함한 HTTP 400 이상 응답, 요청 전송 실패, Console error와 JavaScript 오류를 모두 실패로 처리한다. 오류 원문·URL·인증정보는 Artifact에 보존하지 않는다.
+
+`npm run test:contracts`로 오류 분류와 원문 비수집 경계를 확인하고 `npm run test:browser`로 기존 격리 SQLite·Fixture·정적 수집 환경에서 검증한다. TEST-50A-01은 새 Chromium Context에서 최종 DOM의 favicon 참조를 확인하고, 같은 경로에 고정 검증 query `?favicon-check=1`을 붙여 자동 favicon 요청의 캐시와 구분한다. 이 URL을 `Image`로 로드하여 실제 HTTP 200, ICO 헤더의 두 크기와 이미지 decode를 확인한다. 응답을 가로채거나 대체하지 않으며 Headless Chromium의 자동 favicon 요청을 완료 조건으로 삼지 않는다. 이번 실행 결과와 최신 PR HEAD의 CI는 Issue #59 PR Validation에 기록한다.
+
 ## Issue #50 Phase 50-A
 
 2026-10-12, 최신 main `7afc09d064ea0e45dc68f77ab7ede6c5e7237202`에서 `codex/issue-50-integration-validation`로 시작했다. v1.2 DESIGN FREEZE 및 선행 #46~49/#54의 실제 PR HEAD·Merge·CI를 감사했다. 아래 최초 구현·실패·병합 전 이력은 삭제하지 않는다. 이번 범위는 50-A 기반이며 50-B~F와 최종 RELEASE를 완료했다고 표현하지 않는다.
