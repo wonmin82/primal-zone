@@ -211,6 +211,15 @@ class Help(GameCommand):
 
         commands = [cls for cls in [*COMMANDS, Who] if getattr(cls, "input_style", None)]
         query = (getattr(self, "args", "") or "").strip()
+        from world.actions.manifest import get_index
+        from world.actions.presentation import help_entries
+
+        index = get_index()
+        verb_id = index.verbs_by_public_keys.get(query.casefold())
+        entries = help_entries(index, verb_id) if verb_id else ()
+        if entries:
+            self.caller.msg(ft.sheet(query, *(ft.text(entry["description"], "\n", " · ".join(entry["examples"])) for entry in entries)))
+            return
         page = help_page(query, commands) if query else root_page()
         if page is None:
             raise rules.RuleError("등록된 명령을 찾을 수 없습니다. '도움'에서 확인하세요.")

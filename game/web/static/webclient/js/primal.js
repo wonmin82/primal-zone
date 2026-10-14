@@ -43,6 +43,13 @@
     socket.send(JSON.stringify([name, args, {}]));
     return true;
   }
+  let actionSequence = 0;
+  function actionButton(label, invocation) {
+    const el = document.createElement("button");
+    el.type = "button"; el.textContent = label;
+    el.dataset.actionInvocation = JSON.stringify(invocation);
+    return el;
+  }
   function command(text) {
     if (!playing) { if (!dialog.open) dialog.showModal(); return; }
     if (!send("text", [text]) || !text.trim() || text === "idle") return;
@@ -266,6 +273,9 @@
       actions.push(el);
     }
     byId("context-actions").replaceChildren(...actions);
+    for (const action of state.action_controls || []) {
+      byId("context-actions").append(actionButton(action.label, action.action));
+    }
     const rows = state.inventory.map((item) => {
       const row = document.createElement("li"), name = document.createElement("span");
       if (item.light_source || item.power_source) row.classList.add("lighting-item");
@@ -334,6 +344,9 @@
         if (message.kind === "prompt") latestPrompt = message.segments;
         append("", ["sheet", "event", "error", "chat", "prompt"].includes(message.kind) ? message.kind : "", message.segments);
       } else if (kind === "pz_state" && args?.[0]) render(args[0]);
+      else if (kind === "pz_action_result" && args?.[0]?.action) {
+        byId("context-actions").append(actionButton("확정", args[0].action));
+      }
       else if (kind === "pz_auth") {
         authBusy(false);
         byId("auth-error").textContent = args?.[0]?.ok ? "" : (args?.[0]?.message || "접속에 실패했습니다.");
@@ -351,6 +364,11 @@
     socket.addEventListener("error", () => { byId("auth-error").textContent = "서버에 연결할 수 없습니다. 서버 실행 상태를 확인하세요."; });
   }
   document.addEventListener("click", (event) => {
+    const action = event.target.closest("[data-action-invocation]");
+    if (action) {
+      if (playing) send("pz_action", [{...JSON.parse(action.dataset.actionInvocation), request_id: Date.now() + "-" + (++actionSequence)}]);
+      return;
+    }
     const selection = event.target.closest("[data-dialogue-selection]");
     if (selection?.dataset.dialogueSelection) {
       if (playing) send("pz_dialogue", [selection.dataset.dialogueSelection]);

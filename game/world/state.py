@@ -141,6 +141,7 @@ def multiplayer_state(player, now=None):
     requested, request = request_for(player, now, reconcile=False)
     return {
         "server_now": now,
+        "action_controls": _action_controls(player),
         "enemies": [
             {
                 "id": enemy.id,
@@ -197,3 +198,10 @@ def multiplayer_state(player, now=None):
         "join_request": {"party_id": requested.pk, "expires_at": request["expires_at"]} if requested else None,
         "combat_target": player.combat_snapshot(),
     }
+
+
+def _action_controls(player):
+    from world.actions.manifest import get_index
+    from world.actions.presentation import action_controls
+
+    return action_controls(player, get_index())

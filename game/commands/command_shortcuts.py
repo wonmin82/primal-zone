@@ -38,7 +38,9 @@ def reserved_names(cmdset):
     names = {"줄임말", "해지", "해", "전역"} | set(SHORTCUTS) | set(ARGUMENT_SHORTCUTS) | set(FUTURE_RESERVED_COMMAND_NAMES)
     names.update(data["name"] for data in SKILLS.values())
     for commands in (cmdset, UnloggedinCmdSet()):
-        names.update(commands.get_all_cmd_keys_and_aliases())
+        for command in commands:
+            if not getattr(command, "dynamic_action", False):
+                names.update((command.key, *command.aliases))
     for cls in COMMANDS:
         names.update((cls.key, *cls.aliases))
     names.update(DIRECTION_ALIASES)

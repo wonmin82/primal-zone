@@ -12,11 +12,12 @@ from world import text as ft
 from world.content import ROOMS
 from world.distant_presentation import DistantViewContext, direction_phrase
 from world.navigation import blocked_exit_message, entry_block
+from world.selection_numbers.mixins import NumberedObjectMixin
 
 from .objects import ObjectParent
 
 
-class Exit(ObjectParent, DefaultExit):
+class Exit(NumberedObjectMixin, ObjectParent, DefaultExit):
     """
     Exits are connectors between rooms. Exits are normal Objects except
     they defines the `destination` property and overrides some hooks

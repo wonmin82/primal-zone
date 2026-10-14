@@ -24,6 +24,25 @@ class Door(models.Model):
             models.CheckConstraint(condition=~models.Q(exit_a=models.F("exit_b")), name="door_distinct_exits"),
         ]
 
+    def save(self, *args, **kwargs):
+        from world.multiplayer import world_change
+
+        with world_change():
+            if self.pk:
+                previous = type(self).objects.filter(pk=self.pk).values_list("exit_a_id", "exit_b_id").first()
+                if previous:
+                    from world.selection_numbers.api import schedule
+
+                    for identity in previous:
+                        schedule("door", identity)
+            return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        from world.multiplayer import world_change
+
+        with world_change():
+            return super().delete(*args, **kwargs)
+
 
 class DoorInstallation(models.Model):
     # Door 삭제 이후에도 PK/endpoint와 설치 시각이 남아 신규 설치와 소실을 구분한다.

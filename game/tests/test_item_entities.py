@@ -57,7 +57,8 @@ class ItemEntityTests(GameCommandTest):
         )
 
     def unique_definition(self):
-        definition = {**deepcopy(ITEMS["explorer_machete"]), "unique_per_owner": True}
+        definition = {**deepcopy(ITEMS["explorer_machete"]), "unique_per_owner": True,
+                      "selection_group_id": "item:explorer_machete"}
         self.enterContext(patch.dict(ITEMS, {"unique_test": definition}))
 
     def test_creation_persists_opaque_identity_and_definition_state(self):

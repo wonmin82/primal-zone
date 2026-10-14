@@ -259,15 +259,17 @@ class NPCDialogueTests(NativeItemTest):
     def test_hint_and_web_start_use_npc_only_numbering(self):
         from world.observation import context_for
         from world.room_hints import render
+        from world.selection_numbers.api import descriptor
         from world.state import multiplayer_state
 
-        create_object("typeclasses.interactables.ActionObject", key="윤대장", location=self.char1.location)
+        shared = [("selection_group_id", descriptor(self.npc).group_id)]
+        create_object("typeclasses.interactables.ActionObject", key="윤대장", location=self.char1.location, attributes=shared)
         self.assertEqual(render(context_for(self.char1)), "'윤대장에게 안녕")
         state = multiplayer_state(self.char1)
         actions = [action["command"] for obj in state["interactables"] for action in obj["actions"]
                    if action["label"] == "말 걸기"]
         self.assertEqual(actions, ["'윤대장에게 안녕"])
-        second = create_object("typeclasses.interactables.Commander", key="윤대장", location=self.char1.location)
+        second = create_object("typeclasses.interactables.Commander", key="윤대장", location=self.char1.location, attributes=shared)
         state = multiplayer_state(self.char1)
         actions = [action["command"] for obj in state["interactables"] for action in obj["actions"]
                    if action["label"] == "말 걸기"]
