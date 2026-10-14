@@ -109,6 +109,38 @@ def provider_definition(reference):
     return entity.db.action_provider_id if hasattr(entity, "db") else None
 
 
+def unshadowed(caller, index, pairs):
+    """CmdSet·웹 표시·Gateway가 같은 현재 보호 이름과 입력 모드를 공유한다."""
+    from django.conf import settings
+
+    protected = set()
+    for owner in (caller, caller.account):
+        if not owner:
+            continue
+        for cmdset in owner.cmdset.cmdset_stack:
+            if not cmdset:
+                continue
+            if cmdset.mergetype == "Replace":
+                return ()
+            for command in cmdset:
+                if not getattr(command, "dynamic_action", False):
+                    protected.update((command.key, *command.aliases))
+    if caller.location:
+        for obj in caller.location.contents:
+            if obj.destination:
+                protected.update((obj.key, *obj.aliases.all()))
+    protected = {name.casefold() for key in protected for name in (key, key.lstrip(settings.CMD_IGNORE_PREFIXES))}
+    blocked = set()
+    for action_id in {binding.action_id for _, binding in pairs}:
+        action = index.actions[action_id]
+        verb = index.verbs[action.verb_id]
+        names = {(key + (" " + suffix if suffix else "")).casefold()
+                 for key in (verb.key, *verb.aliases) for suffix in ("", *(variant.suffix for variant in action.variants))}
+        if protected.intersection(names):
+            blocked.add(verb.id)
+    return tuple((ref, binding) for ref, binding in pairs if index.actions[binding.action_id].verb_id not in blocked)
+
+
 def provided(caller, index):
     if not index.bindings:
         return ()
@@ -139,7 +171,7 @@ def provided(caller, index):
             provider = next((role for role in action.roles if role.name == "provider"), None)
             if action.public and provider and record.reference.kind in provider.kinds:
                 pairs.append((record.reference, binding))
-    return tuple(pairs)
+    return unshadowed(caller, index, pairs)
 
 
 def dispatch_text(caller, index, verb_id, args, command_name):

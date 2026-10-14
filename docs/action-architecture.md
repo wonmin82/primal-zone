@@ -47,6 +47,8 @@ Role의 생략 기본 선택과 복수 선택 허용은 별개다. 독립 Provid
 
 등록 시 ID/의존성/순환/역할/인자/Variant/Service 설정/동사·별칭 충돌 및 고정 명령 침범을 검증한다. 키 비교는 실행과 같은 casefold 기준이다. 같은 정규 동사의 복수 Provider는 정상이다. 동일 Provider의 구별 불가능한 Handler는 등록 오류이고, 런타임에 후보가 여럿이면 거절한다.
 
+실행 중 추가된 Engine/Exit와의 기본 키·Variant 확장 키 충돌도 `provided()`의 공통 계산에서 해당 동사 전체를 제외한다. CmdSet만 숨기는 예외가 없으며 웹 control과 이미 받은 안정 ID 요청도 같은 최신 제공 상태를 사용한다. 충돌 해제 후에는 다음 조회/명령에서 정상 복구한다.
+
 현재 Room, Character의 Root inventory/equipment, Provider 제공 상태를 매 실행 시점 조회한다. 내부 아이템은 부모의 대상으로만 조회하며 독립 동적 Provider가 아니다. Engine/Exit/고정 전역 명령을 보호하고 활성 동적 동사는 같은 이름의 개인 줄임말보다 우선한다. 비활성 동사 이름의 개인 줄임말은 사용할 수 있다. 기존 5단계·10개 실제 명령·1,000자 제한을 보존한다. 객체 또는 Account의 추가 입력 Replace CmdSet이 있으면 동적 CmdSet을 제거하고 공통 Gateway도 행동을 거절한다.
 
 웹은 `{action_id, variant, roles, arguments, request_id}`를 보낸다. 각 역할은 `{kind, identity, scope_id}` 참조 배열이다. 표시 이름/번호를 대상 ID로 재해석하거나 텍스트로 재파싱하지 않는다. Gateway는 Session/Account/Puppet 제어권, 현재 참조·제공 상태·역할 타입·권한·소유권·수량·전투/비용 설정·Loot 보호를 같은 변경 경계에서 확인한다. 웹 확정은 원래 Action/역할/인자/Session에 묶인 서버 토큰이 필요하다. 같은 Session의 동일 요청 ID 재전송은 Service와 Prompt를 반복하지 않는다. 삭제·이동·병합된 참조는 실패한다. `pz_dialogue`의 별도 전역 대화 경로는 유지한다.

@@ -414,6 +414,39 @@ class ActionRuntimeTests(NativeItemTest):
         self.assertEqual(calls, [True])
         self.assertEqual(self.events(), [])
 
+    def test_current_engine_exit_and_variant_collision_revalidate_old_web_payload(self):
+        from evennia import CmdSet, Command
+        from evennia.objects.objects import DefaultExit
+
+        obj = self.instrument()
+        payload = self.payload(target=obj)
+        invocation = from_web(payload, self.index)
+        for key in ("검측", "검측 확정", "/검측 확정"):
+            with self.subTest(engine_key=key):
+                cmdset = CmdSet(key="ValidationCollision")
+                cmdset.add(Command(key=key))
+                self.account.cmdset.add(cmdset)
+                refresh(self.char1)
+                self.assertFalse(any(row["action"]["action_id"] == "validation.object"
+                                     for row in action_controls(self.char1, self.index)))
+                self.assertEqual(execute(self.char1, self.session, invocation, self.index).status, ResultStatus.REFUSED)
+                self.assertEqual(self.events(), [])
+                self.account.cmdset.remove("ValidationCollision")
+        for key in ("검측", "검측 확정"):
+            with self.subTest(exit_key=key):
+                exit_obj = create_object(DefaultExit, key=key, location=self.char1.location, destination=self.room2)
+                refresh(self.char1)
+                self.assertEqual(execute(self.char1, self.session, invocation, self.index).status, ResultStatus.REFUSED)
+                self.assertFalse(any(row["action"]["action_id"] == "validation.object"
+                                     for row in action_controls(self.char1, self.index)))
+                self.assertEqual(self.events(), [])
+                exit_obj.delete()
+        refresh(self.char1)
+        self.assertTrue(any(row["action"]["action_id"] == "validation.object"
+                            for row in action_controls(self.char1, self.index)))
+        self.assertEqual(execute(self.char1, self.session, invocation, self.index).status, ResultStatus.SUCCESS)
+        self.assertEqual(len(self.events()), 1)
+
     def test_personal_same_name_active_action_then_inactive_shortcut(self):
         obj = self.instrument()
         self.raw("검측 점수 줄임말")
