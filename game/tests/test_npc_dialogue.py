@@ -31,6 +31,11 @@ class NPCDialogueTests(NativeItemTest):
     def messages(self, character):
         return [call.args[0] for call in character.msg.call_args_list if call.args]
 
+    def shared_npc_group(self):
+        from world.selection_numbers.api import descriptor
+
+        return [("selection_group_id", descriptor(self.npc).group_id)]
+
     def command(self, raw):
         completed = []
         self.char1.execute_cmd(raw).addCallback(lambda _: completed.append(True))
@@ -199,7 +204,8 @@ class NPCDialogueTests(NativeItemTest):
 
     def test_numbered_guide_refresh_and_empty_topic_response(self):
         dialogue.say(self.char1, "윤대장에게 안녕")
-        create_object("typeclasses.interactables.Commander", key="윤대장", location=self.char1.location)
+        create_object("typeclasses.interactables.Commander", key="윤대장", location=self.char1.location,
+                      attributes=self.shared_npc_group())
         dialogue.say(self.char1, "윤대장 1에게 임무")
         self.assertEqual(len(self.guides(self.char1)), 2)
         self.assertIn("'윤대장 1에게 임무", self.guides(self.char1)[-1])
@@ -231,7 +237,8 @@ class NPCDialogueTests(NativeItemTest):
             self.char1.msg.reset_mock()
             dialogue.say(self.char1, raw)
             self.assertEqual(str(self.messages(self.char1)[0]), self.char1.key + ": " + raw)
-        other = create_object("typeclasses.interactables.Commander", key="윤대장", location=self.char1.location)
+        other = create_object("typeclasses.interactables.Commander", key="윤대장", location=self.char1.location,
+                              attributes=self.shared_npc_group())
         for body in ("윤대장에게 임무", "윤대장 3에게 임무", "윤대장 0에게 임무", "윤대장 -1에게 임무", "윤대장 모두에게 임무"):
             self.char1.msg.reset_mock()
             with self.assertRaises(rules.RuleError):
@@ -259,10 +266,9 @@ class NPCDialogueTests(NativeItemTest):
     def test_hint_and_web_start_use_npc_only_numbering(self):
         from world.observation import context_for
         from world.room_hints import render
-        from world.selection_numbers.api import descriptor
         from world.state import multiplayer_state
 
-        shared = [("selection_group_id", descriptor(self.npc).group_id)]
+        shared = self.shared_npc_group()
         create_object("typeclasses.interactables.ActionObject", key="윤대장", location=self.char1.location, attributes=shared)
         self.assertEqual(render(context_for(self.char1)), "'윤대장에게 안녕")
         state = multiplayer_state(self.char1)

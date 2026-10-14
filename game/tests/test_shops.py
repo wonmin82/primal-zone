@@ -14,6 +14,7 @@ from world.content import ITEMS, SHOP_CATALOGS
 from world.content.integrity import errors
 from world.observation import context_for
 from world.room_hints import render
+from world.selection_numbers.api import descriptor
 from world.state import multiplayer_state
 
 from tests.base import WorldCommandTest
@@ -92,7 +93,8 @@ class ShopTests(WorldCommandTest):
         weapon.location = seller.location
         self.assertIn("여러 명", self.command("목록"))
         self.assertIn("1개를 받아", self.command("붕대 사"))
-        extra = create_object(Shopkeeper, key=seller.key, location=seller.location)
+        extra = create_object(Shopkeeper, key=seller.key, location=seller.location,
+                              attributes=[("selection_group_id", descriptor(seller).group_id)])
         extra.db.shop_id = "supply"
         before = deepcopy(self.char1.profile())
         self.assertIn("여러 명", self.command("붕대 사"))

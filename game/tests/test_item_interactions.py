@@ -12,6 +12,7 @@ from world import presentation as view
 from world import rules
 from world.content import ENEMIES, ITEMS
 from world.item_transfers import transfer
+from world.selection_numbers.api import descriptor
 from world.state import multiplayer_state
 from world.targets import Mode, TargetSelector, parse_relation, parse_selector, stack_selector
 
@@ -206,7 +207,8 @@ class ItemInteractionTests(WorldCommandTest):
         self.char1.leave_combat()
 
     def test_shared_container_single_all_persistence_and_duplicate_selector(self):
-        second = create_object(Container, key=self.box.key, location=self.char1.location)
+        second = create_object(Container, key=self.box.key, location=self.char1.location,
+                               attributes=[("selection_group_id", descriptor(self.box).group_id)])
         self.command("보관상자 2에 붕대 넣어")
         self.assertEqual(second.db.items, {"bandage": 1})
         self.assertEqual(self.box.db.items, {})
