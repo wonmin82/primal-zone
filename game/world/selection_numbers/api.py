@@ -153,7 +153,8 @@ def number_for(reference_or_kind, identity=None):
 
 
 def label(record, unique_group_count=1):
-    if record.number is None or record.number == 1 and unique_group_count == 1:
+    # 1도 항상 표시한다. 숨은 그룹원의 존재/제공 상태가 label을 바꾸지 않는다.
+    if record.number is None:
         return record.name
     return f"{record.name} {record.number}"
 
@@ -177,17 +178,30 @@ def _visible(caller, entity):
     return can_perceive(entity, context_for(caller))
 
 
-def records_for(caller, kind=None, scope_id=None):
+def current_scopes(caller, kind=None):
+    scopes = {f"character:{caller.pk}"}
+    if caller.location:
+        room = f"room:{caller.location.pk}"
+        scopes.add(room)
+        if kind in (None, ReferenceKind.LOOT, ReferenceKind.CURRENCY):
+            scopes.add(f"ground:{caller.location.pk}")
+            corpses = SelectionNumber.objects.filter(scope__scope_id=room, kind=ReferenceKind.CORPSE)
+            scopes.update(f"corpse_loot:{identity}" for identity in corpses.values_list("identity", flat=True))
+    return scopes
+
+
+def records_for(caller, kind=None, scope_id=None, *, scope_ids=None):
     """이미 발급된 번호만 관찰한다. 권한으로 재번호하지 않는다."""
-    query = SelectionNumber.objects.select_related("scope").order_by("scope__scope_id", "scope__group_id", "number")
+    scopes = set(scope_ids) if scope_ids is not None else current_scopes(caller, kind)
+    if scope_id is not None:
+        scopes.intersection_update((scope_id,))
+    query = SelectionNumber.objects.filter(scope__scope_id__in=scopes).select_related("scope").order_by("scope__scope_id", "scope__group_id", "number")
     if kind is not None:
         query = query.filter(kind=ReferenceKind(kind))
-    if scope_id is not None:
-        query = query.filter(scope__scope_id=scope_id)
     result = []
     if kind in (None, ReferenceKind.ROOM) and caller.location:
         room = descriptor(caller.location)
-        if room and (scope_id is None or scope_id == room.scope_id):
+        if room and room.scope_id in scopes:
             result.append(room)
     for row in query:
         ref = TargetReference(ReferenceKind(row.kind), row.identity, row.scope.scope_id)

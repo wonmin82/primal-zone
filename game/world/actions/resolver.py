@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 
 from world.actions.registry import RegistryError, validate_argument
-from world.actions.schema import DefaultTargetPolicy, ReferenceKind, TargetReference
+from world.actions.schema import DefaultTargetPolicy, ReferenceKind, TargetReference, TargetScope
 from world.rules import RuleError
 from world.targets import Mode, normalized, parse_selector
 
@@ -20,14 +20,34 @@ class ActionInvocation:
     request_id: str | None = None
 
 
-def role_records(caller, role):
-    from world.selection_numbers.api import records_for
+def role_records(caller, role, bindings=None):
+    from world.selection_numbers.api import current_scopes, records_for, resolve_reference
 
-    return tuple(record for kind in role.kinds for record in records_for(caller, kind=kind))
+    if role.scope == TargetScope.CURRENT:
+        kind = None if {ReferenceKind.LOOT, ReferenceKind.CURRENCY}.intersection(role.kinds) else ReferenceKind.ITEM
+        scopes = current_scopes(caller, kind)
+    else:
+        from typeclasses.interactables import Container
+        from world.item_entities.models import ItemEntity
+        from world.observation import can_perceive, context_for
+
+        scopes = set()
+        for reference in (bindings or {}).get(role.scope_from, ()):
+            entity = resolve_reference(reference)
+            if role.scope == TargetScope.STORAGE:
+                if (not isinstance(entity, Container) or entity.location != caller.location
+                        or not can_perceive(entity, context_for(caller)) or not entity.access(caller, "call")):
+                    continue
+                scopes.add(f"personal_storage:{caller.pk}" if entity.personal else f"shared_storage:{entity.pk}")
+            elif isinstance(entity, ItemEntity):
+                root = entity.root()
+                if root.location_kind in ("inventory", "equipment") and root.owner_object_id == caller.pk:
+                    scopes.add(f"inside:{entity.pk}")
+    return tuple(record for record in records_for(caller, scope_ids=scopes) if record.reference.kind in role.kinds)
 
 
-def select_role(caller, role, query=None):
-    records = role_records(caller, role)
+def select_role(caller, role, query=None, *, bindings=None):
+    records = role_records(caller, role) if bindings is None else role_records(caller, role, bindings)
     if query is None or not query.strip():
         if role.required:
             raise RuleError("대상 이름을 입력하세요.")
@@ -176,6 +196,7 @@ def provided(caller, index):
 
 def dispatch_text(caller, index, verb_id, args, command_name):
     possible = []
+    selections = {}
     for reference, binding in provided(caller, index):
         action = index.actions[binding.action_id]
         if action.verb_id != verb_id:
@@ -189,15 +210,28 @@ def dispatch_text(caller, index, verb_id, args, command_name):
             if not match:
                 continue
             fields = match.groupdict()
-            roles = {}
+            roles = {"provider": (reference,)}
             try:
-                for role in action.roles:
+                # 현재 Scope 역할을 먼저, 그 안정 참조를 사용하는 내부/보관 역할은 뒤에 선택한다.
+                pending = [role for role in action.roles if role.name != "provider"]
+                ordered = []
+                known = {"provider"}
+                while pending:
+                    ready = next(role for role in pending if role.scope == TargetScope.CURRENT or role.scope_from in known)
+                    pending.remove(ready)
+                    ordered.append(ready)
+                    known.add(ready.name)
+                for role in ordered:
                     if role.name == "provider":
                         continue
                     query = fields.get(role.name)
                     if role.name in variant.all_roles and query:
                         query += " 모두"
-                    roles[role.name] = select_role(caller, role, query)
+                    context = () if role.scope == TargetScope.CURRENT else roles.get(role.scope_from, ())
+                    key = (role, query, context)
+                    if key not in selections:
+                        selections[key] = select_role(caller, role, query, bindings=roles)
+                    roles[role.name] = selections[key]
                 if action.provider_from:
                     if reference not in roles[action.provider_from]:
                         continue

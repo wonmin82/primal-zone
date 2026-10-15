@@ -7,7 +7,7 @@ from types import MappingProxyType
 
 from world.targets import normalized
 
-from .schema import DefaultTargetPolicy, ReferenceKind
+from .schema import DefaultTargetPolicy, ReferenceKind, TargetScope
 from .synchronous import validate_handler
 
 
@@ -52,6 +52,8 @@ def _roles(roles):
         _require(isinstance(role.default, DefaultTargetPolicy) and type(role.required) is bool
                  and type(role.allow_all) is bool,
                  "역할 기본 선택 정책 오류")
+        _require(isinstance(role.scope, TargetScope) and type(role.scope_from) is str
+                 and role.scope_from.isidentifier(), "역할 Scope 선언 오류")
     return names
 
 
@@ -153,6 +155,18 @@ def compile_manifest(manifest, protected_names=()):
         reference(action.id, "verbs", action.verb_id)
         role_names = _roles(action.roles)
         _require("provider" in role_names, "Action Provider 역할 누락")
+        roles = {role.name: role for role in action.roles}
+        for role in action.roles:
+            if role.scope == TargetScope.CURRENT:
+                continue
+            _require(role.scope_from in role_names and role.scope_from != role.name,
+                     "역할 Scope 출처가 다른 기존 역할을 참조해야 합니다.")
+            visited, current = {role.name}, role
+            while current.scope != TargetScope.CURRENT:
+                _require(current.scope_from in roles and current.scope_from not in visited,
+                         "역할 Scope 출처 순환/누락")
+                visited.add(current.scope_from)
+                current = roles[current.scope_from]
         argument_names = _arguments(action.arguments)
         _require(not role_names & argument_names, "역할/인자 capture 중복")
         _require(action.provider_from is None or action.provider_from in role_names, "미존재 Provider 역할")
@@ -213,6 +227,10 @@ def compile_manifest(manifest, protected_names=()):
             _require(expected.name in roles, "Service 미존재 역할")
             _require(set(roles[expected.name].kinds) <= set(expected.kinds), "Service 역할 타입 불일치")
             _require(not expected.required or roles[expected.name].required, "Service 필수 역할 불일치")
+            if expected.scope != TargetScope.CURRENT:
+                actual = roles[expected.name]
+                _require((actual.scope, actual.scope_from) == (expected.scope, expected.scope_from),
+                         "Service 역할 Scope 불일치")
         try:
             config = dict(binding.config)
         except (TypeError, ValueError) as error:

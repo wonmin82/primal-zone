@@ -1,6 +1,7 @@
 """게임/DB 없이 선언·등록 실패와 불변성 경계를 확인한다."""
 
 from dataclasses import FrozenInstanceError, replace
+from functools import lru_cache, partial, wraps
 from unittest import TestCase
 
 from world.actions.registry import RegistryError, compile_manifest, validate_argument
@@ -17,6 +18,7 @@ from world.actions.schema import (
     ServiceDefinition,
     SyntaxVariant,
     TargetReference,
+    TargetScope,
     VerbDefinition,
 )
 
@@ -239,3 +241,127 @@ class ActionRegistryTests(TestCase):
         for callback in (None, asynchronous, generator):
             with self.subTest(callback=callback), self.assertRaises(RegistryError):
                 self.compile(replace(p, services=(replace(p.services[0], handler=callback),)))
+
+    def test_uninspectable_callable_handler_forms_are_rejected_before_execution(self):
+        from twisted.internet.task import Clock
+
+        clock = Clock()
+
+        class CallableService:
+            def __call__(self, context):
+                clock.callLater(0, lambda: None)
+                return context
+
+            def bound(self, context):
+                return context
+
+        value = CallableService()
+        p = package()
+        for callback in (value, value.bound, partial(handler), lru_cache()(handler), len):
+            with self.subTest(form=type(callback).__name__), self.assertRaises(RegistryError):
+                self.compile(replace(p, services=(replace(p.services[0], handler=callback),)))
+        self.assertEqual(clock.getDelayedCalls(), [])
+
+    def test_default_arguments_closures_and_wrapped_helpers_cannot_hide_pending_work(self):
+        from twisted.internet.task import Clock
+
+        clock = Clock()
+
+        def default_timer(context, timer=clock.callLater):
+            timer(0, lambda: None)
+            return context
+
+        def keyword_timer(context, *, timer=clock.callLater):
+            timer(0, lambda: None)
+            return context
+
+        async def asynchronous(context):
+            return context
+
+        def generator(context):
+            yield context
+
+        def default_async(context, callback=asynchronous):
+            return callback(context)
+
+        def keyword_generator(context, *, callback=generator):
+            return callback(context)
+
+        hidden = partial(default_timer)
+
+        def closure_wrapper(context):
+            return hidden(context)
+
+        @wraps(asynchronous)
+        def metadata_wrapper(context):
+            return context
+
+        p = package()
+        for callback in (default_timer, keyword_timer, default_async, keyword_generator,
+                         closure_wrapper, metadata_wrapper):
+            with self.subTest(handler=callback.__name__), self.assertRaises(RegistryError):
+                self.compile(replace(p, services=(replace(p.services[0], handler=callback),)))
+        self.assertEqual(clock.getDelayedCalls(), [])
+
+    def test_plain_synchronous_wrappers_and_defaults_remain_supported(self):
+        def helper(context, *, prefix="정상"):
+            return prefix + context
+
+        @wraps(helper)
+        def wrapped(context, callback=helper):
+            return callback(context)
+
+        p = package()
+        index = self.compile(replace(p, services=(replace(p.services[0], handler=wrapped),)))
+        self.assertEqual(index.services["fixture.service"].handler(" 실행"), "정상 실행")
+
+    def test_nested_function_and_container_defaults_cannot_hide_scheduling(self):
+        from twisted.internet.task import Clock
+
+        clock = Clock()
+
+        def nested(context):
+            def helper():
+                clock.callLater(0, lambda: None)
+            helper()
+            return context
+
+        def container(context, callbacks=(clock.callLater,)):
+            callbacks[0](0, lambda: None)
+            return context
+
+        p = package()
+        for callback in (nested, container):
+            with self.subTest(handler=callback.__name__), self.assertRaises(RegistryError):
+                self.compile(replace(p, services=(replace(p.services[0], handler=callback),)))
+        self.assertEqual(clock.getDelayedCalls(), [])
+
+    def test_scoped_roles_require_typed_scope_and_existing_acyclic_source(self):
+        p = package()
+        provider = p.actions[0].roles[0]
+        subject = RoleDefinition("subject", (ReferenceKind.ITEM,), scope=TargetScope.STORAGE)
+        action = replace(p.actions[0], roles=(provider, subject))
+        self.compile(replace(p, actions=(action,)))
+        for bad in (
+            replace(subject, scope="storage"), replace(subject, scope_from=None),
+            replace(subject, scope_from="missing"), replace(subject, scope_from="subject"),
+        ):
+            with self.subTest(role=bad), self.assertRaises(RegistryError):
+                self.compile(replace(p, actions=(replace(action, roles=(provider, bad)),)))
+        cyclic_provider = replace(provider, scope=TargetScope.INSIDE, scope_from="subject")
+        with self.assertRaises(RegistryError):
+            self.compile(replace(p, actions=(replace(action, roles=(cyclic_provider, subject)),)))
+
+    def test_explicit_service_scope_cannot_be_weakened_by_action_binding(self):
+        p = package()
+        provider = p.actions[0].roles[0]
+        subject = RoleDefinition("subject", (ReferenceKind.ITEM,), scope=TargetScope.STORAGE)
+        action = replace(p.actions[0], roles=(provider, subject))
+        service = replace(p.services[0], role_kinds=(provider, subject))
+        self.compile(replace(p, actions=(action,), services=(service,)))
+        for bad in (replace(subject, scope=TargetScope.CURRENT),
+                    replace(subject, scope=TargetScope.INSIDE)):
+            with self.subTest(role=bad), self.assertRaises(RegistryError):
+                self.compile(replace(p, actions=(replace(action, roles=(provider, bad)),), services=(service,)))
+        generic = replace(service, role_kinds=(provider, replace(subject, scope=TargetScope.CURRENT)))
+        self.compile(replace(p, actions=(action,), services=(generic,)))

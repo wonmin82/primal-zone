@@ -23,6 +23,12 @@ class DefaultTargetPolicy(StrEnum):
     ALL = "all"
 
 
+class TargetScope(StrEnum):
+    CURRENT = "current"
+    STORAGE = "storage"
+    INSIDE = "inside"
+
+
 def freeze(value):
     """콘텐츠 설정의 중첩 컨테이너도 외부 변경으로부터 분리한다."""
     if isinstance(value, dict):
@@ -54,6 +60,8 @@ class RoleDefinition:
     default: DefaultTargetPolicy = DefaultTargetPolicy.REQUIRE_UNIQUE
     required: bool = True
     allow_all: bool = False
+    scope: TargetScope = TargetScope.CURRENT
+    scope_from: str = "provider"
 
     def __post_init__(self):
         object.__setattr__(self, "kinds", tuple(self.kinds))

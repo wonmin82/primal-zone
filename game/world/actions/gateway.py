@@ -137,7 +137,7 @@ def _roles(caller, action, invocation):
         refs = bindings.get(name, ())
         if (role.required and not refs) or (not role.allow_all and role.default != DefaultTargetPolicy.ALL and len(refs) > 1) or len(refs) != len(set(refs)):
             raise rules.RuleError("행동 대상 수를 확인하세요.")
-        current = {record.reference for record in role_records(caller, role)}
+        current = {record.reference for record in role_records(caller, role, bindings)}
         if any(ref.kind not in role.kinds or ref not in current for ref in refs):
             raise rules.RuleError("원래 대상이 없어졌거나 위치·권한이 바뀌었습니다.")
         entities[name] = tuple(resolve_reference(ref) for ref in refs)

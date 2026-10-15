@@ -25,6 +25,178 @@ from tests.item_entity_fixture import NativeItemTest
 
 @override_settings(ACTION_CONTENT_PACKAGES=("world.actions.validation_content",))
 class ActionRuntimeTests(NativeItemTest):
+    def test_review_storage_is_not_a_generic_item_target(self):
+        from world.item_entities.api import create_item
+        stored = create_item("bandage", location_kind="personal_storage", owner_object=self.char1)
+        role = RoleDefinition("subject", (ReferenceKind.ITEM,), DefaultTargetPolicy.FIRST_LEGACY_ORDER)
+        with self.assertRaises(RuleError):
+            select_role(self.char1, role, "붕대")
+        owned = self.create("bandage")
+        self.assertEqual(select_role(self.char1, role, "붕대"), (descriptor(owned).reference,))
+        self.assertNotEqual(descriptor(stored).scope_id, descriptor(owned).scope_id)
+        stale = from_web({"action_id": "validation.item", "variant": "normal", "request_id": "remote-storage",
+                          "roles": {name: [reference_json(descriptor(stored).reference)]
+                                    for name in ("provider", "subject")}}, self.index)
+        self.assertEqual(execute(self.char1, self.session, stale, self.index).status, ResultStatus.REFUSED)
+        self.assertEqual(self.events(), [])
+
+    def test_review_storage_context_and_stale_web_access(self):
+        from typeclasses.interactables import Container, PersonalLocker
+        from world.actions.registry import compile_manifest
+        from world.actions.resolver import role_records
+        from world.actions.schema import ActionBinding, PackageManifest, SyntaxVariant, TargetScope
+        from world.actions.validation_content import PACKAGE
+        from world.item_entities.api import create_item
+
+        personal = create_object(PersonalLocker, key="개인 검증함", location=self.char1.location,
+                                 attributes=[("action_provider_id", "validation.instrument")])
+        shared = create_object(Container, key="공용 검증함", location=self.char1.location,
+                               attributes=[("action_provider_id", "validation.instrument")])
+        stored = create_item("bandage", location_kind="personal_storage", owner_object=self.char1)
+        public = create_item("bandage", location_kind="shared_storage", owner_object=shared)
+        other = create_item("bandage", location_kind="personal_storage", owner_object=self.char2)
+        equipped = create_item("test_pistol", location_kind="equipment", owner_object=self.char1, slot="hands")
+        role = RoleDefinition("subject", (ReferenceKind.ITEM,), scope=TargetScope.STORAGE)
+        action = replace(PACKAGE.actions[3], id="validation.storage", provider_from=None,
+                         roles=(PACKAGE.actions[1].roles[0], role),
+                         variants=(SyntaxVariant("normal", r"(?P<subject>.+)에서 (?P<provider>.+)"),))
+        package = replace(PACKAGE, actions=(*PACKAGE.actions, action), bindings=(*PACKAGE.bindings,
+                          ActionBinding("validation.storage.binding", "validation.instrument", action.id, "validation.item_service")),
+                          services=tuple(replace(s, role_kinds=()) if s.id == "validation.item_service" else s for s in PACKAGE.services))
+        index = compile_manifest(PackageManifest((package,)))
+        refs = {"provider": (descriptor(personal).reference,)}
+        self.assertEqual([r.reference for r in role_records(self.char1, role, refs)], [descriptor(stored).reference])
+        self.assertNotIn(descriptor(other).reference, [r.reference for r in role_records(self.char1, role, refs)])
+        generic = RoleDefinition("subject", (ReferenceKind.ITEM,))
+        self.assertIn(descriptor(equipped).reference, [r.reference for r in role_records(self.char1, generic)])
+        text = dispatch_text(self.char1, index, action.verb_id, "붕대에서 개인 검증함", "검측")
+        invocation = from_web({"action_id": action.id, "variant": "normal", "request_id": "storage-review",
+                               "roles": {"provider": [reference_json(refs["provider"][0])],
+                                         "subject": [reference_json(descriptor(stored).reference)]}}, index)
+        self.assertEqual(dict(text.roles), dict(invocation.roles))
+        self.assertEqual(execute(self.char1, self.session, invocation, index).status, ResultStatus.SUCCESS)
+        self.assertEqual(self.events()[-1]["roles"]["subject"], [str(stored.pk)])
+        for denied in ("call:false()", "view:false()"):
+            personal.locks.add(denied)
+            before = len(self.events())
+            self.assertEqual(execute(self.char1, self.session, invocation, index).status, ResultStatus.REFUSED)
+            self.assertEqual(len(self.events()), before)
+            personal.locks.add("call:true();view:true()")
+        personal.location = self.room2
+        with self.assertRaises(RuleError):
+            select_role(self.char1, role, "붕대", bindings=refs)
+        self.assertEqual(execute(self.char1, self.session, invocation, index).status, ResultStatus.REFUSED)
+        refs = {"provider": (descriptor(shared).reference,)}
+        self.assertEqual(select_role(self.char1, role, "붕대", bindings=refs), (descriptor(public).reference,))
+        shared.locks.add("call:false()")
+        with self.assertRaises(RuleError):
+            select_role(self.char1, role, "붕대", bindings=refs)
+
+    def test_review_number_labels_do_not_depend_on_action_availability(self):
+        first, second = self.instrument(), self.instrument()
+        second.db.action_available = False
+        rows = [row for row in action_controls(self.char1, self.index)
+                if row["action"]["action_id"] == "validation.object"]
+        self.assertEqual(rows[0]["label"], "검증기 1 검측")
+        self.assertEqual(rows[0]["action"]["roles"]["provider"][0]["identity"], str(first.pk))
+
+    def test_review_inside_context_rejects_siblings_and_stale_parent(self):
+        from world.actions.registry import compile_manifest
+        from world.actions.resolver import provided
+        from world.actions.schema import ActionBinding, PackageManifest, TargetScope, VerbDefinition
+        from world.actions.validation_content import PACKAGE
+        from world.item_entities.api import create_item, move_item
+
+        first, second = self.create("bandage"), self.create("bandage")
+        child = create_item("bandage", location_kind="inside", parent_item=first, socket="supplies")
+        sibling = create_item("bandage", location_kind="inside", parent_item=second, socket="supplies")
+        role = RoleDefinition("subject", (ReferenceKind.ITEM,), scope=TargetScope.INSIDE)
+        action = replace(PACKAGE.actions[3], id="validation.inside", verb_id="validation.inside_verb", provider_from=None,
+                         roles=(PACKAGE.actions[3].roles[0], role))
+        package = replace(PACKAGE, verbs=(*PACKAGE.verbs, VerbDefinition("validation.inside_verb", "내부검측")),
+                          actions=(*PACKAGE.actions, action), bindings=(*PACKAGE.bindings,
+                          ActionBinding("validation.inside.binding", "item.bandage", action.id, "validation.item_service")))
+        index = compile_manifest(PackageManifest((package,)))
+        refs = {"provider": (descriptor(first).reference,)}
+        self.assertEqual(select_role(self.char1, role, "붕대", bindings=refs), (descriptor(child).reference,))
+        self.assertNotIn(descriptor(child).reference, {ref for ref, _ in provided(self.char1, index)})
+        payload = {"action_id": action.id, "variant": "normal", "request_id": "inside-review",
+                   "roles": {"provider": [reference_json(refs["provider"][0])],
+                             "subject": [reference_json(descriptor(child).reference)]}}
+        invocation = from_web(payload, index)
+        self.assertEqual(execute(self.char1, self.session, invocation, index).status, ResultStatus.SUCCESS)
+        self.assertEqual(self.events()[-1]["roles"]["subject"], [str(child.pk)])
+        payload["roles"]["subject"] = [reference_json(descriptor(sibling).reference)]
+        self.assertEqual(execute(self.char1, self.session, from_web(payload, index), index).status, ResultStatus.REFUSED)
+        move_item(child, location_kind="inside", parent_item=second, socket="other")
+        self.assertEqual(execute(self.char1, self.session, invocation, index).status, ResultStatus.REFUSED)
+        self.assertEqual(len(self.events()), 1)
+
+    def test_review_queries_ignore_unrelated_world_growth(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        from world.actions.resolver import provided
+        from world.item_entities.api import create_item
+        from world.selection_numbers import api
+
+        for _ in range(8):
+            self.instrument()
+        self.create("bandage")
+
+        def observe():
+            with patch.object(api, "_entity", wraps=api._entity) as entities:
+                with CaptureQueriesContext(connection) as queries:
+                    provided(self.char1, self.index)
+                    refresh(self.char1)
+                    action_controls(self.char1, self.index)
+                return len(queries), {str(call.args[1]) for call in entities.call_args_list}, [q["sql"] for q in queries]
+
+        observe()  # 실제 Evennia Attribute/CmdSet의 초기 읽기만 준비한다.
+        before, _, _ = observe()
+        unrelated = set()
+        from evennia.objects.objects import DefaultRoom
+        rooms = [create_object(DefaultRoom, key=f"격리 성능 방 {i}") for i in range(4)]
+        for i in range(40):
+            unrelated.add(str(self.instrument(room=rooms[i % len(rooms)]).pk))
+            unrelated.add(str(create_item("bandage", location_kind="inventory", owner_object=self.char2).pk))
+        after, touched, sql = observe()
+        self.assertFalse(unrelated.intersection(touched))
+        self.assertLessEqual(after, before + 2)
+        numbered = [q for q in sql if "selection_numbers_selectionnumber" in q and q.lstrip().startswith("SELECT")]
+        self.assertTrue(numbered)
+        self.assertTrue(all("scope_id" in q and " WHERE " in q for q in numbered))
+        print(f"Scope query growth: unrelated=80, before={before}, after={after}, unrelated_resolved=0")
+
+    def test_review_fixed_labels_hidden_members_holes_and_reset(self):
+        from dataclasses import replace
+
+        from world.selection_numbers.api import label, records_for
+        first, second = self.instrument(), self.instrument()
+
+        def check(expected):
+            rows = [r for r in action_controls(self.char1, self.index) if r["action"]["action_id"] == "validation.object"]
+            self.assertEqual([r["label"] for r in rows], expected)
+            visible = {r.reference: label(r) for r in records_for(self.char1, ReferenceKind.OBJECT)}
+            for row in rows:
+                payload = row["action"]["roles"]["provider"][0]
+                ref = next(r for r in visible if r.identity == payload["identity"])
+                self.assertEqual(row["label"], visible[ref] + " 검측")
+
+        check(["검증기 1 검측", "검증기 2 검측"])
+        first.db.action_available = False
+        check(["검증기 2 검측"])
+        first.db.action_available = True
+        second.locks.add("view:false()")
+        check(["검증기 1 검측"])
+        self.assertNotIn(str(second.pk), str([r["action"]["roles"] for r in action_controls(self.char1, self.index)]))
+        second.locks.add("view:true()")
+        first.delete()
+        check(["검증기 2 검측"])
+        second.delete()
+        fresh = self.instrument()
+        check(["검증기 1 검측"])
+        self.assertEqual(label(replace(descriptor(fresh), number=1)), "검증기 1")
+
     def test_item_number_quantity_syntax_and_shortage_never_replace_default(self):
         a, b = self.create("bandage", quantity=2), self.create("bandage", quantity=5)
         self.raw("붕대 2개 검측")
@@ -533,17 +705,29 @@ class ActionRuntimeTests(NativeItemTest):
             compile_manifest(PackageManifest((alternate(indirectly_delayed),)))
         self.assertEqual(clock.getDelayedCalls(), [])
         self.assertEqual(calls, [])
-        pending = [Deferred()]
+        from types import SimpleNamespace
+        pending = SimpleNamespace(result=Deferred())
 
         def unfinished(context):
             record(context, "unfinished")
-            return pending[0]
+            return pending.result
 
         index = compile_manifest(PackageManifest((alternate(unfinished),)))
         invocation = from_web(self.payload(), index)
         self.assertEqual(execute(self.char1, self.session, invocation, index).status, ResultStatus.REFUSED)
-        self.assertFalse(pending[0].called)
+        self.assertFalse(pending.result.called)
         self.assertEqual(self.events(), [])
+        self.output.assert_not_called()
+        self.prompt.assert_not_called()
+        self.char1.push_state.reset_mock()
+        payload = self.payload(request_id="unfinished-result")
+        with patch("world.actions.manifest.get_index", return_value=index):
+            pz_action(self.session, payload)
+        self.assertEqual(self.events(), [])
+        self.char1.push_state.assert_not_called()
+        self.prompt.assert_called_once()
+        self.assertEqual(sum(getattr(call.args[0], "kind", None) == "prompt"
+                             for call in self.output.call_args_list if call.args), 1)
 
     def test_private_help_controls_and_guessing_do_not_disclose_or_create_effects(self):
         from world.actions.registry import compile_manifest

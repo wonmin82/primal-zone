@@ -126,3 +126,10 @@ Baseline은 `tests/base.py`의 실제 GameCommandTest/WorldCommandTest, `item_en
 콘텐츠 모듈은 공개 Verb/Role/Variant/Binding/Service를 선언하고 같은 Gateway에 연결한다. 전환하는 전역 동사를 기존 Command 등록에서 함께 제거해야 protected-name 충돌과 중복 실행이 없다. 신규 scope/group은 #44 §4.2를 따른다. Service가 native 도메인 API를 호출할 때 비용·수량·전투·Loot 보호를 바꾸지 말고 해당 baseline을 재검증한다. 기존 `web_actions`/Help/act 분기는 기능별 이전 완료 시 제거한다.
 
 Phase 1 검증은 `test_action_registry`, `test_action_runtime`, `test_selection_numbers`, Node 실제 client 계약과 `scripts/action_e2e.py`가 소유한다. 실제 Portal/Server·인증 WebSocket에서 텍스트/구조화 요청·서버 토큰·재전송·재시작 안정 참조를 확인한다. 실행 결과·SHA·CI URL은 구현 PR의 Validation에 기록한다. 전체 기능 이전, 실제 브라우저 수동 조작·Windows 한글 IME·운영 DB backfill·전 기능 38개 교차 검증은 이번 PASS에 포함하지 않는다.
+
+## PR #69 리뷰 보완 계약
+
+- P1-1: Service entry는 일반 Python 함수만 허용한다. Callable 인스턴스, bound method, partial, C/builtin wrapper는 등록 시 거절한다. 일반 함수 wrapper는 실제 본문과 `__wrapped__`, 참조한 Python helper·closure·기본 인자·중첩 code의 확인 가능한 비동기/예약 실행을 검사한다. Registry는 선언 검증, Gateway는 실행 직전 동일 검증과 실제 ActionResult 반환·트랜잭션 Rollback을 담당한다. 임의 객체 attribute/동적 lookup까지 정적 분석으로 증명하지 않으며 Manifest는 신뢰된 코드다.
+- P1-2: `RoleDefinition.scope`의 기본 `TargetScope.CURRENT`는 현재 Room과 직접 소지·장착 Root ItemEntity를 사용한다. 보관품은 기본 Item 대상에 포함하지 않는다. `STORAGE`는 `scope_from` 역할의 실제 Container를 통해 개인 `personal_storage:<caller>` 또는 공용 `shared_storage:<container>` 범위만 조회한다. 위치·시야·view/call 권한을 텍스트 선택과 실행 직전 Gateway에서 똑같이 확인한다. 실제 이동·비용·전투 등은 기존 도메인 Service가 재검증한다. `INSIDE`는 현재 소유 Root에 연결된 명시 부모 UUID 범위만 조회하며 내부 아이템의 독립 Provider 금지는 유지한다.
+- P2-1: `records_for`는 현재 논리 Scope 집합을 SQL의 Scope 조건으로 제한한다. 현재 Room의 시체/Loot 범위는 해당 Role이 필요한 경우에만 추가하며 보관/내부 Scope는 명시 Role 문맥으로만 연다. 텍스트 실행의 동일 Role/query 선택은 그 호출 안에서만 재사용한다. 실행 간 대상·권한 Cache는 없다. 다른 4개 Room의 Provider 40개와 다른 캐릭터 아이템 40개를 추가한 뒤 provided/CmdSet/controls SQL 수와 실제 참조 접근 수가 증가하지 않는 회귀 검사를 둔다.
+- P2-2: 공통 `label`은 번호가 있는 객체의 1번도 항상 표시한다. D안의 번호 생략은 선택 사항이며, 이 구현은 생략하지 않아 Action 제공/잠김/숨김 상태가 다른 객체의 label을 바꾸거나 숨은 그룹원 존재를 암시하지 않게 한다. 고정 번호 SSOT만 읽고 버튼 payload의 안정 ID는 그대로 유지한다. 번호 2만 남음·전체 소멸 후 1·숨김·제공 상태 변경과 텍스트/웹 label 일치를 검증한다.

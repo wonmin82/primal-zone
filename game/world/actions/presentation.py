@@ -1,7 +1,5 @@
 """공통 선언의 순수 Help/웹 표현. 번호 할당·게임 효과·확정 토큰 발급을 하지 않는다."""
 
-from collections import Counter
-
 from world.actions.resolver import provided
 from world.selection_numbers.api import descriptor, label, number_for, resolve_reference
 
@@ -24,7 +22,6 @@ def action_controls(caller, index):
 
     pairs = provided(caller, index)
     records = {ref: descriptor(resolve_reference(ref)) for ref, _ in pairs}
-    counts = Counter((record.scope_id, record.group_id) for record in records.values() if record)
     controls = []
     for reference, binding in pairs:
         action = index.actions[binding.action_id]
@@ -37,7 +34,7 @@ def action_controls(caller, index):
         if any(arg.required and arg.name not in arguments for arg in action.arguments):
             continue
         record = records[reference]
-        target = label(replace(record, number=number_for(reference)), counts[(record.scope_id, record.group_id)]) if record else "대상"
+        target = label(replace(record, number=number_for(reference))) if record else "대상"
         for variant in action.variants:
             # 확인은 먼저 서버의 정상 요청이 발급한 토큰으로만 한다.
             if variant.confirmation_required:
