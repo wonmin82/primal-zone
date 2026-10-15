@@ -3,7 +3,7 @@
 import re
 from dataclasses import dataclass
 
-from world.actions.registry import RegistryError, validate_argument
+from world.actions.registry import RegistryError, normal_all_guards, validate_argument
 from world.actions.schema import DefaultTargetPolicy, ReferenceKind, TargetReference, TargetScope
 from world.rules import RuleError
 from world.targets import Mode, normalized, parse_selector
@@ -210,6 +210,11 @@ def dispatch_text(caller, index, verb_id, args, command_name):
             if not match:
                 continue
             fields = match.groupdict()
+            # 정적으로 검증한 normal/all 쌍의 예약 접두어는 별칭 조회보다 먼저 검사한다.
+            # 선언 순서가 아니라 서로 배타적인 입력 계약이며 일반 Role 선택 순서는 유지한다.
+            if any(fields.get(role) is not None and fields[role].startswith(prefix)
+                   for role, prefix in normal_all_guards(action, variant)):
+                continue
             roles = {"provider": (reference,)}
             try:
                 # 현재 Scope 역할을 먼저, 그 안정 참조를 사용하는 내부/보관 역할은 뒤에 선택한다.

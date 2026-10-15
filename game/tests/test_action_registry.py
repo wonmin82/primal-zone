@@ -4,7 +4,12 @@ from dataclasses import FrozenInstanceError, replace
 from functools import lru_cache, partial, wraps
 from unittest import TestCase
 
-from world.actions.registry import RegistryError, compile_manifest, validate_argument
+from world.actions.registry import (
+    RegistryError,
+    compile_manifest,
+    normal_all_guards,
+    validate_argument,
+)
 from world.actions.schema import (
     ActionBinding,
     ActionDefinition,
@@ -58,6 +63,137 @@ class ActionRegistryTests(TestCase):
         p = self.paired_patterns(r"(?P<provider>.+)", r"(?P<provider>[가-힣]+)")
         with self.assertRaises(RegistryError):
             self.compile(p)
+
+    def test_same_action_different_variant_languages_are_checked_for_overlap(self):
+        p = package()
+        for left, right in (
+            (r".+", r".+"),
+            (r".+", r"[가-힣]+"),
+            (r"\d+", r"[0-9]+"),
+            (r".+", r"검증기"),
+            (r"검증기", r"검증기"),
+            (r"검증기+", r"검증기{1,3}"),
+        ):
+            action = replace(p.actions[0], variants=(
+                SyntaxVariant("broad", f"(?P<provider>{left})"),
+                SyntaxVariant("narrow", f"(?P<provider>{right})"),
+            ))
+            with self.subTest(left=left, right=right), self.assertRaises(RegistryError):
+                self.compile(replace(p, actions=(action,)))
+        # Provider 선언을 유지한 같은 Action에서 capture 이름만 바꾸어도 구분되지 않는다.
+        subject = RoleDefinition("subject", (ReferenceKind.OBJECT,),
+                                 default=DefaultTargetPolicy.FIRST_LEGACY_ORDER, required=False)
+        action = replace(p.actions[0], roles=(*p.actions[0].roles, subject), variants=(
+            SyntaxVariant("provider-name", r"(?P<provider>.+)"),
+            SyntaxVariant("subject-name", r"(?P<subject>.+)"),
+        ))
+        with self.assertRaises(RegistryError):
+            self.compile(replace(p, actions=(action,)))
+
+    def all_pattern_package(self, normal=r"(?P<source>.+)에서 (?P<provider>.+)"):
+        p = package()
+        source = RoleDefinition("source", (ReferenceKind.CORPSE,), allow_all=True)
+        action = replace(p.actions[0], roles=(*p.actions[0].roles, source), variants=(
+            SyntaxVariant("ordinary-arbitrary-id", normal),
+            SyntaxVariant("collect-arbitrary-id", "모든 " + normal, all_roles=("source",)),
+        ))
+        return replace(p, actions=(action,))
+
+    def test_same_action_supported_disjoint_variants_and_explicit_suffix_remain_valid(self):
+        p = package()
+        for variants in (
+            (SyntaxVariant("first", r"(?P<provider>사과)"),
+             SyntaxVariant("second", r"(?P<provider>바나나)")),
+            (SyntaxVariant("first", r"(?P<provider>[가-힣]+)"),
+             SyntaxVariant("second", r"(?P<provider>[0-9]+)")),
+            (SyntaxVariant("first", r"(?P<provider>.+)"),
+             SyntaxVariant("second", r"(?P<provider>.+)", "확정", True)),
+        ):
+            self.compile(replace(p, actions=(replace(p.actions[0], variants=variants),)))
+
+    def test_same_action_unknown_and_casefold_suffix_conflicts_have_pair_diagnostics(self):
+        p = package()
+        for pattern, suffixes, reason in (
+            (r"(?P<provider>.+)", ("CHECK", "check"), "OVERLAP"),
+            (r"(?P<provider>(?=가).+)", ("", ""), "UNKNOWN"),
+            (r"(?P<provider>.+)(?P=provider)", ("", ""), "UNKNOWN"),
+            (r"(?i:(?P<provider>.+))", ("", ""), "UNKNOWN"),
+        ):
+            action = replace(p.actions[0], variants=(SyntaxVariant("one", pattern, suffixes[0]),
+                                                    SyntaxVariant("two", pattern, suffixes[1])))
+            with self.subTest(pattern=pattern), self.assertRaises(RegistryError) as failure:
+                self.compile(replace(p, actions=(action,)))
+            message = str(failure.exception)
+            for value in ("Verb=fixture.verb", "Provider=fixture.provider",
+                          "Action=fixture.action/fixture.action", "Variant=one/two", reason):
+                self.assertIn(value, message)
+
+    def test_variant_metadata_is_validated_before_language_pairs(self):
+        p = package()
+        first = SyntaxVariant("first", r"(?P<provider>.+)")
+        for second, reason in (
+            (replace(first, pattern=r"(?P<provider>[가-힣]+)"), "Variant ID"),
+            (SyntaxVariant("second", "("), "문법 정규식 오류"),
+            (SyntaxVariant("second", 1), "문법 정규식은 문자열"),
+        ):
+            with self.subTest(variant=second), self.assertRaisesRegex(RegistryError, reason):
+                self.compile(replace(p, actions=(replace(p.actions[0], variants=(first, second)),)))
+
+    def test_normal_all_contract_uses_proven_ast_and_shared_runtime_guard(self):
+        p = self.all_pattern_package()
+        self.compile(p)
+        action = p.actions[0]
+        self.assertEqual(normal_all_guards(action, action.variants[0]), (("source", "모든 "),))
+        self.assertEqual(normal_all_guards(action, action.variants[1]), ())
+        # 자기 Provider도 source 역할은 별도로 선언하므로 같은 증명을 재사용한다.
+        self.compile(replace(p, actions=(replace(action, provider_from="source"),)))
+
+    def test_normal_all_contract_rejects_unsafe_capture_splits_and_unknown_patterns(self):
+        cases = (
+            r"(?P<source>[가-힣]+) (?P<provider>.+)",
+            r"(?P<source>.+?) (?P<provider>.+)",
+            r"(?P<source>.*) (?P<provider>.+)",
+            r"(?P<provider>.+) (?P<source>.+)",
+            r"(?P<source>.+)? (?P<provider>.+)",
+            r"(?P<source>(?=가).+) (?P<provider>.+)",
+            r"(?i:(?P<source>.+) (?P<provider>.+))",
+        )
+        for pattern in cases:
+            p = self.all_pattern_package(pattern)
+            action = p.actions[0]
+            with self.subTest(pattern=pattern):
+                self.assertEqual(normal_all_guards(action, action.variants[0]), ())
+                with self.assertRaises(RegistryError):
+                    self.compile(p)
+
+    def test_normal_all_contract_cannot_escape_declaration_or_cross_action_boundaries(self):
+        p = self.all_pattern_package()
+        action = p.actions[0]
+        ordinary, collective = action.variants
+        for changed in (
+            replace(collective, all_roles=()),
+            replace(collective, confirmation_required=True),
+            replace(collective, pattern=collective.pattern + " 추가"),
+        ):
+            with self.subTest(variant=changed), self.assertRaises(RegistryError):
+                self.compile(replace(p, actions=(replace(action, variants=(ordinary, changed)),)))
+        second = replace(action, id="fixture.other_action", variants=(collective,))
+        binding = replace(p.bindings[0], id="fixture.other_binding", action_id=second.id)
+        with self.assertRaises(RegistryError):
+            self.compile(replace(p, actions=(replace(action, variants=(ordinary,)), second),
+                                 bindings=(*p.bindings, binding)))
+        provider = replace(p.actions[0].roles[0], allow_all=True)
+        provider_action = replace(action, roles=(provider,), variants=(
+            SyntaxVariant("ordinary", r"(?P<provider>.+)"),
+            SyntaxVariant("collective", r"모든 (?P<provider>.+)", all_roles=("provider",)),
+        ))
+        with self.assertRaises(RegistryError):
+            self.compile(replace(p, actions=(provider_action,)))
+        # 양쪽 접미어가 정상이어도 확인 정책이 다르면 예약 prefix 계약을 공유하지 않는다.
+        variants = (replace(ordinary, suffix="확정"),
+                    replace(collective, suffix="확정", confirmation_required=True))
+        with self.assertRaises(RegistryError):
+            self.compile(replace(p, actions=(replace(action, variants=variants),)))
 
     def test_different_capture_positions_do_not_prove_type_disjointness(self):
         provider = RoleDefinition("provider", (ReferenceKind.OBJECT,))

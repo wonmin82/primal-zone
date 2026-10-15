@@ -147,3 +147,13 @@ Phase 1 검증은 `test_action_registry`, `test_action_runtime`, `test_selection
 등록 중 Service·게임 상태 변경 없음, 구별된 리터럴의 실제 Service 실행, `검증기 1 검측`의 복수 해석 거절과 기존 수량/확정 실행을 회귀 검증한다. B-1, TargetResolver, Dynamic CmdSet, Gateway 및 프로덕션 콘텐츠는 변경하지 않는다.
 
 관련 보관품 회귀 Fixture도 기존 일반 검측과 동일 Provider·Verb의 중첩 선언이므로 테스트 전용 `보관검측` Verb로 명시 구분했다. 권한·소유 Scope·오래된 웹 요청·대체 금지 assertions는 그대로이며, 운영 콘텐츠나 전환 범위의 변경은 아니다.
+
+## PR #69 동일 Action 내부 Variant 검증
+
+동일 Action의 Variant 쌍과 서로 다른 Action의 Binding 쌍은 공통 `_check_pair()`에서 공개 Verb·casefold 접미어·`compare_patterns()` 결과를 검증한다. ID 중복은 먼저 검사하며, 문자열 signature만으로 모호성을 판단하지 않는다. DISJOINT는 허용하고, 구분 근거가 없는 OVERLAP/UNKNOWN은 Action·Verb·Variant ID와 구문 수정 안내를 포함한 RegistryError로 거절한다. Variant ID·선언 순서·확인 flag 차이만으로 허용하지 않는다.
+
+기존 Source normal/all의 허용 근거는 제한된 동일 AST 계약이다. normal은 입력 맨 앞의 해당 Role을 greedy `.+`로 capture하고, all은 그 동일한 전체 AST 앞에 literal `모든 `만 추가하며 해당 단일 Role을 all_roles에 명시한다. Role은 provider가 아니고 전체 선택을 지원해야 하며, 두 Variant의 suffix와 confirmation_required는 같아야 한다. 지원하지 않는 정규식, capture 위치 변경, class/lazy/optional·빈 capture, 다른 argument 구조 또는 모든 all_roles에 대한 일괄 예외는 허용하지 않는다. 이 증명은 같은 Action에만 적용한다.
+
+normal/all은 정규식 언어상 OVERLAP이다. 공통 `normal_all_guards()`가 반환한 예약 접두어 계약을 Dispatcher가 같은 normal Role의 원문 query에 적용하고, 이름/별칭 조회 전에 `모든 `으로 시작하는 후보를 거절한다. 따라서 실제 별칭이 `모든 시체`여도 두 Invocation이 동시에 생기지 않는다. 선두 greedy `.+`는 all이 매칭한 Source 앞에 prefix를 붙인 길이보다 짧게 선택되지 않으므로 이 guard의 적용을 정적으로 보장할 수 있다. Variant 우선순위나 다른 Variant로의 재할당이 아니다. 일반 TargetResolver의 이름·번호·기본 대상 선택과 Gateway·웹 Protocol은 그대로다.
+
+기존 validation_content.PACKAGE 선언과 `시체에서 검증기 채록`, `모든 시체에서 검증기 채록`, `시체에서 채록`, `모든 시체에서 채록`, `검증기 검측`/`검증기 검측 확정`을 보존한다. 시체 1개/여러 개·없음·권한 거절·prefix 별칭과 손상된 Index의 런타임 모호성을 검사하고 Variant/Action/Service·안정 ID·효과 1회/0회·Prompt를 검증한다. 정적 정의 검사의 bounded cache만 재사용하며 게임 객체·Scope·권한 결과는 캐시하지 않는다. 등록 검사와 별도로 런타임 복수 Invocation 거절도 유지한다.

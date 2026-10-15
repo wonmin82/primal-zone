@@ -25,6 +25,100 @@ from tests.item_entity_fixture import NativeItemTest
 
 @override_settings(ACTION_CONTENT_PACKAGES=("world.actions.validation_content",))
 class ActionRuntimeTests(NativeItemTest):
+    def test_intra_action_overlap_is_rejected_before_service_or_db_changes(self):
+        from world.actions.registry import RegistryError, compile_manifest
+        from world.actions.schema import PackageManifest, SyntaxVariant
+        from world.actions.validation_content import PACKAGE
+
+        self.instrument()
+        invalid = replace(PACKAGE.actions[1], variants=(SyntaxVariant("general", r"(?P<provider>.+)"),
+                                                       SyntaxVariant("korean", r"(?P<provider>[가-힣]+)")))
+        package = replace(PACKAGE, actions=tuple(invalid if a.id == invalid.id else a for a in PACKAGE.actions))
+        before = list(SelectionNumber.objects.values()), self.events()
+        with self.assertRaises(RegistryError):
+            compile_manifest(PackageManifest((package,)))
+        self.assertEqual((list(SelectionNumber.objects.values()), self.events()), before)
+
+    def test_source_normal_all_variants_execute_once_with_stable_roles(self):
+        from world.actions.gateway import ExecutionContext
+
+        station = self.instrument()
+        for count in (1, 3):
+            corpses = [self.corpse() for _ in range(count)]
+            for external in (True, False):
+                for all_sources in (False, True):
+                    command = ("모든 " if all_sources else "") + "시체에서" + (" 검증기" if external else "") + " 채록"
+                    invocation = dispatch_text(self.char1, self.index, "validation.sources", command.rsplit(" ", 1)[0], "채록")
+                    self.assertEqual(invocation.action_id, "validation.external_sources" if external else "validation.self_sources")
+                    self.assertEqual(invocation.variant_id, "all" if all_sources else "normal")
+                    before = len(self.events())
+                    # 실제 Context 생성/Service는 그대로 실행하고 Binding 식별자만 관측한다.
+                    with patch("world.actions.gateway.ExecutionContext", wraps=ExecutionContext) as contexts:
+                        self.raw(command)
+                    contexts.assert_called_once()
+                    service_id = "validation.external_source_service" if external else "validation.self_source_service"
+                    self.assertEqual(contexts.call_args.args[3].service_id, service_id)
+                    self.assertEqual(len(self.events()), before + 1, command)
+                    event = self.events()[-1]
+                    sources = corpses if all_sources else corpses[:1]
+                    ids = [str(obj.pk) for obj in sources]
+                    self.assertEqual(event["variant"], "all" if all_sources else "normal")
+                    self.assertEqual(event["service"], "sources")
+                    self.assertEqual(event["roles"]["source"], ids)
+                    self.assertEqual(event["roles"]["provider"], [str(station.pk)] if external else ids)
+                    self.assertEqual(dict(invocation.roles)["source"], tuple(descriptor(source).reference for source in sources))
+                    self.assertEqual(event["quantity"], len(ids))
+            for corpse in corpses:
+                corpse.delete()
+
+    def test_source_variants_reject_missing_or_denied_without_effects(self):
+        station = self.instrument()
+        for command in ("시체에서 검증기 채록", "모든 시체에서 검증기 채록", "시체에서 채록", "모든 시체에서 채록"):
+            self.raw(command)
+            self.assertEqual(self.events(), [])
+        corpse = self.corpse()
+        station.locks.add("call:false()")
+        corpse.locks.add("call:false()")
+        for command in ("시체에서 검증기 채록", "모든 시체에서 검증기 채록", "시체에서 채록", "모든 시체에서 채록"):
+            self.raw(command)
+            self.assertEqual(self.events(), [])
+
+    def test_all_prefix_alias_cannot_create_a_second_normal_invocation(self):
+        self.instrument()
+        corpse = self.corpse()
+        corpse.aliases.add("모든 시체")
+        for command in ("모든 시체에서 검증기 채록", "모든 시체에서 채록"):
+            before = len(self.events())
+            self.raw(command)
+            self.assertEqual(len(self.events()), before + 1)
+            self.assertEqual(self.events()[-1]["variant"], "all")
+            self.assertEqual(self.events()[-1]["roles"]["source"], [str(corpse.pk)])
+
+    def test_runtime_rejects_ambiguous_variants_even_if_index_is_corrupted(self):
+        from types import MappingProxyType
+
+        from world.actions.schema import SyntaxVariant
+
+        self.instrument()
+        # 등록을 우회하는 운영 API가 아니라 손상된 Index에 대한 방어를 시험한다.
+        action = replace(self.index.actions["validation.object"], variants=(
+            SyntaxVariant("general", r"(?P<provider>.+)"), SyntaxVariant("korean", r"(?P<provider>[가-힣]+)")))
+        index = replace(self.index, actions=MappingProxyType({**self.index.actions, action.id: action}))
+        with patch("commands.action_command.get_index", return_value=index):
+            self.raw("검증기 검측")
+        self.assertEqual(self.events(), [])
+        self.assertIn("명확하게", " ".join(str(call.args[0]) for call in self.output.call_args_list if call.args))
+
+    def test_normal_confirmed_text_variants_preserve_confirmation_and_single_effect(self):
+        obj = self.instrument()
+        self.raw("검증기 검측")
+        self.assertEqual(self.events(), [])
+        self.raw("검증기 검측 확정")
+        self.assertEqual(len(self.events()), 1)
+        self.assertEqual(self.events()[0]["variant"], "confirmed")
+        self.assertEqual(self.events()[0]["service"], "object")
+        self.assertEqual(self.events()[0]["roles"]["provider"], [str(obj.pk)])
+
     def test_regex_distinct_literals_execute_the_declared_service(self):
         from world.actions.registry import compile_manifest
         from world.actions.schema import (

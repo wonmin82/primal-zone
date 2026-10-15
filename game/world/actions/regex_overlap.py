@@ -261,3 +261,57 @@ def explicit_argument_extension(base, extended, argument_name):
         return True
     except (Unsupported, PatternError, ValueError, OverflowError, RecursionError):
         return False
+
+
+def _canonical(tokens):
+    result = []
+    for op, data in tokens:
+        if op == C.SUBPATTERN:
+            group, add, remove, body = data
+            data = (group, add, remove, _canonical(body))
+        elif op in (C.MAX_REPEAT, C.MIN_REPEAT):
+            data = (*data[:2], _canonical(data[2]))
+        elif op == C.BRANCH:
+            data = tuple(_canonical(branch) for branch in data[1])
+        elif op == C.IN:
+            data = tuple(data)
+        result.append((op, data))
+    return tuple(result)
+
+
+ALL_PREFIX = "모든 "
+
+
+@lru_cache(maxsize=256)
+def literal_role_prefix(normal, all_pattern, role_name):
+    """선두 greedy .+ Role 앞에만 literal '모든 '이 추가된 동일 AST를 증명한다.
+
+언어 비중첩 증명은 아니다. 정상 경로는 prefix로 시작하는 Role query를 예약 구문으로
+거절해야 한다. 앞선 greedy capture가 prefix를 흡수할 수 있는 구조는 지원하지 않는다.
+"""
+    try:
+        a, normal_tokens = _tree(normal)
+        b, all_tokens = _tree(all_pattern)
+        if a.state.flags != b.state.flags or a.state.groupdict != b.state.groupdict or role_name not in a.state.groupdict:
+            return False
+        # 지원하지 않는 AST/flags/크기 제한을 normal/all 예외로 우회하지 않는다.
+        _NFA().sequence(normal_tokens, a.state.flags)
+        _NFA().sequence(all_tokens, b.state.flags)
+        if not normal_tokens or normal_tokens[0][0] != C.SUBPATTERN:
+            return False
+        group, add, remove, body = normal_tokens[0][1]
+        if group != a.state.groupdict[role_name] or add or remove:
+            return False
+        # 더 짧게 자를 수 있는 class/lazy capture는 뒤 Provider가 prefix를 흡수할 수 있다.
+        # 같은 나머지 AST를 매칭할 때 greedy .+는 prefix+ALL source보다 짧아지지 않는다.
+        if len(body) != 1 or body[0][0] != C.MAX_REPEAT:
+            return False
+        minimum, maximum, children = body[0][1]
+        if minimum != 1 or maximum != C.MAXREPEAT or list(children) != [(C.ANY, None)]:
+            return False
+        prefix = tuple((C.LITERAL, ord(character)) for character in ALL_PREFIX)
+        if _canonical(all_tokens) != (*prefix, *_canonical(normal_tokens)):
+            return False
+        return True
+    except (Unsupported, PatternError, ValueError, OverflowError, RecursionError):
+        return False

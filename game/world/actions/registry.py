@@ -2,12 +2,19 @@
 
 import re
 from dataclasses import dataclass
+from functools import lru_cache
 from itertools import combinations
 from types import MappingProxyType
 
 from world.targets import normalized
 
-from .regex_overlap import Relation, compare_patterns, explicit_argument_extension
+from .regex_overlap import (
+    ALL_PREFIX,
+    Relation,
+    compare_patterns,
+    explicit_argument_extension,
+    literal_role_prefix,
+)
 from .schema import DefaultTargetPolicy, ReferenceKind, TargetScope
 from .synchronous import validate_handler
 
@@ -96,6 +103,51 @@ def _argument_contract(base_action, base_variant, extended_action, extended_vari
     return explicit_argument_extension(base_variant.pattern, extended_variant.pattern, argument.name)
 
 
+def _normal_all_contract(action, normal, all_variant):
+    if (normal.all_roles or len(all_variant.all_roles) != 1
+            or normal.suffix.casefold() != all_variant.suffix.casefold()
+            or normal.confirmation_required != all_variant.confirmation_required):
+        return ()
+    name, = all_variant.all_roles
+    if name == "provider":
+        return ()
+    role = next((role for role in action.roles if role.name == name), None)
+    if not role or not (role.allow_all or role.default == DefaultTargetPolicy.ALL):
+        return ()
+    if not literal_role_prefix(normal.pattern, all_variant.pattern, name):
+        return ()
+    return ((name, ALL_PREFIX),)
+
+
+@lru_cache(maxsize=256)
+def normal_all_guards(action, normal_variant):
+    """등록의 동일 AST 증명을 Resolver가 재사용하는 예약 prefix 계약."""
+    return tuple(dict.fromkeys(guard for variant in action.variants
+                              for guard in _normal_all_contract(action, normal_variant, variant)))
+
+
+def _check_pair(a, va, b, vb, provider):
+    if a.verb_id != b.verb_id or va.suffix.casefold() != vb.suffix.casefold():
+        return
+    provider_a = next(role for role in a.roles if role.name == "provider")
+    provider_b = next(role for role in b.roles if role.name == "provider")
+    if not set(provider_a.kinds) & set(provider_b.kinds):
+        return
+    relation = compare_patterns(va.pattern, vb.pattern)
+    if relation == Relation.DISJOINT:
+        return
+    if relation == Relation.OVERLAP:
+        if a.id == b.id and (_normal_all_contract(a, va, vb) or _normal_all_contract(a, vb, va)):
+            return
+        if _argument_contract(a, va, b, vb) or _argument_contract(b, vb, a, va):
+            return
+    raise RegistryError(
+        f"동일 Provider의 모호 Action Handler: Verb={a.verb_id}; "
+        f"Provider={provider}; Action={a.id}/{b.id}; "
+        f"Variant={va.id}/{vb.id}; reason={relation.value}. "
+        "SyntaxVariant 접미어 또는 Provider 역할/필수 인자 계약을 명시적으로 구분하세요.")
+
+
 def compile_manifest(manifest, protected_names=()):
     tables = {name: {} for name in ("packages", "verbs", "actions", "services", "bindings", "providers")}
     owners, all_ids = {}, set()
@@ -167,7 +219,6 @@ def compile_manifest(manifest, protected_names=()):
         _require(action.provider_from is None or action.provider_from in role_names, "미존재 Provider 역할")
         _require(type(action.public) is bool and bool(action.variants), "Action 공개/문법 선언 오류")
         variant_ids = set()
-        signatures = set()
         for variant in action.variants:
             _require(type(variant.pattern) is str, "문법 정규식은 문자열이어야 합니다.")
             _require(type(variant.id) is str and bool(variant.id) and variant.id not in variant_ids,
@@ -186,9 +237,6 @@ def compile_manifest(manifest, protected_names=()):
                 raise RegistryError("문법 정규식 오류") from error
             _require(pattern.groups == len(pattern.groupindex), "이름 없는 문법 capture 금지")
             _require(set(pattern.groupindex) <= role_names | argument_names, "미존재 문법 capture")
-            signature = (variant.suffix, variant.pattern)
-            _require(signature not in signatures, "동일 Action의 모호 Variant")
-            signatures.add(signature)
 
     # 실제 CmdSet에 추가할 다단어 Variant 키도 같은 공개 이름 계약으로 검사한다.
     expanded_keys = dict(public_keys)
@@ -240,30 +288,18 @@ def compile_manifest(manifest, protected_names=()):
                 validate_argument(arg, config[name])
         provider_bindings.setdefault(binding.provider_definition, []).append(binding)
 
+    for action in tables["actions"].values():
+        providers = sorted({binding.provider_definition for binding in tables["bindings"].values()
+                            if binding.action_id == action.id})
+        for va, vb in combinations(action.variants, 2):
+            _check_pair(action, va, action, vb, ",".join(providers) or "<unbound>")
+
     for bindings in provider_bindings.values():
         for left, right in combinations(bindings, 2):
             a, b = tables["actions"][left.action_id], tables["actions"][right.action_id]
-            if a.verb_id != b.verb_id:
-                continue
-            provider_a = next(role for role in a.roles if role.name == "provider")
-            provider_b = next(role for role in b.roles if role.name == "provider")
-            # 같은 실제 Provider의 typed ref는 동시에 다른 kind가 될 수 없다.
-            if not set(provider_a.kinds) & set(provider_b.kinds):
-                continue
             for va in a.variants:
                 for vb in b.variants:
-                    if va.suffix.casefold() != vb.suffix.casefold():
-                        continue
-                    relation = compare_patterns(va.pattern, vb.pattern)
-                    if relation == Relation.DISJOINT:
-                        continue
-                    if (_argument_contract(a, va, b, vb) or _argument_contract(b, vb, a, va)):
-                        continue
-                    raise RegistryError(
-                        f"동일 Provider의 모호 Action Handler: Verb={a.verb_id}; "
-                        f"Provider={left.provider_definition}; Action={a.id}/{b.id}; "
-                        f"Variant={va.id}/{vb.id}; reason={relation.value}. "
-                        "SyntaxVariant 접미어 또는 Provider 역할/필수 인자 계약을 명시적으로 구분하세요.")
+                    _check_pair(a, va, b, vb, left.provider_definition)
 
     scope_names = {}
     for provider in tables["providers"].values():
