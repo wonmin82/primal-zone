@@ -25,6 +25,70 @@ from tests.item_entity_fixture import NativeItemTest
 
 @override_settings(ACTION_CONTENT_PACKAGES=("world.actions.validation_content",))
 class ActionRuntimeTests(NativeItemTest):
+    def test_regex_distinct_literals_execute_the_declared_service(self):
+        from world.actions.registry import compile_manifest
+        from world.actions.schema import (
+            ActionBinding,
+            ContentPackage,
+            PackageManifest,
+            ServiceDefinition,
+            SyntaxVariant,
+        )
+        from world.actions.validation_content import PACKAGE, record
+
+        def first_service(context):
+            return record(context, "regex.first")
+
+        def second_service(context):
+            return record(context, "regex.second")
+
+        obj = self.instrument("첫 검증기")
+        obj.aliases.add("둘 검증기")
+        actions = tuple(replace(PACKAGE.actions[1], id=f"regex.action_{index}",
+                                variants=(SyntaxVariant("normal", f"(?P<provider>{name})"),))
+                        for index, name in enumerate(("첫 검증기", "둘 검증기")))
+        services = tuple(ServiceDefinition(f"regex.service_{index}", callback, actions[index].roles)
+                         for index, callback in enumerate((first_service, second_service)))
+        package = ContentPackage("regex.fixture", verbs=(PACKAGE.verbs[0],), actions=actions, services=services,
+                                 bindings=tuple(ActionBinding(f"regex.binding_{index}", "validation.instrument", action.id,
+                                                              services[index].id) for index, action in enumerate(actions)))
+        index = compile_manifest(PackageManifest((package,)))
+        for name, expected in (("첫 검증기", "regex.first"), ("둘 검증기", "regex.second")):
+            invocation = dispatch_text(self.char1, index, "validation.measure", name, "검측")
+            self.assertEqual(execute(self.char1, self.session, invocation, index).status, ResultStatus.SUCCESS)
+            self.assertEqual(self.events()[-1]["service"], expected)
+            self.assertEqual(self.events()[-1]["roles"]["provider"], [str(obj.pk)])
+        self.assertEqual(len(self.events()), 2)
+
+    def test_regex_collision_registration_has_no_db_or_service_effect(self):
+        from world.actions.registry import RegistryError, compile_manifest
+        from world.actions.schema import (
+            ActionBinding,
+            ContentPackage,
+            PackageManifest,
+            SyntaxVariant,
+        )
+        from world.actions.validation_content import PACKAGE
+
+        self.instrument()
+        actions = tuple(replace(PACKAGE.actions[1], id=f"regex.action_{index}",
+                                variants=(SyntaxVariant("normal", f"(?P<provider>{pattern})"),))
+                        for index, pattern in enumerate((".+", "[가-힣]+")))
+        package = ContentPackage("regex.fixture", verbs=(PACKAGE.verbs[0],), actions=actions,
+                                 services=(PACKAGE.services[1],),
+                                 bindings=tuple(ActionBinding(f"regex.binding_{index}", "validation.instrument", action.id,
+                                                              PACKAGE.services[1].id) for index, action in enumerate(actions)))
+        before = list(SelectionNumber.objects.values()), self.char1.profile_snapshot(), self.events()
+        with self.assertRaises(RegistryError):
+            compile_manifest(PackageManifest((package,)))
+        self.assertEqual((list(SelectionNumber.objects.values()), self.char1.profile_snapshot(), self.events()), before)
+
+    def test_regex_typed_argument_ambiguity_never_executes_first_service(self):
+        self.instrument()
+        self.raw("검증기 1 검측")
+        self.assertEqual(self.events(), [])
+        self.assertIn("명확하게", " ".join(str(call.args[0]) for call in self.output.call_args_list if call.args))
+
     def test_review_storage_is_not_a_generic_item_target(self):
         from world.item_entities.api import create_item
         stored = create_item("bandage", location_kind="personal_storage", owner_object=self.char1)
@@ -44,7 +108,13 @@ class ActionRuntimeTests(NativeItemTest):
         from typeclasses.interactables import Container, PersonalLocker
         from world.actions.registry import compile_manifest
         from world.actions.resolver import role_records
-        from world.actions.schema import ActionBinding, PackageManifest, SyntaxVariant, TargetScope
+        from world.actions.schema import (
+            ActionBinding,
+            PackageManifest,
+            SyntaxVariant,
+            TargetScope,
+            VerbDefinition,
+        )
         from world.actions.validation_content import PACKAGE
         from world.item_entities.api import create_item
 
@@ -57,10 +127,11 @@ class ActionRuntimeTests(NativeItemTest):
         other = create_item("bandage", location_kind="personal_storage", owner_object=self.char2)
         equipped = create_item("test_pistol", location_kind="equipment", owner_object=self.char1, slot="hands")
         role = RoleDefinition("subject", (ReferenceKind.ITEM,), scope=TargetScope.STORAGE)
-        action = replace(PACKAGE.actions[3], id="validation.storage", provider_from=None,
+        action = replace(PACKAGE.actions[3], id="validation.storage", verb_id="validation.storage_verb", provider_from=None,
                          roles=(PACKAGE.actions[1].roles[0], role),
                          variants=(SyntaxVariant("normal", r"(?P<subject>.+)에서 (?P<provider>.+)"),))
-        package = replace(PACKAGE, actions=(*PACKAGE.actions, action), bindings=(*PACKAGE.bindings,
+        package = replace(PACKAGE, verbs=(*PACKAGE.verbs, VerbDefinition("validation.storage_verb", "보관검측")),
+                          actions=(*PACKAGE.actions, action), bindings=(*PACKAGE.bindings,
                           ActionBinding("validation.storage.binding", "validation.instrument", action.id, "validation.item_service")),
                           services=tuple(replace(s, role_kinds=()) if s.id == "validation.item_service" else s for s in PACKAGE.services))
         index = compile_manifest(PackageManifest((package,)))
@@ -69,7 +140,7 @@ class ActionRuntimeTests(NativeItemTest):
         self.assertNotIn(descriptor(other).reference, [r.reference for r in role_records(self.char1, role, refs)])
         generic = RoleDefinition("subject", (ReferenceKind.ITEM,))
         self.assertIn(descriptor(equipped).reference, [r.reference for r in role_records(self.char1, generic)])
-        text = dispatch_text(self.char1, index, action.verb_id, "붕대에서 개인 검증함", "검측")
+        text = dispatch_text(self.char1, index, action.verb_id, "붕대에서 개인 검증함", "보관검측")
         invocation = from_web({"action_id": action.id, "variant": "normal", "request_id": "storage-review",
                                "roles": {"provider": [reference_json(refs["provider"][0])],
                                          "subject": [reference_json(descriptor(stored).reference)]}}, index)

@@ -7,6 +7,7 @@ from types import MappingProxyType
 
 from world.targets import normalized
 
+from .regex_overlap import Relation, compare_patterns, explicit_argument_extension
 from .schema import DefaultTargetPolicy, ReferenceKind, TargetScope
 from .synchronous import validate_handler
 
@@ -81,24 +82,18 @@ def _arguments(arguments):
     return names
 
 
-def _syntax_overlap(left, right, a, b):
-    # capture의 내부 이름만 바꿔도 동일 입력 언어는 구별되지 않는다.
-    capture = r"\(\?P<([A-Za-z_]\w*)>"
-    if left.suffix != right.suffix or re.sub(capture, "(?:", left.pattern) != re.sub(capture, "(?:", right.pattern):
+def _argument_contract(base_action, base_variant, extended_action, extended_variant):
+    """언어 중첩과 별개로 보존하는 전체 Provider/필수 Argument 확장 계약."""
+    if (base_action.arguments or len(extended_action.arguments) != 1
+            or base_action.roles != extended_action.roles
+            or tuple(role.name for role in base_action.roles) != ("provider",)
+            or base_action.provider_from is not None or extended_action.provider_from is not None
+            or base_variant.all_roles or extended_variant.all_roles):
         return False
-    roles_a = {role.name: set(role.kinds) for role in a.roles}
-    roles_b = {role.name: set(role.kinds) for role in b.roles}
-    args_a = {arg.name: arg.kind for arg in a.arguments}
-    args_b = {arg.name: arg.kind for arg in b.arguments}
-    for name_a, name_b in zip(re.findall(capture, left.pattern), re.findall(capture, right.pattern), strict=True):
-        if name_a in roles_a and name_b in roles_b:
-            if not roles_a[name_a] & roles_b[name_b]:
-                return False
-        elif name_a in args_a and name_b in args_b:
-            if args_a[name_a] is not args_b[name_b]:
-                return False
-        # 서로 다른 role/argument capture만으로 사용자 입력을 정적으로 구분할 수 없다.
-    return True
+    argument = extended_action.arguments[0]
+    if not argument.required or argument.default is not None:
+        return False
+    return explicit_argument_extension(base_variant.pattern, extended_variant.pattern, argument.name)
 
 
 def compile_manifest(manifest, protected_names=()):
@@ -174,6 +169,7 @@ def compile_manifest(manifest, protected_names=()):
         variant_ids = set()
         signatures = set()
         for variant in action.variants:
+            _require(type(variant.pattern) is str, "문법 정규식은 문자열이어야 합니다.")
             _require(type(variant.id) is str and bool(variant.id) and variant.id not in variant_ids,
                      "문법 Variant ID 오류/중복")
             variant_ids.add(variant.id)
@@ -249,8 +245,25 @@ def compile_manifest(manifest, protected_names=()):
             a, b = tables["actions"][left.action_id], tables["actions"][right.action_id]
             if a.verb_id != b.verb_id:
                 continue
-            overlap = any(_syntax_overlap(va, vb, a, b) for va in a.variants for vb in b.variants)
-            _require(not overlap, "동일 Provider의 모호 Action Handler")
+            provider_a = next(role for role in a.roles if role.name == "provider")
+            provider_b = next(role for role in b.roles if role.name == "provider")
+            # 같은 실제 Provider의 typed ref는 동시에 다른 kind가 될 수 없다.
+            if not set(provider_a.kinds) & set(provider_b.kinds):
+                continue
+            for va in a.variants:
+                for vb in b.variants:
+                    if va.suffix.casefold() != vb.suffix.casefold():
+                        continue
+                    relation = compare_patterns(va.pattern, vb.pattern)
+                    if relation == Relation.DISJOINT:
+                        continue
+                    if (_argument_contract(a, va, b, vb) or _argument_contract(b, vb, a, va)):
+                        continue
+                    raise RegistryError(
+                        f"동일 Provider의 모호 Action Handler: Verb={a.verb_id}; "
+                        f"Provider={left.provider_definition}; Action={a.id}/{b.id}; "
+                        f"Variant={va.id}/{vb.id}; reason={relation.value}. "
+                        "SyntaxVariant 접미어 또는 Provider 역할/필수 인자 계약을 명시적으로 구분하세요.")
 
     scope_names = {}
     for provider in tables["providers"].values():

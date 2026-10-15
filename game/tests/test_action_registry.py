@@ -45,6 +45,162 @@ class ActionRegistryTests(TestCase):
     def compile(self, value=None, protected=()):
         return compile_manifest(PackageManifest((value or package(),)), protected)
 
+    def paired_patterns(self, left, right, *, roles_left=None, roles_right=None):
+        p = package()
+        a = replace(p.actions[0], variants=(SyntaxVariant("normal", left),),
+                    roles=roles_left or p.actions[0].roles)
+        b = replace(a, id="fixture.second_action", variants=(SyntaxVariant("normal", right),),
+                    roles=roles_right or a.roles)
+        binding = replace(p.bindings[0], id="fixture.second_binding", action_id=b.id)
+        return replace(p, actions=(a, b), bindings=(*p.bindings, binding))
+
+    def test_different_regex_spellings_with_overlapping_languages_are_rejected(self):
+        p = self.paired_patterns(r"(?P<provider>.+)", r"(?P<provider>[가-힣]+)")
+        with self.assertRaises(RegistryError):
+            self.compile(p)
+
+    def test_different_capture_positions_do_not_prove_type_disjointness(self):
+        provider = RoleDefinition("provider", (ReferenceKind.OBJECT,))
+        p = self.paired_patterns(
+            r"(?P<provider>.+) (?P<subject>.+)", r"(?P<source>.+) (?P<provider>.+)",
+            roles_left=(provider, RoleDefinition("subject", (ReferenceKind.ITEM,))),
+            roles_right=(provider, RoleDefinition("source", (ReferenceKind.DOOR,))))
+        with self.assertRaises(RegistryError):
+            self.compile(p)
+
+    def test_renamed_target_captures_with_valid_provider_are_still_ambiguous(self):
+        provider = RoleDefinition("provider", (ReferenceKind.OBJECT,))
+        p = self.paired_patterns(
+            r"(?P<provider>.+)에게 (?P<subject>.+)", r"(?P<provider>.+)에게 (?P<source>.+)",
+            roles_left=(provider, RoleDefinition("subject", (ReferenceKind.ITEM,))),
+            roles_right=(provider, RoleDefinition("source", (ReferenceKind.ITEM,))))
+        with self.assertRaises(RegistryError) as failure:
+            self.compile(p)
+        self.assertIn("OVERLAP", str(failure.exception))
+
+    def test_supported_regex_languages_report_overlap_disjoint_and_unicode_digits(self):
+        from world.actions.regex_overlap import Relation, compare_patterns
+
+        cases = (
+            (r".+", r".+", Relation.OVERLAP),
+            (r"\d+", r"[0-9]+", Relation.OVERLAP),
+            (r"[가-힣]+", r"[0-9]+", Relation.DISJOINT),
+            (r"검증기", r".+", Relation.OVERLAP),
+            (r"사과", r"바나나", Relation.DISJOINT),
+            (r"검증기", r"검증기", Relation.OVERLAP),
+            (r".+", r"[가-힣]+", Relation.OVERLAP),
+            (r"검사", r"수리", Relation.DISJOINT),
+            (r"[가-힣]+", r"[a-z]+", Relation.DISJOINT),
+            (r"[가-힣]*", r"[a-z]*", Relation.OVERLAP),
+            (r"(?:문|시체)\d+", r"시체[0-9]{1,3}", Relation.OVERLAP),
+            (r"(?:문|시체)\d+", r"물품\d+", Relation.DISJOINT),
+            (r"붕대(?: 2)?", r"붕대 2", Relation.OVERLAP),
+            (r"붕대(?: 2)?", r"붕대 3", Relation.DISJOINT),
+            (r"a{2,4}", r"a{3,5}", Relation.OVERLAP),
+            (r"a{2,4}", r"a{5,6}", Relation.DISJOINT),
+            (r"\d+", "٣４", Relation.OVERLAP),
+            (r"\d+", r"[가-힣]+", Relation.DISJOINT),
+            (r"\D+", r"[가-힣]+", Relation.OVERLAP),
+            (r"[^가-힣]+", r"[가-힣]+", Relation.DISJOINT),
+            (r".+", "\n", Relation.DISJOINT),
+            (r"\s+", "\n", Relation.OVERLAP),
+        )
+        for left, right, expected in cases:
+            with self.subTest(left=left, right=right):
+                self.assertEqual(compare_patterns(left, right), expected)
+                self.assertEqual(compare_patterns(right, left), expected)
+                # escape나 newline을 변환하지 않고 같은 Provider/Verb/normal 등록 경계도 검사한다.
+                declaration = self.paired_patterns(f"(?P<provider>{left})", f"(?P<provider>{right})")
+                if expected == Relation.OVERLAP:
+                    with self.assertRaises(RegistryError):
+                        self.compile(declaration)
+                else:
+                    self.compile(declaration)
+
+    def test_finite_supported_languages_match_complete_small_alphabet_oracle(self):
+        import re
+        from itertools import product
+
+        from world.actions.regex_overlap import Relation, compare_patterns
+
+        patterns = ("", "가", "나", "[가나]", "[^가나]", "가?나?", "가{1,2}",
+                    "(?:가|나나)", "가(?:가|나)?", "[가나]{0,2}")
+        strings = ["".join(letters) for size in range(4) for letters in product("가나x", repeat=size)]
+        languages = {pattern: {text for text in strings if re.fullmatch(pattern, text)} for pattern in patterns}
+        for left in patterns:
+            for right in patterns:
+                with self.subTest(left=left, right=right):
+                    expected = Relation.OVERLAP if languages[left] & languages[right] else Relation.DISJOINT
+                    self.assertEqual(compare_patterns(left, right), expected)
+
+    def test_unknown_regex_features_fail_closed_with_registration_context(self):
+        from world.actions.regex_overlap import Relation, compare_patterns
+
+        unknown = (r"(?=가).+", r"(?<=가).+", r"(.)\1", r"\b가", r"가$", r"(?i)abc",
+                   r"(?s:.)+", r"a{1000}", r"(?>가+)가", r"가++가")
+        for pattern in unknown:
+            with self.subTest(pattern=pattern):
+                self.assertEqual(compare_patterns(pattern, ".+"), Relation.UNKNOWN)
+        for pattern in (r"(?P<provider>(?=가).+)", r"(?P<provider>가$)", r"(?i:(?P<provider>abc))"):
+            p = self.paired_patterns(r"(?P<provider>.+)", pattern)
+            with self.subTest(pattern=pattern), self.assertRaises(RegistryError) as failure:
+                self.compile(p)
+            message = str(failure.exception)
+            for value in ("fixture.verb", "fixture.provider", "fixture.action", "fixture.second_action", "normal", "UNKNOWN"):
+                self.assertIn(value, message)
+            self.assertIn("명시적으로 구분", message)
+        for pattern in (r"(?P<provider>(?=가).+)", r"(?P<provider>.+)(?P=provider)"):
+            with self.subTest(identical_unknown=pattern), self.assertRaises(RegistryError) as failure:
+                self.compile(self.paired_patterns(pattern, pattern))
+            self.assertIn("UNKNOWN", str(failure.exception))
+
+    def test_disjoint_literal_actions_are_allowed_and_registration_never_executes_services(self):
+        calls = []
+
+        def observe(context):
+            calls.append(context)
+            return context
+
+        p = self.paired_patterns(r"(?P<provider>검사)", r"(?P<provider>수리)")
+        p = replace(p, services=(replace(p.services[0], handler=observe),))
+        self.compile(p)
+        self.assertEqual(calls, [])
+        p = replace(p, actions=(p.actions[0], replace(p.actions[1], variants=(SyntaxVariant("normal", r"(?P<provider>[가-힣]+)"),))))
+        with self.assertRaises(RegistryError) as failure:
+            self.compile(p)
+        self.assertIn("OVERLAP", str(failure.exception))
+        self.assertEqual(calls, [])
+
+    def test_suffix_casefold_collision_is_checked_but_distinct_suffixes_are_separate(self):
+        p = self.paired_patterns(r"(?P<provider>.+)", r"(?P<provider>[가-힣]+)")
+        a = replace(p.actions[0], variants=(SyntaxVariant("first", r"(?P<provider>.+)", "Confirm"),))
+        b = replace(p.actions[1], variants=(SyntaxVariant("second", r"(?P<provider>[가-힣]+)", "confirm"),))
+        with self.assertRaises(RegistryError):
+            self.compile(replace(p, actions=(a, b)))
+        b = replace(b, variants=(replace(b.variants[0], suffix="확정"),))
+        self.compile(replace(p, actions=(a, b)))
+
+    def test_only_explicit_required_argument_extension_preserves_overlapping_contract(self):
+        from world.actions.regex_overlap import Relation, compare_patterns
+
+        p = self.paired_patterns(r"(?P<provider>.*)", r"(?P<provider>.+) (?P<quantity>\d+)")
+        b = replace(p.actions[1], arguments=(ArgumentDefinition("quantity", int),))
+        p = replace(p, actions=(p.actions[0], b))
+        self.assertEqual(compare_patterns(p.actions[0].variants[0].pattern, b.variants[0].pattern), Relation.OVERLAP)
+        self.compile(p)
+        self.compile(replace(p, actions=tuple(reversed(p.actions))))
+        for declaration in (replace(b.arguments[0], required=False), replace(b.arguments[0], default=1)):
+            with self.subTest(argument=declaration), self.assertRaises(RegistryError):
+                self.compile(replace(p, actions=(p.actions[0], replace(b, arguments=(declaration,)))))
+        for pattern in (r"(?P<provider>.+)", r"(?P<provider>.+) (?P<quantity>\d*)",
+                        r"(?P<provider>.+)(?: (?P<quantity>\d+))?",
+                        r"(?P<provider>.+) (?P<quantity>(?=\d)\d+)",
+                        r"(?P<provider>.+) (?P<quantity>\d+)$",
+                        r"(?i:(?P<provider>.+)) (?P<quantity>\d+)"):
+            changed = replace(b, variants=(SyntaxVariant("normal", pattern),))
+            with self.subTest(pattern=pattern), self.assertRaises(RegistryError):
+                self.compile(replace(p, actions=(p.actions[0], changed)))
+
     def test_shared_verb_different_providers_and_services_without_registry_changes(self):
         p = package()
         p = replace(p, providers=p.providers + (

@@ -133,3 +133,17 @@ Phase 1 검증은 `test_action_registry`, `test_action_runtime`, `test_selection
 - P1-2: `RoleDefinition.scope`의 기본 `TargetScope.CURRENT`는 현재 Room과 직접 소지·장착 Root ItemEntity를 사용한다. 보관품은 기본 Item 대상에 포함하지 않는다. `STORAGE`는 `scope_from` 역할의 실제 Container를 통해 개인 `personal_storage:<caller>` 또는 공용 `shared_storage:<container>` 범위만 조회한다. 위치·시야·view/call 권한을 텍스트 선택과 실행 직전 Gateway에서 똑같이 확인한다. 실제 이동·비용·전투 등은 기존 도메인 Service가 재검증한다. `INSIDE`는 현재 소유 Root에 연결된 명시 부모 UUID 범위만 조회하며 내부 아이템의 독립 Provider 금지는 유지한다.
 - P2-1: `records_for`는 현재 논리 Scope 집합을 SQL의 Scope 조건으로 제한한다. 현재 Room의 시체/Loot 범위는 해당 Role이 필요한 경우에만 추가하며 보관/내부 Scope는 명시 Role 문맥으로만 연다. 텍스트 실행의 동일 Role/query 선택은 그 호출 안에서만 재사용한다. 실행 간 대상·권한 Cache는 없다. 다른 4개 Room의 Provider 40개와 다른 캐릭터 아이템 40개를 추가한 뒤 provided/CmdSet/controls SQL 수와 실제 참조 접근 수가 증가하지 않는 회귀 검사를 둔다.
 - P2-2: 공통 `label`은 번호가 있는 객체의 1번도 항상 표시한다. D안의 번호 생략은 선택 사항이며, 이 구현은 생략하지 않아 Action 제공/잠김/숨김 상태가 다른 객체의 label을 바꾸거나 숨은 그룹원 존재를 암시하지 않게 한다. 고정 번호 SSOT만 읽고 버튼 payload의 안정 ID는 그대로 유지한다. 번호 2만 남음·전체 소멸 후 1·숨김·제공 상태 변경과 텍스트/웹 label 일치를 검증한다.
+
+## PR #69 정규식 중첩 검증 보완
+
+동일 Provider·정규 Verb·공개 Variant 접미어의 충돌은 정규식 문자열 비교 대신 `regex_overlap.compare_patterns()`의 `OVERLAP` / `DISJOINT` / `UNKNOWN` 결과로 검사한다. Python 3.13 표준 정규식 AST에서 fullmatch 언어를 제한된 Thompson NFA로 변환하고 유한 곱 그래프를 탐색한다. 예시 문자열을 대입해 비중첩을 추정하지 않는다. 외부 의존성은 없다.
+
+지원 범위는 리터럴, dot, 문자 클래스/범위/부정, Unicode digit/word/space category, 연결, 대안, capture/noncapture group, greedy/lazy 반복(`?`, `*`, `+`, 제한된 `{m,n}`)이다. lookaround·backreference·조건식·anchor·atomic/possessive 구문·지원하지 않는 flag와 분석 한도 초과는 UNKNOWN이다. 한도는 NFA당 256상태, 곱 그래프 8,192상태, 유한 반복 전개 16이다. 지원하지 않는 문법을 비중첩으로 간주하지 않는다.
+
+다른 Provider, 다른 Verb, 서로 다른 공개 접미어, 실제 Provider의 상호 배타적인 ReferenceKind, 증명된 DISJOINT 언어는 정상 등록한다. capture 이름 변경이나 다른 위치의 Subject/Source 종류 차이만으로 구분되었다고 판단하지 않는다. OVERLAP/UNKNOWN이며 다른 선언 계약으로도 구분되지 않으면 Verb·Provider·Action·Variant ID와 이유를 포함한 RegistryError로 등록을 거절한다. 이 진단은 콘텐츠 등록용이며 플레이어 공개 오류에 내부 ID를 추가하지 않는다.
+
+기존 검증 패키지의 전체 Provider 입력과 `Provider + 공백 + 필수 인자` 확장은 별도 의미 계약으로 제한적으로 보존한다. 동일 Provider-only 역할, provider_from 없음, 기본 Action 인자 없음, 확장 Action의 실제 capture에 연결된 단일 필수 typed 인자(기본값 없음), 지원 AST에서 인자의 비어 있지 않은 소비를 확인해야 한다. 단순 인자 선언 추가·optional/default 인자·capture 이름만 변경하는 방식은 구분 근거가 아니다. 이 경우도 정규식 언어 자체는 OVERLAP이며, 두 해석이 실제로 모두 유효하면 Dispatcher가 효과 없이 거절한다. 임의 Handler 우선순위나 fallback은 없다.
+
+등록 중 Service·게임 상태 변경 없음, 구별된 리터럴의 실제 Service 실행, `검증기 1 검측`의 복수 해석 거절과 기존 수량/확정 실행을 회귀 검증한다. B-1, TargetResolver, Dynamic CmdSet, Gateway 및 프로덕션 콘텐츠는 변경하지 않는다.
+
+관련 보관품 회귀 Fixture도 기존 일반 검측과 동일 Provider·Verb의 중첩 선언이므로 테스트 전용 `보관검측` Verb로 명시 구분했다. 권한·소유 Scope·오래된 웹 요청·대체 금지 assertions는 그대로이며, 운영 콘텐츠나 전환 범위의 변경은 아니다.
