@@ -16,6 +16,7 @@ from world.content import ROOMS
 from world.content.integrity import errors
 from world.observation import context_for
 from world.room_hints import render
+from world.selection_numbers.api import descriptor
 from world.state import multiplayer_state
 
 from tests.base import WorldCommandTest
@@ -75,7 +76,8 @@ class MedicalCommandsTests(WorldCommandTest):
     def test_bare_ambiguity_hidden_objects_and_explicit_selector(self):
         for cls, original, action in ((Doctor, self.doctor, "회복"), (Bed, self.bed, "휴식")):
             self.char1.location = original.location
-            extra = create_object(cls, key=original.key, location=self.char1.location)
+            extra = create_object(cls, key=original.key, location=self.char1.location,
+                                  attributes=[("selection_group_id", descriptor(original).group_id)])
             self.char1.change(lambda p: p.update(hp=1, credits=1000))
             before = deepcopy(self.char1.profile())
             self.assertIn("대상이 여러 개", self.command(action))

@@ -203,6 +203,12 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             after_change(self.schedule_recovery)
         return changed
 
+    def at_cmdset_get(self, **kwargs):
+        super().at_cmdset_get(**kwargs)
+        from world.actions.scope import refresh
+
+        refresh(self)
+
     def begin_command_output(self, *, reconcile=True):
         depth = self.ndb.command_output_depth or 0
         self.ndb.command_output_depth = depth + 1

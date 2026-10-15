@@ -176,6 +176,7 @@ def _build_world(quarantined_exits=()):
                 key=data["name"],
                 aliases=data["aliases"],
                 location=rooms[data["room"]],
+                attributes=[("selection_definition_id", "interactable:" + identity)],
             )
             obj.tags.add(identity, category="primal_interactable")
         else:

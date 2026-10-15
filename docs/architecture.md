@@ -1,5 +1,9 @@
 # 원시구역 구조와 설계 결정
 
+## Action Phase 1 기반
+
+명시 ContentPackage·불변 Registry·Role Resolver·동적 CmdSet·공통 Gateway와 B-1 영속 번호의 구현 계약은 [Action 아키텍처](action-architecture.md)에 있다. 운영 기본 Manifest는 비활성이고 기존 게임 기능의 전체 전환은 Issue #66에서 진행한다.
+
 ## 현재 runtime contract와 명시적 변환
 
 일반 아이템은 ItemEntity, 실물 전리품 권리는 LootClaim, 보급칩 전리품은 CurrencyLoot/CurrencyLootShare, 접근 권한은 Credential ItemEntity가 SSOT다. 문서 끝의 Phase 1~5 legacy 설명은 당시 기록이며 cutover 이후 gameplay backend로 사용하지 않는다. `ItemRuntime.version=1`과 Explorer/native loot marker를 검사하고 미변환 world는 서버 시작과 일반 item 접근에서 migration-required 오류를 낸다.

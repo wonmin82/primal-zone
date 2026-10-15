@@ -232,11 +232,28 @@ class ItemEntity(models.Model):
             raise ValidationError("생성된 아이템의 정의와 순번은 변경할 수 없습니다.")
 
     def save(self, *args, **kwargs):
+        from world.multiplayer import world_change
+
+        with world_change():
+            return self._save_numbered(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        from world.multiplayer import world_change
+
+        with world_change():
+            return super().delete(*args, **kwargs)
+
+    def _save_numbered(self, *args, **kwargs):
         # Django의 IntegerField 정규화가 True/소수/문자열을 정수로 바꾸기 전에 검사한다.
         if type(self.quantity) is not int or self.quantity < 1:
             raise ValidationError({"quantity": "수량은 양의 정수여야 합니다."})
         self.unique_scope_key = self.scope_key()
         self.full_clean()
+        saved_definition = type(self).objects.filter(pk=self.pk).values_list("definition_id", flat=True).first()
+        if saved_definition and saved_definition != self.definition_id:
+            from world.selection_numbers.api import authorize_item_definition_conversion
+
+            authorize_item_definition_conversion(self.pk, saved_definition, self.definition_id)
         if kwargs.get("update_fields") is not None:
             kwargs["update_fields"] = set(kwargs["update_fields"]) | {"unique_scope_key"}
         return super().save(*args, **kwargs)

@@ -41,6 +41,55 @@ def pz_dialogue(session, token=None, **kwargs):
         session.update_session_counters()
 
 
+def pz_action(session, payload=None, **kwargs):
+    """구조화된 요청은 재파싱 없이 공통 Invocation Gateway와 보호된 Prompt 경계를 사용한다."""
+    import json
+    from hashlib import sha256
+
+    from typeclasses.explorers import Explorer
+    from world import rules
+    from world import text as ft
+    from world.actions.gateway import emit, execute, from_web, require_session
+    from world.actions.manifest import get_index
+
+    caller = session.get_puppet()
+    if not isinstance(caller, Explorer):
+        return
+    try:
+        require_session(caller, session)
+    except rules.RuleError:
+        return
+    caller.begin_command_output(reconcile=False)
+    duplicate = False
+    try:
+        if caller.ndb.action_busy or caller.ndb.shortcut_execution:
+            raise rules.RuleError("이전 명령의 완료를 기다려 주세요.")
+        index = get_index()
+        invocation = from_web(payload, index)
+        fingerprint = sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+        completed = dict(caller.ndb.action_requests or {})
+        key = (session.sessid, invocation.request_id)
+        if key in completed:
+            if completed[key] != fingerprint:
+                raise rules.RuleError("이미 완료된 요청 식별자입니다.")
+            duplicate = True
+            return
+        caller.ndb.action_busy = True
+        try:
+            result = execute(caller, session, invocation, index)
+            completed[key] = fingerprint
+            caller.ndb.action_requests = dict(list(completed.items())[-64:])
+            emit(caller, session, invocation, result)
+        finally:
+            caller.ndb.action_busy = False
+    except (rules.RuleError, TypeError, ValueError) as error:
+        message = str(error) if isinstance(error, rules.RuleError) else "행동 요청의 형식을 확인하세요."
+        caller.msg(ft.text(ft.token("error", message)), session=session, kind="error")
+    finally:
+        caller.end_command_output(emit_prompt=not duplicate)
+        session.update_session_counters()
+
+
 def pz_auth(session, payload=None, **kwargs):
     if session.account:
         return

@@ -21,6 +21,7 @@ from world.multiplayer import (
     object_by_id,
     world_change,
 )
+from world.selection_numbers.mixins import NumberedObjectMixin
 from world.targets import LootRequest, Mode, TargetSelector, ordered, select
 
 
@@ -265,7 +266,7 @@ def take_loot(caller, item=None, corpse=True, now=None, *, request=None):
     return received
 
 
-class Corpse(DistantPresenceMixin, DefaultObject):
+class Corpse(NumberedObjectMixin, DistantPresenceMixin, DefaultObject):
     distant_visible = True
     distant_role = "remains"
     distant_unit = "구"
@@ -392,7 +393,7 @@ class Corpse(DistantPresenceMixin, DefaultObject):
                     obj.push_state()
 
 
-class DroppedLoot(DistantPresenceMixin, DefaultObject):
+class DroppedLoot(NumberedObjectMixin, DistantPresenceMixin, DefaultObject):
     detectability = "subtle"
 
     def reconcile(self, now=None):

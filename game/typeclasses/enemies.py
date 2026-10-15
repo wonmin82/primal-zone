@@ -22,9 +22,10 @@ from world.multiplayer import (
     object_by_id,
     world_change,
 )
+from world.selection_numbers.mixins import NumberedObjectMixin
 
 
-class Enemy(DistantPresenceMixin, DefaultObject):
+class Enemy(NumberedObjectMixin, DistantPresenceMixin, DefaultObject):
     @property
     def detectability(self):
         return ENEMIES[self.db.enemy_id].get("detectability", "normal")

@@ -29,6 +29,7 @@ jobs:
           prune-cache: true
       - run: uv sync --locked --python 3.13
       - run: uv run python scripts/dev.py smoke
+      - run: uv run python scripts/action_e2e.py
       - name: 실패 진단 로그 출력 (DB 제외)
         if: failure()
         run: |

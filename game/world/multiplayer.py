@@ -34,6 +34,17 @@ def after_change(callback):
         callback()
 
 
+def before_commit(key, callback):
+    """최종 실물 집합으로 변경을 확정한다. 독립 DB 커밋이나 on_commit 쓰기는 금지한다."""
+    if not getattr(_context, "depth", 0):
+        raise RuntimeError("최종 변경 예약은 world_change 안에서만 가능합니다.")
+    _context.finalizers[key] = callback
+
+
+def pending_commit(key):
+    return getattr(_context, "finalizers", {}).get(key)
+
+
 @contextmanager
 def world_change():
     # 명령과 타이머는 같은 서버 프로세스에서 실행되며 이 구간에서는 yield하지 않는다.
@@ -41,14 +52,20 @@ def world_change():
         outer = not getattr(_context, "depth", 0)
         if outer:
             _context.callbacks = []
+            _context.finalizers = {}
         _context.depth = getattr(_context, "depth", 0) + 1
         mark = len(_context.callbacks)
+        finalizers = dict(_context.finalizers)
         cached = [(obj, obj.pk) for obj in ObjectDB.get_all_cached_instances()]
         try:
             with transaction.atomic():
                 yield
+                if outer:
+                    for finalizer in tuple(_context.finalizers.values()):
+                        finalizer()
         except Exception:
             del _context.callbacks[mark:]
+            _context.finalizers = finalizers
             # DB rollback만으로 Evennia의 identity/Attribute/room 캐시는 복구되지 않는다.
             from evennia.typeclasses.models import Attribute
 
@@ -58,14 +75,19 @@ def world_change():
                     attribute.db_value = values[attribute.pk]
                 else:
                     Attribute.flush_cached_instance(attribute)
-            locations = dict(ObjectDB.objects.values_list("pk", "db_location_id"))
+            fields = [field.attname for field in ObjectDB._meta.concrete_fields]
+            restored = {row[0]: dict(zip(fields, row, strict=True))
+                        for row in ObjectDB.objects.values_list(*fields)}
+            locations = {identity: row["db_location_id"] for identity, row in restored.items()}
             existing = set(locations)
             for obj, identity in cached:
                 if identity in existing:
                     obj.pk = identity
                     obj._is_deleted = False
                     # 실패한 move_to가 바꾼 FK/관계 캐시도 DB의 rollback 위치로 복구한다.
-                    obj.db_location_id = locations[identity]
+                    for name, value in restored[identity].items():
+                        setattr(obj, name, value)
+                    obj._state.fields_cache.clear()
                     obj.attributes.reset_cache()
             for obj, identity in cached:
                 if identity in existing:
@@ -84,6 +106,7 @@ def world_change():
         finally:
             _context.depth -= 1
         if outer:
+            _context.finalizers = {}
             callbacks, _context.callbacks = _context.callbacks, []
             for callback in callbacks:
                 callback()

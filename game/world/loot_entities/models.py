@@ -70,6 +70,18 @@ class CurrencyLoot(Reservation):
         ordering = ["pk"]
         constraints = [models.CheckConstraint(condition=Q(quantity__gt=0), name="currency_loot_positive")]
 
+    def save(self, *args, **kwargs):
+        from world.multiplayer import world_change
+
+        with world_change():
+            return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        from world.multiplayer import world_change
+
+        with world_change():
+            return super().delete(*args, **kwargs)
+
     def clean(self):
         from typeclasses.loot import Corpse, DroppedLoot
 

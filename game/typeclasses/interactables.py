@@ -9,6 +9,7 @@ from world.content import ENEMIES, ITEMS, ROOMS, SALVAGE_CREDIT_RATE, SHOP_CATAL
 from world.currency import format_currency
 from world.distant_presentation import DistantPresence, DistantPresenceMixin
 from world.progression import ATTRIBUTES, SKILLS
+from world.selection_numbers.mixins import NumberedObjectMixin
 
 
 def dialogue_appearance(method):
@@ -24,7 +25,7 @@ def dialogue_appearance(method):
     return appearance
 
 
-class ActionObject(DistantPresenceMixin, DefaultObject):
+class ActionObject(NumberedObjectMixin, DistantPresenceMixin, DefaultObject):
     distant_visible = False
     detectability = "subtle"
     actions = ()

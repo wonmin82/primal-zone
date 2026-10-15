@@ -22,6 +22,9 @@ from django.db.migrations.executor import MigrationExecutor
 
 existing = os.environ["PZ_DOOR_SCHEMA_EXISTING"] == "1"
 if existing:
+    from world.selection_numbers.mode import historical_schema
+    historical_fixture = historical_schema()
+    historical_fixture.__enter__()
     executor = MigrationExecutor(connection)
     executor.migrate([node for node in executor.loader.graph.leaf_nodes() if node[0] != "door_entities"])
     call_command("migrate", "door_entities", "zero", verbosity=0, interactive=False)
@@ -63,6 +66,7 @@ if existing:
     connection.settings_dict["NAME"] = clone_name
 call_command("migrate", verbosity=0, interactive=False)
 if existing:
+    historical_fixture.__exit__(None, None, None)
     after = rows()
     assert all(all(row in after[table] for row in records) for table, records in before.items()), "기존 행 변경/소실"
     assert player.profile_snapshot()["credits"] == 123

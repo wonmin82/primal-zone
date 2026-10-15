@@ -29,6 +29,7 @@ class Element {
   querySelectorAll() { return []; }
   setAttribute(name, value) { (this.attributes ||= {})[name] = value; }
   closest(selector) {
+    if (selector === "[data-action-invocation]" && this.dataset.actionInvocation) return this;
     if (selector === "[data-dialogue-selection]" && this.dataset.dialogueSelection) return this;
     if (selector === "[data-command]" && this.dataset.command) return this;
     return this.parent?.closest(selector) || null;
@@ -72,11 +73,28 @@ function client(localNow = 0) {
   const prompt = segments => receive("pz_log", {kind:"prompt",segments});
   const event = text => receive("pz_log", {kind:"event",segments:[{role:"text",text}]});
   const submit = text => { byId("command").value = text; byId("command-form").fire("submit"); };
-  const click = command => document.fire("click", {target:{closest:() => ({dataset:{command}})}});
+  const click = command => document.fire("click", {target:{closest:selector => selector === "[data-command]" ? ({dataset:{command}}) : null}});
   const arrow = key => { byId("command").fire("keydown", {key}); return byId("command").value; };
   state(full); prompt(full);
   return {byId, log:byId("log"), socket, state, prompt, event, submit, click, arrow, intervals, receive, document};
 }
+
+test("Action 버튼은 표시 문자열을 재파싱하지 않고 안정 참조를 구조화 전송", () => {
+  const c = client();
+  const invocation = {action_id:"fixture.inspect",variant:"normal",
+    roles:{provider:[{kind:"object",identity:"42",scope_id:"room:7"}]},arguments:{}};
+  c.receive("pz_action_result", {action:invocation});
+  const button = c.byId("context-actions").lastElementChild;
+  c.document.fire("click", {target:button});
+  const [kind, args, options] = c.socket.sent.at(-1);
+  assert.equal(kind, "pz_action"); assert.deepEqual(options, {});
+  assert.deepEqual({...args[0],request_id:undefined}, {...invocation,request_id:undefined});
+  assert.equal(typeof args[0].request_id, "string");
+  assert.equal(c.socket.sent.filter(frame => frame[0] === "text").length, 0);
+  const first = args[0].request_id;
+  c.document.fire("click", {target:button});
+  assert.notEqual(c.socket.sent.at(-1)[1][0].request_id, first);
+});
 
 test("NPC 키워드는 승인된 토큰만 버튼으로 렌더링하고 원문을 DOM text로 보존", () => {
   const c = client();

@@ -57,6 +57,15 @@ class UnknownCommand(Command):
         if message:
             self.caller.msg(ft.text(ft.token("warning", message)))
             return
+        from world.actions.manifest import get_index
+        from world.actions.presentation import help_entries
+
+        entries = help_entries(get_index())
+        if any(raw == entry["verb"] or raw.endswith(" " + entry["verb"]) or
+               any(raw == alias or raw.endswith(" " + alias) for alias in entry["aliases"])
+               for entry in entries):
+            self.caller.msg("현재 이곳에서 사용할 수 없는 행동입니다. 대상과 도움말을 확인하세요.")
+            return
         self.caller.msg(
             "명령을 확인하세요. 대상 뒤에 행동을 입력합니다: 어린청소룡 때려 · 윤대장에게 임무 말\n"
             "채팅: 안녕하세요 말 또는 '안녕하세요 · 전체 안내: 도움"

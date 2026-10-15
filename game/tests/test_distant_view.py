@@ -15,6 +15,7 @@ from typeclasses.zone_rooms import ZoneRoom
 from world import rules
 from world.content import ENEMIES, ROOMS
 from world.distant_presentation import DistantViewContext, direction_phrase
+from world.selection_numbers.api import descriptor
 
 from tests.base import WorldCommandTest
 
@@ -432,9 +433,11 @@ class DistantViewTests(WorldCommandTest):
             "Generator",
             "SignalDevice",
         }
-        for definition in interactables.INTERACTABLES.values():
+        for identity, definition in interactables.INTERACTABLES.items():
             cls = getattr(interactables, definition["typeclass"])
-            obj = create_object(cls, key=definition["name"], location=room)
+            original = search_tag(identity, category="primal_interactable")[0]
+            obj = create_object(cls, key=definition["name"], location=room,
+                                attributes=[("selection_group_id", descriptor(original).group_id)])
             self.assertEqual(
                 bool(obj.is_distant_visible(context)), cls.__name__ in visible, cls.__name__
             )

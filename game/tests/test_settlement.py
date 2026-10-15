@@ -14,6 +14,7 @@ from world.content import ITEMS, SALVAGE_CREDIT_RATE
 from world.content.integrity import errors
 from world.observation import context_for
 from world.room_hints import render
+from world.selection_numbers.api import descriptor
 from world.state import multiplayer_state
 
 from tests.base import WorldCommandTest
@@ -89,7 +90,8 @@ class SettlementCommandsTests(SettlementFixture, WorldCommandTest):
 
     def test_multiple_officers_require_target_and_hidden_does_not_count(self):
         extra = create_object(SettlementOfficer, key=self.officer.key, location=self.char1.location,
-                              aliases=["정산관"])
+                              aliases=["정산관"],
+                              attributes=[("selection_group_id", descriptor(self.officer).group_id)])
         self.prepare()
         before = deepcopy(self.char1.profile())
         for raw in ("환율", "회수부품 교환"):
