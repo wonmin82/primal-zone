@@ -24,6 +24,8 @@ from world import (
 from world.content import ENEMIES, ITEMS
 from world.content.item_mapping import BOSS_REWARDS
 from world.incinerator_service import incinerate
+from world.interactable_services import generator as repair_generator
+from world.interactable_services import supplycache
 from world.item_entities import api
 from world.item_entities.models import ItemEntity, ItemSequence
 from world.loot_entities.models import CurrencyLoot
@@ -195,7 +197,7 @@ class Phase6RuntimeTests(WorldCommandTest):
         self.char1.change(lambda p: p["quests"]["radio_tower"].update(started=True, record_read=True))
         generator = self.obj("generator")
         self.char1.location = generator.location
-        generator.perform_action(self.char1, "수리")
+        repair_generator(generator, self.char1, "수리", None)
         profile = self.char1.profile()
         self.assertTrue(profile["quests"]["radio_tower"]["generator_fixed"])
         self.assertNotIn("generator_repair_part", profile["inventory"])
@@ -203,7 +205,7 @@ class Phase6RuntimeTests(WorldCommandTest):
         cache = self.obj("supply_cache")
         self.char1.location = cache.location
         with patch.object(self.char1, "msg") as output:
-            cache.perform_action(self.char1, "조사")
+            supplycache(cache, self.char1, "조사", None)
             message = str(output.call_args_list)
             self.assertIn("붕대", message)
             self.assertIn("탐사인식표", message)
@@ -229,7 +231,7 @@ class Phase6RuntimeTests(WorldCommandTest):
                     api.create_item("generator_repair_part", quantity=amount, owner_object=player, location_kind="inventory")
                 bandages = player.profile()["inventory"].get("bandage", 0)
                 with patch.object(player, "msg") as output:
-                    cache.perform_action(player, "조사")
+                    supplycache(cache, player, "조사", None)
                     message = str(output.call_args_list)
                 profile = player.profile()
                 self.assertEqual(profile["inventory"].get("generator_repair_part", 0), expected)
@@ -323,7 +325,7 @@ class Phase6RuntimeTests(WorldCommandTest):
         cache = self.obj("supply_cache")
         player.location = cache.location
         with patch.object(player, "msg") as output:
-            cache.act(player, "조사", None)
+            supplycache(cache, player, "조사", None)
             self.assertIn("정비용 회수부품", str(output.call_args_list))
             self.assertIn("탐사인식표", str(output.call_args_list))
         self.assertEqual(player.profile()["inventory"]["generator_repair_part"], 3)
@@ -394,7 +396,7 @@ class Phase6RuntimeTests(WorldCommandTest):
         cache = self.obj("supply_cache")
         self.char1.location = cache.location
         with patch.object(self.char1, "msg") as output:
-            cache.perform_action(self.char1, "조사")
+            supplycache(cache, self.char1, "조사", None)
             self.assertIn("기존 보유량을 포함해 3개", str(output.call_args_list))
             self.assertNotIn("0개", str(output.call_args_list))
         self.assertEqual(sum(row.quantity for row in api.items_owned_by(self.char1) if row.definition_id == "generator_repair_part"), 3)

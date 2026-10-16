@@ -344,21 +344,39 @@ test("재바인딩 중 승계 불가 스냅샷은 버튼과 상태 설명을 일
   assert.match(c.byId("party-state").textContent,/승계 가능/);
 });
 
-test("문 조작은 기존 상호작용 버튼과 text 명령 경로를 사용하고 새 상태로 교체", () => {
+test("문 조작은 안정 Endpoint Action이고 이동은 기존 text 경로를 유지", () => {
   const c = client();
   const door = actions => ({name:"관리실 문",label:"동 관리실 문",role:"object",look_command:"동 문 봐",actions});
   const exit = can_move => ({name:"동",exists:true,can_move,status:can_move ? "이동 가능" : "문 닫힘",destination_name:"미탐사",reason:""});
-  c.receive("pz_state",partyState(null,{interactables:[door([{label:"열어",command:"동 문 열어"}])],exit_details:[exit(false)],exits:["동"]}));
-  const open = c.byId("context-actions").children.find(row => row.dataset.command === "동 문 열어");
+  const action = operation => ({action_id:"door." + operation,variant:"normal",roles:{provider:[{kind:"door",identity:"42",scope_id:"room:7"}]},arguments:{}});
+  c.receive("pz_state",partyState(null,{interactables:[door([{label:"열어",action:action("open")}])],exit_details:[exit(false)],exits:["동"]}));
+  const open = c.byId("context-actions").children.find(row => row.dataset.actionInvocation);
   assert.ok(open);
   assert.equal(open.firstElementChild.className,"semantic-object");
   c.document.fire("click",{target:open});
-  assert.deepEqual(c.socket.sent.at(-1),["text",["동 문 열어"],{}]);
-  c.receive("pz_state",partyState(null,{interactables:[door([{label:"닫아",command:"동 문 닫아"}])],exit_details:[exit(true)],exits:["동"]}));
-  assert.ok(commandButtons(c.byId("context-actions")).includes("동 문 닫아"));
-  assert.ok(!commandButtons(c.byId("context-actions")).includes("동 문 열어"));
+  assert.equal(c.socket.sent.at(-1)[0],"pz_action");
+  assert.deepEqual(c.socket.sent.at(-1)[1][0].roles,action("open").roles);
+  c.receive("pz_state",partyState(null,{interactables:[door([{label:"닫아",action:action("close")}])],exit_details:[exit(true)],exits:["동"]}));
+  const close = c.byId("context-actions").children.find(row => row.dataset.actionInvocation);
+  assert.equal(JSON.parse(close.dataset.actionInvocation).action_id,"door.close");
   c.receive("pz_state",partyState(null,{interactables:[door([])],exit_details:[exit(false)],exits:["동"]}));
-  assert.ok(!commandButtons(c.byId("context-actions")).includes("동 문 닫아"));
+  assert.equal(c.byId("context-actions").children.filter(row => row.dataset.actionInvocation).length,0);
   const move = c.byId("exits").firstElementChild.children.find(row => row.dataset?.command === "동");
   assert.equal(move.disabled,true);
+});
+
+test("재분배 버튼은 서버 배열 순서와 무관하게 선언된 scope의 Action만 전송", () => {
+  const c = client();
+  const reset = ["all","attributes","skills"].map(scope => ({action:{action_id:"training.reset."+scope,
+    variant:"normal",roles:{provider:[{kind:"object",identity:"42",scope_id:"room:7"}]},arguments:{value:scope}}}));
+  c.receive("pz_state",partyState(null,{training_controls:{reset}}));
+  for (const scope of ["attributes","skills","all"]) {
+    const button = c.byId("reset-"+scope);
+    assert.equal(button.disabled,false);
+    c.document.fire("click",{target:button});
+    const frame = c.socket.sent.at(-1);
+    assert.equal(frame[0],"pz_action");
+    assert.equal(frame[1][0].arguments.value,scope);
+    assert.equal(frame[1][0].action_id,"training.reset."+scope);
+  }
 });

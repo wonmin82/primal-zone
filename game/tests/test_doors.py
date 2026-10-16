@@ -9,6 +9,7 @@ from typeclasses.explorers import Explorer
 from world import doors, rules
 from world.bootstrap import build_world
 from world.door_entities.models import Door, DoorInstallation
+from world.door_keys import issue_key
 from world.multiplayer import world_change
 
 from tests.base import WorldCommandTest
@@ -358,13 +359,15 @@ class DoorTest(WorldCommandTest):
         return api.create_item("hq_admin_key", owner_object=caller, location_kind="inventory")
 
     def test_four_registry_commands_actual_postfix_parser_and_help(self):
-        from commands.doors import DOOR_COMMANDS
         from commands.help_pages import help_page
         from commands.registry import COMMANDS
-        self.assertEqual([command.key for command in DOOR_COMMANDS], ["열어", "닫아", "잠궈", "풀어"])
-        for command in DOOR_COMMANDS:
-            self.assertIn(command, COMMANDS)
-            self.assertEqual(command.aliases, [])
+        from world.actions.manifest import get_index
+        index = get_index()
+        commands = [index.verbs["game." + key] for key in ("open", "close", "lock", "unlock")]
+        self.assertEqual([command.key for command in commands], ["열어", "닫아", "잠궈", "풀어"])
+        for command in commands:
+            self.assertNotIn(command.key, {legacy.key for legacy in COMMANDS})
+            self.assertEqual(command.aliases, ())
             self.assertEqual(len(command.help_sections), 5)
             for suffix in ("도움", "도움말"):
                 output = self.raw(f"{command.key} {suffix}")
@@ -651,7 +654,10 @@ class DoorTest(WorldCommandTest):
         self.assertEqual([target.direction for target in targets], ["북", "동"])
         with self.assertRaises(rules.RuleError):
             doors.resolve_door(self.char1, "문", "열어", 100)
-        self.assertEqual(doors.resolve_door(self.char1, "문 2", "닫아", 100).identity, "hq_admin_door")
+        # 방향 표시 순서와 B-1 번호는 별개다. 기존 관리실 endpoint는 1을 유지하고
+        # 다른 Scope에서 들어온 회복실 endpoint는 새 번호 2를 받는다.
+        self.assertEqual(doors.resolve_door(self.char1, "문 1", "닫아", 100).identity, "hq_admin_door")
+        self.assertEqual(doors.resolve_door(self.char1, "문 2", "닫아", 100).identity, "recovery_room_door")
         self.assertEqual(doors.resolve_door(self.char1, "북 문", "닫아", 100).identity, "recovery_room_door")
         with self.assertRaises(rules.RuleError):
             doors.operate(self.char1, "북 문", "닫아", 100)
@@ -676,16 +682,51 @@ class DoorTest(WorldCommandTest):
         self.assertNotIn("300", outputs[0])
 
     def test_web_existing_interactables_protocol_stale_buttons_and_expired_state(self):
+        from server.conf.primal_inputfuncs import pz_action
         from world.exit_presentation import exit_entries
         from world.state import multiplayer_state
+
         self.opened()
+        endpoint = self.door().exit_a
+        reference = {"kind": "door", "identity": str(endpoint.pk), "scope_id": f"room:{self.char1.location.pk}"}
         row = next(row for row in multiplayer_state(self.char1, 100)["interactables"] if row["name"] == "관리실 문")
-        self.assertEqual(row["actions"], [{"label": "닫아", "command": "동 문 닫아"}])
+        self.assertEqual(len(row["actions"]), 1)
+        close = row["actions"][0]
+        self.assertNotIn("command", close)
+        self.assertEqual(close["label"], "닫아")
+        self.assertEqual(close["action"], {"action_id": "door.close", "variant": "normal",
+                                           "roles": {"provider": [reference]}, "arguments": {}})
         before = list(Door.objects.values())
         expired = next(row for row in multiplayer_state(self.char1, 160)["interactables"] if row["name"] == "관리실 문")
-        self.assertEqual(expired["actions"], [{"label": "열어", "command": "동 문 열어"}])
+        self.assertEqual(len(expired["actions"]), 1)
+        reopen = expired["actions"][0]
+        self.assertNotIn("command", reopen)
+        self.assertEqual(reopen["label"], "열어")
+        self.assertEqual(reopen["action"], {"action_id": "door.open", "variant": "normal",
+                                            "roles": {"provider": [reference]}, "arguments": {}})
         self.assertFalse(next(e for e in exit_entries(self.char1, observed_at=160) if e["name"] == "동")["can_move"])
         self.assertEqual(list(Door.objects.values()), before)
+        # 이동·권한 변경 뒤의 오래된 버튼은 원래 endpoint를 대신 선택하지 않는다.
+        self.char1.location = self.rooms["dock"]
+        pz_action(self.session, {**close["action"], "request_id": "door-distant"})
+        self.assertEqual(list(Door.objects.values()), before)
+        self.char1.location = self.rooms["hq_concourse"]
+        endpoint.locks.add("call:false()")
+        pz_action(self.session, {**close["action"], "request_id": "door-denied"})
+        self.assertEqual(list(Door.objects.values()), before)
+        endpoint.locks.add("call:all()")
+        self.char1.msg.reset_mock()
+        payload = {**close["action"], "request_id": "door-close-once"}
+        pz_action(self.session, payload)
+        self.assertEqual((self.door().state, self.door().auto_close_at), ("CLOSED", None))
+        self.assertEqual(sum("닫았다" in str(call.args[0]) for call in self.char1.msg.call_args_list if call.args), 1)
+        committed = list(Door.objects.values())
+        self.char1.msg.reset_mock()
+        pz_action(self.session, payload)
+        self.assertEqual(list(Door.objects.values()), committed)
+        self.assertFalse(any("닫았다" in str(call.args[0]) for call in self.char1.msg.call_args_list if call.args))
+        pz_action(self.session, {**reopen["action"], "request_id": "door-open-once"})
+        self.assertEqual((self.door().state, self.door().auto_close_at), ("OPEN", 160))
         doors.operate(self.char1, "문", "닫아", 100)
         self.assertFalse(self.door().exit_a.at_traverse(self.char1, self.rooms["hq_admin_office"]))
         with patch("world.observation.perceives", return_value=False):
@@ -721,7 +762,7 @@ class DoorTest(WorldCommandTest):
         self.char1.location = bed.location
         profile = self.char1.profile_snapshot()
         self.char1.db.profile = {**profile, "hp": 1, "mental": 1}
-        bed.perform_action(self.char1, "휴식")
+        self.char1.execute_cmd("침대 휴식")
         recovered = self.char1.profile_snapshot()
         self.assertGreater(recovered["hp"], 1)
         self.assertGreater(recovered["mental"], 1)
@@ -795,33 +836,33 @@ class DoorKeyTests(NativeItemTest):
     def test_actual_cabinet_free_issue_duplicate_reissue_and_per_owner(self):
         from world.door_keys import owned_key
         credits = self.char1.profile_snapshot()["credits"]
-        key = self.cabinet.perform_action(self.char1, "조사")
+        key = issue_key(self.char1, self.cabinet)
         self.assertEqual((key.definition_id, key.quantity, key.location_kind, key.unique_scope_key),
                          ("hq_admin_key", 1, "inventory", f"{self.char1.pk}:hq_admin_key"))
         self.assertEqual(owned_key(self.char1).pk, key.pk)
         self.assertEqual(self.char1.profile_snapshot()["credits"], credits)
         with self.assertRaises(rules.RuleError):
-            self.cabinet.perform_action(self.char1, "조사")
-        other = self.cabinet.perform_action(self.char2, "조사")
+            issue_key(self.char1, self.cabinet)
+        other = issue_key(self.char2, self.cabinet)
         self.assertNotEqual(other.pk, key.pk)
         key.delete()  # 관리자/실제 소실 이후 재발급 경로; 사용자 소각은 허용하지 않는다.
-        self.assertNotEqual(self.cabinet.perform_action(self.char1, "조사").pk, key.pk)
+        self.assertNotEqual(issue_key(self.char1, self.cabinet).pk, key.pk)
 
     def test_unique_scope_and_repeated_session_request(self):
         from world.item_entities import api
         from world.item_entities.models import ItemEntity
-        first = self.cabinet.perform_action(self.char1, "조사")
+        first = issue_key(self.char1, self.cabinet)
         with self.assertRaises((ValidationError, IntegrityError)), world_change():
             api.create_item("hq_admin_key", location_kind="inventory", owner_object=self.char1)
         for _ in range(2):
             with self.assertRaises(rules.RuleError):
-                self.cabinet.perform_action(self.char1, "조사")
+                issue_key(self.char1, self.cabinet)
         self.assertEqual(list(ItemEntity.objects.filter(definition_id="hq_admin_key").values_list("pk", flat=True)), [first.pk])
 
     def test_every_operation_blocked_at_actual_api_and_state_preserved(self):
         from world.item_entities import api
         from world.item_entities.policy import TREE_OPERATION_SCOPES, can_item_operation
-        key = self.cabinet.perform_action(self.char1, "조사")
+        key = issue_key(self.char1, self.cabinet)
         snapshot = self.atomic_state()
         for operation in TREE_OPERATION_SCOPES:
             with self.subTest(operation=operation):
@@ -832,24 +873,24 @@ class DoorKeyTests(NativeItemTest):
 
     def test_corrupt_ownership_not_duplicated_and_combat_or_remote_denied(self):
         from world.item_entities.models import ItemEntity
-        key = self.cabinet.perform_action(self.char1, "조사")
+        key = issue_key(self.char1, self.cabinet)
         ItemEntity.objects.filter(pk=key.pk).update(unique_scope_key=None)
         with self.assertRaises(rules.RuleError):
-            self.cabinet.perform_action(self.char1, "조사")
+            issue_key(self.char1, self.cabinet)
         self.assertEqual(ItemEntity.objects.filter(definition_id="hq_admin_key").count(), 1)
         self.char2.db.profile = {**self.char2.profile_snapshot(), "combat_target": 999}
         with self.assertRaises(rules.RuleError):
-            self.cabinet.perform_action(self.char2, "조사")
+            issue_key(self.char2, self.cabinet)
         self.char2.location = self.room1
         with self.assertRaises(rules.RuleError):
-            self.cabinet.perform_action(self.char2, "조사")
+            issue_key(self.char2, self.cabinet)
 
     def test_information_inventory_and_credential_are_separate_read_only(self):
         from world.access import can_enter
         from world.bootstrap import get_room
         from world.door_keys import owned_key
         from world.item_information import item_information
-        self.cabinet.perform_action(self.char1, "조사")
+        issue_key(self.char1, self.cabinet)
         self.assertIsNotNone(owned_key(self.char1))
         snapshot = self.atomic_state()
         output = str(item_information(self.char1, "관리실 열쇠", 100))
@@ -865,7 +906,7 @@ class DoorKeyTests(NativeItemTest):
         self.char1.msg.reset_mock()
         self.char1.push_state.reset_mock()
         with self.assertRaises(RuntimeError), world_change():
-            self.cabinet.perform_action(self.char1, "조사")
+            issue_key(self.char1, self.cabinet)
             self.char1.msg.assert_not_called()
             self.char1.push_state.assert_not_called()
             raise RuntimeError("outer rollback")
@@ -873,7 +914,7 @@ class DoorKeyTests(NativeItemTest):
         with world_change():
             try:
                 with world_change():
-                    self.cabinet.perform_action(self.char1, "조사")
+                    issue_key(self.char1, self.cabinet)
                     raise RuntimeError("inner rollback")
             except RuntimeError:
                 pass
@@ -881,14 +922,15 @@ class DoorKeyTests(NativeItemTest):
         self.assertFalse(ItemEntity.objects.filter(definition_id="hq_admin_key").exists())
 
     def test_actual_investigate_command_defers_all_web_updates_until_commit(self):
-        from commands.world_actions import Investigate
+        from commands.action_command import DynamicActionCommand
         from world.item_entities.models import ItemEntity
         for player in (self.char1, self.char2):
             self.connect_character(player)
             player.msg.reset_mock()
             player.push_state.reset_mock()
-        command = Investigate()
+        command = DynamicActionCommand(key="조사")
         command.caller, command.args = self.char1, "관리실 열쇠함"
+        command.verb_id, command.cmdstring, command.session = "game.inspect", "조사", self.session
         with self.assertRaises(RuntimeError), world_change():
             command.func()
             self.char1.msg.assert_not_called()

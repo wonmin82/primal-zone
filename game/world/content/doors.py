@@ -2,13 +2,13 @@
 
 DOORS = {
     "hq_admin_door": {
-        "name": "관리실 문", "aliases": ["관리실문"],
+        "name": "관리실 문", "aliases": ["관리실문"], "legacy_singleton_suffix_1": True,
         "endpoints": (("hq_concourse", "동", "hq_admin_office"), ("hq_admin_office", "서", "hq_concourse")),
         "initial_state": "LOCKED", "lockable": True,
         "key_id": "hq_admin_key", "inside_room_id": "hq_admin_office",
     },
     "recovery_room_door": {
-        "name": "회복실 문", "aliases": ["회복실문"],
+        "name": "회복실 문", "aliases": ["회복실문"], "legacy_singleton_suffix_1": True,
         "endpoints": (("support_3f_e1", "북", "recovery_room"), ("recovery_room", "남", "support_3f_e1")),
         "initial_state": "OPEN", "lockable": False, "key_id": "", "inside_room_id": "",
     },

@@ -5,7 +5,6 @@ from unittest.mock import Mock, patch
 from commands.character import Abilities, Experience, Help, Skills
 from commands.default_cmdsets import CharacterCmdSet, UnloggedinCmdSet
 from commands.inventory import Equipment
-from commands.skills import Allocate
 from evennia import CmdSet, Command, create_object, search_tag
 from evennia.commands.cmdparser import cmdparser as default_parser
 from server.conf.cmdparser import cmdparser
@@ -22,7 +21,6 @@ from typeclasses.interactables import (
 from typeclasses.parties import invite, respond
 from world import rules
 from world.bootstrap import build_world
-from world.multiplayer import world_change
 from world.progression import ATTRIBUTES, SKILLS
 
 from tests.base import WorldCommandTest
@@ -118,9 +116,7 @@ class GrowthIntegrationTests(WorldCommandTest):
             original(profile)
             raise RuntimeError('save failure')
         with patch.object(self.char1, 'save_profile', side_effect=fail):
-            with self.assertRaises(RuntimeError):
-                with world_change():
-                    manager.perform_action(self.char1, '재분배', 'all')
+            self.assertIn('행동 처리 중 오류', self.command('전체 재훈련'))
         self.assertEqual(self.char1.profile(), before)
         self.command('전체 재훈련')
         self.assertEqual(self.char1.profile()['attributes']['strength']['allocated'], 0)
@@ -316,6 +312,9 @@ class GrowthIntegrationTests(WorldCommandTest):
         for text in ("ㅂ 말", "'ㅂ"):
             match = cmdparser(text, cmdset, self.char1)[0]
             self.assertEqual((match[2].key, match[1]), ("말", "ㅂ"))
+        from commands.action_command import DynamicActionCommand
+
+        cmdset.add(DynamicActionCommand(key="조사"))
         match = cmdparser("ㅂ 정비 기록 조사", cmdset, self.char1)[0]
         self.assertEqual(match[1], "ㅂ 정비 기록")
         self.assertFalse(cmdparser("배워 강타", cmdset, self.char1))
@@ -326,7 +325,7 @@ class GrowthIntegrationTests(WorldCommandTest):
         )
         admin = CmdSet(self.char1)
         admin.add(Command(key="상"))
-        admin.add(Allocate())
+        admin.add(DynamicActionCommand(key="배분"))
         self.assertEqual(cmdparser("상", admin, self.char1)[0][2].key, "상")
 
     def test_information_commands_and_help_registry(self):

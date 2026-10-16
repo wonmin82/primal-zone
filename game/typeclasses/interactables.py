@@ -5,8 +5,7 @@ from functools import wraps
 from evennia.objects.objects import DefaultObject
 from world import rules
 from world import text as ft
-from world.content import ENEMIES, ITEMS, ROOMS, SALVAGE_CREDIT_RATE, SHOP_CATALOGS
-from world.currency import format_currency
+from world.content import ROOMS, SHOP_CATALOGS
 from world.distant_presentation import DistantPresence, DistantPresenceMixin
 from world.progression import ATTRIBUTES, SKILLS
 from world.selection_numbers.mixins import NumberedObjectMixin
@@ -54,34 +53,18 @@ class ActionObject(NumberedObjectMixin, DistantPresenceMixin, DefaultObject):
         return action in self.actions
 
     def web_actions(self, caller, target, observed_at=None):
-        """기존 Web control allowlist. 성장·보관 조작은 전용 UI/명령을 유지한다."""
-        return [
-            {"label": action, "command": target + " " + action}
-            for action in (("봐",) if isinstance(self, Container) else self.actions)
-            if action in ("조사", "수리", "봐", "회복", "휴식")
-            and (action not in ("회복", "휴식") or self.available(caller, observed_at=observed_at))
-        ]
+        from world.actions.room_npc_presentation import controls_for
+        return controls_for(caller, self, observed_at)
 
-    def perform_action(self, caller, action, args=None):
-        from world.observation import can_perceive, context_for
-
-        if self.location != caller.location or not self.supports_action(action):
-            raise rules.RuleError("이곳에서 그 대상에게 할 수 없는 행동입니다.")
-        if not can_perceive(self, context_for(caller)):
-            raise rules.RuleError("지금은 그 대상을 식별할 수 없습니다. 광원을 사용하세요.")
-        rules.require_peace(caller.profile())
-        return self.act(caller, action, args)
 
 
 class AdminKeyCabinet(ActionObject):
+    action_provider_definition = "world.adminkeycabinet"
     detectability = "normal"
     actions = ("조사",)
     presence = "벽에 고정되어 있다. 관리실 예비열쇠를 보관한다."
     description = "관리실 열쇠가 없는 탐사자에게 개인 열쇠 하나를 무료로 지급한다."
 
-    def act(self, caller, action, args):
-        from world.door_keys import issue_key
-        return issue_key(caller, self)
 
 
 class Commander(ActionObject):
@@ -94,6 +77,16 @@ class Commander(ActionObject):
 
 
 class Container(ActionObject):
+    def perform_action(self, caller, action, args=None):
+        from world.observation import can_perceive, context_for
+
+        if self.location != caller.location or not self.supports_action(action):
+            raise rules.RuleError("이곳에서 그 대상에게 할 수 없는 행동입니다.")
+        if not can_perceive(self, context_for(caller)):
+            raise rules.RuleError("지금은 그 대상을 식별할 수 없습니다. 광원을 사용하세요.")
+        rules.require_peace(caller.profile())
+        return self.act(caller, action, args)
+
     """공용 스택 보관 공간. 개인 보관함은 caller의 profile만 사용한다."""
 
     distant_visible = True
@@ -159,69 +152,30 @@ class PersonalLocker(Container):
 
 
 class MaintenanceLog(ActionObject):
+    action_provider_definition = "world.maintenancelog"
     distant_visible = False
     presence = "젖은 책상 위에 펼쳐져 있다."
     description = "발전기 복구 절차와 현장 전투 기록이 남아 있는 문서다."
     actions = ("조사",)
 
-    def act(self, caller, action, args):
-        caller.change(rules.read_record)
-        caller.msg(
-            ft.text(
-                content_name("maintenance_log"),
-                "을 펼쳐 복구 절차를 읽었다.\n  ",
-                ft.item("generator_repair_part"),
-                " 3개로 ",
-                content_name("generator"),
-                "를 수리하면 능선의 문을 열 수 있다.\n  ",
-                ft.named("hostile", ENEMIES["alpha"]["name"], "이/가"),
-                " 몸을 낮추면 다음 차례에는 ",
-                ft.token("command", "견제"),
-                "로 공격을 약화시키고 부상은 치료할 것.",
-            )
-        )
 
 
 class SupplyCache(ActionObject):
+    action_provider_definition = "world.supplycache"
     presence = "뒤집힌 수송차 틈에 걸려 있다."
     description = "누군가 남긴 보급품이 들어 있는 튼튼한 상자다."
     actions = ("조사",)
 
-    def act(self, caller, action, args):
-        profile = caller.profile_snapshot()
-        generator_fixed = profile["quests"]["radio_tower"]["generator_fixed"]
-        existing_parts = profile["inventory"].get("generator_repair_part", 0)
-        caller.change(rules.claim_cache)
-        missing_parts = 0 if generator_fixed else max(0, 3 - existing_parts)
-        caller.msg(
-            ft.text(
-                ft.token("object", self.key), "에서 ", ft.item("bandage"), " 2개",
-                ft.text(", ", ft.item("generator_repair_part"), f" {missing_parts}개") if missing_parts else "",
-                "와 ", ft.item("expedition_tag"), "를 찾아 챙겼다.",
-                " 정비용 회수부품은 기존 보유량을 포함해 3개를 확보했다." if existing_parts and not generator_fixed else "",
-            )
-        )
 
 
 class Generator(ActionObject):
+    action_provider_definition = "world.generator"
     detectability = "conspicuous"
     distant_visible = True
     presence = "낡은 외벽 너머로 희미한 경고등을 깜빡이고 있다."
     description = "능선 진입문에 전력을 공급하는 설비다. 정비기록과 부품이 필요하다."
     actions = ("수리",)
 
-    def act(self, caller, action, args):
-        before = caller.profile()["xp"]
-        from world.facilities import restore_outpost_power
-
-        restore_outpost_power(caller)
-        gained = caller.profile()["xp"] - before
-        body = ft.text(ft.named("object", self.key, "이/가"),
-                       " 다시 돌아가기 시작했다. 공용 조명에 전력이 들어왔다.")
-        if gained:
-            body = ft.text(body, " 능선 진입문이 열렸다.\n복구 작업으로 ",
-                           ft.token("reward", f"경험치 {gained}"), "를 얻었다.")
-        caller.msg(body)
 
 
 def _service_available(obj, caller, observed_at=None):
@@ -256,80 +210,48 @@ class GrowthTrainer(ActionObject):
         return ft.sheet(ft.token("npc", self.key), self.description, "", offer, "",
                         ft.join([ft.usage(command, set(self.actions) | {"재훈련"}) for command in commands], "\n"))
 
-    def act(self, caller, action, args):
-        self.train(caller, action, args)
 
 
 class SkillTrainer(GrowthTrainer):
+    @property
+    def action_provider_definition(self):
+        return "skill." + str(self.db.skill_id)
+
     actions = ("배워",)
 
     def training_offer(self):
         name = SKILLS[self.db.skill_id]["name"]
         return f"이 교관에게서 {name}{ft.particle(name, '을/를')} 배울 수 있다.", (name + " 배워",)
 
-    def train(self, caller, action, skill):
-        if action != "배워" or skill != self.db.skill_id:
-            raise rules.RuleError("이 교관이 담당하는 기술이 아니다.")
-        before = rules.skill_rank(caller.profile(), skill)
-        caller.change(lambda profile: rules.learn_skill(profile, skill, safe=self.available(caller)))
-        remaining = rules.point_pools(caller.profile())["skill_points"]
-        caller.msg(f"{self.key}에게 {SKILLS[skill]['name']}{ft.particle(SKILLS[skill]['name'], '을/를')} 훈련받아 R{before}에서 R{before + 1}로 올랐고 기술 훈련이 {remaining}회 남았다.")
 
-    def web_actions(self, caller, target, observed_at=None):
-        if not self.available(caller, observed_at):
-            return []
-        skill = rules.skill_state(caller.profile_snapshot(), self.db.skill_id)
-        return [{"label": skill["name"] + " 배워", "command": f"{target}에게 {skill['name']} 배워"}] if skill["can_learn"] else []
 
 
 class AttributeTrainer(GrowthTrainer):
+    @property
+    def action_provider_definition(self):
+        return "attribute." + str(self.db.attribute_id)
+
     actions = ("배분",)
 
     def training_offer(self):
         name = ATTRIBUTES[self.db.attribute_id]["name"]
         return f"이 교관에게서 {name}{ft.particle(name, '을/를')} 배분할 수 있다.", (name + " 배분",)
 
-    def train(self, caller, action, args):
-        attribute, amount = args
-        if action != "배분" or attribute != self.db.attribute_id:
-            raise rules.RuleError("이 교관이 담당하는 특성이 아니다.")
-        before = 10 + rules.allocated(caller.profile(), attribute)
-        caller.change(lambda profile: rules.allocate_attribute(profile, attribute, amount, safe=self.available(caller)))
-        remaining = rules.point_pools(caller.profile())["attribute_points"]
-        name = ATTRIBUTES[attribute]['name']
-        caller.msg(f"{self.key}에게 훈련받아 {name}{ft.particle(name)} {before}에서 {before + amount}{ft.particle(str(before + amount), '으로/로')} 올랐고 특성 포인트가 {remaining}점 남았다.")
 
-    def web_actions(self, caller, target, observed_at=None):
-        profile = caller.profile_snapshot()
-        if not self.available(caller, observed_at) or rules.point_pools(profile)["attribute_points"] < 1 or rules.allocated(profile, self.db.attribute_id) >= 20:
-            return []
-        name = ATTRIBUTES[self.db.attribute_id]["name"]
-        return [{"label": name + " +1 배분", "command": f"{target}에게 {name} 1 배분"}]
 
 
 class TrainingManager(GrowthTrainer):
+    action_provider_definition = "world.trainingmanager"
     actions = ("재분배",)
 
     def training_offer(self):
         return "이 관리관에게서 특성이나 기술 투자를 다시 정리할 수 있다.", ("특성 재분배", "기술 재분배", "전체 재훈련")
 
-    def train(self, caller, action, scope):
-        result = caller.change(lambda profile: rules.retrain(profile, scope, safe=self.available(caller)))
-        attributes, skills = result["attribute_points"], result["skill_training"]
-        message = {
-            "attributes": f"특성 투자를 초기화해 특성 포인트 {attributes}점",
-            "skills": f"모든 기술을 R1로 초기화해 기술 훈련 {skills}회",
-            "all": f"특성과 기술을 모두 초기화해 특성 포인트 {attributes}점과 기술 훈련 {skills}회",
-        }[result["scope"]]
-        caller.msg(f"{self.key}{ft.particle(self.key)} {message}{ft.particle(message, '을/를')} 다시 사용할 수 있게 했다.")
 
-    def web_actions(self, caller, target, observed_at=None):
-        if not self.available(caller, observed_at):
-            return []
-        return [{"label": text, "command": target + "에게 " + text} for text in ("특성 재분배", "기술 재분배", "전체 재훈련")]
 
 
 class Doctor(ActionObject):
+    action_provider_definition = "world.doctor"
     semantic_role = "npc"
     detectability = "conspicuous"
     presence = "탐사자의 부상을 살피며 회복을 준비하고 있다."
@@ -354,30 +276,11 @@ class Doctor(ActionObject):
             lines.append(ft.actions(self.actions))
         return ft.sheet(ft.token(self.semantic_role, self.key), *lines)
 
-    def web_actions(self, caller, target, observed_at=None):
-        if not self.available(caller, observed_at):
-            return []
-        try:
-            restored, cost = self.quote(caller)
-        except rules.RuleError:
-            return []
-        return [{"label": f"HP {restored} 회복 · 예상 {cost}칩", "command": target + " 회복"}]
 
-    def act(self, caller, action, args):
-        quoted_hp, quoted_cost = self.quote(caller, args)
-        caller.msg(f"요청 HP {quoted_hp} 회복 예상 비용: {quoted_cost}칩 (실행 시 재계산)")
-        from world.multiplayer import world_change
-
-        # 유료 서비스는 SP 자연회복 checkpoint와 분리한다. 조회/실패/성공 모두
-        # 요청 자체가 정신력을 증가시키지 않으며 scheduler의 회복은 독립적이다.
-        with world_change():
-            profile = caller.profile()
-            restored, cost = rules.treat(profile, args, safe=ROOMS.get(caller.zone, {}).get("safe", False))
-            caller.save_profile(profile)
-        caller.msg(f"HP {restored} 회복 · 비용 {cost}칩을 지불했습니다. 정신력은 회복하지 않습니다.")
 
 
 class Bed(ActionObject):
+    action_provider_definition = "world.bed"
     detectability = "conspicuous"
     presence = "깨끗한 시트와 담요로 정돈되어 있다."
     description = "몸을 눕히고 회복할 수 있는 의료용 침대다."
@@ -388,12 +291,10 @@ class Bed(ActionObject):
         return ft.sheet(ft.token(self.semantic_role, self.key), self.description, "",
                         ft.actions(self.actions if self.available(looker) else ()))
 
-    def act(self, caller, action, args):
-        caller.change(lambda profile: rules.rest(profile, safe=ROOMS.get(caller.zone, {}).get("safe", False)))
-        caller.msg("침대에서 휴식하며 체력과 정신력을 모두 회복했습니다.")
 
 
 class SettlementOfficer(ActionObject):
+    action_provider_definition = "world.settlementofficer"
     semantic_role = "npc"
     detectability = "conspicuous"
     presence = "탐사에서 회수한 물자를 확인하며 정산을 준비하고 있다."
@@ -402,14 +303,6 @@ class SettlementOfficer(ActionObject):
 
     available = _service_available
 
-    def web_actions(self, caller, target, observed_at=None):
-        if not self.available(caller, observed_at):
-            return []
-        actions = [{"label": "환율", "command": target + " 환율"}]
-        if caller.profile_snapshot()["inventory"].get("scrap", 0) > 0:
-            resource = ITEMS["scrap"]["name"]
-            actions.append({"label": resource + " 모두 교환", "command": target + "에게 " + resource + " 모두 교환"})
-        return actions
 
     @dialogue_appearance
     def return_appearance(self, looker, **kwargs):
@@ -424,24 +317,13 @@ class SettlementOfficer(ActionObject):
             )], " · ")
         return ft.sheet(ft.token(self.semantic_role, self.key), self.description, "", usage)
 
-    def act(self, caller, action, args):
-        if not ROOMS.get(caller.zone, {}).get("safe", False):
-            raise rules.RuleError("안전한 곳에서만 자원을 정산할 수 있습니다.")
-        if action == "환율":
-            caller.msg(ft.text(ft.item("scrap"), f" 1개 → {format_currency(SALVAGE_CREDIT_RATE)}"))
-            return
-
-        def settle(profile):
-            quantity = profile["inventory"].get("scrap", 0) if args is None else args
-            if args is None and not quantity:
-                raise rules.RuleError("정산할 회수부품이 없습니다.")
-            return quantity, rules.settle_salvage(profile, quantity)
-
-        quantity, earned = caller.change(settle)
-        caller.msg(ft.text(ft.item("scrap"), f" {quantity}개를 정산했다. {format_currency(earned)}을 받았다."))
 
 
 class Shopkeeper(ActionObject):
+    @property
+    def action_provider_definition(self):
+        return "shop." + str(self.db.shop_id)
+
     semantic_role = "npc"
     detectability = "conspicuous"
     presence = "판매대에서 탐사 장비와 보급품을 정리하고 있다."
@@ -451,25 +333,6 @@ class Shopkeeper(ActionObject):
     def available(self, caller, observed_at=None):
         return _service_available(self, caller, observed_at) and self.db.shop_id in SHOP_CATALOGS
 
-    def web_actions(self, caller, target, observed_at=None):
-        if not self.available(caller, observed_at):
-            return []
-        from world.shop_service import shop_snapshot
-
-        catalog, sales = shop_snapshot(caller, self, observed_at)
-        actions = [{"label": "목록", "command": target + " 목록"}]
-        for item in catalog:
-            name = ITEMS[item]["name"]
-            unit = f" ×{ITEMS[item]['purchase_quantity']}발" if ITEMS[item].get("purchase_quantity", 1) != 1 else ""
-            actions.extend(({"label": f"{name}{unit} · {format_currency(rules.purchase_price(item))} 사",
-                             "command": f"{target}에게 {name} 사"},
-                            {"label": name + " 가치", "command": f"{target}에게 {name} 가치"}))
-        for name, quantity, price, stackable in sales:
-            actions.append({"label": f"{name} · {format_currency(price)} 팔아", "command": f"{target}에게 {name} 팔아"})
-            if stackable and quantity >= 2:
-                actions.append({"label": f"{name} 모두 팔아 · 총 {format_currency(quantity * price)}",
-                                "command": f"{target}에게 {name} 모두 팔아"})
-        return actions
 
     @dialogue_appearance
     def return_appearance(self, looker, **kwargs):
@@ -483,49 +346,10 @@ class Shopkeeper(ActionObject):
             )], " · ")
         return ft.sheet(ft.token("npc", self.key), self.description, "", usage)
 
-    def act(self, caller, action, args):
-        from world import presentation as view
-
-        if not ROOMS.get(caller.zone, {}).get("safe", False):
-            raise rules.RuleError("안전한 곳에서만 상점을 이용할 수 있습니다.")
-        if self.db.shop_id not in SHOP_CATALOGS:
-            raise rules.RuleError("상점 판매 목록을 확인할 수 없습니다.")
-        if action == "목록":
-            caller.msg(view.shop(self.db.shop_id, self.key))
-        elif action == "사":
-            from world.shop_service import buy
-
-            buy(caller, self, args)
-            quantity = ITEMS[args].get("purchase_quantity", 1)
-            caller.msg(ft.text(ft.item(args), f" {quantity}개를 받아 소지품에 넣었다."))
-        elif action == "가치":
-            from world.shop_service import valuation
-
-            name, _quantity = args
-            price = valuation(caller, self, name)
-            from world.content.items import find_id
-            from world.targets import parse_selector
-
-            identity = find_id(ITEMS, parse_selector(name).name)
-            try:
-                purchase = rules.purchase_price(identity)
-            except rules.RuleError:
-                purchase = None
-            caller.msg(ft.text(ft.token("npc", self.key), "은 ", ft.token("item", name), "의 가치를 평가한다.\n",
-                               f"구매 기준가는 {format_currency(purchase)}이다.\n" if purchase else "",
-                               "매입가는 ", ft.token("reward", format_currency(price)), "이다."))
-        elif action == "팔아":
-            from world.shop_service import sell
-
-            result = sell(caller, self, *args)
-            caller.msg(ft.text(ft.token("npc", self.key), "이 ", ft.token("item", result.label),
-                               f" {result.quantity}개를 ", ft.token("reward", format_currency(result.proceeds)), "에 매입했다.",
-                               f"\n잔탄 {result.rounds}발의 가치가 포함되었다." if result.rounds else ""))
-        else:
-            raise rules.RuleError("지원하지 않는 상점 행동입니다.")
 
 
 class Incinerator(ActionObject):
+    action_provider_definition = "world.incinerator"
     detectability = "conspicuous"
     description = "불필요한 물품을 폐기한다. 출입증은 소각 확정이 필요하며 원래 발급자에게 재발급받을 수 있다."
     presence = "밀폐된 소각로에서 낮은 열기가 느껴진다."
@@ -545,16 +369,13 @@ class Pathfinder(ActionObject):
 
 
 class JungleMarker(ActionObject):
+    action_provider_definition = "world.junglemarker"
     distant_visible = False
     presence = "나무와 돌에 선발대의 흔적이 남아 있다."
     description = "선발대가 길을 잃지 않도록 남긴 현장 표식이다."
     actions = ("조사",)
     quest_flag = None
 
-    def act(self, caller, action, args):
-        newly_marked = caller.change(lambda profile: rules.jungle_mark(profile, self.quest_flag))
-        caller.msg(ft.text(ft.token("object", self.key), "을 살펴 선발대의 경로를 확인했다."))
-        return newly_marked
 
 
 class WatchMarker(JungleMarker):
@@ -562,45 +383,36 @@ class WatchMarker(JungleMarker):
 
 
 class WaterMarker(JungleMarker):
+    action_provider_definition = "world.watermarker"
     quest_flag = "road_marked"
 
-    def act(self, caller, action, args):
-        if super().act(caller, action, args):
-            caller.msg(ft.text("표식 아래에서 ", ft.item("jungle_cell"), "를 확보했다."))
 
 
 class SignalDevice(ActionObject):
+    action_provider_definition = "world.signaldevice"
     detectability = "conspicuous"
     distant_visible = True
     presence = "출입문 옆에서 신호등을 깜빡이고 있다."
     description = "두 탐사 표식의 좌표를 맞추면 연구구역의 문을 열 수 있다."
     actions = ("조사",)
 
-    def act(self, caller, action, args):
-        caller.change(rules.open_jungle_gate)
-        caller.msg(ft.text(ft.item("jungle_cell"), "로 ", ft.token("object", self.key), "의 좌표를 맞추자 연구구역의 문이 열렸다."))
 
 
 class JungleCache(ActionObject):
+    action_provider_definition = "world.junglecache"
     presence = "검은 물가에 반쯤 잠겨 있다."
     description = "선발대가 늪을 지날 때 남긴 작은 보급 주머니다."
     actions = ("조사",)
 
-    def act(self, caller, action, args):
-        caller.change(rules.claim_jungle_cache)
-        caller.msg(ft.text(ft.token("object", self.key), "에서 ", ft.item("bandage"), " 2개, ", ft.item("battery"), " 2개와 ",
-                           ft.item("mental_stability_module"), "을 찾아 챙겼다."))
 
 
 class EmergencyLightCache(ActionObject):
+    action_provider_definition = "world.emergencylightcache"
     detectability = "conspicuous"
     presence = "수송차 옆에 놓여 있다. 어둠 속에서도 큼직한 반사 표식이 눈에 띈다."
     description = "탐사자용 손전등과 예비 전원이 든 비상 장비함이다. 각 탐사자가 한 번씩 받을 수 있다."
     actions = ("조사",)
 
-    def act(self, caller, action, args):
-        caller.change(rules.claim_emergency_light_cache)
-        caller.msg(ft.text(ft.item("flashlight"), " 한 개와 ", ft.item("battery"), " 두 개를 챙겼다."))
 
 
 def action_objects(room):

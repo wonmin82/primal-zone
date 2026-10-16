@@ -173,3 +173,27 @@ test('TEST-P2-03-D Probe 실패·Timeout은 실패로 구분하고 실제 Contex
     expect(a.detached).toBe(true);
   }
 });
+
+
+test('TEST-66A-01 실제 재분배 버튼의 안정 Provider·scope·단일 효과', async ({ actors }) => {
+  const a = await actors.create(0);
+  for (const command of ['남', '승강기', '4층', '북']) await a.command(command);
+  expect(a.state.zone).toBe('training_office');
+  const refs = a.state.training_controls.reset;
+  for (const scope of ['attributes', 'skills', 'all']) {
+    const button = a.page.locator('#reset-' + scope);
+    await expect(button).toBeEnabled();
+    const payload = JSON.parse(await button.getAttribute('data-action-invocation'));
+    expect(payload.action_id).toBe('training.reset.' + scope);
+    expect(payload.arguments.value).toBe(scope);
+    expect(payload.roles.provider).toEqual(refs.find(row => row.action.arguments.value === scope).action.roles.provider);
+    expect(payload.roles.provider[0].kind).toBe('object');
+  }
+  const skills = a.state.growth.skills.map(skill => [skill.id, skill.rank]);
+  const prompts = a.prompts;
+  await a.page.locator('#reset-attributes').click();
+  await expect.poll(() => a.prompts).toBeGreaterThan(prompts);
+  expect(a.state.growth.attributes.every(attribute => attribute.allocated === 0)).toBe(true);
+  expect(a.state.growth.skills.map(skill => [skill.id, skill.rank])).toEqual(skills);
+  expect(a.errors).toEqual([]);
+});

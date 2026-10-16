@@ -68,7 +68,7 @@ def can_accept(shop_id, item):
 def valuation(character, shop, value):
     require_shop(character, shop)
     try:
-        item = resolve_sale(character, value)
+        item = value if hasattr(value, "definition_id") else resolve_sale(character, value)
     except rules.RuleError:
         item = item_selector(value, ITEMS, "가치")
     if not can_accept(shop.db.shop_id, item):
@@ -106,7 +106,7 @@ def sell(character, shop, value, quantity=1):
     with world_change():
         locked = lock_character_items(character)
         require_shop(character, shop)
-        item = resolve_sale(character, value)
+        item = value if hasattr(value, "definition_id") else resolve_sale(character, value)
         if not can_accept(shop.db.shop_id, item):
             raise rules.RuleError("취급하지 않는 물건입니다.")
         if not entity_runtime(character):

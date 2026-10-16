@@ -2,7 +2,7 @@
 
 ## Action Phase 1 기반
 
-명시 ContentPackage·불변 Registry·Role Resolver·동적 CmdSet·공통 Gateway와 B-1 영속 번호의 구현 계약은 [Action 아키텍처](action-architecture.md)에 있다. 운영 기본 Manifest는 비활성이고 기존 게임 기능의 전체 전환은 Issue #66에서 진행한다.
+명시 ContentPackage·불변 Registry·Role Resolver·동적 CmdSet·공통 Gateway와 B-1 영속 번호의 구현 계약은 [Action 아키텍처](action-architecture.md)에 있다. Issue #66 PR A는 운영 Manifest에 `world.actions.room_npc_content`를 등록하여 방·문·시설·상점·의료·성장·정산을 전환한다. 전역 말/대화 경로는 유지하며 아이템·Storage·총기·광원·전리품의 나머지 전환은 후속 PR 범위다. [기능별 전환표](action-migration.md)에 현재와 역사적 경로를 구분한다.
 
 ## 현재 runtime contract와 명시적 변환
 

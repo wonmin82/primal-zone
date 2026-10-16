@@ -12,10 +12,8 @@ from commands.combat import Flee as Flee
 from commands.combat import Heal as Heal
 from commands.combat import Heavy as Heavy
 from commands.combat import Suppress as Suppress
-from commands.inventory import Buy as Buy
 from commands.inventory import Equip as Equip
 from commands.inventory import Inventory as Inventory
-from commands.inventory import Shop as Shop
 from commands.inventory import Take as Take
 from commands.inventory import Wield as Wield
 from commands.party import PartyAccept as PartyAccept
@@ -27,12 +25,8 @@ from commands.party import PartyLootMode as PartyLootMode
 from commands.party import PartyReject as PartyReject
 from commands.party import PartyTransfer as PartyTransfer
 from commands.registry import COMMANDS as COMMANDS
-from commands.settlement import Exchange as Exchange
 from commands.social import PrivateTalk as PrivateTalk
 from commands.social import RefuseTalk as RefuseTalk
 from commands.social import Reply as Reply
 from commands.social import Say as Say
-from commands.world_actions import Investigate as Investigate
-from commands.world_actions import Repair as Repair
-from commands.world_actions import Rest as Rest
 from commands.world_actions import Return as Return

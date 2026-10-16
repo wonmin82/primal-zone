@@ -238,11 +238,8 @@ class CommandOverhaulSmoke(NativeItemTest):
         def fail_save(profile):
             original(profile)
             raise RuntimeError("저장 실패")
-        from commands.world_actions import Treat
-        command = Treat()
-        command.caller, command.args = self.char1, "20"
-        with patch.object(self.char1, "save_profile", side_effect=fail_save), self.assertRaises(RuntimeError):
-            command.run()
+        with patch.object(self.char1, "save_profile", side_effect=fail_save):
+            self.assertIn("행동 처리 중 오류", self.raw("20 회복"))
         self.assertEqual(before, self.atomic_state())
         bed = search_tag("infirmary_bed", category="primal_interactable")[0]
         stable = bed.pk
@@ -282,3 +279,28 @@ class CommandOverhaulSmoke(NativeItemTest):
             self.assertEqual(rules.treatment_quote(profile, 20, safe=True), (20, expected))
         profile.update(xp=rules.xp_threshold(10))
         self.assertEqual(rules.treatment_quote(profile, 5, safe=True), (5, 2))
+
+    def test_migrated_help_uses_compiled_verbs_without_legacy_commands(self):
+        from world.actions.manifest import get_index
+        from world.actions.presentation import help_metadata
+
+        index = get_index()
+        entries = help_metadata(index)
+        keys = {entry.key for entry in entries}
+        for key in ("열어", "조사", "소각", "목록", "사", "팔아", "가치", "회복", "배워", "배분", "재분배", "교환", "환율"):
+            self.assertIn(key, keys)
+            self.assertNotIn(key, {command.key for command in COMMANDS})
+            page = str(help_page(key, COMMANDS))
+            for section in ("사용법", "예시", "실행 규칙", "제한", "관련 도움말"):
+                self.assertIn(section, page, key)
+        self.assertIn("60초", str(help_page("열어", COMMANDS)))
+        self.assertIn("2*H", str(help_page("회복", COMMANDS)))
+        self.assertIn("탄창", str(help_page("가치", COMMANDS)))
+        self.assertIn("출입증", str(help_page("소각 확정", COMMANDS)))
+        self.assertIn("목록", str(help_page("아이템", COMMANDS)))
+        self.assertIn("배워", str(help_page("성장", COMMANDS)))
+        before = deepcopy(self.atomic_state())
+        for _ in range(2):
+            self.raw("목록 도움")
+            self.raw("회복 도움")
+        self.assertEqual(before, self.atomic_state())

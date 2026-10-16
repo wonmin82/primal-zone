@@ -20,6 +20,37 @@ from world.targets import (
 
 
 @domain_errors
+def incinerate_selected(character, provider, item, quantity=1, *, confirmed=False, explicit_quantity=False):
+    """Gateway가 선택한 실물만 소각한다. 이름/번호로 다시 선택하지 않는다."""
+    from typeclasses.interactables import Incinerator
+
+    from world.observation import can_perceive, context_for
+
+    with world_change():
+        locked = lock_character_items(character)
+        if (not isinstance(provider, Incinerator) or provider.location != character.location
+                or not provider.access(character, "call") or not can_perceive(provider, context_for(character))):
+            raise rules.RuleError("이곳에서 소각기를 식별할 수 없습니다.")
+        rules.require_peace(character.profile_snapshot())
+        row = selected(locked, item)
+        definition = ITEMS[row.definition_id]
+        if row.location_kind != "inventory" or row.owner_object_id != character.pk:
+            raise rules.RuleError("직접 소지한 물건만 소각할 수 있습니다.")
+        credential = definition["item_type"] == "credential"
+        if credential and (quantity != 1 or explicit_quantity):
+            raise rules.RuleError("출입증은 수량 없이 하나를 지정하세요.")
+        if confirmed and not credential:
+            raise rules.RuleError("소각 확정은 출입증에만 사용합니다. 수량 없이 이름을 지정하세요.")
+        if credential and not confirmed:
+            return f"출입 권한을 잃습니다. 삭제하려면 {definition['name']} 소각 확정"
+        if not definition["stackable"] and quantity != 1:
+            raise rules.RuleError("스택만 수량 또는 모두 소각할 수 있습니다.")
+        count = row.quantity if quantity is None else quantity
+        api.destroy_quantity(row, count, operation="burn")
+        return f"{definition['name']} {count}개를 소각했다."
+
+
+@domain_errors
 def incinerate(character, value, *, confirmed=False):
     from typeclasses.interactables import Incinerator
 

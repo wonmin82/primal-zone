@@ -30,6 +30,16 @@ class GameplayIntegrationTests(WorldCommandTest):
             character.home = self.rooms["dock"]
             character.push_state = Mock()
 
+    def action_call(self, verb, arguments, expected=None, *, caller):
+        """운영 Manifest의 실제 후치형 입력을 인증 세션으로 실행한다."""
+        self.connect_character(caller)
+        with patch.object(caller, "msg") as output:
+            caller.execute_cmd(f"{arguments} {verb}")
+        text = "\n".join(str(call.args[0]) for call in output.call_args_list if call.args)
+        if expected is not None:
+            self.assertIn(expected, text)
+        return text
+
     def test_world_bootstrap_is_idempotent(self):
         first = {key: room.id for key, room in self.rooms.items()}
         second = build_world()
@@ -151,20 +161,20 @@ class GameplayIntegrationTests(WorldCommandTest):
     def test_failed_purchase_does_not_change_saved_data(self):
         self.char1.location = self.rooms["weapon_shop"]
         before = deepcopy(self.char1.profile())
-        self.call(gameplay.Buy(), "경비카빈", "보급칩이 부족합니다.", caller=self.char1)
+        self.action_call("사", "경비카빈", "보급칩이 부족합니다.", caller=self.char1)
         self.assertEqual(self.char1.profile(), before)
 
     def test_cache_reward_is_personal_and_once_only(self):
         for character in (self.char1, self.char2):
             character.location = self.rooms["wreck"]
-            self.call(
-                gameplay.Investigate(),
+            self.action_call(
+                "조사",
                 "보급상자",
                 "보급상자에서 붕대 2개, 정비용 회수부품 3개와 탐사인식표를 찾아 챙겼다.",
                 caller=character,
             )
-        self.call(
-            gameplay.Investigate(), "보급상자", "이미 보급품을 챙겼습니다.", caller=self.char1
+        self.action_call(
+            "조사", "보급상자", "이미 보급품을 챙겼습니다.", caller=self.char1
         )
         self.assertEqual(self.char1.profile()["inventory"]["bandage"], 5)
         self.assertEqual(self.char2.profile()["inventory"]["bandage"], 5)
@@ -172,10 +182,10 @@ class GameplayIntegrationTests(WorldCommandTest):
     def test_korean_quest_sequence_and_reward(self):
         self.call(gameplay.Say(), "윤대장에게 수락", caller=self.char1)
         self.char1.location = self.rooms["office"]
-        self.call(gameplay.Investigate(), "정비기록", "정비기록을 펼쳐", caller=self.char1)
+        self.action_call("조사", "정비기록", "정비기록을 펼쳐", caller=self.char1)
         self.char1.change(lambda profile: profile["inventory"].update(generator_repair_part=3))
         self.char1.location = self.rooms["generator"]
-        output = self.call(gameplay.Repair(), "발전기", caller=self.char1)
+        output = self.action_call("수리", "발전기", caller=self.char1)
         self.assertIn("시설 조명이 하나둘 켜진다.", output)
         self.assertIn("발전기가 다시 돌아가기 시작했다.", output)
         self.assertEqual(self.char1.profile()["inventory"].get("scrap", 0), 0)

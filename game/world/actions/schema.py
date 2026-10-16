@@ -15,6 +15,7 @@ class ReferenceKind(StrEnum):
     LOOT = "loot"
     CURRENCY = "currency"
     STORAGE = "storage"
+    INVENTORY = "inventory"
 
 
 class DefaultTargetPolicy(StrEnum):
@@ -62,9 +63,11 @@ class RoleDefinition:
     allow_all: bool = False
     scope: TargetScope = TargetScope.CURRENT
     scope_from: str = "provider"
+    definition_ids: tuple[str, ...] = ()
 
     def __post_init__(self):
         object.__setattr__(self, "kinds", tuple(self.kinds))
+        object.__setattr__(self, "definition_ids", tuple(self.definition_ids))
 
 
 @dataclass(frozen=True)
@@ -75,9 +78,11 @@ class ArgumentDefinition:
     default: object = None
     minimum: int | None = None
     maximum: int | None = None
+    choices: tuple = ()
 
     def __post_init__(self):
         object.__setattr__(self, "default", freeze(self.default))
+        object.__setattr__(self, "choices", tuple(freeze(value) for value in self.choices))
 
 
 @dataclass(frozen=True)
@@ -87,6 +92,7 @@ class SyntaxVariant:
     suffix: str = ""
     confirmation_required: bool = False
     all_roles: tuple[str, ...] = ()
+    show_control: bool = True
 
     def __post_init__(self):
         object.__setattr__(self, "all_roles", tuple(self.all_roles))
@@ -98,9 +104,16 @@ class VerbDefinition:
     key: str
     aliases: tuple[str, ...] = ()
     summary: str = ""
+    usage: str = ""
+    category: str = ""
+    help_sections: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    unavailable_message: str = "현재 이곳에서 사용할 수 없는 행동입니다. 대상과 도움말을 확인하세요."
+    invalid_message: str = "지금 선택할 수 없는 행동 또는 대상입니다."
+    ambiguous_message: str = "행동의 제공자와 대상을 명확하게 지정하세요."
 
     def __post_init__(self):
         object.__setattr__(self, "aliases", tuple(self.aliases))
+        object.__setattr__(self, "help_sections", tuple((title, tuple(entries)) for title, entries in self.help_sections))
 
 
 @dataclass(frozen=True)
@@ -126,6 +139,7 @@ class ServiceDefinition:
     handler: Callable
     role_kinds: tuple[RoleDefinition, ...] = ()
     config_schema: tuple[ArgumentDefinition, ...] = ()
+    presenter: Callable | None = None
 
     def __post_init__(self):
         object.__setattr__(self, "role_kinds", tuple(self.role_kinds))

@@ -157,3 +157,23 @@ Phase 1 검증은 `test_action_registry`, `test_action_runtime`, `test_selection
 normal/all은 정규식 언어상 OVERLAP이다. 공통 `normal_all_guards()`가 반환한 예약 접두어 계약을 Dispatcher가 같은 normal Role의 원문 query에 적용하고, 이름/별칭 조회 전에 `모든 `으로 시작하는 후보를 거절한다. 따라서 실제 별칭이 `모든 시체`여도 두 Invocation이 동시에 생기지 않는다. 선두 greedy `.+`는 all이 매칭한 Source 앞에 prefix를 붙인 길이보다 짧게 선택되지 않으므로 이 guard의 적용을 정적으로 보장할 수 있다. Variant 우선순위나 다른 Variant로의 재할당이 아니다. 일반 TargetResolver의 이름·번호·기본 대상 선택과 Gateway·웹 Protocol은 그대로다.
 
 기존 validation_content.PACKAGE 선언과 `시체에서 검증기 채록`, `모든 시체에서 검증기 채록`, `시체에서 채록`, `모든 시체에서 채록`, `검증기 검측`/`검증기 검측 확정`을 보존한다. 시체 1개/여러 개·없음·권한 거절·prefix 별칭과 손상된 Index의 런타임 모호성을 검사하고 Variant/Action/Service·안정 ID·효과 1회/0회·Prompt를 검증한다. 정적 정의 검사의 bounded cache만 재사용하며 게임 객체·Scope·권한 결과는 캐시하지 않는다. 등록 검사와 별도로 런타임 복수 Invocation 거절도 유지한다.
+
+
+## Phase 2 PR A 운영 콘텐츠
+
+`world.actions.room_npc_content.PACKAGE`가 M01/M02의 운영 Manifest다. 문·시설·상점·의료·훈련·정산은 기존 고정 Command를 등록하지 않고 정규 Verb당 하나의 Dynamic Command를 제공한다. Typeclass는 영속 객체와 표시를 소유하고, 클래스의 `action_provider_definition`이 선언 Binding을 가리킨다. 기존 객체에 Provider ID를 쓰기 위한 운영 Seed는 필요하지 않다. 실제 Door Endpoint와 ItemEntity 참조는 기존 B-1/UUID Scope를 사용한다.
+
+`room_npc_services`는 Gateway에서 선택한 객체를 `interactable_services`, `doors.operate_endpoint`, 기존 상점 및 소각 도메인 API로 전달한다. 도메인 함수는 Command나 제거된 `act/train`을 재호출하지 않는다. 의료·상점·임무 출력은 `after_change`를 사용해 최종 커밋 이후 전달한다. 보관·장비·총기·전리품의 미전환 진입점은 후속 PR의 범위이며 자동 Legacy fallback으로 사용하지 않는다.
+
+공통 선언의 확장도 콘텐츠와 실행의 경계를 유지한다. `RoleDefinition.definition_ids`는 현재 접근 가능한 Root Item 후보를 콘텐츠 정의로 제한한다. `ArgumentDefinition.choices`는 정적 구매 품목·훈련 분야를 텍스트와 웹 양쪽에서 고정한다. `SyntaxVariant.show_control=False`는 번호 지정 등 텍스트 문법을 유지하면서 중복 버튼을 만들지 않는다. `ServiceDefinition.presenter`는 신뢰된 동기 Python 함수이며 현재 상태의 순수 controls를 생성한다. 실행 권한을 부여하거나 효과를 실행하지 않는다.
+
+Help는 `VerbDefinition`의 summary/usage/category/help_sections를 기존 Help renderer에 공급한다. 공개 진단 메시지도 같은 선언에 있으며 비공개 대상 ID나 등록 오류를 노출하지 않는다. 웹 controls는 실제 Action/Variant ID, Typed TargetReference, 고정 인자를 전달하고 `pz_action`을 사용한다. 서버는 현재 Scope·소유권·Provider·인자를 다시 검증한다. 소각 확정은 서버 토큰과 별도 공개 suffix를 사용한다.
+
+기능별 전환 매핑과 검증 기록은 [Action 전환 진행표](action-migration.md)를 따른다. 운영 DB의 기존 Schema/번호 Seed 적용은 별도 승인된 배포 절차이며 개발 테스트가 이를 대신하지 않는다.
+
+
+### 집계 Inventory Source
+
+정산처럼 전체 스택을 집계하는 Action은 `ReferenceKind.INVENTORY`의 안정된 캐릭터 Object ID와 `inventory:<id>` Scope를 Source로 사용한다. 이 참조는 번호가 없는 논리적 소지품 Source이며 Provider나 플레이어 선택 번호가 아니다. Resolver는 현재 인증 캐릭터의 Source만 제공하고 Gateway는 같은 객체·Scope를 다시 확인한다. 선언의 `definition_ids`가 집계할 Root 품목을 고정한다.
+
+웹 집계 인자 `snapshot`은 소유자·품목 정의·정렬된 실제 ItemEntity UUID와 수량 집합의 SHA-256이다. 표시명/B-1 번호로 재선택하거나 클라이언트가 보낸 수량을 전체 재고로 신뢰하지 않는다. 서비스는 기존 world_change/Object→Item lock 안에서 현재 집합과 버전을 대조한 뒤 기존 정산 규칙을 실행한다. 삭제·이동·분할·병합·수량 변화·새 스택 추가는 오래된 요청을 거절한다. 조회는 DB 변경이나 확인 토큰을 발급하지 않는다. 역할당 32개·전체 8192byte의 기존 웹 제한을 늘리지 않고 33개 이상의 실제 스택도 한 Source의 원자적 전체 정산으로 처리한다. 개별 판매·소각은 기존 Item UUID 참조를 그대로 쓴다.

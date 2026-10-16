@@ -22,7 +22,10 @@ def at_server_init():
     """
     This is called first as the server is starting up, regardless of how.
     """
-    pass
+    from world.actions.manifest import get_index
+
+    # 운영 선언 검증/컴파일 비용을 첫 로그인 Session의 응답 경로에서 분리한다.
+    get_index()
 
 
 def at_server_start():

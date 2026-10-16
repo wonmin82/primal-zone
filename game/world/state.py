@@ -98,6 +98,26 @@ def multiplayer_state(player, now=None):
     controls = labels(objects)
     dialogue_controls = labels([obj for obj in objects if dialogue_supports(obj) and obj.access(player, "view")])
     loot = loot_controls(player, now, objects)
+    from world.actions.manifest import get_index
+    from world.actions.presentation import action_controls
+    from world.selection_numbers.api import descriptor
+
+    action_rows = action_controls(player, get_index(), now)
+
+    def object_actions(obj):
+        if not getattr(obj, "action_provider_definition", None):
+            return obj.web_actions(player, controls[obj.id], now)
+        record = descriptor(obj)
+        if not record:
+            return []
+        from world.actions.room_npc_presentation import sort_controls
+
+        rows = [row for row in action_rows
+                if row["action"]["roles"]["provider"][0]["identity"] == str(obj.pk)
+                and row["action"]["roles"]["provider"][0]["kind"] == "object"]
+        if obj.action_provider_definition == "world.incinerator":
+            rows.insert(0, {"label": "봐", "command": controls[obj.id] + " 봐"})
+        return sort_controls(obj, rows)
 
     party = party_for(player)
     party_data = None
@@ -141,7 +161,11 @@ def multiplayer_state(player, now=None):
     requested, request = request_for(player, now, reconcile=False)
     return {
         "server_now": now,
-        "action_controls": _action_controls(player),
+        "action_controls": [row for row in action_rows if not (
+            row["action"]["roles"].get("provider", [{}])[0].get("kind") == "door" or
+            row["action"]["roles"].get("provider", [{}])[0].get("kind") == "object" and
+            row["action"]["roles"]["provider"][0]["identity"] in
+            {str(obj.pk) for obj in objects if getattr(obj, "action_provider_definition", None)})],
         "enemies": [
             {
                 "id": enemy.id,
@@ -178,7 +202,7 @@ def multiplayer_state(player, now=None):
                 "name": obj.key,
                 "label": controls[obj.id],
                 "role": obj.semantic_role,
-                "actions": obj.web_actions(player, controls[obj.id], now) + (
+                "actions": object_actions(obj) + (
                     [{"label": "말 걸기", "command": "'" + dialogue_controls[obj.id] + "에게 안녕"}]
                     if dialogue_accessible(player, obj) else []
                 ),
@@ -186,7 +210,7 @@ def multiplayer_state(player, now=None):
             }
             for obj in objects
             if isinstance(obj, ActionObject)
-        ] + door_controls(player, now),
+        ] + door_controls(player, now, action_rows=action_rows),
         "party": party_data,
         "invitation": {
             "party_id": invited.id,

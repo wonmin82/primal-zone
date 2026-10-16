@@ -39,6 +39,19 @@ class EconomyTests(WorldCommandTest):
             caller.execute_cmd(raw)
         return str(msg.call_args_list)
 
+    def native_shop_fixture(self):
+        """격리 테스트 캐릭터만 명시적으로 변환하고 원본 Legacy profile은 보존한다."""
+        from world.item_migration.convert import convert_explorer
+        from world.item_migration.scan import raw_source
+        from world.item_migration.workflow import migration_context
+        from world.multiplayer import world_change
+
+        self.enterContext(patch("typeclasses.explorers.time", return_value=100))
+        original = deepcopy(deserialize(self.char1.db.profile))
+        with world_change(), migration_context():
+            convert_explorer(self.char1, raw_source("explorer", self.char1), 100, False)
+        self.assertEqual(deserialize(self.char1.db.profile), original)
+
     def take(self, raw, caller=None, now=103):
         return take_loot(caller or self.char1, request=parse_loot(raw, currency_names()), now=now)
 
@@ -218,15 +231,33 @@ class EconomyTests(WorldCommandTest):
         self.char1.change(lambda p: p["inventory"].update(cutting_machete=3))
         self.command("탐사용 벌목도 해제")
         self.command("절단마체테 무장")
+        self.native_shop_fixture()
         self.assertIn("55칩", self.command("무기상에게 절단마체테 가치"))
         self.assertIn("27칩", self.command("절단마체테 얼마"))
+        from world.item_entities.models import ItemEntity
+
+        from tests.action_control_fixture import assert_provider, execute_control
+
+        seller = search_tag("weapon_shopkeeper", category="primal_interactable")[0]
+        owned = ItemEntity.objects.filter(owner_object=self.char1, definition_id="cutting_machete")
+        equipped = owned.get(location_kind="equipment")
+        sellable_ids = {str(item.pk) for item in owned.filter(location_kind="inventory")}
+        self.assertEqual(len(sellable_ids), 2)
         actions = multiplayer_state(self.char1)["interactables"][0]["actions"]
-        single = next(a for a in actions if a["label"] == "절단마체테 · 27칩 팔아")
-        self.assertTrue(single["command"].endswith("절단마체테 팔아"))
-        bulk = next(a for a in actions if a["label"] == "절단마체테 모두 팔아 · 총 54칩")
-        command = bulk["command"]
-        self.assertIn("54칩", self.command(command))
+        # D안의 비스택 장비는 UUID별 단일 판매만 제공하며 Legacy의 일괄 2개 버튼을 유지하지 않는다.
+        sales = [a for a in actions if a.get("action", {}).get("action_id") == "shop.sell.weapon"
+                 and a["action"]["roles"]["subject"][0]["identity"] in sellable_ids]
+        self.assertEqual(len(sales), 2)
+        self.assertEqual({a["action"]["roles"]["subject"][0]["identity"] for a in sales}, sellable_ids)
+        self.assertEqual({a["label"] for a in sales}, {"절단마체테 2 · 27칩 팔아", "절단마체테 3 · 27칩 팔아"})
+        self.assertTrue(all(a["action"]["arguments"]["count"] == "1" for a in sales))
+        credits = self.char1.profile()["credits"]
+        for control in sales:
+            assert_provider(self, control, seller)
+            self.assertIn("27칩", execute_control(self, control))
+        self.assertEqual(self.char1.profile()["credits"] - credits, 54)
         self.assertEqual((self.char1.profile()["credits"], self.char1.profile()["inventory"]["cutting_machete"]), (74, 1))
+        self.assertEqual(list(owned.values_list("pk", "location_kind")), [(equipped.pk, "equipment")])
         before = self.char1.profile()
         for raw in ("절단마체테 팔아", "회수부품 팔아", "붕대 팔아", "절단마체테 3개 팔아"):
             self.command(raw)
@@ -245,32 +276,50 @@ class EconomyTests(WorldCommandTest):
         self.assertEqual(self.char1.profile(), before)
 
     def test_web_single_sale_and_all_sale_have_distinct_amounts(self):
+        from world.actions.room_npc_presentation import controls_for
+        from world.item_entities.models import ItemEntity
+
+        from tests.action_control_fixture import assert_provider, execute_control
+
         self.char1.location = self.rooms["supply_shop"]
+        self.native_shop_fixture()
         seller = search_tag("supply_shopkeeper", category="primal_interactable")[0]
-        actions = seller.web_actions(self.char1, seller.key)
-        single = next(a for a in actions if a["label"] == "붕대 · 5칩 팔아")
-        bulk = next(a for a in actions if a["label"] == "붕대 모두 팔아 · 총 15칩")
-        self.assertTrue(single["command"].endswith("붕대 팔아"))
-        self.assertTrue(bulk["command"].endswith("붕대 모두 팔아"))
-        self.command(single["command"])
+        item = ItemEntity.objects.get(owner_object=self.char1, definition_id="bandage")
+        actions = controls_for(self.char1, seller)
+        single = next(a for a in actions if a["label"] == "붕대 1 · 5칩 팔아")
+        bulk = next(a for a in actions if a["label"] == "붕대 1 모두 팔아 · 총 15칩")
+        for control, count in ((single, "1"), (bulk, "모두")):
+            assert_provider(self, control, seller)
+            self.assertEqual(control["action"]["action_id"], "shop.sell.supply")
+            self.assertEqual(control["action"]["roles"]["subject"][0]["identity"], str(item.pk))
+            self.assertEqual(control["action"]["arguments"]["count"], count)
+        execute_control(self, single)
         self.assertEqual((self.char1.profile()["inventory"]["bandage"], self.char1.profile()["credits"]), (2, 25))
-        actions = seller.web_actions(self.char1, seller.key)
-        bulk = next(a for a in actions if a["label"] == "붕대 모두 팔아 · 총 10칩")
-        self.command(bulk["command"])
+        item.refresh_from_db()
+        self.assertEqual(item.quantity, 2)
+        actions = controls_for(self.char1, seller)
+        bulk = next(a for a in actions if a["label"] == "붕대 1 모두 팔아 · 총 10칩")
+        self.assertEqual(bulk["action"]["roles"]["subject"][0]["identity"], str(item.pk))
+        execute_control(self, bulk)
         self.assertNotIn("bandage", self.char1.profile()["inventory"])
         self.assertEqual(self.char1.profile()["credits"], 35)
+        self.assertFalse(ItemEntity.objects.filter(pk=item.pk).exists())
 
-    def test_last_device_sale_via_dispatcher_cannot_restore_old_charge(self):
+    def test_last_legacy_device_sale_cannot_restore_old_charge(self):
         self.char1.location = self.rooms["supply_shop"]
         self.char1.change(lambda p: p["inventory"].update(flashlight=2, battery=1))
         self.command("손전등에 건전지 넣어")
         device = deepcopy(self.char1.profile()["light_sources"]["flashlight"])
-        self.command("탐사용손전등 팔아")
+        # light_sources 사전은 Legacy 도메인 호환 책임이다. 공개 Action에 Legacy fallback을 만들지 않는다.
+        from world import shop_service
+
+        seller = search_tag("supply_shopkeeper", category="primal_interactable")[0]
+        shop_service.sell(self.char1, seller, "탐사용손전등")
         self.assertEqual(self.char1.profile()["light_sources"]["flashlight"], device)
-        self.command("탐사용손전등 팔아")
+        shop_service.sell(self.char1, seller, "탐사용손전등")
         self.assertNotIn("flashlight", self.char1.profile()["inventory"])
         self.assertNotIn("flashlight", self.char1.profile()["light_sources"])
-        self.command("탐사용손전등 사")
+        shop_service.buy(self.char1, seller, "flashlight")
         self.assertIn("전원이 없습니다", self.command("탐사용손전등 켜"))
         self.assertNotIn("flashlight", self.char1.profile()["light_sources"])
 
@@ -346,6 +395,15 @@ class EconomyTests(WorldCommandTest):
     def test_one_sellable_copy_has_only_single_sale_action(self):
         self.char1.location = self.rooms["supply_shop"]
         self.char1.change(lambda p: p["inventory"].update(bandage=1))
+        self.native_shop_fixture()
         actions = multiplayer_state(self.char1)["interactables"][0]["actions"]
-        self.assertIn({"label": "붕대 · 5칩 팔아", "command": "보급관에게 붕대 팔아"}, actions)
-        self.assertFalse(any(a["command"].endswith("붕대 모두 팔아") for a in actions))
+        from world.item_entities.models import ItemEntity
+
+        item = ItemEntity.objects.get(owner_object=self.char1, definition_id="bandage")
+        sales = [a for a in actions if a.get("action", {}).get("action_id") == "shop.sell.supply"
+                 and a["action"]["roles"]["subject"][0]["identity"] == str(item.pk)]
+        self.assertEqual(len(sales), 1)
+        self.assertEqual(sales[0]["label"], "붕대 1 · 5칩 팔아")
+        self.assertEqual(sales[0]["action"]["arguments"]["count"], "1")
+        self.assertNotIn("command", sales[0])
+        self.assertFalse(any(a["action"]["arguments"]["count"] == "모두" for a in sales))
