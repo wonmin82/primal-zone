@@ -21,11 +21,16 @@ class PartyCommandContractTests(GameCommandTest):
     character_typeclass = Explorer
 
     def test_rt01_all_sixteen_commands_aliases_help_and_old_verbs_absent(self):
-        from commands.doors import DOOR_COMMANDS
         from commands.vocabulary import V13_RUNTIME_NAMES, V14_PARTY_NAMES
+        from world.actions.manifest import get_index
         # #49 문 명령은 v13 당시 CmdSet에 없었다. 역사적 SSOT 자체는 바꾸지 않는다.
-        self.assertSetEqual(set(V13_RUNTIME_NAMES), {name for cls in COMMANDS if cls not in (*PARTY_COMMANDS, *DOOR_COMMANDS)
-                                            for name in (cls.key, *cls.aliases)})
+        migrated = {name for verb in get_index().verbs.values() if verb.key not in ("열어", "닫아", "잠궈", "풀어")
+                    for name in (verb.key, *verb.aliases)}
+        migrated.update(verb.key + " " + variant.suffix for action in get_index().actions.values()
+                        for verb in (get_index().verbs[action.verb_id],)
+                        for variant in action.variants if variant.suffix)
+        current = {name for cls in COMMANDS if cls not in PARTY_COMMANDS for name in (cls.key, *cls.aliases)}
+        self.assertSetEqual(set(V13_RUNTIME_NAMES), current | migrated)
         self.assertEqual(V14_PARTY_NAMES, {name for cls in PARTY_COMMANDS for name in (cls.key, *cls.aliases)})
         expected = {
             "일행": ["무리", "그룹"], "일행모으기": ["그룹만들기", "그룹모으기"],

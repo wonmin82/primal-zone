@@ -57,11 +57,16 @@ def _roles(roles):
         _require(bool(role.kinds) and all(isinstance(kind, ReferenceKind) for kind in role.kinds),
                  "역할 참조 타입 오류")
         _require(len(role.kinds) == len(set(role.kinds)), "역할 참조 타입 중복")
+        if ReferenceKind.INVENTORY in role.kinds:
+            _require(role.kinds == (ReferenceKind.INVENTORY,) and role.name != "provider"
+                     and role.scope == TargetScope.CURRENT, "Inventory는 현재 소지품 Source 전용 참조입니다.")
         _require(isinstance(role.default, DefaultTargetPolicy) and type(role.required) is bool
                  and type(role.allow_all) is bool,
                  "역할 기본 선택 정책 오류")
         _require(isinstance(role.scope, TargetScope) and type(role.scope_from) is str
                  and role.scope_from.isidentifier(), "역할 Scope 선언 오류")
+        _require(all(type(identity) is str and identity for identity in role.definition_ids)
+                 and len(set(role.definition_ids)) == len(role.definition_ids), "역할 콘텐츠 정의 제한 오류")
     return names
 
 
@@ -72,6 +77,7 @@ def validate_argument(definition, value):
         _require(value >= definition.minimum, "인자 최솟값 오류")
     if definition.maximum is not None:
         _require(value <= definition.maximum, "인자 최댓값 오류")
+    _require(not definition.choices or value in definition.choices, "선언된 인자 선택지 오류")
     return value
 
 
@@ -84,6 +90,7 @@ def _arguments(arguments):
         _require(arg.kind is int or (arg.minimum is None and arg.maximum is None), "정수 외 범위 오류")
         _require(arg.minimum is None or arg.maximum is None or arg.minimum <= arg.maximum,
                  "인자 범위 역전")
+        _require(all(type(value) is arg.kind for value in arg.choices), "인자 선택지 타입 오류")
         if arg.default is not None:
             validate_argument(arg, arg.default)
     return names
@@ -191,6 +198,8 @@ def compile_manifest(manifest, protected_names=()):
     public_keys = {}
     protected = {name.casefold() for name in protected_names}
     for verb in tables["verbs"].values():
+        _require(all(type(value) is str and value for value in
+                     (verb.unavailable_message, verb.invalid_message, verb.ambiguous_message)), "공개 진단 선언 오류")
         for key in (verb.key, *verb.aliases):
             _require(type(key) is str and bool(key) and key == key.strip(), "공개 동사 키 오류")
             key = key.casefold()
@@ -226,6 +235,7 @@ def compile_manifest(manifest, protected_names=()):
             variant_ids.add(variant.id)
             _require(type(variant.suffix) is str and type(variant.confirmation_required) is bool,
                      "문법 Variant 확인 타입 오류")
+            _require(type(variant.show_control) is bool, "문법 Variant 화면 표시 타입 오류")
             _require(variant.suffix == variant.suffix.strip(), "Variant 접미 공백 오류")
             _require(not variant.confirmation_required or bool(variant.suffix), "확정 Variant 접미 누락")
             _require(set(variant.all_roles) <= role_names, "전체 선택 Variant 역할 오류")
@@ -254,6 +264,8 @@ def compile_manifest(manifest, protected_names=()):
         _require(callable(service.handler), "Service Handler 누락")
         try:
             validate_handler(service.handler)
+            if service.presenter is not None:
+                validate_handler(service.presenter)
         except ValueError as error:
             raise RegistryError(str(error)) from error
         _roles(service.role_kinds)

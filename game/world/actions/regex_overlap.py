@@ -180,16 +180,28 @@ def _tree(pattern):
 
 
 @lru_cache(maxsize=256)
+def _compiled_pattern(pattern):
+    """동일 선언의 NFA는 쌍마다 재구축하지 않는다. 게임 상태는 캐시하지 않는다."""
+    tree, tokens = _tree(pattern)
+    machine = _NFA()
+    start, end = machine.sequence(tokens, tree.state.flags)
+    # 공통의 포괄 Provider 접두어보다 끝의 구체 문법부터 비교한다.
+    # 두 fullmatch 언어를 함께 뒤집어도 교집합의 공집합 여부는 같다.
+    reverse = [[] for _ in machine.edges]
+    for source, edges in enumerate(machine.edges):
+        for chars, target in edges:
+            reverse[target].append((chars, source))
+    return end, start, tuple(tuple(edges) for edges in reverse)
+
+
+@lru_cache(maxsize=256)
 def compare_patterns(left, right):
     """지원 subset의 정확한 교집합. 알 수 없는 문법을 비중첩으로 취급하지 않는다."""
     try:
         if type(left) is not str or type(right) is not str:
             return Relation.UNKNOWN
-        a_tree, a_tokens = _tree(left)
-        b_tree, b_tokens = _tree(right)
-        a, b = _NFA(), _NFA()
-        a_start, a_end = a.sequence(a_tokens, a_tree.state.flags)
-        b_start, b_end = b.sequence(b_tokens, b_tree.state.flags)
+        a_start, a_end, a_edges = _compiled_pattern(left)
+        b_start, b_end, b_edges = _compiled_pattern(right)
         pending, visited = deque(((a_start, b_start),)), set()
         while pending:
             x, y = pending.popleft()
@@ -200,15 +212,15 @@ def compare_patterns(left, right):
                 return Relation.UNKNOWN
             if x == a_end and y == b_end:
                 return Relation.OVERLAP
-            for chars, target in a.edges[x]:
+            for chars, target in a_edges[x]:
                 if chars is None:
                     pending.append((target, y))
-            for chars, target in b.edges[y]:
+            for chars, target in b_edges[y]:
                 if chars is None:
                     pending.append((x, target))
-            for ca, ta in a.edges[x]:
+            for ca, ta in a_edges[x]:
                 if ca is not None:
-                    for cb, tb in b.edges[y]:
+                    for cb, tb in b_edges[y]:
                         if cb is not None and _intersects(ca, cb):
                             pending.append((ta, tb))
         return Relation.DISJOINT

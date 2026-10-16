@@ -1,8 +1,8 @@
 """테스트별 DB rollback과 Evennia runtime 캐시 격리, 클래스별 월드 준비."""
 
 import gc
-from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from functools import partial
+from unittest.mock import patch
 
 from evennia.commands import cmdhandler
 from evennia.objects.models import ObjectDB
@@ -33,11 +33,31 @@ def clear_test_caches():
 class GameCommandTest(EvenniaCommandTest):
     """계정·세션 정리는 기존 훅을 사용하고 GC는 rollback 뒤 한 번 실행한다."""
 
+    def setUp(self):
+        super().setUp()
+        # 실제 공개 입력 테스트도 Portal처럼 인증된 입력 Session을 명시한다.
+        # 명시적으로 전달한 잘못된 Session/None은 partial 기본값을 덮으므로 보안 검사를 우회하지 않는다.
+        self.char1.execute_cmd = partial(self.char1.execute_cmd, session=self.session)
+
     def connect_character(self, character):
         """온라인 전제 테스트에 실제 puppet 속성을 가진 독립 세션을 제공한다."""
-        session = SimpleNamespace(puppet=character, logged_in=True, protocol_key="telnet", data_out=Mock(), msg=Mock(), sessid=-1)
+        if character is self.char1:
+            session = self.session
+        else:
+            import evennia
+            from evennia.server.serversession import ServerSession
+
+            session = ServerSession()
+            session.init_session("telnet", ("localhost", "testmode"), evennia.SESSION_HANDLER)
+            session.sessid = -character.pk
+            if character.account is None:
+                character.account = evennia.create_account(f"fixture_account_{character.pk}", email="", password=None)
+            session.at_login(character.account)
+        session.puppet = character
+        session.logged_in = True
         self.enterContext(patch.object(character.sessions, "all", return_value=[session]))
         self.enterContext(patch.object(character.sessions, "count", return_value=1))
+        self.enterContext(patch.object(character, "execute_cmd", partial(character.execute_cmd, session=session)))
         return session
 
     def tearDown(self):

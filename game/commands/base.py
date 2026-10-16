@@ -61,11 +61,13 @@ class UnknownCommand(Command):
         from world.actions.presentation import help_entries
 
         entries = help_entries(get_index())
-        if any(raw == entry["verb"] or raw.endswith(" " + entry["verb"]) or
-               any(raw == alias or raw.endswith(" " + alias) for alias in entry["aliases"])
-               for entry in entries):
-            self.caller.msg("현재 이곳에서 사용할 수 없는 행동입니다. 대상과 도움말을 확인하세요.")
-            return
+        for entry in entries:
+            keys = (entry["verb"], *entry["aliases"])
+            expanded = (key + (" " + suffix if suffix else "") for key in keys for suffix in ("", *entry["variants"]))
+            if any(raw.casefold() == key.casefold() or raw.casefold().endswith(" " + key.casefold()) for key in expanded):
+                verb_id = get_index().verbs_by_public_keys[entry["verb"].casefold()]
+                self.caller.msg(get_index().verbs[verb_id].unavailable_message)
+                return
         self.caller.msg(
             "명령을 확인하세요. 대상 뒤에 행동을 입력합니다: 어린청소룡 때려 · 윤대장에게 임무 말\n"
             "채팅: 안녕하세요 말 또는 '안녕하세요 · 전체 안내: 도움"

@@ -180,14 +180,18 @@ class TargetIntegrationTests(WorldCommandTest):
             for _ in range(3)
         ]
         selector = parse_selector("보급상자")
-        self.assertEqual(resolve(objects[::-1], selector, self.char1), [objects[0]])
+        # 전환된 독립 Provider는 D05에 따라 유일 후보만 허용한다. 선언 순서로 선택하지 않는다.
+        with self.assertRaises(rules.RuleError):
+            resolve(objects[::-1], selector, self.char1)
         self.char1.execute_cmd("보급상자 2 조사")
         self.assertTrue(self.char1.profile()["discoveries"]["supply_cache"])
         before = self.char1.profile()
         self.char1.execute_cmd("보급상자 조사")
         self.assertEqual(self.char1.profile(), before)
         state = multiplayer_state(self.char1, 100)
-        self.assertEqual(state["interactables"][1]["actions"][0]["command"], "보급상자 2 조사")
+        controls = [action["action"] for row in state["interactables"] for action in row["actions"]
+                    if action.get("action", {}).get("action_id") == "world.supplycache"]
+        self.assertIn(str(objects[1].pk), {action["roles"]["provider"][0]["identity"] for action in controls})
         for action in ("대화", "조사", "수리"):
             self.char1.execute_cmd("보급상자 모두 " + action)
             self.assertEqual(self.char1.profile(), before)

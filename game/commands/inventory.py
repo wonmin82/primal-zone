@@ -5,11 +5,10 @@ from world import rules
 from world import text as ft
 from world.content import EQUIPMENT_ACTIONS, ITEMS
 from world.currency import currency_names
-from world.targets import item_selector, names, parse_loot, parse_relation, resolve
+from world.targets import parse_loot
 
 from commands.base import GameCommand
 from commands.help_contracts import command_sections
-from commands.shops import resolve_shopkeeper, shopkeepers
 
 
 class Inventory(GameCommand):
@@ -57,75 +56,13 @@ class Wield(Equip):
     aliases = ["wield"]
 
 
-class Shop(GameCommand):
-    help_sections = command_sections('목록')
-    category = "아이템·보급"
-    usage = "목록 · 무기상 목록"
-    summary = "주변 상인의 보급칩 판매 목록을 확인합니다."
-    input_style = "target"
-    key = "목록"
-    aliases = ["품목", "품", "목", "메뉴"]
-
-    def run(self):
-        resolve_shopkeeper(self.caller, self.args).perform_action(self.caller, self.key)
-
-
-class Buy(GameCommand):
-    help_sections = command_sections('사')
-    category = "아이템·보급"
-    usage = "붕대 사 · 보급관에게 붕대 사"
-    summary = "주변 판매자에게 보급칩으로 물건 1개를 구매합니다."
-    input_style = "target"
-    key = "사"
-    aliases = ["구입"]
-    stack = False
-
-    def run(self):
-        objects = shopkeepers(self.caller)
-        value, seller = self.args, None
-        if any(word.endswith("에게") for word in value.split()):
-            selector, value = parse_relation(value, "에게", [n for obj in objects for n in names(obj)])
-            seller = resolve(objects, selector, self.caller, self.key)[0]
-        if self.stack:
-            from world.stack_quantity import parse_stack_quantity
-
-            value, quantity = parse_stack_quantity(value)
-            from world.shop_service import resolve_sale
-
-            if self.key == "가치":
-                from world.content.items import find_id
-                from world.targets import parse_selector
-
-                item = find_id(ITEMS, parse_selector(value).name)
-                selected = item
-            else:
-                selected = resolve_sale(self.caller, value)
-            item = selected.definition_id if hasattr(selected, "definition_id") else selected
-        else:
-            item = item_selector(value, ITEMS, self.key)
-        if not item:
-            raise rules.RuleError("물건 이름을 확인하세요. 예: 붕대 사")
-        seller = seller or resolve_shopkeeper(self.caller, item=item, objects=objects, action=self.key)
-        seller.perform_action(self.caller, self.key, (value, quantity) if self.stack else item)
 
 
 
-class Value(Buy):
-    help_sections = command_sections('가치')
-    stack = True
-    key = "가치"
-    aliases = ["얼마"]
-    usage = "절단마체테 가치 · 무기상에게 절단마체테 가치"
-    summary = "주변 상인에게 취급 품목의 가치와 매입가를 확인합니다."
 
 
-class Sell(Buy):
-    help_sections = command_sections('팔아')
-    key = "팔아"
-    aliases = ["팔", "판"]
-    stack = True
-    usage = "절단마체테 팔아 · 무기상에게 절단마체테 팔아 · 붕대 모두 팔아"
-    summary = "물품을 1개·N개·모두 판매합니다. 장비는 먼저 해제하세요."
+
+
 
 
 class Take(GameCommand):

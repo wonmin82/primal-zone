@@ -1,6 +1,6 @@
 # ItemEntity 기반·장비·상태형 아이템
 
-Issue #65의 [B-1 번호 계약](action-architecture.md#b-1-물리-저장과-원자성)은 UUID·sequence·quantity와 사용자 선택 번호를 분리한다. 신규 Action 경로에 적용하며 기존 명령의 전체 이전은 Issue #66 범위다. 운영 DB 초기 할당은 명시적 백업/seed/verify 절차로 수행한다.
+Issue #65의 [B-1 번호 계약](action-architecture.md#b-1-물리-저장과-원자성)은 UUID·sequence·quantity와 사용자 선택 번호를 분리한다. Issue #66 PR A의 판매·가치 조회·소각은 현재 접근 가능한 Root ItemEntity의 실제 UUID를 공통 Gateway로 전달한다. 정산 집계는 안정 Inventory Source와 UUID·수량 집합 버전을 재검증한다. 장비·Storage·총기·광원 자체 행동의 Action 전환은 후속 PR 범위다. 아래 ItemEntity 구축 단계의 역사적 Phase 번호와 Action Phase 2를 구분하며, 운영 DB 초기 할당은 명시적 백업/seed/verify 절차로 수행한다.
 
 ## Current Runtime Contract
 

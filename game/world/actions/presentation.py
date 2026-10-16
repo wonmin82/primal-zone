@@ -17,13 +17,35 @@ def help_entries(index, verb_id=None):
                  (verb_id is None or action.verb_id == verb_id))
 
 
-def action_controls(caller, index):
+def help_metadata(index):
+    """공개 Action을 가진 Verb 선언만 도움말에 제공한다. Scope/효과 조회는 없다."""
+    from dataclasses import replace
+
+    public = {action.verb_id for action in index.actions.values() if action.public}
+    entries = []
+    for identity, verb in index.verbs.items():
+        if identity not in public:
+            continue
+        suffixes = {variant.suffix for action in index.actions.values()
+                    if action.public and action.verb_id == identity
+                    for variant in action.variants if variant.suffix}
+        aliases = (*verb.aliases, *(key + " " + suffix for suffix in sorted(suffixes)
+                                    for key in (verb.key, *verb.aliases)))
+        entries.append(replace(verb, aliases=aliases))
+    return tuple(entries)
+
+
+def action_controls(caller, index, observed_at=None):
     from dataclasses import replace
 
     pairs = provided(caller, index)
     records = {ref: descriptor(resolve_reference(ref)) for ref, _ in pairs}
     controls = []
     for reference, binding in pairs:
+        service = index.services[binding.service_id]
+        if service.presenter is not None:
+            controls.extend(service.presenter(caller, index, reference, binding, observed_at))
+            continue
         action = index.actions[binding.action_id]
         roles = {"provider": [reference_json(reference)]}
         if action.provider_from:
@@ -37,7 +59,7 @@ def action_controls(caller, index):
         target = label(replace(record, number=number_for(reference))) if record else "대상"
         for variant in action.variants:
             # 확인은 먼저 서버의 정상 요청이 발급한 토큰으로만 한다.
-            if variant.confirmation_required:
+            if variant.confirmation_required or not variant.show_control:
                 continue
             controls.append({"label": target + " " + index.verbs[action.verb_id].key,
                              "description": action.help,

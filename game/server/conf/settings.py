@@ -70,7 +70,7 @@ AUTH_USERNAME_VALIDATORS = [
 ]
 INPUT_FUNC_MODULES = ["evennia.server.inputfuncs", "server.conf.primal_inputfuncs"]
 COMMAND_PARSER = "server.conf.cmdparser.cmdparser"
-ACTION_CONTENT_PACKAGES = ()  # 명시 Manifest. 운영 콘텐츠 전체 이전은 Issue #66.
+ACTION_CONTENT_PACKAGES = ("world.actions.room_npc_content",)  # M01/M02 운영 Cutover.
 INSTALLED_APPS = [*INSTALLED_APPS, "world.item_entities.apps.ItemEntitiesConfig"]  # noqa: F405
 INSTALLED_APPS += ["world.loot_entities.apps.LootEntitiesConfig"]
 INSTALLED_APPS += ["world.door_entities.apps.DoorEntitiesConfig"]

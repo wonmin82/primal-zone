@@ -28,6 +28,8 @@ class Exit(NumberedObjectMixin, ObjectParent, DefaultExit):
 
     """
 
+    action_provider_definition = "world.door"
+
     blocks_distant_view = True
 
     def at_traverse(self, traversing_object, target_location, **kwargs):

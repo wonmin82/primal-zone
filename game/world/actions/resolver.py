@@ -21,7 +21,17 @@ class ActionInvocation:
 
 
 def role_records(caller, role, bindings=None):
-    from world.selection_numbers.api import current_scopes, records_for, resolve_reference
+    from world.selection_numbers.api import (
+        SelectionRecord,
+        current_scopes,
+        records_for,
+        resolve_reference,
+    )
+
+    if role.kinds == (ReferenceKind.INVENTORY,):
+        scope = f"inventory:{caller.pk}"
+        return (SelectionRecord(TargetReference(ReferenceKind.INVENTORY, str(caller.pk), scope),
+                                scope, "inventory:root", "소지품"),)
 
     if role.scope == TargetScope.CURRENT:
         kind = None if {ReferenceKind.LOOT, ReferenceKind.CURRENCY}.intersection(role.kinds) else ReferenceKind.ITEM
@@ -43,11 +53,17 @@ def role_records(caller, role, bindings=None):
                 root = entity.root()
                 if root.location_kind in ("inventory", "equipment") and root.owner_object_id == caller.pk:
                     scopes.add(f"inside:{entity.pk}")
-    return tuple(record for record in records_for(caller, scope_ids=scopes) if record.reference.kind in role.kinds)
+    records = tuple(record for record in records_for(caller, scope_ids=scopes) if record.reference.kind in role.kinds)
+    if role.definition_ids:
+        records = tuple(record for record in records
+                        if getattr(resolve_reference(record.reference), "definition_id", None) in role.definition_ids)
+    return records
 
 
-def select_role(caller, role, query=None, *, bindings=None):
+def select_role(caller, role, query=None, *, bindings=None, candidates=None):
     records = role_records(caller, role) if bindings is None else role_records(caller, role, bindings)
+    if candidates is not None:
+        records = tuple(record for record in records if record.reference in candidates)
     if query is None or not query.strip():
         if role.required:
             raise RuleError("대상 이름을 입력하세요.")
@@ -71,6 +87,8 @@ def select_role(caller, role, query=None, *, bindings=None):
                 matches = [record for record in matches if record.number == selector.index or
                            (selector.index == 1 and unique_match and selector.name in record.unique_names)]
     if not matches:
+        if (query is None or not query.strip()) and not role.required:
+            return ()
         raise RuleError("지금 선택할 수 없는 대상입니다.")
     if selector and selector.mode == Mode.ALL and not (role.allow_all or role.default == DefaultTargetPolicy.ALL):
         raise RuleError("이 행동은 전체 대상 선택을 지원하지 않습니다.")
@@ -100,7 +118,7 @@ def argument_values(action, values, *, text=False):
             if argument.required:
                 raise RuleError("행동 인자가 부족합니다.")
             continue
-        if text and argument.kind is int and type(value) is str and value.isdecimal():
+        if text and argument.kind is int and type(value) is str and re.fullmatch(r"[+-]?[0-9]+", value):
             value = int(value)
         try:
             validate_argument(argument, value)
@@ -126,7 +144,7 @@ def provider_definition(reference):
 
         if not isinstance(entity, NumberedObjectMixin):
             raise RuleError("선언형 객체는 원자적 Provider 생명주기 타입이 필요합니다.")
-    return entity.db.action_provider_id if hasattr(entity, "db") else None
+    return (getattr(entity, "action_provider_definition", None) or entity.db.action_provider_id) if hasattr(entity, "db") else None
 
 
 def unshadowed(caller, index, pairs):
@@ -196,8 +214,10 @@ def provided(caller, index):
 
 def dispatch_text(caller, index, verb_id, args, command_name):
     possible = []
+    verb = index.verbs[verb_id]
     selections = {}
-    for reference, binding in provided(caller, index):
+    offers = provided(caller, index)
+    for reference, binding in offers:
         action = index.actions[binding.action_id]
         if action.verb_id != verb_id:
             continue
@@ -243,7 +263,8 @@ def dispatch_text(caller, index, verb_id, args, command_name):
                     roles["provider"] = roles[action.provider_from]
                 elif fields.get("provider"):
                     role = next(role for role in action.roles if role.name == "provider")
-                    selected = select_role(caller, role, fields["provider"])
+                    candidates = {ref for ref, offer in offers if offer.action_id == action.id}
+                    selected = select_role(caller, role, fields["provider"], candidates=candidates)
                     if reference not in selected:
                         continue
                     roles["provider"] = (reference,)
@@ -256,6 +277,5 @@ def dispatch_text(caller, index, verb_id, args, command_name):
             possible.append(ActionInvocation(action.id, variant.id, tuple(roles.items()), arguments))
     unique = tuple(dict.fromkeys(possible))
     if len(unique) != 1:
-        raise RuleError("행동의 제공자와 대상을 명확하게 지정하세요." if unique else
-                        "지금 선택할 수 없는 행동 또는 대상입니다.")
+        raise RuleError(verb.ambiguous_message if unique else verb.invalid_message)
     return unique[0]

@@ -16,20 +16,14 @@ from commands.character import (
 )
 from commands.combat import Attack, Breathe, Flee, Heal, Heavy, Insight, Shooting, Suppress, Use
 from commands.command_shortcuts import DeleteShortcut, Sequence, Shortcuts
-from commands.doors import DOOR_COMMANDS
 from commands.firearms import FillMagazine, LoadMagazine, Reload
-from commands.incinerator import Burn
 from commands.inventory import (
     ActiveWeapon,
-    Buy,
     Equip,
     Equipment,
     Inventory,
     ItemInformation,
-    Sell,
-    Shop,
     Take,
-    Value,
     Wield,
 )
 from commands.items import (
@@ -46,13 +40,10 @@ from commands.items import (
     Unwield,
 )
 from commands.party import PARTY_COMMANDS
-from commands.settlement import Exchange, Rate
-from commands.skills import Allocate, Learn, Retrain
 from commands.social import PrivateTalk, RefuseTalk, Reply, Say
-from commands.world_actions import Investigate, Repair, Rest, Return, Treat
+from commands.world_actions import Return
 
 COMMANDS = [
-    Burn,
     Reload,
     LoadMagazine,
     FillMagazine,
@@ -61,12 +52,8 @@ COMMANDS = [
     Experience,
     Equipment,
     ActiveWeapon,
-    Learn,
-    Allocate,
-    Retrain,
     Take,
     *PARTY_COMMANDS,
-    *DOOR_COMMANDS,
     Look,
     Exits,
     Weather,
@@ -101,17 +88,7 @@ COMMANDS = [
     Use,
     Flee,
     Return,
-    Rest,
-    Treat,
-    Shop,
-    Buy,
-    Value,
-    Sell,
-    Exchange,
-    Rate,
     Quest,
-    Investigate,
-    Repair,
     Map,
     Say,
     PrivateTalk,

@@ -47,6 +47,16 @@ def package():
 
 
 class ActionRegistryTests(TestCase):
+    def test_inventory_collection_is_a_current_source_and_never_a_provider(self):
+        p = package()
+        for role in (RoleDefinition("provider", (ReferenceKind.INVENTORY,)),
+                     RoleDefinition("source", (ReferenceKind.INVENTORY, ReferenceKind.ITEM)),
+                     RoleDefinition("source", (ReferenceKind.INVENTORY,), scope=TargetScope.STORAGE)):
+            with self.subTest(role=role), self.assertRaisesRegex(RegistryError, "Source"):
+                self.compile(replace(p, actions=(replace(p.actions[0], roles=(role,)),)))
+        source = RoleDefinition("source", (ReferenceKind.INVENTORY,), required=False)
+        self.compile(replace(p, actions=(replace(p.actions[0], roles=(*p.actions[0].roles, source)),)))
+
     def compile(self, value=None, protected=()):
         return compile_manifest(PackageManifest((value or package(),)), protected)
 

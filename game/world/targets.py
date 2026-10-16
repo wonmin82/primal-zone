@@ -220,7 +220,18 @@ def resolve(objects, selector, caller, action=None, supports=None, *, observed_a
         candidates = [obj for obj in candidates if can_perceive(obj, context)]
     if supports and selector.mode == Mode.DEFAULT:
         candidates = [obj for obj in candidates if supports(obj)]
-    selected = select(candidates, selector)
+    if candidates and all(not obj.destination
+                          and getattr(obj, "action_provider_definition", None) for obj in candidates):
+        from world.actions.resolver import select_role
+        from world.actions.schema import ReferenceKind, RoleDefinition
+        from world.selection_numbers.api import descriptor, resolve_reference
+
+        query = selector.name + (f" {selector.index}" if selector.mode == Mode.INDEX else " 모두" if selector.mode == Mode.ALL else "")
+        references = select_role(caller, RoleDefinition("provider", (ReferenceKind.OBJECT,), allow_all=True),
+                                 query, candidates={descriptor(obj).reference for obj in candidates})
+        selected = [resolve_reference(ref) for ref in references]
+    else:
+        selected = select(candidates, selector)
     if supports and any(not supports(obj) for obj in selected):
         raise RuleError(f"지정한 대상은 '{action}' 행동을 지원하지 않습니다.")
     return selected
@@ -232,6 +243,15 @@ def labels(objects, name_values=lambda obj: obj.key):
     result = {}
     for obj in pool:
         name = name_values(obj)
+        if getattr(obj, "action_provider_definition", None):
+            from world.selection_numbers.api import descriptor, label, number_for
+
+            record = descriptor(obj)
+            if record:
+                from dataclasses import replace
+
+                result[obj.id] = label(replace(record, number=number_for(record.reference)))
+                continue
         peers = [other for other in pool if normalized(name_values(other)) == normalized(name)]
         result[obj.id] = f"{name} {peers.index(obj) + 1}" if len(peers) > 1 else name
     return result

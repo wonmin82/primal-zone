@@ -71,7 +71,7 @@ def descriptor(value):
             scope = f"{location}:{value.owner_object_id}"
         group = definition.get("selection_group_id") or f"item:{value.definition_id}"
         return SelectionRecord(TargetReference(kind, str(value.pk), scope), scope, group,
-                               definition["name"], tuple(definition.get("aliases", ())))
+                               definition["name"], tuple(dict.fromkeys((value.definition_id, *definition.get("aliases", ())))))
     if isinstance(value, CurrencyLoot):
         source = value.owner_object
         if isinstance(source, Corpse):
@@ -104,10 +104,14 @@ def descriptor(value):
     else:
         door = Door.objects.filter(Q(exit_a_id=value.pk) | Q(exit_b_id=value.pk)).first() if value.db_destination_id else None
         if door:
+            from world.content.doors import DOORS
+
             return SelectionRecord(TargetReference(ReferenceKind.DOOR, str(value.pk), scope),
                                    scope, "world:door", "문",
-                                   tuple(dict.fromkeys((door.name, value.key, *door.aliases, *aliases))),
-                                   (door.name,) if value.db.legacy_singleton_suffix_1 else ())
+                                   tuple(dict.fromkeys((door.name, value.key, value.key + " 문", *door.aliases, *aliases,
+                                                        *[alias + " 문" for alias in aliases]))),
+                                   (door.name,) if value.db.legacy_singleton_suffix_1 or
+                                   DOORS.get(door.door_id, {}).get("legacy_singleton_suffix_1", False) else ())
         if not isinstance(value, ActionObject) and not value.db.action_provider_id:
             return None
         kind, name = ReferenceKind.OBJECT, value.key
@@ -133,6 +137,11 @@ def _entity(kind, identity):
 
 def resolve_reference(reference):
     """동일 typed ID의 현재 실물과 Scope를 검증한다. 다른 대상으로 대체하지 않는다."""
+    if reference.kind == ReferenceKind.INVENTORY:
+        from typeclasses.explorers import Explorer
+
+        entity = ObjectDB.objects.filter(pk=reference.identity).first()
+        return entity if isinstance(entity, Explorer) and reference.scope_id == f"inventory:{entity.pk}" else None
     entity = _entity(reference.kind, reference.identity)
     if reference.kind == ReferenceKind.ROOM:
         from evennia.objects.objects import DefaultRoom

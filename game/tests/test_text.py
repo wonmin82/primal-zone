@@ -22,6 +22,7 @@ from world import presentation as view
 from world import rules
 from world import text as ft
 from world.content import ITEMS, ROOMS, SHOP_CATALOGS
+from world.interactable_services import generator as repair_generator
 from world.progression import ATTRIBUTES, SKILLS
 
 from tests.base import WorldCommandTest
@@ -333,7 +334,7 @@ class SemanticTextTests(WorldCommandTest):
         )
         before = self.char1.profile()["xp"]
         with patch.object(self.char1, "msg") as message:
-            generator.perform_action(self.char1, "수리")
+            repair_generator(generator, self.char1, "수리", None)
         self.assertEqual(
             tokens(message.call_args.args[0], "reward"),
             [f"경험치 {self.char1.profile()['xp'] - before}"],

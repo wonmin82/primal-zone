@@ -9,19 +9,21 @@ from pathlib import Path
 from unittest.mock import patch
 
 from commands.account_commands import Quit, Who
+from commands.action_command import DynamicActionCommand
 from commands.aliases import SHORTCUTS
-from commands.default_cmdsets import AccountCmdSet, CharacterCmdSet
+from commands.default_cmdsets import AccountCmdSet
 from commands.help_pages import help_page
 from commands.registry import COMMANDS
 from evennia.commands.cmdhandler import CMD_NOMATCH
 from world import rules
 from world import text as ft
 
+from tests.action_catalog_fixture import public_action_catalog
 from tests.base import WorldCommandTest
 
 
 class IntegratedContractTests(WorldCommandTest):
-    def _audit_feature_documents(self, documents):
+    def _audit_feature_documents(self, documents, *, html=None):
         root = Path(__file__).resolve().parents[2]
         sys.path.insert(0, str(root / 'scripts'))
         from commands import shortcuts as s
@@ -35,10 +37,10 @@ class IntegratedContractTests(WorldCommandTest):
         from world.equipment import SLOT_CAPACITY
         from world.multiplayer import PARTY_INVITE_TTL_SECONDS, PARTY_MAX_SIZE
         from world.npc_dialogue import validate_message
-        cmdset = CharacterCmdSet()
+        cmdset, action_entries = public_action_catalog()
         cmdset.add(Who())
         cmdset.add(Quit())
-        commands = [*COMMANDS, Who, Quit]
+        commands = [*COMMANDS, Who, Quit, *action_entries]
         directions = set(DIRECTION_ALIASES) | set(DIRECTION_ALIASES.values()) | set(DIRECTION_SHORTCUTS)
         directions.update(direction for room in ROOMS.values() for direction in room['exits'])
         def example(text, definitions):
@@ -97,12 +99,16 @@ class IntegratedContractTests(WorldCommandTest):
                          '실제 하위 실행 시도': s.MAX_COMMANDS, '개인 정의 깊이': s.MAX_DEPTH, '최종 하위 문자열 합계': s.MAX_EXPANDED_CHARACTERS},
                         AUTO_CLOSE_SECONDS, rules.PROFILE_VERSION, roles, example, medical)
         # 실제 템플릿 Action은 동일 parser/Help 계약을 통과해야 한다.
-        html = (root / 'game/web/templates/webclient/webclient.html').read_text(encoding='utf-8')
+        if html is None:
+            html = (root / 'game/web/templates/webclient/webclient.html').read_text(encoding='utf-8')
         actions = re.findall(r'data-command="([^"]+)"', html)
         for action in actions:
             example(action, {})
         self.assertGreater(len(actions), 20)
-        self.assertIn('웹 조작은 기존 SURROUNDINGS/이동 버튼과 같은 텍스트 명령', documents['docs/doors-and-keys.md'])
+        door_document = documents['docs/doors-and-keys.md']
+        self.assertIn('`pz_action`', door_document)
+        self.assertIn('Typed TargetReference', door_document)
+        self.assertIn('실제 출구 이동 버튼은 기존 텍스트 이동 명령을 유지', door_document)
         return result
 
     def _feature_documents(self):
@@ -137,19 +143,41 @@ class IntegratedContractTests(WorldCommandTest):
                 with self.assertRaisesRegex(ValueError, error):
                     self._audit_feature_documents(corrupted)
 
+    def test_unregistered_web_control_and_action_help_are_rejected(self):
+        html = (Path(__file__).resolve().parents[2] /
+                'game/web/templates/webclient/webclient.html').read_text(encoding='utf-8')
+        for command in ('검증되지않은행동', '검증되지않은행동 도움'):
+            with self.subTest(command=command), self.assertRaisesRegex(ValueError, '미등록/제거|없는 Help'):
+                self._audit_feature_documents(
+                    self._feature_documents(), html=html + '<button data-command="' + command + '"></button>')
+
     def test_frozen_all_keys_aliases_and_input_styles(self):
         expected = json.loads((Path(__file__).resolve().parents[2]/'scripts/issue50-command-contract.json').read_text(encoding='utf-8'))
-        # Evennia 6.1은 Alias를 set에서 정규화한다. Alias 순서는 계약이 아니지만
-        # key/전체 Alias 집합/Registry 순서/입력 방식은 정확히 보존한다.
+        cmdset, actions = public_action_catalog()
+        migrated = {entry.key for entry in actions}
+        fixed = [*COMMANDS, Who, Quit]
+        # #50 스냅샷은 역사적 baseline이다. 미전환 고정 명령의 순서·입력 방식은
+        # 보존하고, 승인된 동적 전환은 공개 key/Alias와 실제 어댑터로 대조한다.
         self.assertEqual([{'key': c.key, 'aliases': sorted(c.aliases), 'input_style': getattr(c, 'input_style', 'standalone')}
-                          for c in [*COMMANDS, Who, Quit]], expected)
+                          for c in fixed], [row for row in expected if row['key'] not in migrated])
+        self.assertEqual(migrated, {row['key'] for row in expected if row['key'] in migrated})
+        self.assertFalse(migrated & {c.key for c in fixed})
+        frozen = {row['key']: row for row in expected}
+        for entry in actions:
+            with self.subTest(action=entry.key):
+                self.assertEqual(sorted(entry.aliases), frozen[entry.key]['aliases'])
+                command = cmdset.get(entry.key)
+                self.assertIsInstance(command, DynamicActionCommand)
+                self.assertEqual(command.verb_id, entry.id)
+                self.assertEqual(command.input_style, frozen[entry.key]['input_style'])
 
     def test_all_registry_aliases_actual_help_dispatch_and_semantics(self):
         titles = ("사용법", "예시", "실행 규칙", "제한", "관련 도움말")
-        commands = [c for c in [*COMMANDS, Who] if c.key != CMD_NOMATCH]
+        cmdset, actions = public_action_catalog()
+        commands = [c for c in [*COMMANDS, Who, *actions] if c.key != CMD_NOMATCH]
         names = [name.casefold() for c in commands for name in (c.key, *c.aliases)]
         self.assertEqual(len(names), len(set(names)), "정식 명령/Alias 충돌")
-        cmdset, account_cmdset = CharacterCmdSet(), AccountCmdSet()
+        account_cmdset = AccountCmdSet()
         # 동결은 #46~49 신규/변경 명령의 6절을 요구한다. 무관한 기존 명령의
         # 간결한 Help까지 새 정책으로 바꾸지 않고, 그 Alias/dispatcher는 전수 검사한다.
         required = {"봐", "출구", "도움", "누구", "점수", "가진거", "정보", "때려", "목록", "사", "팔아",
@@ -160,7 +188,12 @@ class IntegratedContractTests(WorldCommandTest):
         self.assertTrue(required <= {c.key for c in commands})
         for cls in commands:
             with self.subTest(command=cls.key):
-                self.assertIsInstance((account_cmdset if cls is Who else cmdset).get(cls.key), cls)
+                if cls in actions:
+                    selected = cmdset.get(cls.key)
+                    self.assertIsInstance(selected, DynamicActionCommand)
+                    self.assertEqual(selected.verb_id, cls.id)
+                else:
+                    self.assertIsInstance((account_cmdset if cls is Who else cmdset).get(cls.key), cls)
                 page = help_page(cls.key, commands)
                 self.assertIsInstance(page, ft.Text)
                 self.assertTrue(getattr(cls, "summary", ""), cls.key)

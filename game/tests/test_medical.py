@@ -134,8 +134,23 @@ class MedicalCommandsTests(WorldCommandTest):
     def test_web_presentation_and_distant_privacy_use_real_objects(self):
         self.char1.change(lambda p: p.update(hp=1, credits=1000))
         state = multiplayer_state(self.char1)
-        self.assertEqual({action["command"] for obj in state["interactables"] if obj["name"] in ("의무관", "침대") for action in obj["actions"]},
-                         {"의무관 회복", "'의무관에게 안녕"})
+        from tests.action_control_fixture import assert_provider, execute_control
+
+        actions = next(obj["actions"] for obj in state["interactables"] if obj["name"] == "의무관")
+        controls = [control for control in actions if "action" in control]
+        self.assertEqual([control["action"]["action_id"] for control in controls], ["medical.treat"])
+        self.assertEqual([control["command"] for control in actions if "command" in control], ["'의무관 1에게 안녕"])
+        assert_provider(self, controls[0], self.doctor)
+        before = deepcopy(self.char1.profile())
+        from world import interactable_services
+
+        with patch.object(interactable_services, "doctor", wraps=interactable_services.doctor) as effect:
+            self.assertIn("HP 59 회복", execute_control(self, controls[0]))
+        self.assertEqual(effect.call_count, 1)
+        self.assertEqual(effect.call_args.args[0].pk, self.doctor.pk)
+        self.assertEqual(self.char1.profile()["hp"], 60)
+        self.assertEqual(self.char1.profile()["credits"], before["credits"] - rules.treatment_quote(before, safe=True)[1])
+        self.char1.change(lambda profile: profile.update(hp=1))
         self.assertEqual(render(context_for(self.char1)), "의무관 회복")
         appearance = str(self.char1.location.return_appearance(self.char1))
         self.assertIn("의무관", appearance)
@@ -146,6 +161,7 @@ class MedicalCommandsTests(WorldCommandTest):
         distant = self.command("북 봐")
         self.assertNotIn("의무관 회복", distant)
         self.assertNotIn("'의무관에게 안녕", distant)
+        self.assertNotIn("'의무관 1에게 안녕", distant)
         self.assertNotIn("침대 휴식", distant)
         self.char1.location = self.rooms["dock"]
         before = deepcopy(self.char1.profile())

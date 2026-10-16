@@ -267,12 +267,17 @@ def current_doors(caller, now=None):
 
 
 def resolve_door(caller, value, action, now=None):
-    from world.targets import matching, parse_selector, strict_single
+    from world.actions.resolver import select_role
+    from world.actions.schema import ReferenceKind, RoleDefinition
+    from world.selection_numbers.api import descriptor
     if not value.strip():
         raise rules.RuleError(f"대상 이름 뒤에 {action}를 입력하세요. 예: 관리실 문 {action}")
     candidates = current_doors(caller, now)
-    selector = parse_selector(value, [name for target in candidates for name in target.names])
-    return strict_single(matching(candidates, selector, lambda target: target.names), selector, action)
+    from evennia.objects.models import ObjectDB
+
+    references = {descriptor(ObjectDB.objects.get(pk=target.exit_pk)).reference for target in candidates}
+    reference = select_role(caller, RoleDefinition("provider", (ReferenceKind.DOOR,)), value, candidates=references)[0]
+    return next(target for target in candidates if str(target.exit_pk) == reference.identity)
 
 
 def description(target, now=None):
@@ -304,9 +309,16 @@ def actions_for(caller, target, now=None):
     return [{"label": action, "command": target.direction + " 문 " + action} for action in actions]
 
 
-def web_controls(caller, now=None):
+def web_controls(caller, now=None, *, action_rows=None):
+    from world.actions.manifest import get_index
+    from world.actions.presentation import action_controls
+    from world.selection_numbers.api import number_for
+
+    rows = action_controls(caller, get_index(), now) if action_rows is None else action_rows
     return [dict(name=target.name, label=target.direction + " " + target.name, role="object",
-                 look_command=target.direction + " 문 봐", actions=actions_for(caller, target, now))
+                 look_command=f"문 {number_for('door', target.exit_pk)} 봐",
+                 actions=[row for row in rows if row["action"]["roles"].get("provider", [{}])[0].get("kind") == "door"
+                          and row["action"]["roles"]["provider"][0]["identity"] == str(target.exit_pk)])
             for target in current_doors(caller, now)]
 
 
@@ -369,10 +381,20 @@ def publish(identity, caller=None, message=None):
 
 
 def operate(caller, value, action, now=None):
+    """문 관찰/도메인 호환 호출. 공개 실행은 Action의 안정 Endpoint를 사용한다."""
+    target = resolve_door(caller, value, action, now)
+    from evennia.objects.models import ObjectDB
+
+    return operate_endpoint(caller, ObjectDB.objects.get(pk=target.exit_pk), action, now)
+
+
+def operate_endpoint(caller, endpoint, action, now=None):
     with world_change():
         rules.require_peace(caller.profile_snapshot())
         now = time() if now is None else now
-        target = resolve_door(caller, value, action, now)
+        target = next((target for target in current_doors(caller, now) if target.exit_pk == endpoint.pk), None)
+        if target is None or endpoint.location != caller.location or not endpoint.access(caller, "call"):
+            raise rules.RuleError("원래 문이 없어졌거나 위치·권한이 바뀌었습니다.")
         state = effective_door_state(target.identity, now)
         if state == UNAVAILABLE:
             raise rules.RuleError("그 문은 지금 이용할 수 없습니다.")

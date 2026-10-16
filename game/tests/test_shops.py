@@ -17,6 +17,7 @@ from world.room_hints import render
 from world.selection_numbers.api import descriptor
 from world.state import multiplayer_state
 
+from tests.action_control_fixture import selection_label
 from tests.base import WorldCommandTest
 
 
@@ -51,7 +52,7 @@ class ShopTests(WorldCommandTest):
                     # 집중링/정신집중링처럼 이름의 부분 문자열이 겹쳐도 독립 상품으로 검사한다.
                     self.assertEqual(bool(re.search(r"(?<![가-힣])" + re.escape(ITEMS[item]["name"]) + r" ·", output)), item in SHOP_CATALOGS[shop_id]["purchase_catalog"], item)
                 self.assertNotIn("회수부품", output)
-            self.assertIn(seller.key + "에게 물건이름 사", self.command(seller.key + " 봐"))
+            self.assertIn(selection_label(seller) + "에게 물건이름 사", self.command(seller.key + " 봐"))
             self.assertIn("판매 목록", self.command(seller.key + "에게 보급 말"))
 
     def test_bare_targeted_alias_purchases_and_infinite_catalog(self):
@@ -99,12 +100,19 @@ class ShopTests(WorldCommandTest):
         before = deepcopy(self.char1.profile())
         self.assertIn("여러 명", self.command("붕대 사"))
         self.assertEqual(self.char1.profile(), before)
-        with patch.object(extra, "act", wraps=extra.act) as selected, patch.object(seller, "act") as other:
+        from world import interactable_services
+
+        from tests.action_control_fixture import assert_provider
+
+        with patch.object(interactable_services, "shopkeeper", wraps=interactable_services.shopkeeper) as selected:
             self.command("보급관 2에게 붕대 사")
-            selected.assert_called_once()
-            other.assert_not_called()
-        commands = [a["command"] for obj in multiplayer_state(self.char1)["interactables"] for a in obj["actions"]]
-        self.assertIn("보급관 2에게 붕대 사", commands)
+        self.assertEqual(selected.call_count, 1)
+        self.assertEqual(selected.call_args.args[0].pk, extra.pk)
+        controls = [a for obj in multiplayer_state(self.char1)["interactables"] for a in obj["actions"]
+                    if a.get("action", {}).get("action_id") == "shop.buy.bandage"]
+        selected = next(control for control in controls
+                        if control["action"]["roles"]["provider"][0]["identity"] == str(extra.pk))
+        assert_provider(self, selected, extra)
         weapon.location = self.rooms["weapon_shop"]
         extra.locks.add("view:false()")
         self.assertNotIn("여러 명", self.command("목록"))
@@ -148,24 +156,43 @@ class ShopTests(WorldCommandTest):
         for shop_id, seller in self.sellers.items():
             self.char1.location = seller.location
             actions = multiplayer_state(self.char1)["interactables"][0]["actions"]
-            self.assertEqual(actions[0]["command"], seller.key + " 목록")
-            self.assertEqual([a["command"] for a in actions if a["command"].endswith(" 사")],
-                             [seller.key + "에게 " + ITEMS[item]["name"] + " 사" for item in SHOP_CATALOGS[shop_id]["purchase_catalog"]])
+            from tests.action_control_fixture import assert_provider, execute_control
+
+            self.assertEqual(actions[0]["action"]["action_id"], "shop.menu." + shop_id)
+            purchases = [a for a in actions if a.get("action", {}).get("action_id", "").startswith("shop.buy.")]
+            self.assertEqual([a["action"]["arguments"]["value"] for a in purchases],
+                             list(SHOP_CATALOGS[shop_id]["purchase_catalog"]))
+            for control in (actions[0], *purchases):
+                assert_provider(self, control, seller)
             self.assertEqual(render(context_for(self.char1)), seller.key + " 목록")
-            self.assertIn("1개를 받아", self.command(actions[1]["command"]))
+            item = purchases[0]["action"]["arguments"]["value"]
+            before = deepcopy(self.char1.profile())
+            self.assertIn("1개를 받아", execute_control(self, purchases[0]))
+            self.assertEqual(self.char1.profile()["credits"], before["credits"] - ITEMS[item]["value"])
+            self.assertEqual(self.char1.profile()["inventory"].get(item, 0), before["inventory"].get(item, 0) + ITEMS[item].get("purchase_quantity", 1))
         for zone, expected in (("storage_room", {"봐"}), ("training_room", {"힘 +1 배분"}),
-                               ("infirmary", {"의무관 회복"}), ("recovery_room", {"휴식", "닫아"}), ("survival_training_room", {"체질 +1 배분"}), ("salvage_office", {"환율", "봐"}),
+                               ("infirmary", {"회복"}), ("recovery_room", {"휴식", "닫아"}), ("survival_training_room", {"체질 +1 배분"}), ("salvage_office", {"환율", "봐"}),
                                ("dock", {"말 걸기"}), ("office", {"조사"}), ("generator", {"수리"})):
             self.char1.location = self.rooms[zone]
             if zone == "infirmary":
                 self.char1.change(lambda p: p.update(hp=1))
+                from world import rules
+
+                restored, cost = rules.treatment_quote(self.char1.profile_snapshot(), safe=True)
+                expected = {f"HP {restored} 회복 · 예상 {cost}칩"}
             if zone == "recovery_room":
                 from world.doors import operate
                 # 실제 조작으로 OPEN을 준비해 현재 침대/문 기능을 함께 검증한다.
                 operate(self.char1, "문", "닫아")
                 operate(self.char1, "문", "열어")
-            self.assertEqual({a["command"] if zone == "infirmary" else a["label"] for obj in multiplayer_state(self.char1)["interactables"] for a in obj["actions"] if a["label"] != "말 걸기" or zone == "dock"}, expected)
+            self.assertEqual({a["label"] for obj in multiplayer_state(self.char1)["interactables"] for a in obj["actions"] if a["label"] != "말 걸기" or zone == "dock"}, expected)
         self.char1.location = self.rooms["salvage_office"]
+        from world.equipment_service import use_item_entities
+
+        profile = self.char1.profile()
+        profile.update(inventory={}, equipment={"weapon": None, "armor": None})
+        self.char1.db.profile = profile
+        use_item_entities(self.char1)
         self.char1.change(lambda p: p["inventory"].update(scrap=2))
         self.assertIn("회수부품 모두 교환", str(multiplayer_state(self.char1)))
 

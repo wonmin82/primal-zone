@@ -12,6 +12,8 @@ from world import rules
 from world.bootstrap import build_world, stale_definitions
 from world.content import ITEMS, SALVAGE_CREDIT_RATE
 from world.content.integrity import errors
+from world.item_entities import api
+from world.item_entities.models import ItemEntity
 from world.observation import context_for
 from world.room_hints import render
 from world.selection_numbers.api import descriptor
@@ -32,6 +34,13 @@ class SettlementFixture:
             player.location = self.rooms["salvage_office"]
             player.home = self.rooms["dock"]
             player.push_state = Mock()
+            # 새 캐릭터 fixture를 빈 Native 소지품에서 시작한다. 운영 변환은 수행하지 않는다.
+            from world.equipment_service import use_item_entities
+
+            profile = player.profile()
+            profile.update(inventory={}, equipment={"weapon": None, "armor": None})
+            player.db.profile = profile
+            use_item_entities(player)
         for module in ("enemies", "explorers", "loot"):
             self.enterContext(patch(f"typeclasses.{module}.delay"))
 
@@ -79,7 +88,8 @@ class SettlementCommandsTests(SettlementFixture, WorldCommandTest):
             before = deepcopy(self.char1.profile())
             self.assertNotIn("칩을 받았다", self.command(raw))
             self.assertEqual(self.char1.profile(), before)
-        self.char1.change(lambda p: p["inventory"].pop("scrap", None))
+        for item in api.items_in_location("inventory", owner_object=self.char1).filter(definition_id="scrap"):
+            api.delete_item(item)
         before = deepcopy(self.char1.profile())
         self.assertIn("정산할 회수부품이 없습니다", self.command("회수부품 모두 교환"))
         self.assertEqual(self.char1.profile(), before)
@@ -97,12 +107,21 @@ class SettlementCommandsTests(SettlementFixture, WorldCommandTest):
         for raw in ("환율", "회수부품 교환"):
             self.assertIn("정산관이 여러 명", self.command(raw))
             self.assertEqual(self.char1.profile(), before)
-        with patch.object(extra, "act", wraps=extra.act) as selected, patch.object(self.officer, "act") as other:
+        from world import interactable_services
+
+        with patch.object(interactable_services, "settlementofficer", wraps=interactable_services.settlementofficer) as selected:
             self.command("자원 정산관 2에게 회수부품 3개 교환")
-            selected.assert_called_once()
-            other.assert_not_called()
+        self.assertEqual(selected.call_count, 1)
+        self.assertEqual(selected.call_args.args[0].pk, extra.pk)
         self.assertEqual(self.char1.profile()["inventory"]["scrap"], 4)
-        self.assertIn("자원 정산관 2에게 회수부품 모두 교환", str(multiplayer_state(self.char1)))
+        from tests.action_control_fixture import assert_provider
+
+        controls = [control for obj in multiplayer_state(self.char1)["interactables"] for control in obj["actions"]
+                    if control.get("action", {}).get("action_id") == "settlement.all"
+                    and control["action"]["roles"]["provider"][0]["identity"] == str(extra.pk)]
+        self.assertTrue(controls)
+        for control in controls:
+            assert_provider(self, control, extra)
         extra.locks.add("view:false()")
         self.assertNotIn("여러 명", self.command("환율"))
         self.command("회수부품 교환")
@@ -145,29 +164,52 @@ class SettlementWorldTests(SettlementFixture, WorldCommandTest):
     def test_server_actions_resource_snapshot_and_settlement_push(self):
         self.prepare(scrap=7, credits=0)
         actions = next(obj["actions"] for obj in multiplayer_state(self.char1)["interactables"] if obj["name"] == self.officer.key)
-        self.assertEqual([action["command"] for action in actions],
-                         ["자원 정산관 환율", "자원 정산관에게 회수부품 모두 교환", "'자원 정산관에게 안녕"])
+        from tests.action_control_fixture import assert_provider
+
+        structured = [control for control in actions if "action" in control]
+        self.assertEqual({control["action"]["action_id"] for control in structured},
+                         {"settlement.rate", "settlement.all"})
+        self.assertEqual([control["command"] for control in actions if "command" in control],
+                         ["'자원 정산관 1에게 안녕"])
+        for control in structured:
+            assert_provider(self, control, self.officer)
+        exchange = next(control for control in structured if control["action"]["action_id"] == "settlement.all")
+        expected_ids = {str(item.pk) for item in api.items_in_location("inventory", owner_object=self.char1)
+                        if item.definition_id == "scrap"}
+        self.assertTrue(expected_ids)
+        from world.actions.collections import inventory_version
+
+        version, members = inventory_version(self.char1, ("scrap",))
+        self.assertEqual({identity for identity, _quantity in members}, expected_ids)
+        self.assertEqual(exchange["action"]["arguments"]["snapshot"], version)
+        self.assertEqual(exchange["action"]["roles"]["source"],
+                         [{"kind": "inventory", "identity": str(self.char1.pk), "scope_id": f"inventory:{self.char1.pk}"}])
         self.assertEqual(render(context_for(self.char1)), "자원 정산관 환율")
         appearance = str(self.officer.return_appearance(self.char1))
         for usage in ("환율", "10개", "모두"):
             self.assertIn(usage, appearance)
         self.char1.push_state = lambda: Explorer.push_state(self.char1)
         with patch.object(self.char1, "msg") as output:
-            self.char1.execute_cmd(next(action["command"] for action in actions if action["command"].endswith(" 교환")))
+            from server.conf.primal_inputfuncs import pz_action
+
+            control = next(action for action in structured if action["action"]["action_id"] == "settlement.all")
+            pz_action(self.session, {**control["action"], "request_id": "settlement-all"})
         payloads = [call.kwargs["pz_state"][0][0] for call in output.call_args_list if "pz_state" in call.kwargs]
         self.assertTrue(payloads)
         for state in payloads:
             self.assertEqual(state["credits"], 7 * SALVAGE_CREDIT_RATE)
             self.assertEqual(state["resources"], {"scrap": {"name": "회수부품", "count": 0}})
-        self.assertEqual([action["command"] for action in next(obj["actions"] for obj in multiplayer_state(self.char1)["interactables"] if obj["name"] == self.officer.key)],
-                         ["자원 정산관 환율", "'자원 정산관에게 안녕"])
+        remaining = next(obj["actions"] for obj in multiplayer_state(self.char1)["interactables"] if obj["name"] == self.officer.key)
+        self.assertEqual([action["action"]["action_id"] for action in remaining if "action" in action], ["settlement.rate"])
+        self.assertEqual([action["command"] for action in remaining if "command" in action], ["'자원 정산관 1에게 안녕"])
         self.char1.location = self.rooms["support_2f_e1"]
         self.assertNotIn("정산관", self.command("북 봐"))
 
     def test_bootstrap_identity_aliases_and_all_existing_data_are_preserved(self):
         self.prepare()
-        self.char1.change(lambda p: p["storage"].update(scrap=8))
-        self.char2.change(lambda p: p["storage"].update(scrap=3))
+        api.create_item("scrap", quantity=8, location_kind="personal_storage", owner_object=self.char1)
+        api.create_item("scrap", quantity=3, location_kind="personal_storage", owner_object=self.char2)
+        native_before = list(ItemEntity.objects.order_by("sequence").values("pk", "quantity", "location_kind", "owner_object_id"))
         profiles = [deepcopy(player.profile()) for player in (self.char1, self.char2)]
         identities = {key: search_tag(key, category="primal_interactable")[0].id for key in INTERACTABLES}
         box = search_tag("shared_container", category="primal_interactable")[0]
@@ -183,6 +225,7 @@ class SettlementWorldTests(SettlementFixture, WorldCommandTest):
             self.assertEqual(self.officer.aliases.all(), ["정산관"])
             self.assertEqual([player.profile() for player in (self.char1, self.char2)], profiles)
             self.assertEqual(deserialize(box.db.items), {"scrap": 4, "bandage": 2})
+            self.assertEqual(list(ItemEntity.objects.order_by("sequence").values("pk", "quantity", "location_kind", "owner_object_id")), native_before)
         self.assertEqual(stale_definitions(), [])
         self.assertEqual(errors(INTERACTABLES), [])
 
@@ -223,8 +266,8 @@ class SettlementWorldTests(SettlementFixture, WorldCommandTest):
         self.command("보관상자에 회수부품 모두 넣어")
         self.command("보관상자에서 회수부품 모두 꺼내")
         self.command("개인 보관함에 회수부품 넣어")
-        self.assertEqual(self.char1.profile()["storage"]["scrap"], 1)
-        self.assertNotIn("scrap", self.char2.profile()["storage"])
+        self.assertEqual(list(api.items_in_location("personal_storage", owner_object=self.char1).values_list("definition_id", "quantity")), [("scrap", 1)])
+        self.assertFalse(api.items_in_location("personal_storage", owner_object=self.char2).filter(definition_id="scrap").exists())
         self.command("개인 보관함에서 회수부품 꺼내")
         self.command(f"{self.char2.key}에게 회수부품 줘")
         self.command("회수부품 모두 버려")

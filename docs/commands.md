@@ -1,6 +1,8 @@
 # 명령 어휘와 별칭 기준
 
-실행 어휘의 SSOT는 각 Command의 `key`·`aliases`, `commands/aliases.py`의 전역 단축어와 `content/directions.py`의 방향이다. 도움말의 표시 입력은 `commands/help_contracts.py`와 개별 명령의 `help_sections`를 사용한다.
+실행 어휘의 SSOT는 미전환 기능의 Command `key`·`aliases`와 전환된 M01/M02의 Compiled Action Index `VerbDefinition`이다. `commands/aliases.py`의 전역 단축어와 `content/directions.py`의 방향은 유지한다. M01/M02의 콘텐츠는 `world/actions/room_npc_content.py`에 선언하며 정규 동사 하나당 Dynamic Command 하나가 현재 Provider의 Action을 선택한다. 중앙 파서에 콘텐츠별 분기를 추가하지 않는다.
+
+도움말은 미전환 Command의 `commands/help_contracts.py`·`help_sections`와 공개 Compiled Verb의 `summary`·`usage`·`category`·`help_sections`를 같은 렌더러에서 표시한다. 전환된 문·시설·NPC 서비스의 기존 도움말은 `world/actions/room_npc_help.py`에서 Verb 선언으로 인수한다. 요약·사용법·예시·실행 규칙·제한·관련 도움말과 별칭·분류를 유지하며, 도움말 조회는 Service를 실행하지 않는다. 전환 범위와 Legacy 제거 근거는 [Action 전환표](action-migration.md)를 따른다.
 
 | 정식 명령 | 사용자 별칭 | 제거한 이전 입력 |
 | --- | --- | --- |
@@ -24,10 +26,21 @@
 | 가치 | 얼마 | value |
 | 정보 | 없음 | 이전 상태 조회 의미 제거 |
 | 회복 | 없음 | 진료, treat |
+| 휴식 | rest | 없음 |
+| 조사 | 없음 | 없음 |
+| 수리 | 없음 | 없음 |
+| 소각 | 소각 확정 | 없음 |
+| 배워 | 없음 | 없음 |
+| 배분 | 없음 | 없음 |
+| 재분배 | 재훈련 | 없음 |
+| 교환 | exchange | 없음 |
+| 환율 | rate | 없음 |
 | 열어 | 없음 | 없음 |
 | 닫아 | 없음 | 없음 |
 | 잠궈 | 없음 | 없음 (`잠가`를 추가하지 않음) |
 | 풀어 | 없음 | 없음 |
+
+M01/M02의 조사·수리·문·소각·의료·상점·성장·정산은 운영 ContentPackage의 Action/Service 경로로 실행한다. 표의 `소각 확정`은 Dynamic Command의 공개 선택 키이며 실행 의미는 별도 SyntaxVariant다. 공개 접미어와 서버 확인 토큰을 검사하며 웹의 단순 `confirmed=true`로 우회하지 않는다. 나머지 아이템·총기·전리품의 전환은 후속 PR 범위이고 기존 공개 경로를 유지한다.
 
 대상·번호·조사는 별칭에서도 그대로 전달한다: `갈퀴사냥룡 2 쳐`, `보급관에게 붕대 구입`, `붕대 집`. 정식 명령·별칭으로 요청한 도움말은 같은 정식 페이지를 표시한다.
 

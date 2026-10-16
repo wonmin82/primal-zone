@@ -34,7 +34,16 @@ def root_page():
     return ft.compact("도움", *lines)
 
 
+def with_action_help(commands):
+    from world.actions.manifest import get_index
+    from world.actions.presentation import help_metadata
+
+    keys = {command.key for command in commands}
+    return [*commands, *[entry for entry in help_metadata(get_index()) if entry.key not in keys]]
+
+
 def category_page(category, commands):
+    commands = with_action_help(commands)
     lines = [commands_text([cls.key for cls in commands if getattr(cls, "category", None) == category])]
     if category == "이동·탐사":
         lines.extend(["", ft.join([ft.token("direction", value) for value in DIRECTION_ORDER], " · "),
@@ -83,6 +92,7 @@ def shortcut_page():
 
 def help_page(query, commands):
     """실제 명령 > 방향 > 분류/topic. 개인 줄임말을 help query로 확장하지 않는다."""
+    commands = with_action_help(commands)
     query = query.strip().casefold()
     selected = next((cls for cls in commands if query in {name.casefold() for name in (cls.key, *cls.aliases)}), None)
     if selected is None and query in SHORTCUTS:

@@ -108,6 +108,12 @@ class Client:
         await self.send("text", [text])
         return await self.until(predicate, timeout, before)
 
+    async def action(self, payload, predicate=lambda state: True, timeout=STATE_TIMEOUT):
+        """실제 구조화 웹 요청을 보내고 같은 Gateway의 최종 상태를 기다린다."""
+        before = self.revision
+        await self.send("pz_action", [payload])
+        return await self.until(predicate, timeout, before)
+
     async def expect_text(self, command, expected):
         while not self.messages.empty():
             self.messages.get_nowait()
@@ -328,11 +334,35 @@ class Scenario:
             await first.act("무기상에게 절단마체테 사", lambda state: count_item(state, "cutting_machete") == 1)
             assert first.state["credits"] == before_credits - 55
             await first.expect_text("절단마체테 가치", "매입가는 27칩")
+            # 격리 DB의 실제 구매 UUID와 버튼의 Typed Subject가 일치해야 한다.
+            snapshot = await asyncio.to_thread(self.harness.checkpoint)
+            bought = {identity: item for identity, item in snapshot["players"][first.name]["items"].items()
+                      if item["definition"] == "cutting_machete" and item["location"] == "inventory"}
+            assert len(bought) == 1
+            item_id = next(iter(bought))
+            assert bought[item_id]["quantity"] == 1
             single_sale = next(action for obj in first.state["interactables"] for action in obj["actions"]
-                               if action["label"] == "절단마체테 · 27칩 팔아")
-            assert single_sale["command"].endswith("절단마체테 팔아")
-            await first.act(single_sale["command"], lambda state: count_item(state, "cutting_machete") == 0)
+                               if action.get("action", {}).get("action_id") == "shop.sell.weapon"
+                               and action["action"]["roles"].get("subject", [{}])[0].get("identity") == item_id)
+            assert single_sale["label"] == "절단마체테 1 · 27칩 팔아"
+            assert "command" not in single_sale
+            subject = single_sale["action"]["roles"]["subject"]
+            assert subject == [{"kind": "item", "identity": item_id,
+                                "scope_id": f"character:{snapshot['players'][first.name]['id']}"}]
+            assert single_sale["action"]["arguments"]["count"] == "1"
+            payload = {**single_sale["action"], "request_id": "smoke-single-sale"}
+            await first.action(payload, lambda state: count_item(state, "cutting_machete") == 0
+                               and state["credits"] == before_credits - 28)
             assert first.state["credits"] == before_credits - 28
+            assert count_item(first.state, "cutting_machete") == 0
+            # 같은 request ID를 재전송한 뒤 다음 가진거 응답까지 기다려 중복 지급이 없음을 확인한다.
+            await first.send("pz_action", [payload])
+            await first.expect_text("가진거", "가진거")
+            assert first.state["credits"] == before_credits - 28
+            assert count_item(first.state, "cutting_machete") == 0
+            after_sale = await asyncio.to_thread(self.harness.checkpoint)
+            assert item_id not in after_sale["players"][first.name]["items"]
+            assert after_sale["players"][first.name]["profile"]["credits"] == before_credits - 28
             await first.act("무기상에게 절단마체테 사", lambda state: count_item(state, "cutting_machete") == 1)
             self.report("shop", "옥상 귀환 / 승강기 / 가치·구매·판매 / 재구매")
             self.phase = "persistence"

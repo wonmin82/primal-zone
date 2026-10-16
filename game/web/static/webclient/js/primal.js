@@ -136,7 +136,7 @@
       text.textContent = attribute.name + " " + attribute.value + " (기본 " + attribute.base + " + " + attribute.allocated + ")";
       text.title = attribute.description;
       const action = controls[attribute.id]?.[0];
-      const add = button("+1", action?.command || "");
+      const add = action?.action ? actionButton("+1", action.action) : button("+1", action?.command || "");
       add.setAttribute("aria-label", attribute.name + " 1 포인트 배분");
       add.disabled = !action;
       row.append(text, add); return row;
@@ -148,11 +148,18 @@
       detail.className = "muted";
       detail.textContent = skill.description + (skill.rank === skill.max_rank ? " · 최고 Rank" : " · 다음 Rank: 훈련 1회");
       const action = controls[skill.id]?.[0];
-      const learn = button(skill.name + " 배워", action?.command || "");
+      const learn = action?.action ? actionButton(skill.name + " 배워", action.action) : button(skill.name + " 배워", action?.command || "");
       learn.disabled = !action;
       row.append(title, detail, learn); return row;
     }));
-    ["reset-attributes", "reset-skills", "reset-all"].forEach((id, index) => { const action = controls.reset?.[index]; byId(id).disabled = !action; byId(id).dataset.command = action?.command || ""; });
+    ["attributes", "skills", "all"].forEach((scope) => {
+      const action = controls.reset?.find((control) => control.action?.arguments?.value === scope), el = byId("reset-" + scope);
+      el.disabled = !action;
+      delete el.dataset.command;
+      delete el.dataset.actionInvocation;
+      if (action?.action) el.dataset.actionInvocation = JSON.stringify(action.action);
+      else if (action?.command) el.dataset.command = action.command;
+    });
   }
   // 로컬 시계 차이와 추가 타이머 없이 서버가 관측한 수신 시점의 TTL을 표시한다.
   function pendingTime(entry, serverNow) {
@@ -268,7 +275,7 @@
     byId("party-invitation").hidden = !invitation || pendingTime(invitation, state.server_now).expired;
     byId("party-inviter").textContent = invitation ? invitation.inviter + "의 일행 초청 · " + pendingTime(invitation, state.server_now).label : "";
     for (const object of state.interactables) for (const action of object.actions) {
-      const el = button(object.label + " " + action.label, action.command);
+      const el = action.action ? actionButton(object.label + " " + action.label, action.action) : button(object.label + " " + action.label, action.command);
       el.replaceChildren(semantic(object.role, object.label), " ", semantic("command", action.label));
       actions.push(el);
     }

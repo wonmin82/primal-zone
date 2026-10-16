@@ -106,7 +106,9 @@ class VocabularyTests(WorldCommandTest):
         self.assertTrue({'방어', 'guard', '응급처치', 'firstaid'}.isdisjoint(registered))
 
     def test_help_taxonomy_routes_semantics_and_shortcut_ssot(self):
-        commands = [cls for cls in COMMANDS if getattr(cls, "input_style", None)]
+        from commands.help_pages import with_action_help
+
+        commands = with_action_help([cls for cls in COMMANDS if getattr(cls, "input_style", None)])
         self.assertEqual(len(HELP_CATEGORIES), 6)
         root = root_page()
         self.assertNotIn("8방향 이동", tokens(root, "command"))

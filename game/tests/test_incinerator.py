@@ -13,6 +13,13 @@ from tests.phase5_fixture import Phase5Test
 
 
 class CredentialConfirmationCases:
+    def burn_request(self, value, *, confirmed=False):
+        """Native는 공개 Action 입력, Legacy는 보존된 도메인 API만 검증한다."""
+        if self.native:
+            suffix = " 소각 확정" if confirmed else " 소각"
+            return self.command(value + suffix)
+        return incinerator_service.incinerate(self.char1, value, confirmed=confirmed)
+
     def test_credentials_reject_quantity_confirmation_and_accept_exact_selector(self):
         for identity, quest in credentials.CREDENTIAL_QUESTS.items():
             with self.subTest(credential=identity):
@@ -21,20 +28,26 @@ class CredentialConfirmationCases:
                 name = ITEMS[identity]["name"]
                 before = self.state()
                 access = [can_enter(self.char1, zone) for zone in ("outpost_equipment", "outpost_weapon", "reserved_equipment", "reserved_weapon")]
-                self.assertIn(name + " 소각 확정", self.command(name + " 소각"))
+                self.assertIn(name + " 소각 확정", self.burn_request(name))
                 self.assertEqual(self.state(), before)
                 for suffix in ("1개", "2개", "모두"):
                     with self.subTest(suffix=suffix):
-                        self.command(f"{name} {suffix} 소각 확정")
-                        self.assertEqual(self.state(), before)
+                        if self.native:
+                            # 잘못된 공개 입력은 실제 운영 Manifest/TargetResolver로 거절한다.
+                            self.burn_request(f"{name} {suffix}", confirmed=True)
+                            self.assertEqual(self.state(), before)
                         with self.assertRaises(rules.RuleError):
                             incinerator_service.incinerate(self.char1, f"{name} {suffix}", confirmed=True)
                         self.assertEqual(self.state(), before)
                         self.assertEqual([can_enter(self.char1, zone) for zone in ("outpost_equipment", "outpost_weapon", "reserved_equipment", "reserved_weapon")], access)
                 for raw in (name + " 확정", name + " 확정 소각", name + " 소각 확정 확정"):
-                    self.command(raw)
+                    if self.native:
+                        self.command(raw)
+                    else:
+                        with self.assertRaises(rules.RuleError):
+                            self.burn_request(raw, confirmed=True)
                     self.assertEqual(self.state(), before)
-                self.assertIn("소각했다", self.command(name + " 소각 확정"))
+                self.assertIn("소각했다", self.burn_request(name, confirmed=True))
                 self.assertFalse(credentials.has_credential(self.char1, identity))
                 after = self.state()
                 expected = before[0]
@@ -47,7 +60,7 @@ class CredentialConfirmationCases:
                 if self.native:
                     expected[0]["inventory"][identity] = 1
                 self.assertEqual(self.state()[0], expected)
-                # stable ID와 정상 local index도 수량이 아닌 selector로 처리한다.
+                # 구형 도메인 API의 ID/selector 호환 검사이며 공개 Action의 B-1 선택과 구분한다.
                 incinerator_service.incinerate(self.char1, identity + " 1", confirmed=True)
                 self.assertFalse(credentials.has_credential(self.char1, identity))
 
@@ -55,25 +68,32 @@ class CredentialConfirmationCases:
         if self.native:
             self.create("bandage", quantity=3)
         before = self.state()
-        self.command("붕대 소각 확정")
-        self.assertEqual(self.state(), before)
+        if self.native:
+            self.burn_request("붕대", confirmed=True)
+            self.assertEqual(self.state(), before)
         with self.assertRaisesRegex(rules.RuleError, "출입증"):
             incinerator_service.incinerate(self.char1, "붕대", confirmed=True)
         self.assertEqual(self.state(), before)
 
 
 class IncineratorTests(CredentialConfirmationCases, Phase5Test):
+    """Legacy 프로필과 기존 소각 도메인의 명시적 API 호환성."""
+
     def test_credential_exact_confirm_access_loss_and_issuer_reissue(self):
         self.char1.change(lambda p: p["quests"]["radio_tower"].update(started=True, claimed=True))
         credentials.grant_credential(self.char1, "outpost_supply_pass")
         before = self.state()
-        for raw in ("전초 보급구역 출입증 소각", "전초 보급구역 출입증 확정", "전초 보급구역 출입증 소각 확정 확정",
-                    "전초 보급구역 출입증 확정 소각"):
-            self.command(raw)
+        # 이 클래스는 Legacy API 호환 검사다. 공개 소각 문법은 NativeIncineratorTests가 검증한다.
+        self.burn_request("전초 보급구역 출입증")
+        self.assertEqual(self.state(), before)
+        for value in ("전초 보급구역 출입증 확정", "전초 보급구역 출입증 소각 확정 확정",
+                      "전초 보급구역 출입증 확정 소각"):
+            with self.assertRaises(rules.RuleError):
+                self.burn_request(value, confirmed=True)
             self.assertEqual(self.state(), before)
-        self.assertIn("소각 확정", self.command("전초 보급구역 출입증 소각"))
+        self.assertIn("소각 확정", self.burn_request("전초 보급구역 출입증"))
         self.assertTrue(can_enter(self.char1, "outpost_weapon"))
-        self.assertIn("소각했다", self.command("전초 보급구역 출입증 소각 확정"))
+        self.assertIn("소각했다", self.burn_request("전초 보급구역 출입증", confirmed=True))
         self.assertFalse(can_enter(self.char1, "outpost_weapon"))
         self.assertEqual(self.char1.profile()["quests"], before[0][0]["quests"])
         self.assertEqual(self.char1.profile()["credits"], before[0][0]["credits"])
@@ -96,7 +116,7 @@ class IncineratorTests(CredentialConfirmationCases, Phase5Test):
     def test_legacy_quantity_burn_and_no_lazy_conversion(self):
         self.char1.change(lambda p: p["inventory"].update(bandage=8))
         for raw, remaining in (("붕대 소각", 7), ("붕대 3개 소각", 4), ("붕대 모두 소각", 0)):
-            self.assertIn("소각했다", self.command(raw))
+            self.assertIn("소각했다", incinerator_service.incinerate(self.char1, raw.removesuffix(" 소각")))
             self.assertEqual(self.char1.profile()["inventory"].get("bandage", 0), remaining)
         self.assertFalse(ItemEntity.objects.exists())
 
@@ -108,6 +128,8 @@ class IncineratorTests(CredentialConfirmationCases, Phase5Test):
 
 
 class NativeIncineratorTests(CredentialConfirmationCases, Phase5Test):
+    """실제 Native Provider/Subject와 운영 Action·웹 Gateway 실행."""
+
     native = True
 
     def test_native_quantities_keep_source_uuid_sequence_and_state(self):
@@ -176,3 +198,46 @@ class NativeIncineratorTests(CredentialConfirmationCases, Phase5Test):
         self.assertIn("소각했다", self.command("손전등 소각"))
         self.assertIsNone(self.char1.db.active_light_item_id)
         self.assertFalse(ItemEntity.objects.filter(pk=row.pk).exists())
+
+    def test_web_confirmation_keeps_stable_credential_and_requires_server_token(self):
+        from server.conf.primal_inputfuncs import pz_action
+        from world.actions.room_npc_presentation import controls_for
+
+        credential = credentials.grant_credential(self.char1, "outpost_supply_pass")
+        controls = controls_for(self.char1, self.obj("incinerator"))
+        control = next(row for row in controls if row["action"]["action_id"] == "incinerator.burn"
+                       and row["action"]["roles"]["subject"][0]["identity"] == str(credential.pk))
+        self.assertEqual(control["action"]["variant"], "normal")
+        before = self.state()
+        for quantity in ("1개", "2개", "모두"):
+            payload = {**control["action"], "arguments": {"count": quantity},
+                       "request_id": "credential-quantity-" + quantity}
+            with patch.object(self.char1, "msg") as output:
+                pz_action(self.session, payload)
+            self.assertEqual(self.state(), before)
+            self.assertFalse(any("pz_action_result" in call.kwargs for call in output.call_args_list))
+        for forged in ({**control["action"], "confirmed": True},
+                       {**control["action"], "variant": "confirmed"}):
+            with patch.object(self.char1, "msg"):
+                pz_action(self.session, {**forged, "request_id": "forged-" + str(len(forged))})
+            self.assertEqual(self.state(), before)
+        with patch.object(self.char1, "msg") as output:
+            pz_action(self.session, {**control["action"], "request_id": "credential-prompt"})
+        results = [call.kwargs["pz_action_result"][0][0]["action"]
+                   for call in output.call_args_list if "pz_action_result" in call.kwargs]
+        self.assertEqual(len(results), 1)
+        confirmation = results[0]
+        self.assertEqual(confirmation["roles"], control["action"]["roles"])
+        self.assertEqual(confirmation["variant"], "confirmed")
+        self.assertTrue(confirmation["confirmation_token"])
+        self.assertEqual(self.state(), before)
+        with patch.object(self.char1, "msg") as output:
+            pz_action(self.session, {**confirmation, "request_id": "credential-confirmed"})
+        self.assertEqual(sum("소각했다" in str(call.args[0]) for call in output.call_args_list if call.args), 1)
+        self.assertFalse(ItemEntity.objects.filter(pk=credential.pk).exists())
+        self.assertFalse(can_enter(self.char1, "outpost_weapon"))
+        after = self.state()
+        with patch.object(self.char1, "msg") as duplicate:
+            pz_action(self.session, {**confirmation, "request_id": "credential-confirmed"})
+        self.assertEqual(self.state(), after)
+        self.assertFalse(any("소각했다" in str(call.args[0]) for call in duplicate.call_args_list if call.args))

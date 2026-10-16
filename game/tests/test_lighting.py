@@ -141,8 +141,11 @@ class LightingTests(WorldCommandTest):
         self.char1.location = self.rooms["office"]
         record = next(obj for obj in self.char1.location.contents if isinstance(obj, MaintenanceLog))
         self.assertNotIn(record, room_objects(self.char1, observed_at=100))
+        from world.actions.manifest import get_index
+        from world.actions.resolver import dispatch_text
+
         with self.assertRaises(rules.RuleError):
-            record.perform_action(self.char1, "조사")
+            dispatch_text(self.char1, get_index(), "game.inspect", "정비기록", "조사")
         self.powered()
         self.assertIn(record, room_objects(self.char1, observed_at=100))
         remote = self.rooms["office"].return_distant_appearance(DistantViewContext(self.char1, self.rooms["grass"], self.rooms["office"], observed_at=100))
