@@ -25,7 +25,7 @@ def heal_target(caller, identity=None):
     return target
 
 
-def use_support(caller, action, name=""):
+def use_support(caller, action, name="", *, item=None):
     now = time()
     with world_change():
         target = caller
@@ -36,6 +36,11 @@ def use_support(caller, action, name=""):
             target = resolve(objects, parse_selector(name, [n for obj in objects for n in names(obj)]), caller, "치료")[0]
             target = heal_target(caller, target.id)
         profile = caller.profile()
+        if item is not None:
+            from world.item_inventory import bind_consumption
+
+            if action != "bandage" or not bind_consumption(caller, profile, "bandage", item.pk):
+                raise rules.RuleError("원래 선택한 붕대가 없어졌거나 위치가 바뀌었습니다.")
         caller.accrue_recovery(profile, now)
         target_profile = profile if target is caller else target.profile()
         if target is not caller:
@@ -43,6 +48,7 @@ def use_support(caller, action, name=""):
         if profile.get("combat_target"):
             rules.queue_action(profile, action, now, target_profile)
             profile["heal_target"] = target.id if action == "heal" else None
+            profile["queued_item_id"] = str(item.pk) if item is not None else None
             caller.save_profile(profile)
             message = "다음 차례에는 공격 대신 " + ("붕대를 사용한다." if action == "bandage" else {"heal": "치료한다.", "breathing": "호흡을 가다듬는다."}[action])
             after_change(lambda: caller.msg(message))

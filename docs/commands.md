@@ -1,8 +1,8 @@
 # 명령 어휘와 별칭 기준
 
-실행 어휘의 SSOT는 미전환 기능의 Command `key`·`aliases`와 전환된 M01/M02의 Compiled Action Index `VerbDefinition`이다. `commands/aliases.py`의 전역 단축어와 `content/directions.py`의 방향은 유지한다. M01/M02의 콘텐츠는 `world/actions/room_npc_content.py`에 선언하며 정규 동사 하나당 Dynamic Command 하나가 현재 Provider의 Action을 선택한다. 중앙 파서에 콘텐츠별 분기를 추가하지 않는다.
+실행 어휘의 SSOT는 미전환 기능의 Command `key`·`aliases`와 전환된 M01~M04의 Compiled Action Index `VerbDefinition`이다. `commands/aliases.py`의 전역 단축어와 `content/directions.py`의 방향은 유지한다. 콘텐츠는 `world/actions/`의 room_npc/item_equipment/storage/firearm_lighting 패키지에 선언하며 정규 동사 하나당 Dynamic Command 하나가 현재 Provider의 Action을 선택한다. 넣어/꺼내 동사는 item_shared_content에서 한 번만 선언한다. 중앙 파서에 콘텐츠별 분기를 추가하지 않는다.
 
-도움말은 미전환 Command의 `commands/help_contracts.py`·`help_sections`와 공개 Compiled Verb의 `summary`·`usage`·`category`·`help_sections`를 같은 렌더러에서 표시한다. 전환된 문·시설·NPC 서비스의 기존 도움말은 `world/actions/room_npc_help.py`에서 Verb 선언으로 인수한다. 요약·사용법·예시·실행 규칙·제한·관련 도움말과 별칭·분류를 유지하며, 도움말 조회는 Service를 실행하지 않는다. 전환 범위와 Legacy 제거 근거는 [Action 전환표](action-migration.md)를 따른다.
+도움말은 미전환 Command의 `commands/help_contracts.py`·`help_sections`와 공개 Compiled Verb의 `summary`·`usage`·`category`·`help_sections`를 같은 렌더러에서 표시한다. 전환된 문·시설·NPC 서비스는 `room_npc_help.py`, 소비·장비·정보는 `item_equipment_help.py`, 총기·광원은 `firearm_lighting_help.py`, 보관은 공유 Verb 선언의 도움말을 사용한다. 요약·사용법·예시·실행 규칙·제한·관련 도움말과 별칭·분류를 유지하며, 도움말 조회는 Service를 실행하지 않는다. 전환 범위와 Legacy 제거 근거는 [Action 전환표](action-migration.md)를 따른다.
 
 | 정식 명령 | 사용자 별칭 | 제거한 이전 입력 |
 | --- | --- | --- |
@@ -21,6 +21,20 @@
 | 장비 | 장 | 없음 |
 | 착용 | 입어, 입 | wear |
 | 벗어 | 벗 | remove |
+| 무장 | wield | 없음 |
+| 해제 | unwield | 없음 |
+| 주무기 | 없음 | 없음 |
+| 사용 | 없음 | 없음 |
+| 먹어 | eat | 없음 |
+| 마셔 | drink | 없음 |
+| 넣어 | store | 없음 |
+| 꺼내 | retrieve | 없음 |
+| 재장전 | 없음 | 없음 |
+| 장전 | 없음 | 없음 |
+| 채워 | 없음 | 없음 |
+| 켜 | 없음 | 없음 |
+| 꺼 | 없음 | 없음 |
+| 확인 | 없음 | 없음 |
 | 가져 | 집 | 없음 |
 | 줄임말 | 준말 | 없음 |
 | 가치 | 얼마 | value |
@@ -40,7 +54,9 @@
 | 잠궈 | 없음 | 없음 (`잠가`를 추가하지 않음) |
 | 풀어 | 없음 | 없음 |
 
-M01/M02의 조사·수리·문·소각·의료·상점·성장·정산은 운영 ContentPackage의 Action/Service 경로로 실행한다. 표의 `소각 확정`은 Dynamic Command의 공개 선택 키이며 실행 의미는 별도 SyntaxVariant다. 공개 접미어와 서버 확인 토큰을 검사하며 웹의 단순 `confirmed=true`로 우회하지 않는다. 나머지 아이템·총기·전리품의 전환은 후속 PR 범위이고 기존 공개 경로를 유지한다.
+M01/M02의 조사·수리·문·소각·의료·상점·성장·정산에 이어 PR B는 M03/M04의 소비·장비·정보·보관·총기·광원을 운영 ContentPackage로 전환한다. 표의 `소각 확정`은 Dynamic Command의 공개 선택 키이며 실행 의미는 별도 SyntaxVariant다. 공개 접미어와 서버 확인 토큰을 검사하며 웹의 단순 `confirmed=true`로 우회하지 않는다. 가져/집 등 전리품의 공개 실행 전환은 PR C 범위이며 전역 봐·말·도움과 승인된 대화 경로는 유지한다.
+
+ItemEntity의 `이름 2`는 B-1 번호 2, `이름 2개`는 수량이다. `붕대 2 1개 사용`은 2번 스택에서 한 번 소비하며 소비·착탈·주무기·정보는 복수 수량이나 모두를 다회 실행으로 확장하지 않는다. `개인 보관함에 붕대 모두 넣어`는 해당 품목 전체 스택 선택이고 웹 `스택 전부`는 표시된 UUID 하나다. 내부 탄창은 `경비카빈의 카빈표준 채워`처럼 부모 총기를 명시할 수 있다. 번호 결번·원격 보관품·이동한 웹 대상은 다른 대상으로 바뀌지 않는다.
 
 대상·번호·조사는 별칭에서도 그대로 전달한다: `갈퀴사냥룡 2 쳐`, `보급관에게 붕대 구입`, `붕대 집`. 정식 명령·별칭으로 요청한 도움말은 같은 정식 페이지를 표시한다.
 

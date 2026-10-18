@@ -30,6 +30,15 @@ def item_information(character, value, observed_at=None):
     if not entity_runtime(character):
         raise rules.RuleError("아이템 정보는 변환된 ItemEntity 소지품에서 조회합니다. 관리자에게 변환 상태를 확인하세요.")
     item = resolve_item(character, value, "정보")
+    return information_for_item(character, item, observed_at, parent=item.parent_item if item.parent_item_id else None)
+
+
+def information_for_item(character, item, observed_at=None, *, parent=None):
+    """이미 선택한 Root 또는 명시 부모의 직접 자식 UUID를 읽기만 한다."""
+    root = parent if parent is not None else item
+    if (root.owner_object_id != character.pk or root.location_kind not in ("inventory", "equipment")
+            or root.parent_item_id or parent is not None and (item.location_kind != "inside" or item.parent_item_id != parent.pk)):
+        raise rules.RuleError("직접 소지하거나 장착한 자신의 아이템만 조회하세요.")
     definition = ITEMS[item.definition_id]
     label = selector_label(character, item)
     lines = [ft.token("item", definition["name"])]

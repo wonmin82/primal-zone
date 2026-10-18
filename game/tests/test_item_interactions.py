@@ -11,6 +11,8 @@ from typeclasses.loot import DroppedLoot, room_loot, take_loot
 from world import presentation as view
 from world import rules
 from world.content import ENEMIES, ITEMS
+from world.item_entities import api
+from world.item_entities.models import ItemEntity
 from world.item_transfers import transfer
 from world.selection_numbers.api import descriptor
 from world.state import multiplayer_state
@@ -19,7 +21,7 @@ from world.targets import Mode, TargetSelector, parse_relation, parse_selector, 
 from tests.base import WorldCommandTest
 
 
-class ItemInteractionTests(WorldCommandTest):
+class ItemInteractionFixture(WorldCommandTest):
     character_typeclass = Explorer
 
     def setUp(self):
@@ -41,6 +43,32 @@ class ItemInteractionTests(WorldCommandTest):
             caller.execute_cmd(value)
         return str(message.call_args_list)
 
+
+class ItemInteractionTests(ItemInteractionFixture):
+    """명시적으로 변환한 격리 Fixture에서 실제 공개 Action을 실행한다."""
+
+    def setUp(self):
+        super().setUp()
+        from world.item_migration.convert import convert_explorer
+        from world.item_migration.workflow import migration_context
+
+        for player in (self.char1, self.char2):
+            with migration_context():
+                convert_explorer(player, dict(player.profile()), 100, False)
+            self.connect_character(player)
+
+    def storage(self, container, player=None):
+        from world.item_transfer_native import stored_items
+
+        contents = {}
+        for item in stored_items(player or self.char1, container):
+            contents[item.definition_id] = contents.get(item.definition_id, 0) + item.quantity
+        return contents
+
+    def persistent_state(self):
+        return (list(ItemEntity.objects.order_by("sequence").values()),
+                self.char1.profile_snapshot(), self.char2.profile_snapshot())
+
     def test_attack_alias_default_index_and_all_cardinality(self):
         self.char1.location = self.rooms["trail"]
         enemy = room_enemies(self.char1.location)[0]
@@ -59,12 +87,16 @@ class ItemInteractionTests(WorldCommandTest):
         self.assertEqual(self.char1.profile(), before)
 
     def test_drop_creates_public_ground_and_existing_take_recovers_quantities(self):
+        from world.loot_service import loot_snapshot
+
         self.command("붕대 버려")
         dropped = room_loot(self.char1.location, False)[0]
         self.assertIsInstance(dropped, DroppedLoot)
-        self.assertEqual(dropped.db.entries[0]["quantity"], 1)
-        self.assertEqual(dropped.db.entries[0]["protection_until"], 0)
-        self.assertIsNone(dropped.db.entries[0]["assigned_player"])
+        entry, = loot_snapshot(dropped).entries
+        self.assertEqual(entry.quantity, 1)
+        self.assertEqual(entry.protection_until, 0)
+        self.assertIsNone(entry.assigned_player)
+        self.assertIsNotNone(entry.item_id)
         self.assertEqual(self.char1.profile()["inventory"]["bandage"], 2)
         self.command("붕대 가져", self.char2)
         self.assertEqual(self.char2.profile()["inventory"]["bandage"], 4)
@@ -102,17 +134,23 @@ class ItemInteractionTests(WorldCommandTest):
             "보관상자에 탐사용 벌목도 넣어",
             "개인 보관함에 탐사용 벌목도 넣어",
         ):
-            before = (self.char1.profile(), self.char2.profile(), deserialize(self.box.db.items))
-            self.assertIn("해제", self.command(raw))
+            before = self.persistent_state()
+            self.assertTrue(self.command(raw))
             self.assertEqual(
-                (self.char1.profile(), self.char2.profile(), deserialize(self.box.db.items)), before
+                self.persistent_state(), before
             )
         self.char1.change(lambda p: rules.add_item(p, "explorer_machete", 2))
         self.command("탐사용 벌목도 버려")
+        # 기존 Native transfer는 비스택 모두를 거절한다. Legacy 집계 규칙과
+        # 섞지 않고 실제 UUID 한 개를 옮겨 장착분 보호를 확인한다.
+        before = self.persistent_state()
         self.command("보관상자에 탐사용 벌목도 모두 넣어")
+        self.assertEqual(self.persistent_state(), before)
+        self.command("보관상자에 탐사용 벌목도 넣어")
         self.assertEqual(self.char1.profile()["inventory"]["explorer_machete"], 1)
-        self.assertEqual(self.box.db.items, {"explorer_machete": 1})
-        self.assertEqual(self.char1.profile()["equipment"]["weapon"], "explorer_machete")
+        self.assertEqual(self.storage(self.box), {"explorer_machete": 1})
+        self.assertEqual(ItemEntity.objects.get(owner_object=self.char1, location_kind="equipment", slot="hands").definition_id,
+                         "explorer_machete")
 
     def test_quest_key_transfer_block_and_original_gate_lifecycle(self):
         def prepare(p):
@@ -179,7 +217,8 @@ class ItemInteractionTests(WorldCommandTest):
         self.command("탐사대 작업복 벗어")
         self.char1.attributes.reset_cache()
         profile = self.char1.profile()
-        self.assertEqual(profile["equipment"], {"weapon": None, "armor": None})
+        self.assertFalse(ItemEntity.objects.filter(owner_object=self.char1, location_kind="equipment").exists())
+        self.assertIsNone(self.char1.db.active_weapon_item_id)
         self.assertEqual(profile["inventory"], inventory)
         self.assertEqual(rules.stats(profile)["attack"], 7)
         self.assertIn("장비 | 없음", view.status(self.char1.key, profile))
@@ -210,17 +249,17 @@ class ItemInteractionTests(WorldCommandTest):
         second = create_object(Container, key=self.box.key, location=self.char1.location,
                                attributes=[("selection_group_id", descriptor(self.box).group_id)])
         self.command("보관상자 2에 붕대 넣어")
-        self.assertEqual(second.db.items, {"bandage": 1})
-        self.assertEqual(self.box.db.items, {})
+        self.assertEqual(self.storage(second), {"bandage": 1})
+        self.assertEqual(self.storage(self.box), {})
         self.command("보관상자 2에 붕대 모두 넣어")
-        self.assertEqual(second.db.items, {"bandage": 3})
+        self.assertEqual(self.storage(second), {"bandage": 3})
         self.command("보관상자 2에서 붕대 꺼내")
-        self.assertEqual(second.db.items, {"bandage": 2})
+        self.assertEqual(self.storage(second), {"bandage": 2})
         second.attributes.reset_cache()
-        self.assertEqual(second.db.items, {"bandage": 2})
+        self.assertEqual(self.storage(second), {"bandage": 2})
         self.assertIn("붕대 ×2", second.return_appearance(self.char1))
         self.command("보관상자 2에서 붕대 모두 꺼내")
-        self.assertEqual(second.db.items, {})
+        self.assertEqual(self.storage(second), {})
         self.assertEqual(self.char1.profile()["inventory"]["bandage"], 3)
         for raw in (
             "보관상자 모두에 붕대 넣어",
@@ -238,49 +277,21 @@ class ItemInteractionTests(WorldCommandTest):
 
     def test_personal_locker_contents_are_per_caller_and_survive_cache_reload(self):
         self.command("개인 보관함에 붕대 모두 넣어")
-        self.assertEqual(self.char1.profile()["storage"], {"bandage": 3})
+        self.assertEqual(self.storage(self.locker), {"bandage": 3})
         self.assertNotIn("붕대", self.locker.return_appearance(self.char2))
         self.command("개인 보관함에 탐사대 작업복 넣어", self.char2)
-        self.assertEqual(self.char2.profile()["storage"], {})
+        self.assertEqual(self.storage(self.locker, self.char2), {})
         self.command("개인 보관함에 붕대 넣어", self.char2)
-        self.assertEqual(self.char2.profile()["storage"], {"bandage": 1})
+        self.assertEqual(self.storage(self.locker, self.char2), {"bandage": 1})
         self.char1.attributes.reset_cache()
-        self.assertEqual(self.char1.profile()["storage"], {"bandage": 3})
+        self.assertEqual(self.storage(self.locker), {"bandage": 3})
         self.assertIn("붕대 ×3", self.locker.return_appearance(self.char1))
         self.assertIn("붕대 ×1", self.locker.return_appearance(self.char2))
         self.command("개인 보관함에서 붕대 꺼내")
         self.command("개인 보관함에서 붕대 모두 꺼내")
-        self.assertEqual(self.char1.profile()["storage"], {})
-        self.assertEqual(self.char2.profile()["storage"], {"bandage": 1})
+        self.assertEqual(self.storage(self.locker), {})
+        self.assertEqual(self.storage(self.locker, self.char2), {"bandage": 1})
         self.assertEqual(self.locker.db.items, {})
-
-    def test_shared_last_unit_serialization_and_late_failure_rollback(self):
-        self.box.db.items = {"bandage": 1}
-        transfer(self.char1, "bandage", container=self.box, withdraw=True)
-        before = self.char2.profile()
-        with self.assertRaises(rules.RuleError):
-            transfer(self.char2, "bandage", container=self.box, withdraw=True)
-        self.assertEqual(self.char2.profile(), before)
-        self.assertEqual(self.box.db.items, {})
-        first, second = self.char1.profile(), self.char2.profile()
-        with patch.object(self.char2, "save_profile", side_effect=RuntimeError("save failure")):
-            with self.assertRaises(RuntimeError):
-                transfer(self.char1, "bandage", recipient=self.char2)
-        self.assertEqual((self.char1.profile(), self.char2.profile()), (first, second))
-        with patch(
-            "typeclasses.loot.create_dropped_loot", side_effect=RuntimeError("create failure")
-        ):
-            with self.assertRaises(RuntimeError):
-                transfer(self.char1, "bandage")
-        self.assertEqual(self.char1.profile(), first)
-        self.assertEqual(room_loot(self.char1.location, False), [])
-        with patch.object(
-            self.box.attributes, "add", side_effect=RuntimeError("container save failure")
-        ):
-            with self.assertRaises(RuntimeError):
-                transfer(self.char1, "bandage", container=self.box)
-        self.assertEqual(self.char1.profile(), first)
-        self.assertEqual(self.box.db.items, {})
 
     def test_missing_items_and_recipient_combat_preserve_all_owners(self):
         for raw in (
@@ -318,9 +329,20 @@ class ItemInteractionTests(WorldCommandTest):
         boxes = [i for i in state["interactables"] if i["name"] in ("보관상자", "개인 보관함")]
         self.assertEqual(len(boxes), 2)
         for box in boxes:
-            self.assertEqual(box["actions"], [{"label": "봐", "command": box["name"] + " 봐"}])
+            self.assertEqual(box["look_command"], box["label"] + " 봐")
+            stores = [control for control in box["actions"] if control.get("action", {}).get("action_id") == "storage.store"]
+            self.assertTrue(stores)
+            provider = next(obj for obj in (self.box, self.locker) if obj.key == box["name"])
+            for control in stores:
+                self.assertNotIn("command", control)
+                self.assertEqual(control["action"]["roles"]["provider"][0]["identity"], str(provider.pk))
+                subject = control["action"]["roles"]["subject"][0]
+                self.assertTrue(ItemEntity.objects.filter(pk=subject["identity"], owner_object=self.char1,
+                                                          location_kind="inventory").exists())
 
     def test_combat_restrictions_preserve_profiles_and_container(self):
+        self.char1.change(lambda p: (rules.add_item(p, "field_ration"), rules.add_item(p, "water")))
+        api.create_item("bandage", location_kind="shared_storage", owner_object=self.box)
         self.char1.change(lambda p: p.update(combat_target=123))
         for raw in (
             "붕대 버려",
@@ -332,10 +354,10 @@ class ItemInteractionTests(WorldCommandTest):
             "야전식량 먹어",
             "정제수 마셔",
         ):
-            before = (self.char1.profile(), self.char2.profile(), deserialize(self.box.db.items))
+            before = self.persistent_state()
             self.assertIn("전투 중", self.command(raw))
             self.assertEqual(
-                (self.char1.profile(), self.char2.profile(), deserialize(self.box.db.items)), before
+                self.persistent_state(), before
             )
 
     def test_relation_parser_reuses_suffix_modes_and_stack_rejects_indices(self):
@@ -354,6 +376,48 @@ class ItemInteractionTests(WorldCommandTest):
         with self.assertRaises(rules.RuleError):
             stack_selector("붕대 2", ITEMS, "버려")
         self.assertEqual(parse_selector("붕대 모두").mode, Mode.ALL)
+
+
+class LegacyItemInteractionTests(ItemInteractionFixture):
+    """과거 profile/entries 저장 계약의 명시적 도메인 호환 테스트."""
+
+    def test_legacy_nonstack_all_retains_equipped_copy(self):
+        # 과거 집계 profile은 비스택도 모두 옮길 수 있었다. 해당 baseline은
+        # 역사적 도메인 검사로 보존하고 Native 공개 Action에 fallback하지 않는다.
+        self.char1.change(lambda p: rules.add_item(p, "explorer_machete", 2))
+        self.assertEqual(transfer(self.char1, "explorer_machete"), 1)
+        self.assertEqual(transfer(self.char1, "explorer_machete", all_items=True, container=self.box), 1)
+        self.assertEqual(self.char1.profile()["inventory"]["explorer_machete"], 1)
+        self.assertEqual(self.box.db.items, {"explorer_machete": 1})
+        self.assertEqual(self.char1.profile()["equipment"]["weapon"], "explorer_machete")
+
+    def test_shared_last_unit_serialization_and_late_failure_rollback(self):
+        self.box.db.items = {"bandage": 1}
+        transfer(self.char1, "bandage", container=self.box, withdraw=True)
+        before = self.char2.profile()
+        with self.assertRaises(rules.RuleError):
+            transfer(self.char2, "bandage", container=self.box, withdraw=True)
+        self.assertEqual(self.char2.profile(), before)
+        self.assertEqual(self.box.db.items, {})
+        first, second = self.char1.profile(), self.char2.profile()
+        with patch.object(self.char2, "save_profile", side_effect=RuntimeError("save failure")):
+            with self.assertRaises(RuntimeError):
+                transfer(self.char1, "bandage", recipient=self.char2)
+        self.assertEqual((self.char1.profile(), self.char2.profile()), (first, second))
+        with patch(
+            "typeclasses.loot.create_dropped_loot", side_effect=RuntimeError("create failure")
+        ):
+            with self.assertRaises(RuntimeError):
+                transfer(self.char1, "bandage")
+        self.assertEqual(self.char1.profile(), first)
+        self.assertEqual(room_loot(self.char1.location, False), [])
+        with patch.object(
+            self.box.attributes, "add", side_effect=RuntimeError("container save failure")
+        ):
+            with self.assertRaises(RuntimeError):
+                transfer(self.char1, "bandage", container=self.box)
+        self.assertEqual(self.char1.profile(), first)
+        self.assertEqual(self.box.db.items, {})
 
     def test_v4_load_migrates_without_overwriting_equipment_or_progress(self):
         old = self.char1.profile()

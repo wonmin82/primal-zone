@@ -104,19 +104,6 @@ class Breathe(Heal):
     input_style = "bare"
 
 
-class Use(Heal):
-    key = "사용"
-    aliases = []
-    usage = "붕대 사용"
-    summary = "붕대 하나로 HP를 회복합니다. 전투 중에는 다음 공격을 대신하며 정신력은 소비하지 않습니다."
-    action = "bandage"
-
-    def run(self):
-        if self.args.strip() not in ("붕대", "bandage"):
-            raise rules.RuleError(self.usage)
-        from world.skill_services import use_support
-
-        use_support(self.caller, self.action)
 
 
 class Flee(GameCommand):

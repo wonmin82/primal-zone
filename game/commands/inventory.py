@@ -1,9 +1,7 @@
 """inventory 영역의 명시적 게임 명령."""
 
 from world import presentation as view
-from world import rules
-from world import text as ft
-from world.content import EQUIPMENT_ACTIONS, ITEMS
+from world.content import ITEMS
 from world.currency import currency_names
 from world.targets import parse_loot
 
@@ -23,37 +21,8 @@ class Inventory(GameCommand):
         self.caller.msg(view.inventory(self.caller.profile()))
 
 
-class Equip(GameCommand):
-    help_sections = command_sections('착용')
-    equipment_change = True
-    category = "아이템·보급"
-    usage = "방어구 착용 · 방어구 2 착용"
-    summary = "소유한 방어구를 착용합니다."
-    input_style = "target"
-    expected_slot = "armor"
-    key = EQUIPMENT_ACTIONS[expected_slot]
-    aliases = ["입어", "입"]
-
-    def run(self):
-        from world.equipment_service import equip_item, resolve_item, selector_label
-
-        selected = resolve_item(self.caller, self.args, self.key)
-        item = selected.definition_id if hasattr(selected, "definition_id") else selected
-        label = selector_label(self.caller, selected)
-        equip_item(self.caller, selected, self.expected_slot)
-        particle = "으로/로" if ITEMS[item]["slot"] == "weapon" else "을/를"
-        self.caller.msg(
-            ft.text(ft.token("item", label), ft.particle(label, particle), f" {self.key}했다.")
-        )
 
 
-class Wield(Equip):
-    help_sections = ()
-    usage = "강철 마체테 무장"
-    summary = "소유한 무기를 빈 손에 장착합니다. 자동 교체는 하지 않습니다."
-    expected_slot = "weapon"
-    key = EQUIPMENT_ACTIONS[expected_slot]
-    aliases = ["wield"]
 
 
 
@@ -92,48 +61,3 @@ class Equipment(GameCommand):
 
     def run(self):
         self.caller.msg(view.equipment(self.caller.profile()))
-
-
-class ActiveWeapon(GameCommand):
-    key = "주무기"
-    input_style = "target"
-    category = "아이템·보급"
-    equipment_change = True
-    usage = "절단마체테 2 주무기"
-    summary = "장착한 무기 하나를 실제 공격에 사용할 주무기로 지정합니다."
-
-    def run(self):
-        from world.equipment_service import resolve_item, set_active_weapon
-
-        item = resolve_item(self.caller, self.args, self.key)
-        set_active_weapon(self.caller, item)
-        self.caller.msg("주무기를 지정했다.")
-
-
-class ItemInformation(GameCommand):
-    key = "정보"
-    aliases = []
-    category = "아이템·보급"
-    input_style = "target"
-    read_only = True
-    usage = "정찰권총 정보 · 정찰권총 2 정보 · 붕대 정보"
-    summary = "소지·장착 중인 실제 아이템의 공개 속성과 현재 상태를 조회합니다."
-    help_sections = (
-        ("사용법", (usage,)),
-        ("예시", ("정찰권총 정보", "정찰권총 2 정보", "탐사용손전등 정보", "붕대 정보", "관리실 열쇠 정보")),
-        ("실행 규칙", ("본인의 ItemEntity만 읽기 전용으로 조회합니다. 이름·번호로 하나를 선택합니다.",
-                      "정의된 기준 가격·장비 modifier·탄창 잔탄·광원 상태·거래 제한을 표시합니다.",
-                      "판매 묶음은 개당 구매·매입 기준가, 묶음 수량과 구매 총액을 구분합니다.")),
-        ("제한", ("타인의 소지품·내부 관리 ID·숨겨진 임무 조건은 공개하지 않습니다.",
-                "조회는 프로필·수량·장비·보급칩·잔탄·배터리를 변경하지 않습니다.",
-                "기준 가격은 상인의 취급·매매 가능성을 보장하지 않습니다. 실제 거래가는 가치·얼마로 확인하세요.")),
-        ("관련 도움말", ("봐 도움", "장비 도움", "가치 도움")),
-    )
-
-    def func(self):
-        from world.item_information import item_information
-
-        try:
-            self.caller.msg(item_information(self.caller, self.args))
-        except rules.RuleError as error:
-            self.caller.msg(ft.token("error", str(error)))

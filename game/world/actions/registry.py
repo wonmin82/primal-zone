@@ -57,6 +57,10 @@ def _roles(roles):
         _require(bool(role.kinds) and all(isinstance(kind, ReferenceKind) for kind in role.kinds),
                  "역할 참조 타입 오류")
         _require(len(role.kinds) == len(set(role.kinds)), "역할 참조 타입 중복")
+        _require(not role.location_kinds or set(role.kinds) == {ReferenceKind.ITEM}, "아이템 위치 제약 역할 타입 오류")
+        _require(all(type(value) is str for value in role.location_kinds)
+                 and set(role.location_kinds) <= {"inventory", "equipment", "inside", "personal_storage", "shared_storage"},
+                 "아이템 위치 제약 오류")
         if ReferenceKind.INVENTORY in role.kinds:
             _require(role.kinds == (ReferenceKind.INVENTORY,) and role.name != "provider"
                      and role.scope == TargetScope.CURRENT, "Inventory는 현재 소지품 Source 전용 참조입니다.")
@@ -65,6 +69,8 @@ def _roles(roles):
                  "역할 기본 선택 정책 오류")
         _require(isinstance(role.scope, TargetScope) and type(role.scope_from) is str
                  and role.scope_from.isidentifier(), "역할 Scope 선언 오류")
+        if role.scope == TargetScope.CARRIED_AND_INSIDE:
+            _require(role.kinds == (ReferenceKind.ITEM,), "소지품과 내부 결합 Scope는 아이템 역할 전용입니다.")
         _require(all(type(identity) is str and identity for identity in role.definition_ids)
                  and len(set(role.definition_ids)) == len(role.definition_ids), "역할 콘텐츠 정의 제한 오류")
     return names
@@ -113,7 +119,8 @@ def _argument_contract(base_action, base_variant, extended_action, extended_vari
 def _normal_all_contract(action, normal, all_variant):
     if (normal.all_roles or len(all_variant.all_roles) != 1
             or normal.suffix.casefold() != all_variant.suffix.casefold()
-            or normal.confirmation_required != all_variant.confirmation_required):
+            or normal.confirmation_required != all_variant.confirmation_required
+            or normal.all_when != all_variant.all_when):
         return ()
     name, = all_variant.all_roles
     if name == "provider":
@@ -241,6 +248,13 @@ def compile_manifest(manifest, protected_names=()):
             _require(set(variant.all_roles) <= role_names, "전체 선택 Variant 역할 오류")
             _require(all(role.allow_all or role.default == DefaultTargetPolicy.ALL for role in action.roles
                          if role.name in variant.all_roles), "전체 선택 미지원 역할")
+            for condition in variant.all_when:
+                _require(len(condition) == 3, "조건부 전체 선택 선언 오류")
+                role_name, argument_name, expected = condition
+                _require(role_name in roles and argument_name in argument_names, "조건부 전체 선택 역할/인자 누락")
+                _require(roles[role_name].allow_all, "조건부 전체 선택 미지원 역할")
+                argument = next(arg for arg in action.arguments if arg.name == argument_name)
+                validate_argument(argument, expected)
             try:
                 pattern = re.compile(variant.pattern)
             except (re.error, TypeError) as error:

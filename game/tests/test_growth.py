@@ -318,6 +318,7 @@ class GrowthIntegrationTests(WorldCommandTest):
         match = cmdparser("ㅂ 정비 기록 조사", cmdset, self.char1)[0]
         self.assertEqual(match[1], "ㅂ 정비 기록")
         self.assertFalse(cmdparser("배워 강타", cmdset, self.char1))
+        cmdset.add(DynamicActionCommand(key="무장"))
         self.assertEqual(cmdparser("절단마체테 무장", cmdset, self.char1)[0][1], "절단마체테")
         unlogged = UnloggedinCmdSet(self.char1)
         self.assertEqual(

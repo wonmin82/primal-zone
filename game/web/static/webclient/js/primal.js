@@ -281,7 +281,9 @@
     }
     byId("context-actions").replaceChildren(...actions);
     for (const action of state.action_controls || []) {
-      byId("context-actions").append(actionButton(action.label, action.action));
+      if (action.action.roles.provider?.[0]?.kind !== "item") {
+        byId("context-actions").append(actionButton(action.label, action.action));
+      }
     }
     const rows = state.inventory.map((item) => {
       const row = document.createElement("li"), name = document.createElement("span");
@@ -293,25 +295,16 @@
       if (item.location === "inside") name.append(" [장전]");
       row.append(name);
       if (item.equipped) {
-        const mark = document.createElement("small"); mark.textContent = item.active_weapon ? "주무기" : "착용 중"; row.append(mark);
-        if (item.weapon) row.append(button("주무기", selector + " 주무기"));
-        if (item.remove_action) row.append(button(item.remove_action, selector + " " + item.remove_action));
-      } else if (item.equip_action) row.append(button(item.equip_action, selector + " " + item.equip_action));
-      else if (item.consume_action) row.append(button(item.consume_action, item.name + " " + item.consume_action));
-      else if (item.id === "bandage") row.append(button("사용", "붕대 사용"));
-      if (item.information_command) row.append(button("정보", item.information_command));
-      if (item.light_source) {
-        const active = observation?.light_source?.name === selector && observation.light_source.active;
-        row.append(button(active ? "끄기" : "켜기", selector + (active ? " 꺼" : " 켜")), button("확인", selector + " 확인"));
+        const mark = document.createElement("small");
+        mark.textContent = item.active_weapon ? "주무기" : "착용 중";
+        row.append(mark);
       }
-      if (item.power_source) {
-        for (const source of state.inventory.filter((device) => device.light_source?.power_type === item.power_source.type)) {
-          const deviceSelector = source.selector || source.name;
-          row.append(button(deviceSelector + "에 넣기", deviceSelector + "에 " + selector + " 넣어"));
+      for (const control of state.action_controls || []) {
+        const provider = control.action.roles.provider?.[0];
+        if (provider?.kind === "item" && provider.identity === item.identity) {
+          row.append(actionButton(control.label, control.action));
         }
       }
-      if (item.firearm) row.append(button("재장전", selector + " 재장전"), button("탄창 꺼내기", selector + "에서 탄창 꺼내"));
-      if (item.magazine) row.append(button("채우기", selector + " 채워"), button("잔탄 꺼내기", selector + "에서 " + item.ammo_name + " 꺼내"));
       return row;
     });
     const emptySlots = Object.entries(state.equipment || {}).filter(([, name]) => !name);

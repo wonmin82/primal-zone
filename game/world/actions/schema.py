@@ -28,6 +28,7 @@ class TargetScope(StrEnum):
     CURRENT = "current"
     STORAGE = "storage"
     INSIDE = "inside"
+    CARRIED_AND_INSIDE = "carried_and_inside"
 
 
 def freeze(value):
@@ -64,10 +65,12 @@ class RoleDefinition:
     scope: TargetScope = TargetScope.CURRENT
     scope_from: str = "provider"
     definition_ids: tuple[str, ...] = ()
+    location_kinds: tuple[str, ...] = ()
 
     def __post_init__(self):
         object.__setattr__(self, "kinds", tuple(self.kinds))
         object.__setattr__(self, "definition_ids", tuple(self.definition_ids))
+        object.__setattr__(self, "location_kinds", tuple(self.location_kinds))
 
 
 @dataclass(frozen=True)
@@ -93,9 +96,11 @@ class SyntaxVariant:
     confirmation_required: bool = False
     all_roles: tuple[str, ...] = ()
     show_control: bool = True
+    all_when: tuple[tuple[str, str, object], ...] = ()
 
     def __post_init__(self):
         object.__setattr__(self, "all_roles", tuple(self.all_roles))
+        object.__setattr__(self, "all_when", tuple(tuple(entry) for entry in self.all_when))
 
 
 @dataclass(frozen=True)

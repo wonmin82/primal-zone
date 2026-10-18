@@ -40,7 +40,7 @@ class LightingTests(WorldCommandTest):
         for module in ("world.observation", "commands.character", "typeclasses.explorers",
                        "typeclasses.enemies", "world.item_transfers", "typeclasses.loot"):
             self.enterContext(patch(module + ".time", return_value=100))
-        self.enterContext(patch("commands.items.time", create=True, return_value=100))
+        self.enterContext(patch("world.lighting_service.time", return_value=100))
         self.rooms = self.world_rooms()
         self.script = create_script(WorldLifecycle, autostart=False)
         self.state = environment.new_environment(100, Random(3))
@@ -55,6 +55,14 @@ class LightingTests(WorldCommandTest):
         with patch.object(self.char1, "msg") as message:
             self.char1.execute_cmd(value)
         return "\n".join(str(call.args[0]) for call in message.call_args_list if call.args)
+
+    def native_fixture(self):
+        from world.item_migration.convert import convert_explorer
+        from world.item_migration.workflow import migration_context
+
+        with migration_context():
+            convert_explorer(self.char1, dict(self.char1.profile()), 100, False)
+        self.connect_character(self.char1)
 
     def powered(self, player=None):
         player = player or self.char1
@@ -152,23 +160,37 @@ class LightingTests(WorldCommandTest):
         self.assertNotIn(record.key, remote)
 
     def test_store_parser_accepts_alias_and_future_capacity_without_changes(self):
+        from world.item_entities.models import ItemEntity
+
         self.clear()
         self.char1.change(lambda p: p["inventory"].update(flashlight=1, battery=2))
-        self.assertIn("전원이 없습니다", self.command("손전등 켜"))
+        self.native_fixture()
+        light = ItemEntity.objects.get(owner_object=self.char1, definition_id="flashlight")
+        self.assertIn("전원", self.command("손전등 켜"))
+        light.refresh_from_db()
+        self.assertFalse(light.state["enabled"])
+        self.assertEqual(light.state["remaining_power"], 0)
         self.command("손전등에 건전지 넣어")
         self.assertEqual(self.char1.profile()["inventory"]["battery"], 1)
-        self.assertEqual(self.char1.profile()["light_sources"]["flashlight"]["charge_seconds"], 1800)
+        light.refresh_from_db()
+        self.assertEqual(light.state["remaining_power"], 1800)
         self.assertIn("건전지", self.command("손전등 확인"))
         before = deepcopy(self.char1.profile())
+        state = deepcopy(light.state)
         self.command("탐사용손전등에 건전지 넣어")
         self.assertEqual(self.char1.profile(), before)
-        self.char1.change(lambda p: p["light_sources"].clear())
+        light.refresh_from_db()
+        self.assertEqual(light.state, state)
+
+    def test_legacy_dynamic_power_capacity_and_source_name_are_preserved(self):
+        # 런타임에 추가한 과거 불완전 정의의 호환 책임은 pure 도메인에 둔다.
+        # 운영 Action은 Manifest에 등록된 실제 Native UUID를 사용한다.
         future = {"name": "고용량건전지", "slot": "consumable", "power_source": {"type": "flashlight_battery", "capacity_seconds": 3600}}
         with patch.dict(ITEMS, high_capacity_battery=future):
-            self.char1.change(lambda p: p["inventory"].update(high_capacity_battery=1))
-            self.command("탐사용손전등에 고용량건전지 넣어")
+            self.char1.change(lambda p: p["inventory"].update(flashlight=1, high_capacity_battery=1))
+            self.char1.change(lambda p: lighting.insert_power(p, "flashlight", "high_capacity_battery", 100))
             self.assertEqual(self.char1.profile()["light_sources"]["flashlight"]["charge_seconds"], 3600)
-            self.assertIn("고용량건전지", self.command("손전등 확인"))
+            self.assertIn("고용량건전지", lighting.status(self.char1.profile(), "flashlight", 100))
 
     def test_power_insertion_transaction_failure_rolls_back_item_and_device(self):
         self.char1.change(lambda p: p["inventory"].update(flashlight=1, battery=2))
@@ -399,19 +421,24 @@ class LightingTests(WorldCommandTest):
         self.assertEqual(self.char1.profile(), before)
 
     def test_light_look_status_and_web_share_timestamp_and_rounding(self):
+        from world import lighting_service
+        from world.item_entities.models import ItemEntity
+
         self.powered()
-        with patch("commands.character.time", return_value=700), patch("commands.items.time", return_value=700):
+        self.native_fixture()
+        light = ItemEntity.objects.get(owner_object=self.char1, definition_id="flashlight")
+        with patch("commands.character.time", return_value=700), patch("world.lighting_service.time", return_value=700):
             look = self.command("손전등 봐")
             self.char1.push_state.assert_called_with(observed_at=700)
             quick = self.command("손전등 확인")
-        status = lighting.status(self.char1.profile_snapshot(), "flashlight", 700)
+        status = lighting_service.status(self.char1, light, 700)
         self.assertIn(status, look)
         self.assertIn(status, quick)
         self.assertIn("잔량 약 20분", status)
         with patch.object(self.char1.sessions, "count", return_value=1), patch.object(self.char1, "msg") as msg:
             Explorer.push_state(self.char1, observed_at=700)
         self.assertEqual(msg.call_args.kwargs["pz_state"][0][0]["observation"]["light_source"]["remaining_minutes"], 20)
-        self.char1.change(lambda p: lighting.switch(p, "flashlight", False, 700))
+        lighting_service.switch(self.char1, light, False, 700)
         with patch("commands.character.time", return_value=1300):
             off = self.command("손전등 봐")
         self.assertIn("상태 꺼짐", off)

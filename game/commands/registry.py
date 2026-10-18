@@ -14,44 +14,26 @@ from commands.character import (
     Status,
     Weather,
 )
-from commands.combat import Attack, Breathe, Flee, Heal, Heavy, Insight, Shooting, Suppress, Use
+from commands.combat import Attack, Breathe, Flee, Heal, Heavy, Insight, Shooting, Suppress
 from commands.command_shortcuts import DeleteShortcut, Sequence, Shortcuts
-from commands.firearms import FillMagazine, LoadMagazine, Reload
 from commands.inventory import (
-    ActiveWeapon,
-    Equip,
     Equipment,
     Inventory,
-    ItemInformation,
     Take,
-    Wield,
 )
 from commands.items import (
-    Drink,
     Drop,
-    Eat,
     Give,
-    LightOff,
-    LightOn,
-    LightStatus,
-    RemoveArmor,
-    Retrieve,
-    Store,
-    Unwield,
 )
 from commands.party import PARTY_COMMANDS
 from commands.social import PrivateTalk, RefuseTalk, Reply, Say
 from commands.world_actions import Return
 
 COMMANDS = [
-    Reload,
-    LoadMagazine,
-    FillMagazine,
     Abilities,
     Skills,
     Experience,
     Equipment,
-    ActiveWeapon,
     Take,
     *PARTY_COMMANDS,
     Look,
@@ -64,20 +46,8 @@ COMMANDS = [
     DeleteShortcut,
     Status,
     Inventory,
-    ItemInformation,
-    Wield,
-    Equip,
     Drop,
     Give,
-    Eat,
-    Drink,
-    RemoveArmor,
-    Unwield,
-    Store,
-    Retrieve,
-    LightOn,
-    LightOff,
-    LightStatus,
     Attack,
     Heavy,
     Shooting,
@@ -85,7 +55,6 @@ COMMANDS = [
     Suppress,
     Heal,
     Breathe,
-    Use,
     Flee,
     Return,
     Quest,

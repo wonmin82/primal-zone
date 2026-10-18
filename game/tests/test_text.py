@@ -83,7 +83,14 @@ class SemanticTextTests(WorldCommandTest):
                     self.assertEqual(tokens(output, "command"), ["재분배", "재분배", "재훈련"])
                 else:
                     self.assertEqual(tokens(output, "command"), list(obj.actions))
-                self.assertIn(obj.key, tokens(output, obj.semantic_role))
+                from dataclasses import replace
+
+                from world.selection_numbers.api import descriptor, label, number_for
+
+                record = descriptor(obj)
+                expected_label = (label(replace(record, number=number_for(record.reference)))
+                                  if isinstance(obj, Container) and record else obj.key)
+                self.assertIn(expected_label, tokens(output, obj.semantic_role))
         self.char1.location = self.rooms["grass"]
         enemy = room_enemies(self.char1.location)[0]
         command = Look()

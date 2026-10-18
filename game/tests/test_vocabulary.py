@@ -53,6 +53,12 @@ class VocabularyTests(WorldCommandTest):
             self.assertIn("절단마체테", self.raw(command))
 
     def test_healing_aliases_bandage_and_medical_services(self):
+        from world.item_migration.convert import convert_explorer
+        from world.item_migration.workflow import migration_context
+
+        with migration_context():
+            convert_explorer(self.char1, dict(self.char1.profile()), 100, False)
+        self.connect_character(self.char1)
         for command in ('치료', '힐', 'heal'):
             self.char1.change(lambda p: p.update(hp=20, mental=40, skill_ready_at={}))
             before = self.char1.profile_snapshot()

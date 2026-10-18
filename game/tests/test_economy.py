@@ -229,9 +229,9 @@ class EconomyTests(WorldCommandTest):
         self.enterContext(patch("typeclasses.explorers.time", return_value=100))
         self.char1.location = self.rooms["weapon_shop"]
         self.char1.change(lambda p: p["inventory"].update(cutting_machete=3))
+        self.native_shop_fixture()
         self.command("탐사용 벌목도 해제")
         self.command("절단마체테 무장")
-        self.native_shop_fixture()
         self.assertIn("55칩", self.command("무기상에게 절단마체테 가치"))
         self.assertIn("27칩", self.command("절단마체테 얼마"))
         from world.item_entities.models import ItemEntity
@@ -306,13 +306,15 @@ class EconomyTests(WorldCommandTest):
         self.assertFalse(ItemEntity.objects.filter(pk=item.pk).exists())
 
     def test_last_legacy_device_sale_cannot_restore_old_charge(self):
+        from world import lighting_service, shop_service
+
         self.char1.location = self.rooms["supply_shop"]
         self.char1.change(lambda p: p["inventory"].update(flashlight=2, battery=1))
-        self.command("손전등에 건전지 넣어")
+        # 이 검사는 Legacy light_sources 도메인 보존을 담당한다. 공개 Action의
+        # Native 전환 이후에도 명시적 도메인 API로 같은 저장 계약을 유지한다.
+        lighting_service.insert_power(self.char1, "flashlight", "battery", now=100)
         device = deepcopy(self.char1.profile()["light_sources"]["flashlight"])
         # light_sources 사전은 Legacy 도메인 호환 책임이다. 공개 Action에 Legacy fallback을 만들지 않는다.
-        from world import shop_service
-
         seller = search_tag("supply_shopkeeper", category="primal_interactable")[0]
         shop_service.sell(self.char1, seller, "탐사용손전등")
         self.assertEqual(self.char1.profile()["light_sources"]["flashlight"], device)
@@ -320,7 +322,8 @@ class EconomyTests(WorldCommandTest):
         self.assertNotIn("flashlight", self.char1.profile()["inventory"])
         self.assertNotIn("flashlight", self.char1.profile()["light_sources"])
         shop_service.buy(self.char1, seller, "flashlight")
-        self.assertIn("전원이 없습니다", self.command("탐사용손전등 켜"))
+        with self.assertRaisesRegex(rules.RuleError, "전원이 없습니다"):
+            lighting_service.switch(self.char1, "flashlight", True, now=100)
         self.assertNotIn("flashlight", self.char1.profile()["light_sources"])
 
     def test_zero_remaining_share_keeps_eligibility_and_pays_offline_recipient(self):

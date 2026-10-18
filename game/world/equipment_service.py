@@ -41,6 +41,14 @@ def entity_snapshot(character):
     from world.content.item_mapping import LEGACY_ITEM_MAPPING
     from world.item_entities.api import items_owned_by
     from world.item_runtime import maintenance
+    from world.selection_numbers.models import SelectionNumber
+
+    owned = [row for row in items_owned_by(character)
+             if row.root().location_kind in ("inventory", "equipment")]
+    scopes = {f"character:{character.pk}", *(f"inside:{row.parent_item_id}" for row in owned if row.parent_item_id)}
+    numbers = dict(SelectionNumber.objects.filter(kind="item", scope__scope_id__in=scopes,
+                                                  identity__in=[str(row.pk) for row in owned])
+                   .values_list("identity", "number"))
 
     def definition_id(row):
         return LEGACY_ITEM_MAPPING.get(row.definition_id, row.definition_id) if maintenance.get() else row.definition_id
@@ -48,9 +56,8 @@ def entity_snapshot(character):
     carried = tuple(
         eq.item_snapshot(definition_id(row), ITEMS[definition_id(row)], item_id=row.pk,
                          sequence=row.sequence, quantity=row.quantity, location=row.location_kind,
-                         slot=row.slot, state_summary=state_summary(row))
-        for row in items_owned_by(character)
-        if row.root().location_kind in ("inventory", "equipment")
+                         slot=row.slot, state_summary=state_summary(row), selection_number=numbers.get(str(row.pk)))
+        for row in owned
     )
     return eq.EquipmentSnapshot(tuple(item for item in carried if item.location == "equipment"),
                                 carried, character.db.active_weapon_item_id)
@@ -238,9 +245,12 @@ def resolve_item(character, value, action):
 def selector_label(character, item):
     if not isinstance(item, ItemEntity):
         return ITEMS[item]["name"]
-    snapshot = entity_snapshot(character)
-    selected = next(entry for entry in snapshot.carried if entry.identity == str(item.pk))
-    return snapshot.label(selected)
+    from dataclasses import replace
+
+    from world.selection_numbers.api import descriptor, label, number_for
+
+    record = descriptor(item)
+    return label(replace(record, number=number_for(record.reference)))
 
 
 def _change_equipment(character, item, *, remove=False, expected_slot=None):
