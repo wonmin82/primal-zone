@@ -50,7 +50,7 @@ Firearm (inventory 또는 equipment root)
 
 ## 명령과 재장전
 
-Phase 3 광원·전원·reload/load/unload 명령과 일반 Store/Retrieve는 기존 일반 command recovery reconciliation을 따른다. `equipment_change=True`의 특별 lifecycle은 실제 equipment stat/max/recovery 경계를 바꾸는 착탈·주무기 명령에만 남긴다. ItemEntity mutation 자체는 recovery bypass 사유가 아니다. 각 Phase 3 service에 별도 회복 정산을 복제하지 않으며 combat reload의 기존 accrue_recovery/기회 소비/save_profile 경로도 유지한다.
+현재 Issue #66 PR B의 `game.firearm_lighting`은 재장전·장전·채워·켜·꺼·확인과 공통 `넣어`/`꺼내`를 선언한다. 고정 Command 대신 실제 Root Provider·Inside Subject·소지 Source UUID를 선택하여 공통 Gateway에서 기존 `firearm_service`/`lighting_service`를 호출한다. 보관함·탄창·광원이 같은 정규 넣어/꺼내 Verb를 공유하며 어떤 서비스인지 결정할 수 없으면 임의의 첫 후보를 실행하지 않는다. ItemEntity mutation 자체를 회복 우회 사유로 사용하지 않으며 장비 변경과 combat reload의 기존 도메인 회복·기회 소비·저장 계약을 유지한다.
 
 명령은 공통 target parser와 instance selector를 사용한다. 실제 등록된 기존 총기를 예시로 한다. 미변환 runtime은 migration-required 오류로 거절하며 명령 중 legacy 총기를 자동 변환하지 않는다.
 
@@ -64,7 +64,11 @@ Phase 3 광원·전원·reload/load/unload 명령과 일반 Store/Retrieve는 �
 카빈표준 2에 카빈탄 넣어
 카빈표준 2 채워
 카빈표준 2에서 카빈탄 꺼내
+경비카빈의 카빈표준 채워
+경비카빈의 카빈표준에 카빈탄 넣어
 ```
+
+내부 탄창은 부모 총기의 INSIDE 범위에서 선택한다. 같은 이름의 소지 탄창과 내부 탄창이 있으면 부모를 명시하여 구분한다. 부모가 같은 한 내부 B-1 번호는 유지되며, 꺼낸 탄창은 Character Scope의 새 번호를 받는다. 내부 탄창 자체를 독립 Dynamic Provider로 등록하지 않는다.
 
 자동 reload는 직접 inventory의 호환 탄창 중 양수 잔탄 최대, 동률이면 sequence가 가장 작은 것을 선택한다. 현재 탄창이 같거나 더 많으면 no-op이다. 빈 현재 탄창에 양수 후보가 없으면 실패한다. 7→12, 12→18은 교체하고 12→12는 유지한다. 명시 reload는 양수 잔탄의 호환 inventory instance를 선택하며 현재 instance 지정은 no-op이다. swap은 옛 탄창→inventory와 새 탄창→inside를 함께 처리한다.
 
@@ -90,9 +94,11 @@ equip/unequip은 root-only이며 load/unload도 조작하는 root의 명시적 p
 
 ## Selector·Web·전리품 연결
 
-sequence 기반 local numbering은 state가 바뀌거나 inventory↔equipment↔inside를 이동해도 후보가 남으면 유지한다. UUID/global integer는 사용자 표시·입력에 쓰지 않는다. 정규화는 공백·`.`·`-`·`_`를 무시하고 digit/mm는 보존한다. 5.56과556의 점 처리 충돌은 사용자의 명시적 답변에 따라 Decision Log를 따랐다. stable ID/display name/alias의 전역 충돌은 integrity가 검사한다. 탄창·탄약에는 권총표준/카빈표준/중량표준·권총탄/카빈탄/중량탄 등 한글 alias가 있다.
+현재 Action 선택 번호는 sequence 기반 local index가 아닌 영속 B-1이다. state 변경과 같은 Character Scope의 inventory↔equipment 이동은 번호를 유지한다. Inside 이동은 직접 부모 UUID Scope로 바뀌므로 목적 Scope에서 새 번호를 발급한다. 결번은 다른 후보로 대체하지 않는다. UUID/global sequence는 사용자 번호로 표시하지 않는다. 정규화는 공백·`.`·`-`·`_`를 무시하고 digit/mm는 보존한다. 5.56과556의 점 처리 충돌은 사용자의 명시적 답변에 따라 Decision Log를 따랐다. stable ID/display name/alias의 전역 충돌은 integrity가 검사한다. 탄창·탄약에는 권총표준/카빈표준/중량표준·권총탄/카빈탄/중량탄 등 한글 alias가 있다.
 
-상태/장비/소지품/Web은 같은 equipment snapshot의 주무기 instance와 state summary를 사용한다. inside 탄창은 [장전]으로 표시하며 firearm은 loaded magazine/rounds, 탄창은 rounds/capacity를 표시한다. Web 버튼은 같은 서버 명령을 보내고 새 stateful 행만 줄바꿈한다.
+상태/장비/소지품/Web은 같은 equipment snapshot의 주무기 instance와 state summary를 사용한다. inside 탄창은 [장전]으로 표시하며 firearm은 loaded magazine/rounds, 탄창은 rounds/capacity를 표시한다. 전환된 웹 버튼은 명령 문자열 대신 Action ID·Variant·Typed 안정 참조·인자·Request ID를 `pz_action`으로 전달한다. 자동 재장전 추천은 생성 시 선택한 실제 탄창 Source UUID를 가진 명시 장전 요청이다. 서버가 오래된 버튼의 Source를 다른 아이템으로 바꾸지 않는다. 웹 채워도 텍스트처럼 여러 호환 탄약 스택을 순서대로 사용하는 의미를 보존해야 한다. 현재 Inventory Source·UUID/수량 snapshot 재검증을 사용하는 집계 실행으로 구현 완료·통합 검증 중이며 최종 테스트 전에는 동등성 PASS로 기록하지 않는다.
+
+Action/Help/상태 조회는 배터리나 탄약을 추가 소비하지 않는다. 기존 시간 경과에 따른 광원 projection과 정당한 lifecycle reconcile은 유지한다. PR B의 개발 검증과 과거 Phase 3/7의 실행 기록은 [Action 전환표](action-migration.md)에서 구분하며 운영 DB migration/seed/복원은 이번 작업에서 실행하지 않는다.
 
 Firearm tree의 corpse/world 이동·pickup·decay는 root LootClaim 권리로 보호되고 child magazine은 별도 claim/selector로 노출하지 않는다. 실물·화폐·storage·Credential·shop·소각·명시적 full-world migration은 현재 구현되어 있다. [전리품](loot-claims.md), [migration](item-migration.md)을 따른다.
 

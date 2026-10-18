@@ -115,7 +115,7 @@ def multiplayer_state(player, now=None):
         rows = [row for row in action_rows
                 if row["action"]["roles"]["provider"][0]["identity"] == str(obj.pk)
                 and row["action"]["roles"]["provider"][0]["kind"] == "object"]
-        if obj.action_provider_definition == "world.incinerator":
+        if obj.action_provider_definition in ("world.incinerator", "world.container", "world.personal_locker"):
             rows.insert(0, {"label": "봐", "command": controls[obj.id] + " 봐"})
         return sort_controls(obj, rows)
 

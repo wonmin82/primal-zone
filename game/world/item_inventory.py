@@ -49,14 +49,15 @@ def grant(character, identity, quantity=1, *, location="inventory"):
     return created
 
 
-def consume(character, identity, quantity, *, operation="consume"):
+def consume(character, identity, quantity, *, operation="consume", item_id=None):
     from world.item_entities.services import lock_character_items
     from world.multiplayer import world_change
     from world.rules import RuleError
 
     with world_change():
         locked = lock_character_items(character)
-        rows = sorted((row for row in locked.values() if row.definition_id == identity and row.location_kind == "inventory"), key=lambda row: row.sequence)
+        rows = sorted((row for row in locked.values() if row.definition_id == identity and row.location_kind == "inventory"
+                       and (item_id is None or str(row.pk) == str(item_id))), key=lambda row: row.sequence)
         if type(quantity) is not int or quantity <= 0 or sum(row.quantity for row in rows) < quantity:
             raise RuleError("소모할 물품이 부족합니다.")
         for row in rows:
@@ -70,6 +71,24 @@ def consume(character, identity, quantity, *, operation="consume"):
             quantity -= amount
             if not quantity:
                 break
+
+
+def bind_consumption(character, profile, identity, item_id):
+    """선택한 UUID만 pure 계산의 음수 delta에 연결한다. 사라진 대상을 대체하지 않는다."""
+    from world.item_entities.services import lock_character_items
+
+    rows = lock_character_items(character)
+    row = next((row for row in rows.values() if str(row.pk) == str(item_id)
+                and row.definition_id == identity and row.owner_object_id == character.pk
+                and row.location_kind == "inventory" and row.parent_item_id is None), None)
+    if row is None:
+        # combat rules는 정상적인 error outcome을 반환한다. 집계 수량과 baseline도 함께
+        # 가려 저장 delta가 다른 스택을 소비하지 않도록 한다.
+        profile["inventory"][identity] = 0
+        profile.item_baseline[identity] = 0
+        return False
+    profile.item_consumption_ids = {**getattr(profile, "item_consumption_ids", {}), identity: str(row.pk)}
+    return True
 
 
 def persist_calculation(character, profile):
@@ -87,7 +106,8 @@ def persist_calculation(character, profile):
             raise RuleError("소지품이 변경되었습니다. 다시 시도하세요.")
     for identity, delta in changes.items():
         if delta < 0:
-            consume(character, identity, -delta, operation=profile.item_operations.get(identity, "consume"))
+            consume(character, identity, -delta, operation=profile.item_operations.get(identity, "consume"),
+                    item_id=getattr(profile, "item_consumption_ids", {}).get(identity))
         elif delta > 0:
             grant(character, identity, delta)
     saved = deepcopy(dict(profile))

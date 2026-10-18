@@ -35,12 +35,30 @@ class ServiceRelocationTests(WorldCommandTest):
             self.char1.execute_cmd(value)
         return str(output.call_args_list)
 
+    def native_fixture(self):
+        from world.item_migration.convert import convert_explorer
+        from world.item_migration.workflow import migration_context
+
+        self.enterContext(patch("typeclasses.explorers.time", return_value=100))
+        with migration_context():
+            convert_explorer(self.char1, dict(self.char1.profile()), 100, False)
+        self.connect_character(self.char1)
+
+    def stored(self, container):
+        from world.item_transfer_native import stored_items
+
+        result = {}
+        for row in stored_items(self.char1, container):
+            result[row.definition_id] = result.get(row.definition_id, 0) + row.quantity
+        return result
+
     def state(self):
         with patch.object(self.char1.sessions, "count", return_value=1), patch.object(self.char1, "msg") as output:
             Explorer.push_state(self.char1, observed_at=100)
         return output.call_args.kwargs["pz_state"][0][0]
 
     def test_actual_storage_objects_drive_commands_presentation_and_web(self):
+        self.native_fixture()
         for identity in ("shared_container", "personal_locker"):
             self.assertEqual(self.services[identity].location, self.rooms["storage_room"])
         state = multiplayer_state(self.char1)
@@ -52,15 +70,15 @@ class ServiceRelocationTests(WorldCommandTest):
         self.assertEqual(self.char1.profile()["inventory"]["bandage"], 3)
         self.assertEqual(self.char1.profile()["storage"], {})
         box = self.services["shared_container"]
-        self.assertEqual(box.db.items, {})
+        self.assertEqual(self.stored(box), {})
         box.location = self.rooms["support_roof"]
         before = deepcopy(self.char1.profile())
-        self.assertIn("대상 뒤에 '에'를 붙이고", self.command("보관상자에 붕대 넣어"))
+        self.assertIn("kind='error'", self.command("보관상자에 붕대 넣어"))
         self.assertEqual(self.char1.profile(), before)
         self.assertNotIn("보관상자", {obj["name"] for obj in multiplayer_state(self.char1)["interactables"]})
         self.char1.location = box.location
         self.command("보관상자에 붕대 넣어")
-        self.assertEqual(box.db.items, {"bandage": 1})
+        self.assertEqual(self.stored(box), {"bandage": 1})
 
     def test_dock_has_no_storage_or_training_targets_and_failures_preserve_profile(self):
         # 이 검사는 서비스 실패의 불변성을 본다. 실제 10초 회복 경계와 분리한다.
@@ -81,12 +99,13 @@ class ServiceRelocationTests(WorldCommandTest):
         self.assertEqual({obj["name"] for obj in self.state()["interactables"]}, {"윤대장"})
 
     def test_service_paths_reuse_cardinal_movement_and_elevator(self):
+        self.native_fixture()
         self.char1.location = self.rooms["hq_concourse"]
         for command in ("계단", "위", "나가기", "서", "북"):
             self.command(command)
         self.assertEqual(self.char1.zone, "storage_room")
         self.command("보관상자에 붕대 넣어")
-        self.assertEqual(self.services["shared_container"].db.items, {"bandage": 1})
+        self.assertEqual(self.stored(self.services["shared_container"]), {"bandage": 1})
         for command in ("남", "동", "승강기", "4층", "서", "북"):
             self.command(command)
         self.assertEqual(self.char1.zone, "training_room")

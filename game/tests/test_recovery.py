@@ -33,6 +33,15 @@ class RecoveryTests(WorldCommandTest):
         self.enterContext(patch.object(self.char1.sessions, "count", return_value=1))
         self.char1.change(lambda p: p.update(hp=10, mental=10, recovery=recovery.initialize(100)))
 
+    def native_fixture(self):
+        from world.item_migration.convert import convert_explorer
+        from world.item_migration.workflow import migration_context
+
+        with migration_context():
+            convert_explorer(self.char1, dict(self.char1.profile()), 100, False)
+        self.connect_character(self.char1)
+        self.enterContext(patch("world.lighting_service.time", side_effect=lambda: self.clock.return_value))
+
     def test_movement_accrues_old_location_without_payment(self):
         self.clock.return_value = 109
         self.assertTrue(self.char1.move_to(self.rooms["support_2f_w1"], quiet=True))
@@ -43,31 +52,41 @@ class RecoveryTests(WorldCommandTest):
         self.char1.reconcile_recovery(120)
         self.assertEqual((self.char1.profile()["hp"], self.char1.profile()["mental"]), (11, 12))
 
-    def test_legacy_store_retrieve_reconcile_elapsed_command_boundary(self):
+    def test_native_store_retrieve_reconcile_elapsed_command_boundary(self):
+        from world.item_transfer_native import stored_items
+
         self.char1.location = self.rooms["storage_room"]
         self.char1.change(lambda p: p["inventory"].update(bandage=2))
+        self.native_fixture()
+        locker = next(obj for obj in self.char1.location.contents if getattr(obj, "personal", False))
         for index, command in enumerate(("개인 보관함에 붕대 넣어", "개인 보관함에서 붕대 꺼내"), start=1):
             before = self.char1.profile_snapshot()
             self.clock.return_value = 100 + index * (6 * recovery.RECOVERY_INTERVAL + 1)
             self.char1.execute_cmd(command)
             after = self.char1.profile_snapshot()
-            self.assertEqual(after["storage"].get("bandage", 0), 1 if index == 1 else 0)
+            self.assertEqual(sum(row.quantity for row in stored_items(self.char1, locker) if row.definition_id == "bandage"),
+                             1 if index == 1 else 0)
             self.assertEqual(after["inventory"]["bandage"], 1 if index == 1 else 2)
             for resource in recovery.RESOURCES:
                 self.assertGreater(after[resource], before[resource])
             self.assertEqual(after["recovery"]["updated_at"], self.clock.return_value)
 
-    def test_legacy_light_commands_reconcile_elapsed_command_boundary(self):
+    def test_native_light_commands_reconcile_elapsed_command_boundary(self):
+        from world.item_entities.models import ItemEntity
+
         self.char1.change(lambda p: p["inventory"].update(flashlight=1, battery=1))
+        self.native_fixture()
+        light = ItemEntity.objects.get(owner_object=self.char1, definition_id="flashlight")
         for index, command in enumerate(("손전등에 건전지 넣어", "손전등 켜", "손전등 꺼"), start=1):
             before = self.char1.profile_snapshot()
             self.clock.return_value = 100 + index * (2 * recovery.RECOVERY_INTERVAL + 1)
-            with patch("commands.items.time", return_value=self.clock.return_value):
+            with patch("world.lighting_service.time", return_value=self.clock.return_value):
                 self.char1.execute_cmd(command)
             after = self.char1.profile_snapshot()
             for resource in recovery.RESOURCES:
                 self.assertGreater(after[resource], before[resource])
-            self.assertEqual(after["light_sources"]["flashlight"]["on"], index == 2)
+            light.refresh_from_db()
+            self.assertEqual(light.state["enabled"], index == 2)
 
     def test_movement_failure_rolls_back_location_and_recovery(self):
         before = deepcopy(self.char1.profile_snapshot())
@@ -96,6 +115,7 @@ class RecoveryTests(WorldCommandTest):
     def test_equipment_transition_applies_only_future_time(self):
         self.char1.location = self.rooms["staging_room"]
         self.char1.change(lambda p: p["equipment"].update(weapon=None))
+        self.native_fixture()
         definition = {**ITEMS["explorer_machete"], "modifiers": [{"target": "recovery.mental_per_minute", "op": "add", "value": 6, "scope": "equipped"}]}
         with patch.dict(ITEMS, explorer_machete=definition):
             self.clock.return_value = 109

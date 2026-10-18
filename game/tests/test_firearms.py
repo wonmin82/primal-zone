@@ -30,12 +30,12 @@ class FirearmTests(NativeItemTest):
         return self.char1.profile()
 
     def test_noncombat_reload_reconciles_elapsed_command_boundary(self):
-        gun = self.gun("empty")
+        gun = service.create_firearm("scout_pistol", owner_object=self.char1, mode="empty")
         magazine = self.mag(12)
         before = self.char1.profile_snapshot()
         now = 100 + 6 * recovery.RECOVERY_INTERVAL + 1
         with patch("typeclasses.explorers.time", return_value=now), patch("world.firearm_service.time", return_value=now):
-            self.char1.execute_cmd("시험권총 재장전")
+            self.char1.execute_cmd("정찰권총 재장전")
         after = self.char1.profile_snapshot()
         self.assertEqual(service.loaded_magazine_item(gun).pk, magazine.pk)
         for resource in recovery.RESOURCES:
@@ -306,26 +306,31 @@ class FirearmTests(NativeItemTest):
         self.assertEqual(before, self.atomic_state())
 
     def test_stateful_duplicate_selectors_and_command_parser(self):
-        from commands.firearms import LoadMagazine
-        from commands.items import Retrieve, Store
+        from world.content import ITEMS
 
-        first, second = self.gun(), self.gun()
-        self.mag(2)
-        magazine = self.mag(7)
-        self.assertEqual(equipment.resolve_item(self.char1, "시험총 2", "장전").pk, second.pk)
-        self.call(LoadMagazine(), "시험총 2에 권총표준 2", "탄창을 장전했다.")
+        self.connect_character(self.char1)
+        first = service.create_firearm("guard_carbine", owner_object=self.char1)
+        second = service.create_firearm("guard_carbine", owner_object=self.char1)
+        self.mag(2, "mag_556_standard")
+        magazine = self.mag(7, "mag_556_standard")
+        gun_name = ITEMS["guard_carbine"]["name"]
+        mag_name = ITEMS["mag_556_standard"]["name"]
+        with patch.object(self.char1, "msg") as output:
+            self.char1.execute_cmd(f"{gun_name} 2에 {mag_name} 2 장전")
+            self.assertIn("탄창을 장전했다.", str(output.call_args_list))
         self.assertEqual(service.loaded_magazine_item(second).pk, magazine.pk)
         self.assertIsNone(service.loaded_magazine_item(first))
-        self.assertEqual(equipment.resolve_item(self.char1, "권총표준 2", "채워").pk, magazine.pk)
-        ammo = self.create("ammo_9", quantity=3)
-        self.call(Store(), "권총표준 2에 권총탄", "탄창에 3발을 넣었다.")
+        ammo = self.create("ammo_556", quantity=3)
+        # Inside 번호는 직접 부모 UUID Scope의 번호다. 내부 부품은 총기의 Action으로 조작한다.
+        self.char1.execute_cmd(f"{gun_name} 2에서 탄창 꺼내")
+        self.char1.execute_cmd(f"{mag_name} 3에 카빈탄 넣어")
         self.assertFalse(ItemEntity.objects.filter(pk=ammo.pk).exists())
-        self.call(Retrieve(), "시험총 2에서 탄창", "탄창을 꺼냈다.")
-        self.call(Retrieve(), "권총표준 2에서 권총탄", "탄창에서 10발을 전부 꺼냈다.")
-        profile = self.char1.profile()
-        rows = equipment.eq.inventory_rows(profile)
-        self.assertNotIn(str(magazine.pk), str(rows))
-        self.assertIn("0/12", str(rows))
+        self.char1.execute_cmd(f"{mag_name} 3에서 카빈탄 꺼내")
+        magazine.refresh_from_db()
+        self.assertEqual(magazine.state["rounds"], 0)
+        rows = equipment.eq.inventory_rows(self.char1.profile())
+        self.assertIn(str(magazine.pk), {row["identity"] for row in rows})
+        self.assertIn("0/20", str(rows))
 
     def test_legacy_firearm_combat_remains_ammo_free_and_reload_rejected(self):
         self.char1.db.equipment_backend = None

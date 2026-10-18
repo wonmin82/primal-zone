@@ -198,13 +198,20 @@ class GameplayIntegrationTests(WorldCommandTest):
         self.assertEqual(self.char1.profile(), before)
 
     def test_raw_commands_purchase_equip_and_quest(self):
+        from world.equipment_service import active_weapon_item
+        from world.item_migration.convert import convert_explorer
+        from world.item_migration.workflow import migration_context
+
+        with migration_context():
+            convert_explorer(self.char1, dict(self.char1.profile()), 100, False)
+        self.connect_character(self.char1)
         self.char1.change(lambda data: data.update(credits=200))
         self.char1.location = self.rooms["weapon_shop"]
         self.char1.execute_cmd("  절단마체테   사  ")
         self.assertEqual(self.char1.profile()["inventory"]["cutting_machete"], 1)
         self.char1.execute_cmd("탐사용 벌목도 해제")
         self.char1.execute_cmd("절단마체테 WIELD")
-        self.assertEqual(self.char1.profile()["equipment"]["weapon"], "cutting_machete")
+        self.assertEqual(active_weapon_item(self.char1).definition_id, "cutting_machete")
         self.char1.location = self.rooms["dock"]
         self.char1.execute_cmd("윤대장에게 수락 말")
         self.assertTrue(self.char1.profile()["quests"]["radio_tower"]["started"])

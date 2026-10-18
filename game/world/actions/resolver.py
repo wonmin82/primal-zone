@@ -20,7 +20,7 @@ class ActionInvocation:
     request_id: str | None = None
 
 
-def role_records(caller, role, bindings=None):
+def role_records(caller, role, bindings=None, *, cache=None):
     from world.selection_numbers.api import (
         SelectionRecord,
         current_scopes,
@@ -41,27 +41,45 @@ def role_records(caller, role, bindings=None):
         from world.item_entities.models import ItemEntity
         from world.observation import can_perceive, context_for
 
-        scopes = set()
+        scopes = (set(current_scopes(caller, ReferenceKind.ITEM))
+                  if role.scope == TargetScope.CARRIED_AND_INSIDE else set())
         for reference in (bindings or {}).get(role.scope_from, ()):
             entity = resolve_reference(reference)
             if role.scope == TargetScope.STORAGE:
                 if (not isinstance(entity, Container) or entity.location != caller.location
-                        or not can_perceive(entity, context_for(caller)) or not entity.access(caller, "call")):
+                        or not can_perceive(entity, context_for(caller))
+                        or not entity.access(caller, "view") or not entity.access(caller, "call")):
                     continue
                 scopes.add(f"personal_storage:{caller.pk}" if entity.personal else f"shared_storage:{entity.pk}")
             elif isinstance(entity, ItemEntity):
                 root = entity.root()
                 if root.location_kind in ("inventory", "equipment") and root.owner_object_id == caller.pk:
                     scopes.add(f"inside:{entity.pk}")
-    records = tuple(record for record in records_for(caller, scope_ids=scopes) if record.reference.kind in role.kinds)
-    if role.definition_ids:
+    key = ("scope", frozenset(scopes))
+    if cache is None:
+        records = records_for(caller, scope_ids=scopes)
+    else:
+        if key not in cache:
+            cache[key] = records_for(caller, scope_ids=scopes)
+        records = cache[key]
+    records = tuple(record for record in records if record.reference.kind in role.kinds)
+    if role.definition_ids or role.location_kinds:
+        def entity(record):
+            key = ("entity", record.reference)
+            if cache is None:
+                return resolve_reference(record.reference)
+            if key not in cache:
+                cache[key] = resolve_reference(record.reference)
+            return cache[key]
+
         records = tuple(record for record in records
-                        if getattr(resolve_reference(record.reference), "definition_id", None) in role.definition_ids)
+                        if (not role.definition_ids or getattr(entity(record), "definition_id", None) in role.definition_ids)
+                        and (not role.location_kinds or getattr(entity(record), "location_kind", None) in role.location_kinds))
     return records
 
 
-def select_role(caller, role, query=None, *, bindings=None, candidates=None):
-    records = role_records(caller, role) if bindings is None else role_records(caller, role, bindings)
+def select_role(caller, role, query=None, *, bindings=None, candidates=None, cache=None):
+    records = role_records(caller, role, bindings, cache=cache)
     if candidates is not None:
         records = tuple(record for record in records if record.reference in candidates)
     if query is None or not query.strip():
@@ -86,6 +104,8 @@ def select_role(caller, role, query=None, *, bindings=None, candidates=None):
                 unique_match = len(matches) == 1
                 matches = [record for record in matches if record.number == selector.index or
                            (selector.index == 1 and unique_match and selector.name in record.unique_names)]
+                if len({record.scope_id for record in matches}) > 1:
+                    raise RuleError("서로 다른 보관 범위의 번호가 겹칩니다. 대상을 고유하게 지정하세요.")
     if not matches:
         if (query is None or not query.strip()) and not role.required:
             return ()
@@ -216,6 +236,7 @@ def dispatch_text(caller, index, verb_id, args, command_name):
     possible = []
     verb = index.verbs[verb_id]
     selections = {}
+    record_cache = {}  # 구문 선택 한 번에만 재사용한다. Gateway는 잠금 뒤 새로 검증한다.
     offers = provided(caller, index)
     for reference, binding in offers:
         action = index.actions[binding.action_id]
@@ -237,6 +258,11 @@ def dispatch_text(caller, index, verb_id, args, command_name):
                 continue
             roles = {"provider": (reference,)}
             try:
+                arguments = argument_values(action, {arg.name: fields[arg.name] for arg in action.arguments
+                                                    if fields.get(arg.name) is not None}, text=True)
+                argument_map = dict(arguments)
+                all_roles = set(variant.all_roles) | {name for name, argument, expected in variant.all_when
+                                                     if argument_map.get(argument) == expected}
                 # 현재 Scope 역할을 먼저, 그 안정 참조를 사용하는 내부/보관 역할은 뒤에 선택한다.
                 pending = [role for role in action.roles if role.name != "provider"]
                 ordered = []
@@ -250,12 +276,12 @@ def dispatch_text(caller, index, verb_id, args, command_name):
                     if role.name == "provider":
                         continue
                     query = fields.get(role.name)
-                    if role.name in variant.all_roles and query:
+                    if role.name in all_roles and query:
                         query += " 모두"
                     context = () if role.scope == TargetScope.CURRENT else roles.get(role.scope_from, ())
                     key = (role, query, context)
                     if key not in selections:
-                        selections[key] = select_role(caller, role, query, bindings=roles)
+                        selections[key] = select_role(caller, role, query, bindings=roles, cache=record_cache)
                     roles[role.name] = selections[key]
                 if action.provider_from:
                     if reference not in roles[action.provider_from]:
@@ -264,14 +290,12 @@ def dispatch_text(caller, index, verb_id, args, command_name):
                 elif fields.get("provider"):
                     role = next(role for role in action.roles if role.name == "provider")
                     candidates = {ref for ref, offer in offers if offer.action_id == action.id}
-                    selected = select_role(caller, role, fields["provider"], candidates=candidates)
+                    selected = select_role(caller, role, fields["provider"], candidates=candidates, cache=record_cache)
                     if reference not in selected:
                         continue
                     roles["provider"] = (reference,)
                 else:
                     roles["provider"] = (reference,)
-                arguments = argument_values(action, {arg.name: fields[arg.name] for arg in action.arguments
-                                                    if fields.get(arg.name) is not None}, text=True)
             except RuleError:
                 continue
             possible.append(ActionInvocation(action.id, variant.id, tuple(roles.items()), arguments))

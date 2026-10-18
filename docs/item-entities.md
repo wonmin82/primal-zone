@@ -1,6 +1,14 @@
 # ItemEntity 기반·장비·상태형 아이템
 
-Issue #65의 [B-1 번호 계약](action-architecture.md#b-1-물리-저장과-원자성)은 UUID·sequence·quantity와 사용자 선택 번호를 분리한다. Issue #66 PR A의 판매·가치 조회·소각은 현재 접근 가능한 Root ItemEntity의 실제 UUID를 공통 Gateway로 전달한다. 정산 집계는 안정 Inventory Source와 UUID·수량 집합 버전을 재검증한다. 장비·Storage·총기·광원 자체 행동의 Action 전환은 후속 PR 범위다. 아래 ItemEntity 구축 단계의 역사적 Phase 번호와 Action Phase 2를 구분하며, 운영 DB 초기 할당은 명시적 백업/seed/verify 절차로 수행한다.
+Issue #65의 [B-1 번호 계약](action-architecture.md#b-1-물리-저장과-원자성)은 UUID·sequence·quantity와 사용자 선택 번호를 분리한다. Issue #66 PR A의 판매·가치 조회·소각에 이어 PR B는 소비·장비·정보·Storage·총기·광원을 공통 Gateway로 전환한다. 정산 집계는 안정 Inventory Source와 UUID·수량 집합 버전을 재검증한다. 구현·검증 진행과 아직 미전환인 전리품/최종 통합 경계는 [Action 전환표](action-migration.md)를 따른다. 아래 ItemEntity 구축 단계의 역사적 Phase 번호와 Action Phase 2를 구분하며, 운영 DB 초기 할당은 명시적 백업/seed/verify 절차로 수행한다. 이번 개발에서 운영 DB migration/seed/복원은 실행하지 않는다.
+
+## Action 선택과 소비·보관
+
+`붕대 2 사용`은 B-1 번호 2인 스택 하나를, `붕대 2개 사용`은 수량 2개를 뜻한다. 현재 소비 효과는 기존처럼 한 번에 하나이므로 `2개`나 `모두`는 다회 소비 없이 거절한다. `붕대 2 1개 사용`은 2번 스택에서 하나다. 선택한 UUID를 pure 계산 결과 저장까지 보존하며 부분 소비는 UUID·번호를 유지한다. 전투 중 붕대 예약도 실제 소비 차례에 원래 UUID를 다시 검사한다.
+
+일반 Item Action의 Provider/Subject는 현재 소유한 직접 Root inventory/equipment다. Inside 아이템은 자기 Provider가 아니며 부모 Root의 명시 Subject다. 부모가 이동해도 같은 부모 UUID의 내부 번호는 유지하고, 밖으로 나오면 목적 Scope에서 새 번호를 받는다. 인벤토리·장비의 Character Scope와 개인·공용 Storage Scope는 분리된다.
+
+`개인 보관함에 붕대 2 3개 넣어`처럼 번호와 이동 수량을 분리한다. 텍스트 `붕대 모두`는 접근 가능한 같은 품목의 여러 스택을 선택하고, 웹의 `스택 전부`는 버튼에 고정된 UUID 하나의 전량이다. 꺼내기는 실제 접근 가능한 Provider의 보관 Scope만 조회한다. 위치·소유·권한을 잠금 뒤 재검증하며 실패한 명시 대상은 다른 스택으로 대체하지 않는다.
 
 ## Current Runtime Contract
 
@@ -45,7 +53,7 @@ Phase 4 실물 권리는 별도 `LootClaim`이며 ItemEntity.state가 아니다.
 | items_in_location(location_kind, owner_object=..., parent_item=...) | 정확한 canonical 위치를 sequence 순으로 조회 |
 | children_of(item) | 바로 아래 자식을 sequence 순으로 조회 |
 
-생성·이동 시 location 필드를 모두 명시적으로 구성한다. 이동에서 생략한 owner/parent/slot/socket은 None으로 지우므로 이전 위치의 값이 남지 않는다. query는 UUID를 번호 정렬에 사용하지 않는다. Phase 2는 기존 `world.targets` parsing/matching/select를 재사용하며 inventory/equipment 후보의 sequence 순서로 instance selector를 만든다.
+생성·이동 시 location 필드를 모두 명시적으로 구성한다. 이동에서 생략한 owner/parent/slot/socket은 None으로 지우므로 이전 위치의 값이 남지 않는다. query는 UUID를 번호 정렬에 사용하지 않는다. 과거 ItemEntity Phase 2의 sequence 기반 instance selector와 현재 Action의 영속 B-1 선택 번호를 구분한다. 현재 번호는 `selection_numbers`를 사용하며 sequence는 기본 대상 선택에 필요한 기존 정렬 근거로만 유지한다.
 
 스택 병합은 동일 정의·canonical 위치·merge 관련 상태와 max_stack을 요구하고 자식 있는 스택은 거절한다. `same_merge_context()`는 raw JSON을 직접 비교하지 않고 `merge_state(item)` 계약의 결과를 비교한다. 현재 기본 계약은 전체 state의 복사본이므로 기존과 같이 모든 state 값이 같아야 한다. 향후 정의별 계약에서 provenance·UI/debug·migration metadata 등 병합과 무관한 값을 제외할 수 있으며, 이번 단계에는 새 state schema나 정의별 선택 규칙을 추가하지 않는다. destination의 ID·sequence·state는 유지하고 수량만 합산한다. 분할 source 순번은 유지되고 새 row만 새 순번을 얻는다.
 
@@ -127,3 +135,5 @@ Native 사용자 이전은 같은 owner 내부 위치 변경과 owner-changing t
 아래 설명은 native runtime 전환 전의 단계별 경계다. 현재 ItemEntity SSOT·fresh bootstrap·legacy explicit migration 계약을 대체하지 않는다.
 
 ItemEntity migration과 Phase 4 loot_entities schema는 profile·공용 상자·기존 시체·바닥 물품을 읽거나 옮기지 않는다. 기존 캐릭터는 legacy에만 쓰고, 명시적으로 Entity backend를 선택한 빈 신규/fixture 캐릭터의 장비·광원·총기와 native 전리품은 새 모델에만 쓴다. 이중 쓰기는 없다. Phase 6에서 범위별 legacy migration·검증·cutover를 구현한다. Phase 2 장비·modifier·Defense, Phase 3 활성 광원·총기/탄창, Phase 4 LootClaim·CurrencyLoot를 연결했다. Credential·신규 상점·최종 콘텐츠·밸런스는 후속 단계다.
+
+정보 조회도 직접 Root와 부모 총기의 Inside 탄창을 구분한다. 내부 탄창은 부모 Provider의 읽기 전용 Subject이며 별도 동적 Provider가 아니다. `카빈표준 정보`는 유효한 후보가 유일할 때 동작하고, 동명 Root/Inside 또는 여러 부모가 겹치면 부모를 명시한다(`경비카빈의 카빈표준 1 정보`). 번호는 해당 직접 부모 UUID Scope의 B-1 번호다.

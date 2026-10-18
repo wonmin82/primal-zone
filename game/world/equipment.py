@@ -87,6 +87,7 @@ class EquipmentItem:
     modifiers: tuple = ()
     state_summary: str = ""
     firearm_family: str | None = None
+    selection_number: int | None = None
 
     @property
     def equip_action(self):
@@ -97,7 +98,7 @@ class EquipmentItem:
         return "해제" if self.role == "weapon" else "벗어"
 
 
-def item_snapshot(identity, definition, *, item_id=None, sequence=0, quantity=1, location="equipment", slot=None, state_summary=""):
+def item_snapshot(identity, definition, *, item_id=None, sequence=0, quantity=1, location="equipment", slot=None, state_summary="", selection_number=None):
     errors = definition_errors(identity, definition)
     if errors:
         reject(" / ".join(errors))
@@ -109,7 +110,7 @@ def item_snapshot(identity, definition, *, item_id=None, sequence=0, quantity=1,
         slot or properties.get("slot"), location, properties.get("role"),
         properties.get("weapon_type"), properties.get("hands_required", 0),
         properties.get("weapon_attack", 0), tuple(Modifier(**modifier) for modifier in modifiers),
-        state_summary, definition.get("firearm_family"),
+        state_summary, definition.get("firearm_family"), selection_number,
     )
 
 
@@ -153,6 +154,8 @@ class EquipmentSnapshot:
         return sum(item.hands_required for item in self.items if item.slot == "hands")
 
     def label(self, item):
+        if item.selection_number is not None:
+            return f"{item.name} {item.selection_number}"
         candidates = [entry for entry in self.carried if entry.definition_id == item.definition_id]
         index = candidates.index(item) + 1 if item in candidates else 1
         return item.name if index == 1 else f"{item.name} {index}"
@@ -215,6 +218,7 @@ def inventory_rows(profile):
             selected.active.identity == item.identity if selected.source == "item_entities"
             else selected.active.definition_id == item.definition_id)
         rows.append({"information_command": selected.label(item) + " 정보" if selected.source == "item_entities" else None,
+                     "identity": str(item.identity) if item.identity else None,
                      "id": item.definition_id, "name": item.name, "selector": selected.label(item),
                      "count": item.quantity, "slot": item.slot or data.get("slot"),
                      "equip_action": item.equip_action if item.slot else None,

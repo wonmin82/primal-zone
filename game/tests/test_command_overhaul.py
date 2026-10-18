@@ -116,12 +116,13 @@ class CommandOverhaulSmoke(NativeItemTest):
         before = deepcopy(self.atomic_state())
         saved = deepcopy(dict(self.char1.db.profile))
         for raw, expected in (("정찰권총 정보", "7/12"), ("정찰권총 2 정보", "0/12"),
-                              ("9mm 표준탄창 정보", "잔탄 7발"), ("붕대 정보", "기준 구매가"),
+                              ("정찰권총 1의 9mm 표준탄창 정보", "잔탄 7발"), ("붕대 정보", "기준 구매가"),
                               ("탐사용손전등 정보", "꺼짐")):
             self.assertIn(expected, self.raw(raw))
             self.assertEqual(before, self.atomic_state())
             self.assertEqual(saved, dict(self.char1.db.profile))
         self.assertIn("아이템", self.raw("정보 도움"))
+        self.assertIn("대상", self.raw("9mm 표준탄창 정보"))
         self.assertNotIn("레벨·HP/SP", self.raw("정보 도움"))
         self.assertIn("대상", self.raw("정찰권총 3 정보"))
         self.assertEqual(before, self.atomic_state())
@@ -158,13 +159,20 @@ class CommandOverhaulSmoke(NativeItemTest):
             ("test_purchase", ("기준 구매가: 9칩",), ("기준 매입가",)),
             ("test_unavailable", ("매매불가품",), ("기준 구매가",)),
         )
-        for identity, _, _ in cases:
-            self.create(identity)
+        rows = {identity: self.create(identity) for identity, _, _ in cases}
         before = deepcopy(self.atomic_state())
         saved = deepcopy(dict(self.char1.db.profile))
         for identity, included, excluded in cases:
             with self.subTest(identity=identity):
-                output = self.raw(f"{ITEMS[identity]['name']} 정보")
+                # 실행 중 추가한 시험 정의는 운영 Manifest 콘텐츠가 아니다.
+                # 가격 계산 경계는 실제 UUID 정보 도메인으로 검증하고,
+                # 정식 콘텐츠는 위와 같이 공개 Action 입력을 통과한다.
+                if identity.startswith("test_"):
+                    from world.item_information import information_for_item
+
+                    output = information_for_item(self.char1, rows[identity])
+                else:
+                    output = self.raw(f"{ITEMS[identity]['name']} 정보")
                 for text in included:
                     self.assertIn(text, output)
                 for text in excluded:

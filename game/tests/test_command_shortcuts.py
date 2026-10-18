@@ -45,12 +45,19 @@ class CommandShortcutsTests(WorldCommandTest):
         self.assertIn("추가했습니다", output)
 
     def test_purchase_then_wield_and_location_specific_commands_run_sequentially(self):
+        from world.equipment_service import active_weapon_item
+        from world.item_migration.convert import convert_explorer
+        from world.item_migration.workflow import migration_context
+
+        with migration_context():
+            convert_explorer(self.char1, dict(self.char1.profile()), self.char1.profile()["recovery"]["updated_at"], False)
+        self.connect_character(self.char1)
         self.char1.location = self.rooms["weapon_shop"]
         self.char1.change(lambda p: p.update(credits=100))
         self.run_raw("절단마체테 사, 탐사용 벌목도 해제, 절단마체테 무장 해")
         profile = self.char1.profile_snapshot()
         self.assertEqual(profile["inventory"]["cutting_machete"], 1)
-        self.assertEqual(profile["equipment"]["weapon"], "cutting_machete")
+        self.assertEqual(active_weapon_item(self.char1).definition_id, "cutting_machete")
         self.assertEqual(profile["credits"], 45)
         self.run_raw("귀환, 승강기, 5층, 동, 북 해")
         self.assertEqual(self.char1.zone, "weapon_shop")

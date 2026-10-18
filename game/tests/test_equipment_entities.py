@@ -120,10 +120,11 @@ class EquipmentEntityTests(GameCommandTest):
             service.equip_item(self.char1, row)
         self.assertEqual(service.resolve_item(self.char1, "ring 2", "벗어").pk, second.pk)
         rows = eq.inventory_rows(self.char1.profile())
-        self.assertEqual([row["selector"] for row in rows], ["ring", "ring 2"])
+        self.assertEqual([row["selector"] for row in rows], ["ring 1", "ring 2"])
         with self.assertRaises(rules.RuleError):
             service.resolve_item(self.char1, str(first.pk), "벗어")
-        self.assertNotIn(str(first.pk), str(rows))
+        self.assertEqual([row["identity"] for row in rows], [str(first.pk), str(second.pk)])
+        self.assertNotIn(str(first.pk), str([row["selector"] for row in rows]))
         self.assertEqual(ItemEntity.objects.count(), 2)
 
     def test_nested_equip_and_unequip_keep_passive_child(self):
@@ -260,25 +261,31 @@ class EquipmentEntityTests(GameCommandTest):
             service.use_item_entities(self.char2)
 
     def test_command_selector_and_presentation_agree_with_web(self):
-        self.definition("weapon")
-        first, second = self.create("weapon"), self.create("weapon")
-        self.char1.execute_cmd("weapon 무장")
-        self.char1.execute_cmd("weapon 2 무장")
-        self.char1.execute_cmd("weapon 2 주무기")
+        first, second = self.create("explorer_machete"), self.create("explorer_machete")
+        name = ITEMS["explorer_machete"]["name"]
+        self.char1.execute_cmd(name + " 무장")
+        self.char1.execute_cmd(name + " 2 무장")
+        self.char1.execute_cmd(name + " 2 주무기")
         self.assertEqual(service.active_weapon_item(self.char1).pk, second.pk)
         profile = self.char1.profile()
         for output in (presentation.status(self.char1.key, profile),
                        presentation.equipment(profile), presentation.inventory(profile)):
-            self.assertIn("weapon 2", output)
-            self.assertNotIn("weapon [주무기]", output)
+            self.assertIn(name + " 2", output)
+            self.assertNotIn(name + " 1 [주무기]", output)
             self.assertEqual(output.count("[주무기]"), 1)
             self.assertNotIn(str(second.pk), output)
-        self.assertIn("weapon 2 [주무기]", presentation.status(self.char1.key, profile))
-        self.assertIn("weapon 2 [주무기]", presentation.equipment(profile))
-        self.assertIn("weapon 2×1 [착용] [주무기]", presentation.inventory(profile))
-        self.char1.execute_cmd("weapon 2 해제")
+        self.assertIn(name + " 2 [주무기]", presentation.status(self.char1.key, profile))
+        self.assertIn(name + " 2 [주무기]", presentation.equipment(profile))
+        self.assertIn(name + " 2×1 [착용] [주무기]", presentation.inventory(profile))
+        self.char1.execute_cmd(name + " 2 해제")
         self.assertEqual(service.active_weapon_item(self.char1).pk, first.pk)
-        self.assertIn("weapon [주무기]", str(eq.equipment_rows(self.char1.profile())))
+        self.assertIn(name + " 1 [주무기]", str(eq.equipment_rows(self.char1.profile())))
+        # 첫 UUID가 사라져도 남은 2번을 1번으로 재표시하거나 선택하지 않는다.
+        api.delete_item(first, operation="burn")
+        self.assertEqual([row["selector"] for row in eq.inventory_rows(self.char1.profile())], [name + " 2"])
+        self.char1.execute_cmd(name + " 1 무장")
+        second.refresh_from_db()
+        self.assertEqual(second.location_kind, "inventory")
 
     def test_outer_world_change_rollback_includes_reference(self):
         self.definition("weapon")
@@ -309,13 +316,14 @@ class EquipmentEntityTests(GameCommandTest):
                 self.assertIsNone(self.char1.db.active_weapon_item_id)
 
     def test_failed_command_at_recovery_boundary_has_no_partial_resource_change(self):
-        self.definition("weapon")
         for _ in range(2):
-            service.equip_item(self.char1, self.create("weapon"))
-        self.create("weapon")
+            service.equip_item(self.char1, self.create("explorer_machete"))
+        self.create("explorer_machete")
         self.clock.return_value = 130
         before = self.state()
-        self.char1.execute_cmd("weapon 3 무장")
+        with patch.object(self.char1, "msg") as output:
+            self.char1.execute_cmd(ITEMS["explorer_machete"]["name"] + " 3 무장")
+        self.assertIn("손", str(output.call_args_list))
         self.assertEqual(before, self.state())
 
     def test_plain_profile_save_and_read_keep_equipment_max_and_schema(self):
@@ -342,6 +350,6 @@ class EquipmentEntityTests(GameCommandTest):
         with patch.object(self.char1.sessions, "count", return_value=1), patch.object(self.char1, "msg") as message:
             Explorer.push_state(self.char1)
         state = message.call_args.kwargs["pz_state"][0][0]
-        self.assertEqual([row["selector"] for row in state["inventory"]], ["weapon", "weapon 2"])
-        self.assertEqual(state["equipment"]["hands"], "weapon · weapon 2 [주무기]")
+        self.assertEqual([row["selector"] for row in state["inventory"]], ["weapon 1", "weapon 2"])
+        self.assertEqual(state["equipment"]["hands"], "weapon 1 · weapon 2 [주무기]")
         self.assertEqual([row["active_weapon"] for row in state["inventory"]], [False, True])

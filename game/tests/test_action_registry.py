@@ -47,6 +47,32 @@ def package():
 
 
 class ActionRegistryTests(TestCase):
+    def test_item_location_constraints_are_typed_and_do_not_expand_scope(self):
+        p = package()
+        subject = RoleDefinition("subject", (ReferenceKind.ITEM,), location_kinds=("inventory",))
+        action = replace(p.actions[0], roles=(*p.actions[0].roles, subject))
+        self.compile(replace(p, actions=(action,)))
+        for bad in (replace(subject, kinds=(ReferenceKind.OBJECT,)),
+                    replace(subject, location_kinds=("remote",)),
+                    replace(subject, location_kinds=(["inventory"],))):
+            with self.subTest(role=bad), self.assertRaises(RegistryError):
+                self.compile(replace(p, actions=(replace(action, roles=(*p.actions[0].roles, bad)),)))
+
+    def test_conditional_all_selection_requires_a_declared_typed_argument_and_role(self):
+        p = package()
+        role = RoleDefinition("subject", (ReferenceKind.ITEM,), allow_all=True)
+        variant = SyntaxVariant("normal", r"(?P<provider>.+)",
+                                all_when=(("subject", "count", "모두"),))
+        action = replace(p.actions[0], roles=(*p.actions[0].roles, role), variants=(variant,),
+                         arguments=(ArgumentDefinition("count", default="1"),))
+        self.compile(replace(p, actions=(action,)))
+        for condition in (("missing", "count", "모두"), ("subject", "missing", "모두"),
+                          ("subject", "count", 1)):
+            with self.subTest(condition=condition), self.assertRaises(RegistryError):
+                self.compile(replace(p, actions=(replace(action, variants=(replace(variant, all_when=(condition,)),)),)))
+        with self.assertRaises(RegistryError):
+            self.compile(replace(p, actions=(replace(action, roles=(*p.actions[0].roles, replace(role, allow_all=False))),)))
+
     def test_inventory_collection_is_a_current_source_and_never_a_provider(self):
         p = package()
         for role in (RoleDefinition("provider", (ReferenceKind.INVENTORY,)),

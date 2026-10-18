@@ -77,16 +77,7 @@ class Commander(ActionObject):
 
 
 class Container(ActionObject):
-    def perform_action(self, caller, action, args=None):
-        from world.observation import can_perceive, context_for
-
-        if self.location != caller.location or not self.supports_action(action):
-            raise rules.RuleError("이곳에서 그 대상에게 할 수 없는 행동입니다.")
-        if not can_perceive(self, context_for(caller)):
-            raise rules.RuleError("지금은 그 대상을 식별할 수 없습니다. 광원을 사용하세요.")
-        rules.require_peace(caller.profile())
-        return self.act(caller, action, args)
-
+    action_provider_definition = "world.container"
     """공용 스택 보관 공간. 개인 보관함은 caller의 profile만 사용한다."""
 
     distant_visible = True
@@ -99,14 +90,6 @@ class Container(ActionObject):
     def at_object_creation(self):
         super().at_object_creation()
         self.db.items = {}
-
-    def act(self, caller, action, args):
-        from world.item_transfers import transfer
-
-        identity, all_items = args
-        return transfer(
-            caller, identity, all_items=all_items, container=self, withdraw=action == "꺼내"
-        )
 
     def return_appearance(self, looker, **kwargs):
         from evennia.utils.dbserialize import deserialize
@@ -146,6 +129,7 @@ class Container(ActionObject):
 
 
 class PersonalLocker(Container):
+    action_provider_definition = "world.personal_locker"
     distant_visible = True
     personal = True
     description = "탐사자 개인의 물품을 보관한다. 같은 보관함을 사용해도 내용은 각자에게만 보인다."

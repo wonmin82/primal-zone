@@ -380,3 +380,25 @@ test("재분배 버튼은 서버 배열 순서와 무관하게 선언된 scope�
     assert.equal(frame[1][0].action_id,"training.reset."+scope);
   }
 });
+
+test("아이템 버튼은 같은 표시 이름에서도 해당 UUID의 구조화 Action만 전송", () => {
+  const c = client();
+  const item = identity => ({id:"bandage",identity,name:"붕대",selector:"붕대 2",count:3});
+  const action = identity => ({action_id:"item.bandage.use",variant:"normal",
+    roles:{provider:[{kind:"item",identity,scope_id:"character:7"}],
+      subject:[{kind:"item",identity,scope_id:"character:7"}]},arguments:{count:"1"}});
+  c.receive("pz_state",partyState(null,{inventory:[item("original"),item("other")],
+    action_controls:[{label:"사용",action:action("original")},{label:"사용",action:action("other")}]}));
+  const rows = c.byId("inventory").children;
+  for (const [index, identity] of ["original","other"].entries()) {
+    const buttons = rows[index].children.filter(child => child.dataset?.actionInvocation);
+    assert.equal(buttons.length,1);
+    c.document.fire("click",{target:buttons[0]});
+    assert.equal(c.socket.sent.at(-1)[0],"pz_action");
+    assert.equal(c.socket.sent.at(-1)[1][0].roles.subject[0].identity,identity);
+    assert.equal(commandButtons(rows[index]).length,0);
+  }
+  assert.equal(c.byId("context-actions").children.filter(child => child.dataset?.actionInvocation).length,0);
+  c.receive("pz_state",partyState(null,{inventory:[item("replacement")],action_controls:[]}));
+  assert.equal(c.byId("inventory").firstElementChild.children.filter(child => child.dataset?.actionInvocation).length,0);
+});

@@ -216,6 +216,8 @@ class ActionRuntimeTests(NativeItemTest):
                                  attributes=[("action_provider_id", "validation.instrument")])
         shared = create_object(Container, key="공용 검증함", location=self.char1.location,
                                attributes=[("action_provider_id", "validation.instrument")])
+        # 운영 Container는 클래스 선언을 사용한다. 이 격리 콘텐츠는 명시적으로 별도 Provider다.
+        personal.action_provider_definition = shared.action_provider_definition = "validation.instrument"
         stored = create_item("bandage", location_kind="personal_storage", owner_object=self.char1)
         public = create_item("bandage", location_kind="shared_storage", owner_object=shared)
         other = create_item("bandage", location_kind="personal_storage", owner_object=self.char2)
@@ -296,6 +298,23 @@ class ActionRuntimeTests(NativeItemTest):
         move_item(child, location_kind="inside", parent_item=second, socket="other")
         self.assertEqual(execute(self.char1, self.session, invocation, index).status, ResultStatus.REFUSED)
         self.assertEqual(len(self.events()), 1)
+
+    def test_role_candidate_cache_is_local_and_reuses_scopes_across_definitions(self):
+        from world.item_entities.api import move_item_tree
+        from world.selection_numbers import api
+
+        bandage, food = self.create("bandage"), self.create("field_ration")
+        cache = {}
+        roles = [RoleDefinition("subject", (ReferenceKind.ITEM,), definition_ids=(identity,))
+                 for identity in ("bandage", "field_ration")]
+        with patch.object(api, "records_for", wraps=api.records_for) as records:
+            for role, item in zip(roles, (bandage, food), strict=True):
+                self.assertEqual(select_role(self.char1, role, item.definition_id, cache=cache),
+                                 (descriptor(item).reference,))
+            self.assertEqual(records.call_count, 1)
+        move_item_tree(bandage, location_kind="inventory", owner_object=self.char2, operation="give")
+        with self.assertRaises(RuleError):
+            select_role(self.char1, roles[0], "bandage", cache={})
 
     def test_review_queries_ignore_unrelated_world_growth(self):
         from django.db import connection

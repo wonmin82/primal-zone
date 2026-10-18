@@ -244,6 +244,10 @@ def player_attack(character, profile, enemy_id, now, interval, rng=None, target_
             from world.equipment_service import equipment_snapshot
 
             profile.equipment_context = equipment_snapshot(character)
+            if profile.get("queued_action") == "bandage" and profile.get("queued_item_id"):
+                from world.item_inventory import bind_consumption
+
+                bind_consumption(character, profile, "bandage", profile.pop("queued_item_id"))
             firearm = active_weapon_item(character)
             magazine = None
             available = True

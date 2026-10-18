@@ -25,7 +25,9 @@ Phase 6 현재 상태: cutover 후 일반 gameplay는 native ItemEntity만 사�
 
 ## Selector와 주무기
 
-inventory와 equipment root 및 그 inside 후손을 sequence 순으로 한 번 정렬한다. 같은 definition의 후보는 이름/이름 2처럼 표시하고 `world.targets`의 parse/matching/select를 재사용한다. 장착/삽입 위치가 바뀌어도 후보가 남아 있으면 번호는 유지된다. UUID와 큰 global sequence를 사용자에게 표시하지 않는다. 무장/착용/해제/벗어/주무기는 ItemEntity instance를 선택한다.
+현재 Issue #66 PR B의 착용/입어/입·무장/wield·벗어/벗·해제/unwield·주무기·정보는 `game.item_equipment`의 선언형 Action이다. 직접 소지·장착 Root Subject를 먼저 고른 뒤 같은 UUID의 Provider Binding과 기존 장비 도메인 API로 실행한다. 내부 탄창 등 Inside 아이템은 독립 장비 Provider가 아니다. 기존 고정 장비 Command를 병행하거나 실패 시 재호출하지 않는다.
+
+inventory와 equipment Root는 같은 Character Scope의 B-1 번호를 사용한다. 번호는 sequence 기반 후보 인덱스와 별개이며 결번을 보존한다. 장착·해제는 동일 Character Scope이므로 번호를 유지하고 Inside 이동은 부모 UUID Scope로 바뀐다. 현재 텍스트·웹 label은 번호 1도 표시하며 숨은 대상이나 Action 제공 여부가 다른 아이템 번호를 바꾸지 않는다. UUID와 큰 global sequence는 사용자 번호로 표시하지 않는다.
 
 Entity 주무기는 `Explorer.db.active_weapon_item_id`에 UUID 문자열을 저장한다. 무기 하나/2H는 자동 선택하고 두 번째 1H는 기존 선택을 유지한다. `<무기> 주무기`로 바꿀 수 있다. 선택한 무기가 장비에서 사라지면 sequence가 가장 작은 남은 weapon으로 승계하고 없으면 None이다. inventory·다른 소유자·삭제된 UUID를 가리키는 stale 참조는 주무기로 인정하지 않는다. 읽기에서는 수리·쓰기하지 않고 domain 변경에서 reconcile한다.
 

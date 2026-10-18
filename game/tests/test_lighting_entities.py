@@ -52,7 +52,7 @@ class LightingEntityTests(NativeItemTest):
         for index, action in enumerate(("켜", "꺼"), start=1):
             now = 100 + index * (6 * recovery.RECOVERY_INTERVAL + 1)
             before = self.char1.profile_snapshot()
-            with patch("typeclasses.explorers.time", return_value=now), patch("commands.items.time", return_value=now):
+            with patch("typeclasses.explorers.time", return_value=now), patch("world.lighting_service.time", return_value=now):
                 self.char1.execute_cmd("손전등 " + action)
             after = self.char1.profile_snapshot()
             for resource in recovery.RESOURCES:
@@ -220,17 +220,19 @@ class LightingEntityTests(NativeItemTest):
         self.assertIsNone(self.char2.db.active_light_item_id)
 
     def test_native_commands_resolve_duplicate_light_and_battery(self):
-        from commands.items import LightOff, LightOn, LightStatus, Store
-
+        self.connect_character(self.char1)
         self.create("flashlight")
         second = self.create("flashlight")
         self.create("battery")
-        self.call(Store(), "손전등 2에 건전지", "광원에 전원 하나를 넣었다.")
-        self.call(LightOn(), "손전등 2")
+        with patch.object(self.char1, "msg") as output:
+            self.char1.execute_cmd("손전등 2에 건전지 넣어")
+            self.assertIn("광원에 전원 하나를 넣었다.", str(output.call_args_list))
+        self.char1.execute_cmd("손전등 2 켜")
         self.assertEqual(self.char1.db.active_light_item_id, str(second.pk))
-        output = self.call(LightStatus(), "손전등 2")
-        self.assertIn("상태 켜짐", output)
-        self.call(LightOff(), "손전등 2")
+        with patch.object(self.char1, "msg") as output:
+            self.char1.execute_cmd("손전등 2 확인")
+            self.assertIn("상태 켜짐", str(output.call_args_list))
+        self.char1.execute_cmd("손전등 2 꺼")
         self.assertIsNone(self.char1.db.active_light_item_id)
 
     def test_legacy_facade_retains_storage_and_never_creates_entities(self):

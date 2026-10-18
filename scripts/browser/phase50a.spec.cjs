@@ -197,3 +197,34 @@ test('TEST-66A-01 실제 재분배 버튼의 안정 Provider·scope·단일 효�
   expect(a.state.growth.skills.map(skill => [skill.id, skill.rank])).toEqual(skills);
   expect(a.errors).toEqual([]);
 });
+
+test('TEST-66B-01 아이템 행의 안정 UUID Action과 장비 해제·재장착', async ({ actors }) => {
+  const a = await actors.create(0);
+  const weapon = a.state.inventory.find(item => item.weapon && item.location !== "inside");
+  expect(weapon?.identity).toBeTruthy();
+  const control = operation => a.page.locator('#inventory [data-action-invocation]').evaluateAll((buttons, { identity, operation }) => buttons.map(button => ({
+    payload: JSON.parse(button.dataset.actionInvocation),
+  })).find(row => row.payload.roles.provider[0].identity === identity &&
+    row.payload.action_id.endsWith('.' + operation))?.payload, {identity: weapon.identity, operation});
+  const info = await control('information');
+  expect(info.roles.subject[0].identity).toBe(weapon.identity);
+  async function click(operation) {
+    const payload = await control(operation);
+    expect(payload.roles.provider[0].identity).toBe(weapon.identity);
+    const before = a.prompts;
+    const buttons = a.page.locator('#inventory [data-action-invocation]');
+    const index = await buttons.evaluateAll((buttons, action) => buttons.findIndex(button =>
+      JSON.stringify(JSON.parse(button.dataset.actionInvocation)) === JSON.stringify(action)), payload);
+    expect(index).toBeGreaterThanOrEqual(0);
+    await buttons.nth(index).click();
+    await expect.poll(() => a.prompts).toBeGreaterThan(before);
+  }
+  if (!weapon.equipped) await click('wield');
+  await click('information');
+  expect(a.state.inventory.find(item => item.identity === weapon.identity).equipped).toBe(true);
+  await click('unwield');
+  expect(a.state.inventory.find(item => item.identity === weapon.identity).equipped).toBe(false);
+  await click('wield');
+  expect(a.state.inventory.find(item => item.identity === weapon.identity).equipped).toBe(true);
+  expect(a.errors).toEqual([]);
+});
