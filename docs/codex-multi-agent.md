@@ -1,73 +1,107 @@
 # Codex Windows 멀티 에이전트 운영
 
-[Issue #58](https://github.com/wonmin82/primal-zone/issues/58)의 프로젝트 설정이다. 게임 코드·DB·CI·사용자 글로벌 설정을 바꾸지 않는다. 모델과 Reasoning Effort 지원은 **USER VERIFIED**이며, 지원 여부와 실제 역할 로딩·라우팅·권한 검증을 구분한다.
+[Issue #68](https://github.com/wonmin82/primal-zone/issues/68)의 현행 운영 정책이다. [Issue #58](https://github.com/wonmin82/primal-zone/issues/58)의 실제 실행·실패 기록은 아래 역사 자료로 보존한다. 게임 코드·DB·CI·글로벌 설정은 바꾸지 않는다. 모델/Effort 지원은 **USER VERIFIED**이며 설정값과 실제 로딩·라우팅·권한 관측은 구분한다.
 
-현재 운영 기준은 사용자가 2026-10-13 승인한 **같은 부모 대화 안의 역할 지시·파일 소유권 기반 분리**다. Scout/Reviewer의 파일 쓰기 금지와 Implementer의 할당 파일 수정 책임을 유지하고 메인이 변경 범위를 확인한다. OS/Sandbox가 역할마다 쓰기를 강제로 거부한다는 보장은 이 운영 방식의 완료 조건으로 사용하지 않는다. 최초 강제 격리 검사 실패는 아래 역사 기록으로 보존하며 PASS로 바꾸지 않는다.
+같은 부모 대화에서 **역할 지시·파일 소유권·Orchestrator의 Diff 검사**로 책임을 분리한다. `sandbox_mode = "read-only"`는 OS 강제 쓰기 차단의 증명이 아니다. 최초 MA-07 FAIL과 Reviewer 강제 쓰기 차단 NOT RUN은 유지한다. 강제 격리가 필요한 작업에는 이 구성을 사용하지 않는다.
 
 ## 역할과 책임
 
-| 역할 | 모델 | Effort | 설정한 Sandbox | 담당 |
+| 역할 / agent_type | 모델 | Effort | 설정 Sandbox | 담당 |
 | --- | --- | --- | --- | --- |
-| Orchestrator | `gpt-6.1-sol` | `low` | 부모 세션 정책 유지 | 요구사항·위임·Gate·Git 작업·최종 통합 |
-| Scout | `gpt-6-luna` | `high` | `read-only` | 소스·문서·호출 관계·검증 공백 조사 |
-| Implementer | `gpt-6.1-sol` | `medium` | `workspace-write` | 할당된 파일의 최소 구현·직접 영향 검사 |
-| Reviewer | `gpt-6-astra` | `medium` | `read-only` | 실제 diff·소스·검증 근거의 독립 리뷰 |
+| Orchestrator (부모) | `gpt-6.1-sol` | `low` | 부모 정책 유지 | 전체 계획·자율 위임·파일 소유권·생명주기·Git·최종 통합 |
+| Scout / `scout` | `gpt-6-luna` | `high` | `read-only` | 소스·문서·의존성·영향 조사, 파일·Git 쓰기 금지 |
+| Implementer / `implementer` | `gpt-6.1-sol` | `medium` | `workspace-write` | 할당된 파일 구현·직접 영향 테스트 |
+| Reviewer / `reviewer` | `gpt-6.1-sol` | `high` | `read-only` | 일반 코드 정확성·회귀·예외·테스트 공백 독립 리뷰, 파일·Git 쓰기 금지 |
+| Auditor / `auditor` | `gpt-6.1-sol` | `high` | `read-only` | 고위험 불변조건·동시성·권한·영속성·실패/복구 감사, 파일·Git 쓰기 금지 |
+| Verifier / `verifier` | `gpt-6-luna` | `high` | `workspace-write` | 필요한 테스트 실행·재현성·CI 근거 검증, 제품 코드·Git 쓰기 금지 |
 
-설정 파일은 [config.toml](../.codex/config.toml), [scout.toml](../.codex/agents/scout.toml), [implementer.toml](../.codex/agents/implementer.toml), [reviewer.toml](../.codex/agents/reviewer.toml)이다. 커스텀 역할은 파일의 `name`으로 호출한다. 단순히 작업 이름이나 프롬프트에 역할 이름을 넣은 것은 커스텀 설정 로딩의 증거가 아니다.
+설정은 [config.toml](../.codex/config.toml), [scout.toml](../.codex/agents/scout.toml), [implementer.toml](../.codex/agents/implementer.toml), [reviewer.toml](../.codex/agents/reviewer.toml), [auditor.toml](../.codex/agents/auditor.toml), [verifier.toml](../.codex/agents/verifier.toml)에 있다. Verifier의 쓰기는 사전 허용된 격리 DB·소유 프로세스·테스트 산출물로 제한한다. 운영 DB·다른 에이전트 자원·제품 코드 수정 승인이 아니다.
 
-메인 설정은 다음과 같다. 서브에이전트 동시 제한 3은 메인 스레드를 제외한 수다. 메인의 Sandbox·승인 모드를 프로젝트 설정에서 새로 강제하지 않는다.
+메인은 Sol/Low, `[agents] enabled = true`, `max_concurrent_threads_per_session = 3`을 유지한다. 역할은 다섯 개지만 메인을 제외한 동시 실행 상한은 **3개**다. 모든 서브 에이전트의 중첩 위임을 금지한다. 메인의 Sandbox·승인 모드는 새로 강제하지 않는다.
 
-```toml
-model = "gpt-6.1-sol"
-model_reasoning_effort = "low"
+공식 근거: [서브에이전트 설정](https://developers.openai.com/codex/multi-agent), [설정 Reference](https://developers.openai.com/codex/config-reference), [Windows 앱](https://developers.openai.com/codex/app/windows). 프로젝트 Trust와 세션 override를 고려하며 현재 인터페이스에 없는 기능을 가정하지 않는다.
 
-[agents]
-enabled = true
-max_concurrent_threads_per_session = 3
-```
+## 작업 이름과 실제 역할 선택
 
-공식 근거: [서브에이전트 설정](https://developers.openai.com/codex/multi-agent), [설정 Reference](https://developers.openai.com/codex/config-reference), [Windows 앱](https://developers.openai.com/codex/app/windows). 프로젝트 설정은 신뢰된 프로젝트에서 적용된다. 앱에서 선택한 모델과 실행 중 권한 override가 파일의 기본값보다 우선할 수 있다.
+TOML의 `name`은 고정 역할명이다. `agent_type`은 실제 역할 선택, `task_name`은 표시용 작업 이름이며 서로 대체할 수 없다. 작업명만 붙이거나 메인이 역할을 흉내 낸 것은 커스텀 역할 로딩의 증거가 아니다.
 
-**권한 주의:** `sandbox_mode = "read-only"`와 역할의 쓰기 금지 지시는 서로 다른 보호다. 부모의 실행 중 권한 override가 자식에도 재적용되면 실제 Sandbox가 `workspace-write` 또는 Full Access가 될 수 있다. 이 상태에서 파일 수정이 없었다는 사실만으로 읽기 전용 강제 격리를 PASS로 판정하지 않는다. 현재 구성은 역할 지시 준수에 의존한다. 강제 격리가 필요한 작업에는 사용하지 않는다.
+새 `task_name`은 `<role>_<random_name>`으로 지정한다. 별칭은 짧고 구별하기 쉬운 랜덤 영문 소문자 단어이며 Issue 번호·작업 내용·숫자 접미사를 포함하지 않는다. 예: `scout_falcon`, `implementer_maple`, `reviewer_raven`, `auditor_orbit`, `verifier_cedar`.
+
+1. 지원되는 조회 기능으로 기존 이름·상태를 확인하고 같은 부모 세션에서 이미 사용한 이름과 비교한다. 닫힌 작업 이름도 새 작업에 재사용하지 않는다.
+2. 충돌하면 다른 별칭을 선택하고 `_2`, `_3` 같은 순차 번호를 붙이지 않는다. 후보가 부족하면 영문 단어 조합으로 확장한다.
+3. Orchestrator가 생성과 사용 이름 관리를 순차 조율한다. 같은 에이전트의 후속 재사용은 기존 작업 이름을 유지한다.
+4. 복구된 이력 누락·조회 불가·동시 생성 시 보장할 수 없는 중복 확인 범위를 기록한다. 지침만으로 원자적 중복 방지나 세션 간 전역 고유성을 보장하지 않는다.
+
+현재 도구에 `spawn_agent`의 `agent_type`/`task_name`, `list_agents`, `followup_task`, `send_message`가 노출되면 생성·조회·후속 전달에 사용한다. 이 인터페이스의 예시이며 모든 앱에 동일 API가 있다는 보장은 아니다. 기존 작업 이름 강제 변경·Windows/모바일 UI 표시 일치·스레드 복원은 별도 관측이 없으면 UNVERIFIED다. 숨은 API나 별도 자동화로 보장하지 않는다.
+
+## 자율 위임과 파일 소유권
+
+사용자가 작업을 요청하면 Orchestrator는 별도 에이전트 사용 지시 없이 요청 범위 안에서 **자율 위임**할 수 있다. 위임은 강제가 아니며 단순 질문·작은 문서/설정 수정은 직접 처리할 수 있다. 사용자의 에이전트 사용 금지·특정 역할 지정이 우선한다. 요청 없이 새 과제나 백그라운드 작업을 시작하지 않는다.
+
+| 작업 | 기본 선택 |
+| --- | --- |
+| 작은 설명·문서·독립 수정 | Orchestrator 직접 처리 가능 |
+| 영향 범위가 불명확한 조사 | Scout |
+| 복잡한 구현 | Scout → Implementer → Reviewer, 필요 시 Verifier |
+| 고위험 구현·중요 감사 | Scout → Implementer → Auditor, 필요 시 Verifier |
+| 일반 PR 리뷰 | Reviewer, 필요 시 Scout |
+| 테스트·CI 실패 재현 | Verifier, 필요 시 Scout |
+
+표는 기계적인 분류나 추가 승인 절차가 아니다. 복잡도·위험도·독립성·검증 부담에 맞춰 필요한 역할만 선택한다. 자율 위임으로 범위·설계/게임 정책·DB 접근·대규모 검증·외부 조치·파괴적인 Git 작업을 확대하지 않는다. Commit/Push/PR 생성은 요청 범위를 따르고 **PR Merge·브랜치 삭제·Issue 종료는 사용자 명시 승인**이 있어야 한다.
+
+- 전체 계획·파일/자원 소유권·생명주기·Git·최종 통합은 Orchestrator가 담당한다. 각 위임에 목적·요구사항·기준 HEAD/Diff·허용 파일·금지 작업·완료 조건·검증/보고 형식을 명시한다.
+- 한 파일에는 동시에 한 명만 쓴다. 담당 외 파일·새 파일이 필요하면 먼저 조율한다. 기존 사용자 변경과 다른 에이전트 변경을 보존한다.
+- 위임 전후 `git status --short`·Diff·미추적 파일을 비교한다. Scout/Reviewer/Auditor 쓰기, Verifier 제품 파일 쓰기, Implementer 담당 외 수정이 발견되면 멈추고 영향을 확인한다. Diff 확인은 예방적인 쓰기 차단 장치가 아니다.
+- 운영 DB·플레이 데이터·실행 중 서비스·비밀 설정·글로벌 설정을 건드리지 않는다. 테스트 경로·소유 프로세스·산출물·정리 책임을 사전에 배정하며 허용된 소유 자원만 변경·정리한다.
+
+### 리뷰·감사·검증 분업
+
+Reviewer는 일반 코드의 정확성·회귀·예외·테스트 공백을, Auditor는 타이머·중복 보상·Loot 권리·인증·권한·영속 DB·트랜잭션·동시성과 실패/복구 불변조건을 독립 확인한다. 같은 Sol/High라도 **서로 다른 에이전트와 독립 컨텍스트·검토 목적**을 유지한다. Auditor를 상위 성능 역할로 단정하지 않는다.
+
+기본적으로 위험도에 따라 Reviewer **또는** Auditor를 선택한다. 상이한 관점이 꼭 필요한 경우에만 교차 검토한다. 실제 Diff·소스·테스트 근거를 확인하며 구현자 보고만 신뢰하지 않는다. 지적은 코드 위치·발생 조건·영향·반례·수정 방향과 P0/P1/P2를 포함한다. 판정은 A=Ready for Review, B=Minor Follow-up, C=Hold이며 Issue #58 환경 판정 B=Partial과 구분한다.
+
+Verifier는 코드 리뷰를 대신하지 않고 필요한 테스트 실행·실패 재현·CI HEAD/이벤트·재현성을 확인한다. Implementer의 직접 영향 테스트나 유효한 기존 성공 근거를 불필요하게 반복하지 않는다. 넓은 검증의 최종 소유자는 Orchestrator다. Reviewer/Auditor와 Verifier를 같은 **고정 HEAD 및 미커밋 Diff**에서 병렬 실행할 수 있으나 이후 코드 변경 시 영향받는 리뷰·검증만 갱신한다.
+
+유효 결함·오탐·수정 불필요 판정·추가 수정·미검증 사항은 실제 업무 근거가 있을 때만 보고한다. 별도 모델 비교·형식적 이중 리뷰·평가 보고서·수치 집계를 만들지 않는다. 실제 사용한 역할·담당 범위·검증 근거를 구분하고 미사용 에이전트가 검증한 것처럼 표현하지 않는다.
+
+## 제한적 재사용(Bounded Reuse)과 생명주기
+
+같은 목적의 연속 작업은 컨텍스트가 유효하면 재사용하고 목적·단계·전제가 바뀌거나 독립 검토가 필요하면 신규 생성한다. 같은 Issue라는 이유로 장기 유지하거나 매 프롬프트마다 일괄 재생성하지 않는다. 고정 토큰 수·프롬프트 수·경과 시간이 아닌 관련성·전제 변경·재조사 범위·독립성으로 판단한다.
+
+| 역할 | 재사용 범위 | 종료·신규 생성 |
+| --- | --- | --- |
+| Scout | 같은 조사 직후 추가 질문·근거 확인 | 조사/보완 후 종료, 새 주제는 신규 생성 |
+| Implementer | 하나의 할당 구현·직접 영향 검사·관련 결함 수정 | 구현/보완 후 종료, 새 기능·범위 확대·전제 무효화 시 교체 |
+| Reviewer | 같은 리뷰 회차의 좁은 수정 확인 | 회차 후 종료, 새 PR·범위 확대·최종 독립 전체 재리뷰는 신규 생성 |
+| Auditor | 원칙적으로 재사용하지 않음 | 감사마다 신규 생성, 결과 수집 후 종료 |
+| Verifier | 같은 검증과 직접 관련된 실패 재현·재검증 | 결과 확정 후 종료, 다른 범위·환경은 신규 생성 |
+| Orchestrator | 하나의 Issue/독립 Phase 계획·통합 | 단계 상태 정리, 컨텍스트 과다 시 최소 인계 후 새 부모 대화 |
+
+결과 반환 **Done**과 실제 스레드 종료 **Close**는 다르다. 결과·근거를 수집하고 후속 보완이 없으면 지원되는 종료 기능으로 닫고 가능하면 상태를 확인한다. 완료된 작업의 불필요한 슬롯 점유도 확인한다. 현재 `interrupt_agent`는 실행 중 턴의 중단이며 스레드 Close와 동일하지 않다. 전용 Close 도구가 없으면 종료·슬롯 해제를 보장하지 않고 한계를 기록한다.
+
+다른 Issue/PR/역할 전환, 요구사항·설계·파일 범위의 큰 변경, 오래된 가설·실패 로그 누적, 독립 판단 필요 시 결과를 수집하고 교체한다. 최소 인계는 **확정 요구사항·최신 Issue/PR 상태·기준 브랜치/HEAD/Diff·담당 파일·해결/미해결 결함·실제 테스트 결과·검증 공백** 중 필요한 정보만 제공한다. 과거 대화·폐기된 가설을 통째로 전달하지 않는다. 부모 대화도 Issue/독립 Phase 단위로 정리하며 강제 종료로 진행 중 결과를 잃지 않는다. 재사용·신규 생성 어느 쪽도 토큰 절약이나 품질 향상을 자동 보장하지 않는다.
+
+## 중단 후 통합 재개
+
+Stop·실행 오류·연결 문제 뒤의 재개 요청은 **기존 작업의 연속**이다.
+
+1. 지원되는 조회로 기존 역할의 실행 중/Done/중단/접근 불가 여부와 Git 작업 트리·HEAD/Diff·미완료 단계·실제 검증 결과를 확인한다.
+2. 부모 중단 후에도 자식이 실행 중일 수 있다. 쓰기·소유권이 불명확하면 같은 파일을 재배정하거나 덮어쓰지 않는다. 완료된 구현·검증은 반복하지 않는다.
+3. 연결 가능하고 컨텍스트가 유효하면 후속 전달로 재사용한다. 복원 불가·컨텍스트 부적합이면 충돌이 없음을 확인한 뒤 **미완료 작업에 필요한 역할만** 신규 생성한다. 모든 역할을 일괄 호출하지 않는다.
+4. 재개 요청을 자율 위임 해제나 Orchestrator 단독 실행 지시로 해석하지 않는다. 기존 분담과 승인·보안 경계를 유지한다. 단순 보고·결과 정리만 남았다면 직접 처리할 수 있다.
+5. 상태·소유권을 신뢰할 수 없거나 재위임에 실패하면 충돌 가능한 작업을 멈추고 오류·완료/미완료 범위·복구 제약을 보고한다. 복잡한 구현·독립 리뷰를 조용히 단독 수행으로 바꾸지 않는다.
+6. 재개 후에도 제한적 재사용·최소 인계·결과 수집 후 종료를 적용한다. 특정 API·기존 스레드 복원을 가정하지 않으며 미관측 기능은 UNVERIFIED 또는 NOT RUN으로 기록한다.
 
 ## Windows Native 사용 절차
 
-1. Codex Windows 앱에서 원시구역 프로젝트를 연다. 실제 저장소와 작업 브랜치·Worktree·미커밋 변경을 확인한다.
-2. 프로젝트 Trust와 Windows Native Agent Environment를 확인한다. 글로벌 `%USERPROFILE%\.codex` 설정을 자동 수정하지 않는다.
-3. 설정을 만든 뒤 새 대화를 시작한다. 기존 대화에 설정이 다시 로딩됐다고 가정하지 않는다.
-4. 메인 모델 `gpt-6.1-sol`, Effort `low`를 확인한다. 앱 UI의 선택값이 프로젝트 기본값을 재정의할 수 있다.
-5. 앱의 제한된 권한 모드를 사용한다. Full Access는 기본 운영으로 권장하지 않는다. 제한된 모드도 작업 공간 쓰기를 허용할 수 있으므로 Scout/Reviewer의 강제 읽기 전용 보장으로 해석하지 않는다. 이 프로젝트 설정은 앱이나 글로벌 권한을 자동 변경하지 않는다.
-6. 사용할 역할과 파일 소유권을 명시적으로 배정한다. 현재 운영은 사용자 요청이 있을 때 위임하며, 역할별 하위 위임은 금지한다.
-7. 실제 `scout`, `implementer`, `reviewer` 호출 수락과 각 결과를 확인한다. 이름을 인식하지 못하면 실행을 멈추고 설정 경로·Trust·로딩을 점검한다.
-8. 런타임 모델·Effort·Sandbox가 제공되면 실제 값과 설정값을 대조한다. 제공되지 않는 값은 `UNVERIFIED`로 남긴다.
-9. 메인은 시작 시점과 역할 작업 이후의 `git status --short`, diff와 새 파일을 비교한다. Scout/Reviewer의 저장소 수정 또는 Implementer의 담당 외 수정이 발견되면 다음 작업을 멈추고 원인과 영향 범위를 확인한다. Git diff 확인은 예방적인 쓰기 차단 장치가 아니다.
-10. 메인이 결과를 통합한다. 필요한 검사와 최신 CI를 확인한 뒤 사용자에게 결과와 제한을 보고한다.
+1. 실제 경로·브랜치·Worktree·미커밋 변경과 Trust·Windows Native 환경을 확인한다. 글로벌 설정을 출력하거나 수정하지 않는다.
+2. 설정 변경은 새 대화에서 확인한다. 기존 세션의 재로딩을 가정하지 않는다. 필요한 정상 앱 재시작은 사용자에게 맡기고 강제 종료하지 않는다.
+3. 메인 Sol/Low와 세션 override를 구분한다. 지원 모델 재조사 없이 제공된 런타임 값만 대조하고 없으면 UNVERIFIED다.
+4. 사용자 작업 요청 안에서 필요에 따라 자율 위임한다. 파일/자원 소유권과 랜덤 작업명을 배정하고 실제 역할 `scout`/`implementer`/`reviewer`/`auditor`/`verifier`를 지원되는 선택 수단으로 호출한다. 전원을 호출할 필요는 없다.
+5. 역할 인식 실패 시 오류·경로·Trust·로딩을 확인하고 일반 에이전트나 다른 모델로 대체하지 않는다. 읽기 전용 선언과 실제 권한을 구분한다.
+6. 위임 전후 Git 상태·Diff·새 파일을 확인하고 결과를 수집한다. 필요한 검사·최신 HEAD CI를 확인하며 기존 승인 범위 안에서 Git/PR/Issue 작업을 수행한다.
+7. 같은 목적의 보완만 재사용하고 완료 후 지원되는 Close와 상태 확인을 적용한다. 기능 부재·모델 관측 불가·UI 표시 미확인은 사실대로 남긴다.
 
-앱 재시작이 꼭 필요하면 진행 중인 작업을 저장하고 사용자가 정상적으로 재시작한다. 자동 강제 종료하지 않는다. 이 구성은 앱 UI에 세 개의 선택 버튼이 반드시 생긴다는 의미가 아니다. 실제 커스텀 역할 호출을 기준으로 확인한다.
-
-## 작업 분해와 파일 소유권
-
-메인은 Scout 조사 결과로 영향 범위를 정리하고 Implementer에게 파일과 완료 조건을 배정한다. Reviewer는 구현 완료 diff와 실제 검증 결과를 직접 읽는다. 독립 탐색은 병렬로 수행할 수 있지만 최종 리뷰는 구현이 끝난 기준을 고정한 뒤 한다.
-
-- 한 파일에는 동시에 한 명만 쓴다. 새 파일이나 담당 외 수정이 필요하면 메인이 소유권을 다시 배정한다.
-- 메인은 기존 사용자 변경을 보존하고 에이전트별 변경을 확인한다. 다른 에이전트의 변경을 되돌리지 않는다.
-- Implementer는 직접 영향 검사부터 실행하고 넓은 검증 책임은 메인과 조율한다. 같은 전체 검사와 Smoke를 역할마다 반복하지 않는다.
-- Git 스테이징·Commit·Push·PR 작업은 메인이 통합한다. 역할의 보고만으로 검증 완료를 단정하지 않는다.
-- Reviewer는 P0/P1/P2와 근거·발생 조건·수정 방향을 보고한다. 코드 리뷰 판정 A=Ready for Review, B=Minor Follow-up, C=Hold를 사용한다. Issue #58 환경 판정의 B=Partial과 구분한다.
-- PR Merge·Issue Close·브랜치 삭제는 별도 사용자 승인 범위 안에서만 메인이 수행한다. 이 설정 자체는 승인이나 자동 실행 요청이 아니다.
-- 운영 DB·게임 서비스·비밀 설정은 작업 대상에 넣지 않는다. 게임 정책 변경은 사용자 승인과 [AGENTS.md](../AGENTS.md)를 따른다.
-
-### 일반 기능 구현
-
-> Scout에게 요구사항과 영향을 받는 파일을 분석하도록 위임해 주세요. 결과를 바탕으로 Implementer에게 최소 구현과 직접 영향 테스트를 맡기고, 완료된 Diff는 Reviewer가 독립적으로 리뷰하도록 해 주세요. 마지막으로 전체 결과와 미해결 문제를 정리해 주세요.
-
-### PR 독립 리뷰
-
-> Scout에게 변경 경로와 의존성을 조사하게 하고, Reviewer에게 실제 Diff·테스트 근거·권한·영속성·동시성 위험을 독립 검토하도록 위임해 주세요. 결과를 P0/P1/P2로 분류하고 병합 가능 여부를 판정해 주세요. 코드는 수정하지 마세요.
-
-### 조사 전용
-
-> Scout를 사용해 해당 기능의 실제 구현 위치와 호출 관계를 조사해 주세요. 관련 파일과 함수, 기존 테스트, 잠재적 검증 공백을 보고해 주세요. 다른 에이전트는 호출하지 말고 코드를 수정하지 마세요.
 
 ## Windows와 WSL
 
@@ -77,20 +111,21 @@ Windows Native는 Windows의 프로젝트 `.codex/`와 사용자 Codex Home을 �
 
 ## 문제 해결
 
-| 증상 | 확인 및 대응 |
+| 증상 | 대응 |
 | --- | --- |
-| 커스텀 에이전트가 인식되지 않음 | 현재 cwd·Trust·`.codex/agents/*.toml`·고유 `name`·필수 필드·앱이 제공하는 호출 방식 확인. 수동 모델 지정으로 로딩 성공을 대체하지 않음 |
-| 새 설정이 반영되지 않음 | 새 대화로 확인. 필요한 정상 앱 재시작은 사용자에게 맡김 |
-| 앱 모델과 프로젝트 기본값이 다름 | UI 선택 또는 세션 override 확인. 요청한 모델을 다른 모델로 자동 대체하지 않음 |
-| 부모 권한이 자식 정책을 덮어씀 | 실제 자식 Sandbox와 역할 지시 준수를 각각 기록. 강제 격리는 FAIL/UNVERIFIED로 남기며 현재 운영에서는 지시·소유권·diff 확인을 적용. 글로벌 정책을 임의 수정하지 않음 |
-| 역할 호출 실패 | 오류와 호출 역할을 기록. 모델 지원은 USER VERIFIED이며 접근 권한 재조사를 기본 복구로 수행하지 않음 |
-| 같은 파일 편집 충돌 | 쓰기를 중단하고 메인이 소유권·기준 diff 재배정. 사용자 변경을 덮어쓰지 않음 |
-| 글로벌/프로젝트 설정 충돌 | 유효 설정과 출처를 확인. 글로벌 파일을 출력·수정하지 않고 필요한 키만 비교 |
-| 모델 실행 기록을 볼 수 없음 | 설정값과 지원 여부는 기록하되 런타임 값은 UNVERIFIED. 실제 모델을 추정하지 않음 |
+| 역할 호출·새 설정 반영 실패 | cwd·Trust·고정 name·필수 필드·실제 호출 인터페이스 확인. 기존 세션의 재로딩을 가정하거나 다른 역할/모델로 대체하지 않음 |
+| 부모 권한이 역할 정책을 덮어씀 | 설정값·실제 권한·지시 준수 각각 기록. MA-07 FAIL 보존, 글로벌 정책 임의 수정 금지 |
+| 파일 소유권 충돌 | 쓰기를 멈추고 메인이 기준 Diff와 담당 파일 재배정, 기존 사용자 변경 보존 |
+| 이름 이력·중단 스레드 확인 불가 | 중복 방지·복원 보장 불가를 보고, 충돌 가능한 작업은 중단 |
+| Close·재개 기능 또는 모델 메타데이터 없음 | Done/중단을 Close로 오인하지 않고 NOT RUN/UNVERIFIED 기록 |
 
-## 검증 방법
+## 최소 자동 검증
 
-TOML 문법과 지정값을 검사한다. Python 표준 `tomllib`만 사용하며 새 의존성을 추가하지 않는다.
+Issue #68은 T01~T03 PASS를 필수 완료 조건으로 사용한다. 새 외부 의존성·별도 영구 검증 스크립트는 추가하지 않는다.
+
+### T01 — 설정 정합성
+
+저장소 루트에서 Python 표준 `tomllib`으로 설정 6개를 검사한다.
 
 ```powershell
 @'
@@ -102,29 +137,36 @@ assert main == {"model": "gpt-6.1-sol", "model_reasoning_effort": "low",
 expected = {
     "scout": ("gpt-6-luna", "high", "read-only"),
     "implementer": ("gpt-6.1-sol", "medium", "workspace-write"),
-    "reviewer": ("gpt-6-astra", "medium", "read-only"),
+    "reviewer": ("gpt-6.1-sol", "high", "read-only"),
+    "auditor": ("gpt-6.1-sol", "high", "read-only"),
+    "verifier": ("gpt-6-luna", "high", "workspace-write"),
 }
-names = set()
 assert {p.stem for p in (root / "agents").glob("*.toml")} == set(expected)
 for name, values in expected.items():
     cfg = tomllib.loads((root / "agents" / f"{name}.toml").read_text(encoding="utf-8"))
-    assert cfg["name"] == name and name not in names
+    assert cfg["name"] == name
     assert (cfg["model"], cfg["model_reasoning_effort"], cfg["sandbox_mode"]) == values
     assert cfg["description"].strip() and cfg["developer_instructions"].strip()
-    names.add(name)
-print("4 TOML: PASS")
+print("T01: PASS (6 TOML)")
 '@ | .\.venv\Scripts\python.exe -
-
-git diff --check
 ```
 
-이 검사는 정적 검증이며 실행 중 권한 분리를 증명하지 않는다.
+T01은 설정 선언만 확인하며 실제 모델 적용·역할 선택·권한 분리를 증명하지 않는다.
 
-### 안전한 권한 검증
+### T02 — 문서 정합성
 
-게임 저장 영역 대신 검증자가 새로 만들고 소유한 폐기 가능한 공간을 사용한다. Scout/Reviewer의 실제 권한으로 무해한 파일 생성을 시도하고 Sandbox 또는 OS의 거부와 승인 요청 여부를 기록한다. 역할 지시에 따라 시도하지 않은 것만으로 강제 격리를 PASS로 판정하지 않는다.
+`AGENTS.md`와 이 가이드의 역할·작업명·자율 위임·제한적 재사용·종료·중단 후 재개·승인/안전·상대 참조를 간단한 자동 문자열/구조 검사로 확인한다. 정책이 문서에 존재한다는 것과 실제 동작 보장은 구분한다.
 
-쓰기가 성공하면 MA-07 FAIL이다. 검증자가 만든 파일과 디렉터리만 경로를 확인한 뒤 정리한다. 게임 Worktree·DB·다른 프로세스·사용자의 기존 파일에 시도하지 않는다. 실행 중 권한을 관측할 수 없고 안전한 시도도 불가능하면 NOT RUN/UNVERIFIED로 남긴다.
+### T03 — Git 변경 검증
+
+`git diff --check`와 Stage 후 `git diff --cached --check`·`git diff --cached`를 확인한다. `git status --short`와 미추적 파일을 포함해 허용 범위와 기존 사용자 변경의 비혼입을 확인한다.
+
+### T04 — 선택적 경량 Smoke
+
+수동 조작·추가 승인 없이 안전하게 자동 호출할 수 있을 때만 읽기 전용 서브 에이전트 1개를 짧게 실행해 역할 지정·응답을 확인한다. 불가능하면 NOT RUN과 이유를 기록한다. 모델/Effort·UI 표시·재사용·Close·재개처럼 호출로 관측되지 않는 기능은 UNVERIFIED다.
+
+게임 테스트·Full Smoke·브라우저 E2E·모델 비교·다수 에이전트 생성·반복 종료 시험·인위적인 중단/오류/충돌 재현은 하지 않는다. Windows/모바일 UI 수동 확인을 필수로 요구하지 않는다. 자동 CI는 변경·비활성화하지 않고 최신 PR HEAD 결과를 확인한다. 결과는 PASS / FAIL / NOT RUN / UNVERIFIED로 구분해 PR Validation에 간결히 남긴다. 아래 역사 자료의 Issue #58 권한 시험은 이번에 반복하지 않는다.
+
 
 ## Phase 58-A~E 실행 기록
 
