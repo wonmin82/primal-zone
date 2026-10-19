@@ -157,20 +157,29 @@ test('TEST-E2E-06 일행 실제 전투·XP·Native 전리품·중복 방지', as
   expect(a.errors.concat(b.errors)).toEqual([]);
 });
 
-test('TEST-E2E-07 실제 해체 뒤 Native/Legacy 개인 권리·지급', async ({ actors }) => {
+test('TEST-E2E-07 실제 해체 뒤 Native A/B 개인 권리·지급', async ({ actors }) => {
   const a = await actors.create(0), b = await actors.create(1), c = await actors.create(2);
   const before = snapshot();
   await command(a, '일행해체');
   await command(a, '확인 일행해체');
-  expect(Object.keys(snapshot().parties)).toHaveLength(0);
+  const disbanded = snapshot();
+  expect(Object.keys(disbanded.parties)).toHaveLength(0);
   await command(c, '모든 시체에서 모두 가져');
-  expect(snapshot().items).toEqual(before.items);
+  const refused = snapshot();
+  expect(refused.items).toEqual(before.items);
+  expect(refused.currency).toEqual(disbanded.currency);
+  expect(refused.shares).toEqual(disbanded.shares);
   await command(a, '모든 시체에서 모두 가져');
   await command(b, '모든 시체에서 모두 가져');
   const after = snapshot();
   expect(itemCount(after, a.name, 'bandage')).toBe(itemCount(before, a.name, 'bandage') + 2);
-  expect(after.players[b.name].profile.inventory.water || 0).toBe((before.players[b.name].profile.inventory.water || 0) + 1);
+  expect(itemCount(after, b.name, 'water')).toBe(itemCount(before, b.name, 'water') + 1);
+  expect(after.players[a.name].profile.credits).toBe(before.players[a.name].profile.credits + 6);
+  expect(after.players[b.name].profile.credits).toBe(before.players[b.name].profile.credits + 14);
   expect(after.claims).toHaveLength(0);
+  expect(after.currency).toHaveLength(0);
+  expect(after.shares).toHaveLength(0);
+  expect(a.errors.concat(c.errors)).toEqual([]);
   expect(b.errors).toEqual([]);
 });
 
@@ -320,7 +329,7 @@ test('TEST-E2E-12 정상 Portal/Server 재시작·같은 DB·재인증', async (
   preservedExits(before, snapshot());
 });
 
-test('TEST-E2E-13 실제 Native/Legacy 지급 뒤 상위 Rollback·성공 알림 없음', async ({ actors }) => {
+test('TEST-E2E-13 실제 Native A/B 지급 뒤 상위 Rollback·성공 알림 없음', async ({ actors }) => {
   const a = await actors.create(0), b = await actors.create(1), before = snapshot();
   await command(a, '모든 시체에서 모두 가져', '상위 변경 롤백');
   await command(b, '모든 시체에서 모두 가져', '상위 변경 롤백');

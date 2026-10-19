@@ -156,3 +156,11 @@ Historical audit 모드의 구형 blob은 기존 권리 검사 후 품목·수�
 동결 후 전체 검사에 남은 2개는 `test_currency_display_and_indexed_take_target_are_independent`의 구형 blob 임시 번호·실행 명령 기대와 `test_legacy_read_take_and_decay_and_web_use_common_assets`의 구형 실행 명령 기대였다. 구형 데이터의 읽기·Decay·historical 지급 검사는 유지하고, 실행 번호 검사는 실제 Native CurrencyLoot ID·Source·B-1·공개 지급으로 이전하여 위 2개 직접 재검증을 통과했다. 이 테스트 Fixture 보완만으로 제품 코드가 바뀌지 않으므로 로컬 전체 검사를 반복하지 않으며, 필수 CI의 전체 검사는 생략하지 않는다. 최종 CI는 PR Validation에서 확인한다.
 
 운영 DB migration/seed/복원은 미실행이다. Full Smoke·전체 38개 종합/수동 검증·Windows OS IME·실제 모바일·PostgreSQL·다중 서버는 이번 PASS 범위에 포함하지 않는다. M06과 Phase 2 전체 Migration Gate는 미완료이며, PR C 병합 전 M05 Final Closeout을 선언하지 않는다.
+
+### PR #73의 통합 Fixture 보완
+
+최초 제출 HEAD `2bacd60c874ae6272e4ae2f9a96e62f3080c82f6`의 [CI 실행](https://github.com/wonmin82/primal-zone/actions/runs/39206621935)에서 기본 Chromium 12개와 E2E-01~06은 성공했으나 E2E-07이 실패했다. E2E-07/13의 기존 Fixture가 Legacy 플레이어와 blob을 공개 회수하는 경로를 요구했기 때문이다. 두 시나리오는 Native A/B의 실제 ItemEntity·CurrencyLoot 지급과 상위 Rollback으로 이전하고, E2E-12의 Legacy 데이터 읽기·동일 DB 재시작 보존 검사는 유지한다. 제품 코드·권한 예외·Legacy 실행 fallback은 추가하지 않는다.
+
+E2E-07은 외부인 요청의 화폐·지분 불변, A/B의 정확한 6칩/14칩 지급과 잔여 권리 제거를 추가한다. 일행 해체는 권리를 정상 변환하므로 외부인 요청의 불변 기준은 해체 직후 상태다. 보완 중 해체 이전 상태와 비교해 발생한 검사 실패도 별도 보존하며, 독립 Reviewer가 이 경계를 재확인했다. 실행 중 파일이 바뀐 최초 로컬 시도는 고정 기준 재현이나 성공 근거로 집계하지 않는다.
+
+고정된 보완 Diff에서 `.venv/Scripts/python.exe scripts/integration_e2e.py --scenario E2E-07 --scenario E2E-12 --scenario E2E-13`을 순차 실행해 3개 모두 PASS했다. 각각 123.639초·166.128초·91.519초이며 전체 381.649초다. 각 환경의 운영 DB 불변·서버/브라우저 프로세스 정리·자격 증명 제거를 확인했다. 통합 Runner 단위 검사 9개, Ruff·Node syntax·공백 검사도 PASS했다. 제품 코드가 동일하므로 로컬 전체 게임·Quick Smoke·기본 Chromium을 반복하지 않는다. 최초 HEAD의 `test`·`smoke`·`contracts` 성공과 `browser-e2e` 실패는 그대로 보존하며, 보완 커밋의 필수 네 Job 결과는 PR Validation에서 정확한 HEAD로 확인한다.
