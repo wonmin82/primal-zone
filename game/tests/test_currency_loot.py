@@ -71,7 +71,7 @@ class CurrencyLootTests(NativeLootTest):
     def test_protected_outsider_reject_then_expiry_free_payout(self):
         row = self.currency(20, shares={self.char1: 20}, deadline=110)
         before = self.all_state()
-        self.assertFalse(loot_controls(self.char2, 109)[self.source.pk]["loot"][0]["can_take"])
+        self.assertEqual(loot_controls(self.char2, 109)[self.source.pk]["loot"], [])
         with self.assertRaises(rules.RuleError):
             loot_service.pickup(self.source, self.entry(row), self.char2, 5, now=109)
         self.assertEqual(self.all_state(), before)
@@ -149,12 +149,13 @@ class CurrencyLootTests(NativeLootTest):
             loot_service.pickup(self.source, selected, self.char1, 15, now=100)
         self.assertEqual(self.all_state(), before)
 
-    def test_native_partial_and_indexed_chip_command_payload_no_ids(self):
+    def test_native_partial_and_indexed_chip_command_payload_has_typed_ids(self):
         first = self.currency()
         second = self.currency(4, shares={self.char1: 4})
         controls = loot_controls(self.char1, 100)[self.source.pk]["loot"]
-        self.assertEqual([entry["take_target"] for entry in controls], ["칩 1", "칩 2"])
-        self.assertNotIn("currency_id", str(controls))
+        self.assertEqual([entry["take_target"] for entry in controls], ["보급칩 1", "보급칩 2"])
+        self.assertEqual([entry["action"]["roles"]["subject"][0]["identity"] for entry in controls],
+                         [str(first.pk), str(second.pk)])
         take_loot(self.char1, request=parse_loot("시체에서 5칩", ["칩"]), now=100)
         take_loot(self.char1, request=parse_loot("시체에서 칩 2", ["칩"]), now=100)
         first.refresh_from_db()

@@ -77,7 +77,11 @@ class ZoneRoom(DefaultRoom):
         for dropped in (obj for obj in room_loot(self, corpse=False) if obj in pool):
             from world.loot_service import source_entries
 
+            from typeclasses.loot import can_take_entry
+
             for entry in source_entries(dropped):
+                if not can_take_entry(entry, looker, observed_at):
+                    continue
                 from world.loot_assets import asset_text, normalize_entry
 
                 entry = normalize_entry(entry)

@@ -27,6 +27,7 @@ class DefaultTargetPolicy(StrEnum):
 class TargetScope(StrEnum):
     CURRENT = "current"
     STORAGE = "storage"
+    SOURCE = "source"
     INSIDE = "inside"
     CARRIED_AND_INSIDE = "carried_and_inside"
 
@@ -132,6 +133,9 @@ class ActionDefinition:
     public: bool = True
     help: str = ""
     examples: tuple[str, ...] = ()
+    text_resolver: Callable | None = None
+    max_references: int = 32
+    max_payload_bytes: int = 8192
 
     def __post_init__(self):
         for field in ("roles", "variants", "arguments", "examples"):
@@ -145,6 +149,8 @@ class ServiceDefinition:
     role_kinds: tuple[RoleDefinition, ...] = ()
     config_schema: tuple[ArgumentDefinition, ...] = ()
     presenter: Callable | None = None
+    locker: Callable | None = None
+    prepare: Callable | None = None
 
     def __post_init__(self):
         object.__setattr__(self, "role_kinds", tuple(self.role_kinds))

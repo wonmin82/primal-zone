@@ -133,7 +133,11 @@ def create_dropped_loot(room, entries, source_spawn=None):
 
 
 def take_loot(caller, item=None, corpse=True, now=None, *, request=None):
-    """선택과 트리거 권한을 검증한 뒤 item 배정 또는 currency 잔여 몫을 지급한다."""
+    """과거 migration audit fixture 전용 API. 운영 회수는 loot.take Action만 사용한다."""
+    from django.conf import settings
+
+    if not getattr(settings, "ITEM_MIGRATION_TEST_OVERRIDE", False) or not getattr(settings, "ITEM_MIGRATION_AUDIT", False):
+        raise rules.RuleError("과거 전리품 선택 API는 migration audit 테스트에서만 사용할 수 있습니다.")
     from world import loot_service
     from world.lifecycle import reconcile_room
     from world.observation import can_inspect_loot, can_perceive, context_for
@@ -267,6 +271,12 @@ def take_loot(caller, item=None, corpse=True, now=None, *, request=None):
 
 
 class Corpse(NumberedObjectMixin, DistantPresenceMixin, DefaultObject):
+    selection_default_policy = "first_legacy_order"
+
+    @property
+    def action_provider_definition(self):
+        return self.db.action_provider_id or "loot.corpse"
+
     distant_visible = True
     distant_role = "remains"
     distant_unit = "구"
@@ -305,7 +315,7 @@ class Corpse(NumberedObjectMixin, DistantPresenceMixin, DefaultObject):
             lines.append("작은 전리품을 식별하기 어렵다. 광원을 사용하세요." if not can_inspect_loot(context_for(looker, observed_at=now)) else "남은 전리품이 없다.")
         if control:
             lines.extend(["", ft.text("지정: ", ft.token("remains", control["label"]))])
-            if entries:
+            if entries and control.get("take_action"):
                 lines.append(ft.text("회수: ", ft.usage(control["take_command"], {"가져"})))
         return ft.sheet(ft.token("remains", self.key), *lines)
 
@@ -394,7 +404,17 @@ class Corpse(NumberedObjectMixin, DistantPresenceMixin, DefaultObject):
 
 
 class DroppedLoot(NumberedObjectMixin, DistantPresenceMixin, DefaultObject):
+    selection_default_policy = "first_legacy_order"
+
+    @property
+    def action_provider_definition(self):
+        return self.db.action_provider_id or "loot.ground"
+
     detectability = "subtle"
+
+    def get_display_name(self, looker=None, **kwargs):
+        # Source key는 권리와 무관한 영속 이름이며 보호된 내용의 표시 이름이 아니다.
+        return "바닥 전리품"
 
     def reconcile(self, now=None):
         from world.loot_service import reconcile_claims
@@ -423,7 +443,7 @@ class DroppedLoot(NumberedObjectMixin, DistantPresenceMixin, DefaultObject):
             )
         if not entries:
             lines.append("남은 전리품이 없다.")
-        if control and entries:
+        if control and entries and any(entry.get("action") for entry in entries):
             lines.extend(
                 [
                     "",
@@ -433,7 +453,7 @@ class DroppedLoot(NumberedObjectMixin, DistantPresenceMixin, DefaultObject):
                     ),
                 ]
             )
-        return ft.sheet(ft.token("item", self.key), *lines)
+        return ft.sheet(ft.token("item", "바닥 전리품"), *lines)
 
     def at_object_creation(self):
         self.locks.add("get:false();puppet:false();delete:false()")

@@ -228,3 +228,61 @@ test('TEST-66B-01 아이템 행의 안정 UUID Action과 장비 해제·재장�
   expect(a.state.inventory.find(item => item.identity === weapon.identity).equipped).toBe(true);
   expect(a.errors).toEqual([]);
 });
+
+
+test('TEST-66C-01 바닥 전리품 안정 UUID·중복 및 오래된 요청 거절·텍스트 동등 지급', async ({ actors }) => {
+  const a = await actors.create(0);
+  const count = () => a.state.inventory.filter(item => item.id === 'scrap').reduce((sum, item) => sum + item.count, 0);
+  const initial = count();
+  expect(initial).toBeGreaterThan(1);
+  await a.command('회수부품 버려');
+  expect(count()).toBe(initial - 1);
+  const entry = a.state.ground_loot.flatMap(source => source.loot).find(item => item.id === 'scrap');
+  expect(entry?.action.action_id).toBe('loot.take');
+  const original = entry.action;
+  expect(original.roles.source[0].identity).toBeTruthy();
+  expect(original.roles.subject[0].identity).toMatch(/^[0-9a-f-]{36}$/i);
+  expect(original.arguments.snapshot).toBeTruthy();
+  const buttons = a.page.locator('#context-actions [data-action-invocation]');
+  const index = await buttons.evaluateAll((buttons, original) => buttons.findIndex(button =>
+    JSON.stringify(JSON.parse(button.dataset.actionInvocation)) === JSON.stringify(original)), original);
+  expect(index).toBeGreaterThanOrEqual(0);
+  // 실제 UI가 보낸 프레임을 같은 소유 브라우저 메모리에서만 보존한다.
+  await a.page.evaluate(() => {
+    const send = WebSocket.prototype.send;
+    window.lootReplay = {send};
+    WebSocket.prototype.send = function(frame) {
+      const value = JSON.parse(frame);
+      if (value[0] === 'pz_action' && value[1][0].action_id === 'loot.take') {
+        window.lootReplay.socket = this;
+        window.lootReplay.frame = frame;
+        WebSocket.prototype.send = send;
+      }
+      return send.call(this, frame);
+    };
+  });
+  await buttons.nth(index).click();
+  await expect.poll(count).toBe(initial);
+  async function replay(sameRequest) {
+    await a.page.evaluate(sameRequest => {
+      const replay = window.lootReplay;
+      const value = JSON.parse(replay.frame);
+      if (!sameRequest) value[1][0].request_id += '-stale';
+      replay.send.call(replay.socket, JSON.stringify(value));
+    }, sameRequest);
+    // 같은 WebSocket의 후속 공개 명령으로 처리를 직렬화한다. 중복 요청에는 ACK/Prompt가 없다.
+    await a.command('봐');
+  }
+  await replay(true);
+  expect(count()).toBe(initial);
+  await a.command('회수부품 버려');
+  const replacement = a.state.ground_loot.flatMap(source => source.loot).find(item => item.id === 'scrap');
+  expect(replacement?.action.roles.source).not.toEqual(original.roles.source);
+  await replay(false);
+  expect(count()).toBe(initial - 1);
+  expect(a.state.ground_loot.flatMap(source => source.loot).find(item => item.id === 'scrap').action.roles.source)
+    .toEqual(replacement.action.roles.source);
+  await a.command(replacement.take_command);
+  expect(count()).toBe(initial);
+  expect(a.errors).toEqual([]);
+});

@@ -234,6 +234,14 @@ def compile_manifest(manifest, protected_names=()):
         _require(not role_names & argument_names, "역할/인자 capture 중복")
         _require(action.provider_from is None or action.provider_from in role_names, "미존재 Provider 역할")
         _require(type(action.public) is bool and bool(action.variants), "Action 공개/문법 선언 오류")
+        _require(type(action.max_references) is int and 1 <= action.max_references <= 4096
+                 and type(action.max_payload_bytes) is int and 8192 <= action.max_payload_bytes <= 262144,
+                 "행동 요청 크기 선언 오류")
+        if action.text_resolver is not None:
+            try:
+                validate_handler(action.text_resolver)
+            except ValueError as error:
+                raise RegistryError(str(error)) from error
         variant_ids = set()
         for variant in action.variants:
             _require(type(variant.pattern) is str, "문법 정규식은 문자열이어야 합니다.")
@@ -280,6 +288,10 @@ def compile_manifest(manifest, protected_names=()):
             validate_handler(service.handler)
             if service.presenter is not None:
                 validate_handler(service.presenter)
+            if service.locker is not None:
+                validate_handler(service.locker)
+            if service.prepare is not None:
+                validate_handler(service.prepare)
         except ValueError as error:
             raise RegistryError(str(error)) from error
         _roles(service.role_kinds)

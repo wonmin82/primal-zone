@@ -15,16 +15,34 @@ def at_server_start():
         install_party_clock(settings)
     if os.environ.get("PRIMAL_INTEGRATION_SCENARIO") != "E2E-13":
         return
-    from commands.inventory import Take
-    from world.multiplayer import world_change
-    from world.rules import RuleError
-    original = Take.run
-    def rollback(command):
+    install_loot_rollback(settings)
+
+
+def install_loot_rollback(settings):
+    """격리 서버의 신규 Loot Service 뒤에만 상위 실패를 주입한다."""
+    from dataclasses import replace
+
+    from server.conf.smoke_support import require_smoke
+    from world.actions import loot_content
+    from world.actions.manifest import compiled
+
+    require_smoke(settings)
+    package = loot_content.PACKAGE
+    original = next(service.handler for service in package.services if service.id == "loot.pickup")
+
+    def rollback(context):
+        from world.multiplayer import world_change
+        from world.rules import RuleError
+
         with world_change():
-            original(command)
-            # 실제 선택·권리·Native/Legacy 지급 후 상위 경계에서 실패한다.
+            original(context)
+            # 실제 안정 선택·권리·native 지급 후 상위 경계에서 실패한다.
             raise RuleError("격리 검증: 상위 변경 롤백")
-    Take.run = rollback
+
+    loot_content.PACKAGE = replace(package, services=tuple(
+        replace(service, handler=rollback) if service.id == "loot.pickup" else service
+        for service in package.services))
+    compiled.cache_clear()
 
 
 def install_party_clock(settings):

@@ -118,7 +118,7 @@ class LootEntityTests(NativeLootTest):
         with self.assertRaises(rules.RuleError):
             loot_service.pickup(self.source, selected, self.char2, 10, now=109)
         self.assertEqual(self.all_state(), before)
-        self.assertFalse(loot_entries(self.source, self.char2, 109)[0]["can_take"])
+        self.assertEqual(loot_entries(self.source, self.char2, 109), [])
         self.assertTrue(loot_entries(self.source, self.char2, 110)[0]["can_take"])
         self.assertEqual(self.all_state(), before)  # expired 조회는 read-only
         loot_service.reconcile_claims(self.source, now=110)
@@ -305,8 +305,8 @@ class LootEntityTests(NativeLootTest):
         first, second = self.loot_item("cutting_machete", 1), self.loot_item("cutting_machete", 1)
         controls = loot_controls(self.char1, 100)[self.source.pk]["loot"]
         self.assertEqual([entry["label"] for entry in controls], ["절단마체테 1", "절단마체테 2"])
-        self.assertNotIn(str(first.pk), str(controls))
-        self.assertNotIn(str(second.pk), str(controls))
+        self.assertEqual([entry["action"]["roles"]["subject"][0]["identity"] for entry in controls],
+                         [str(first.pk), str(second.pk)])
         take_loot(self.char1, request=parse_loot("시체에서 절단마체테 2", []), now=100)
         first.refresh_from_db()
         second.refresh_from_db()
@@ -338,7 +338,7 @@ class LootEntityTests(NativeLootTest):
         self.source.db.entries = [{"kind": "item", "id": "scrap", "quantity": 1}]
         before = self.all_state()
         self.assertFalse(loot_service.loot_snapshot(self.source).native)
-        self.assertEqual(loot_entries(self.source, self.char1, 100)[0]["name"], "회수부품")
+        self.assertEqual(loot_service.source_entries(self.source)[0]["id"], "scrap")
         self.assertEqual(self.all_state(), before)
 
     def test_invalid_native_destination_backend_does_not_dual_write(self):

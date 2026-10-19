@@ -71,9 +71,12 @@ class CommandOverhaulSmoke(NativeItemTest):
             row = api.create_item("bandage", quantity=2, location_kind="corpse_loot", owner_object=corpse)
             loot_service.create_claim(row, reserved_player=owner, assigned_player=owner, protection_until=1000)
         inventory = dict(self.char1.profile_snapshot()["inventory"])
-        self.raw("시")
-        self.assertEqual(inventory, self.char1.profile_snapshot()["inventory"])
-        self.raw("시2")
+        # 기존 fixture의 TTL·보호 시각과 신규 Action의 선택/실행 시각을 일치시킨다.
+        with patch("world.actions.loot_resolution.time", return_value=100), patch(
+                "world.actions.loot_services.time", return_value=100):
+            self.raw("시")
+            self.assertEqual(inventory, self.char1.profile_snapshot()["inventory"])
+            self.raw("시2")
         self.assertEqual(self.char1.profile_snapshot()["inventory"].get("bandage"), 2)
         self.assertIn("추가했습니다", self.raw("사냥준비 점수, 장비 해 준말"))
         self.assertIn("체력", self.raw("사냥준비"))

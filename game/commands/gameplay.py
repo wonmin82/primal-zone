@@ -13,7 +13,6 @@ from commands.combat import Heal as Heal
 from commands.combat import Heavy as Heavy
 from commands.combat import Suppress as Suppress
 from commands.inventory import Inventory as Inventory
-from commands.inventory import Take as Take
 from commands.party import PartyAccept as PartyAccept
 from commands.party import PartyCommand as PartyCommand
 from commands.party import PartyInvite as PartyInvite

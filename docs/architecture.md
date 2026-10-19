@@ -73,13 +73,13 @@ Web command echo는 별도 `› 명령` entry가 아니다. 마지막 entry가 �
 
 ## 보급칩 경제와 전리품 자산
 
-`world/content/economy.py`의 CURRENCY는 id=credits·이름=보급칩·단위=칩·별칭·설명의 SSOT다. `world/currency.py`의 format_currency는 127칩을 만들며 profile의 credits 숫자를 유지한다. 현재 profile version은 14이며 v10의 화폐 저장 방식을 유지한다. 화폐는 ITEMS나 inventory에 넣지 않는다. Web은 서버의 currency metadata/formatted/전리품 display_label과 take_command를 표시한다. take_target은 칩/칩 2 같은 명령 선택자, display_label은 8칩 같은 표시 문자열이며 화면 문자열을 재해석해 명령을 만들지 않는다.
+`world/content/economy.py`의 CURRENCY는 id=credits·이름=보급칩·단위=칩·별칭·설명의 SSOT다. `world/currency.py`의 format_currency는 127칩을 만들며 profile의 credits 숫자를 유지한다. 현재 profile version은 14이며 v10의 화폐 저장 방식을 유지한다. 화폐는 ITEMS나 inventory에 넣지 않는다. Web은 서버의 currency metadata/formatted/전리품 display_label을 표시한다. 회수 버튼은 Action ID와 Source/Entry의 안정 typed reference를 전송한다. take_target과 take_command는 직접 입력 안내이며 표시 문자열을 실행 대상으로 재해석하지 않는다.
 
 `world.loot_service`가 모델을 backend-neutral snapshot으로 제공한다. ItemEntity root와 LootClaim, CurrencyLoot/Share가 authoritative하며 legacy normalize_entry는 migration·historical 호환용이다. snapshot.as_entry의 eligible_players/remaining_shares는 share rows에서 파생한 pure 계산 입력이며 CurrencyLoot에 중복 저장하지 않는다. 조회는 DB를 변경하지 않는다.
 
 `rules.reward_allocation(amount, groups)`는 그룹 기여도 비례 → 일행 내부 균등 → deterministic 최대 나머지법으로 총량을 보존한다. XP는 즉시 지급하고 보급칩은 그룹별 CurrencyLoot로 생성한다. Share=0 행도 원래 eligibility를 유지한다. 부분 지급은 양수 remaining 몫만 weight로 쓰며 quantity·shares·offline 포함 모든 recipient credits가 같은 transaction에 저장된다. Missing recipient는 전체 rollback이다. 만료 후 잔액은 caller에게 지급하고 decay는 owner만 바꾸며 share·reservation·deadline을 보존한다.
 
-currency_request는 기존 TargetSelector에서 금액만 읽는다. 20칩은 양의 정수 금액, 칩 2는 공통 INDEX, 칩 모두는 ALL이다. source/관계 parsing은 기존 helper를 사용하고 여러 시체에는 ALL target을 요구한다. 기본 화폐 대상은 접근 가능한 entry에서 선택하며 기존 item 선택 정책은 바꾸지 않는다. player 간 전달·버리기와 전리품 회수는 world_change 안에서 관련 profile/loot를 함께 변경하고 실패 시 rollback한다. 임무·정산·NPC 판매는 직접 source, 구매·학습·패배는 sink이며 패배 손실은 드롭하지 않는다.
+currency_request는 기존 TargetSelector에서 금액만 읽는다. 20칩은 양의 정수 금액, 칩 2는 공통 INDEX, 칩 모두는 ALL이다. source/관계 parsing은 기존 helper를 사용하고 여러 시체에는 ALL target을 요구한다. 전리품 선택은 권한으로 번호를 다시 매기지 않고 정규 B-1 항목을 먼저 확정한 뒤 현재 권한을 검증한다. 명시 대상의 권한 거절·결번은 다른 항목으로 대체하지 않는다. player 간 전달·버리기와 전리품 회수는 world_change 안에서 관련 profile/loot를 함께 변경하고 실패 시 rollback한다. 임무·정산·NPC 판매는 직접 source, 구매·학습·패배는 sink이며 패배 손실은 드롭하지 않는다.
 
 `SHOP_CATALOGS`는 purchase_catalog/accepts를 분리한다. 가격은 value와 explicit purchase_unit_value/resale_unit_value, 탄약 bundle의 purchase_quantity로 결정한다. 일반 resale은 floor(value/2), explicit resale은 우선한다. 탄창은 empty resale + 잔탄×ammo resale, 총기는 full_standard package로 구매한다. Stack 판매는 1/N개/모두, non-stack은 stable instance selector를 사용한다. field-only/T2 장비도 category/policy/가격이 맞으면 기본점에서 매입한다. [최종 가격·catalog](final-content.md)를 따른다.
 

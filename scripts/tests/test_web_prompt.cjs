@@ -402,3 +402,39 @@ test("아이템 버튼은 같은 표시 이름에서도 해당 UUID의 구조화
   c.receive("pz_state",partyState(null,{inventory:[item("replacement")],action_controls:[]}));
   assert.equal(c.byId("inventory").firstElementChild.children.filter(child => child.dataset?.actionInvocation).length,0);
 });
+
+
+test("전리품 버튼은 Source와 Entry 안정 참조를 보존하고 문자열 명령을 실행하지 않는다", () => {
+  const c = client();
+  const action = (source, identity, quantity = 0) => ({action_id:"loot.take",variant:"take",
+    roles:{provider:[{kind:"object",identity:source,scope_id:"room:7"}],
+      source:[{kind:"object",identity:source,scope_id:"room:7"}],
+      subject:[{kind:"loot",identity,scope_id:"source:"+source}]},
+    arguments:{quantity,snapshot:"server-signed-"+identity}});
+  const entry = (source, identity) => ({display_label:"회수부품 3 ×2",protected:false,
+    can_take:true,take_command:"대체하면 안 되는 문자열 가져",action:action(source,identity)});
+  const corpse = (id, identity) => ({id,label:"시체 "+id,name:"사체",look_command:"시체 "+id+" 봐",
+    loot:[entry(String(id),identity)],take_command:"구형 전체 가져",take_action:action(String(id),identity)});
+  const corpses = [corpse(3,"original-corpse-entry"),corpse(4,"other-corpse-entry")];
+  const all = {corpses:action("3","original-corpse-entry"),ground:action("8","original-ground-entry")};
+  c.receive("pz_state",partyState(null,{corpses,
+    ground_loot:[{id:8,loot:[entry("8","original-ground-entry")]}],loot_actions:all}));
+  const buttons = c.byId("context-actions").children.filter(row => row.dataset?.actionInvocation);
+  assert.equal(buttons.length,7); // 여러 시체 전체, 출처별 전체/개별, 바닥 전체/개별
+  for (const button of buttons) {
+    const expected = JSON.parse(button.dataset.actionInvocation);
+    c.document.fire("click",{target:button});
+    const [kind,args] = c.socket.sent.at(-1);
+    assert.equal(kind,"pz_action");
+    assert.deepEqual(args[0].roles,expected.roles);
+    assert.deepEqual(args[0].arguments,expected.arguments);
+  }
+  assert.ok(commandButtons(c.byId("context-actions")).every(command => command.endsWith(" 봐")));
+  const stale = buttons.at(-1);
+  c.receive("pz_state",partyState(null,{ground_loot:[{id:8,loot:[entry("8","replacement")]}],
+    loot_actions:{ground:action("8","replacement")}}));
+  // 지연된 DOM 클릭도 원래 참조 그대로 보낸다. 현재 번호로 새 항목을 찾지 않는다.
+  c.document.fire("click",{target:stale});
+  assert.equal(c.socket.sent.at(-1)[1][0].roles.subject[0].identity,"original-ground-entry");
+  assert.equal(c.socket.sent.at(-1)[1][0].arguments.snapshot,"server-signed-original-ground-entry");
+});

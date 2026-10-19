@@ -95,12 +95,14 @@ def _confirmation(caller, session, invocation, variant):
 
 def from_web(payload, index):
     if (type(payload) is not dict or set(payload) - {"action_id", "variant", "roles", "arguments", "confirmation_token", "request_id"}
-            or len(json.dumps(payload, ensure_ascii=False)) > 8192):
+            or len(json.dumps(payload, ensure_ascii=False).encode()) > 262144):
         raise rules.RuleError("행동 요청의 형식이나 크기를 확인하세요.")
     action_id, variant_id = payload.get("action_id"), payload.get("variant")
     action = index.actions.get(action_id) if type(action_id) is str else None
     if not action or not action.public or type(variant_id) is not str or variant_id not in {v.id for v in action.variants}:
         raise rules.RuleError("지금 사용할 수 없는 행동입니다.")
+    if len(json.dumps(payload, ensure_ascii=False).encode()) > action.max_payload_bytes:
+        raise rules.RuleError("행동 요청의 크기를 확인하세요.")
     request_id = payload.get("request_id")
     token = payload.get("confirmation_token")
     if type(request_id) is not str or not 1 <= len(request_id) <= 64 or (token is not None and (type(token) is not str or len(token) > 100)):
@@ -111,7 +113,7 @@ def from_web(payload, index):
     output = []
     try:
         for name, references in roles.items():
-            if type(references) is not list or not 1 <= len(references) <= 32:
+            if type(references) is not list or not 1 <= len(references) <= action.max_references:
                 raise ValueError
             refs = []
             for ref in references:
@@ -172,18 +174,15 @@ def _lock_roles(caller, invocation):
             elif isinstance(entity, CurrencyLoot):
                 identities.add(entity.owner_object_id)
                 sources[entity.owner_object_id] = entity.owner_object
-    list(ObjectDB.objects.select_for_update().filter(pk__in=sorted(identities)).order_by("pk"))
     # Loot의 item/claim/currency/share lock은 기존 도메인 API가 같은 총순서로 확보한다.
     if sources:
         from world.loot_service import lock_sources
 
-        for source in sources.values():
-            items.update(api.items_owned_by(source).values_list("pk", flat=True))
+        lock_sources(list(sources.values()), caller=caller, extra_owners=identities)
+    else:
+        list(ObjectDB.objects.select_for_update().filter(pk__in=sorted(identities)).order_by("pk"))
         if items:
             api.lock_items(items)
-        lock_sources(list(sources.values()), caller=caller, extra_owners=identities)
-    elif items:
-        api.lock_items(items)
 
 
 def execute(caller, session, invocation, index):
@@ -199,9 +198,24 @@ def execute(caller, session, invocation, index):
             raise rules.RuleError("행동 문법을 확인하세요.")
         if variant.confirmation_required and invocation.origin == "web":
             _confirmation(caller, session, invocation, variant)
+        services = {index.services[binding.service_id] for binding in index.bindings.values()
+                    if binding.action_id == action.id}
+        lockers = {service.locker for service in services}
+        preparations = {service.prepare for service in services}
+        if len(lockers) != 1 or len(preparations) != 1:
+            raise rules.RuleError("행동 잠금 계약을 확정할 수 없습니다.")
+        prepare = next(iter(preparations))
+        if prepare is not None:
+            synchronous(prepare)
+            prepare(caller, invocation)
         with world_change():
-            # 전체 변경 lock 이후 기존 Object→Item→Loot→번호 최종 확정 순서를 유지한다.
-            _lock_roles(caller, invocation)
+            # Lifecycle 확정 후 owner→item→claim→currency→share를 한 번에 잠근다.
+            locker = next(iter(lockers))
+            if locker is None:
+                _lock_roles(caller, invocation)
+            else:
+                synchronous(locker)
+                locker(caller, invocation)
             require_session(caller, session)
             entities = _roles(caller, action, invocation)
             provider_refs = dict(invocation.roles).get("provider", ())
@@ -225,8 +239,6 @@ def execute(caller, session, invocation, index):
             quantity = dict(arguments).get("quantity")
             for name, values in entities.items():
                 for entity in values:
-                    if hasattr(entity, "quantity") and quantity is not None and quantity > entity.quantity:
-                        raise rules.RuleError("원래 대상의 수량이 부족합니다.")
                     if any(ref.kind in (ReferenceKind.LOOT, ReferenceKind.CURRENCY) for ref in dict(invocation.roles).get(name, ())):
                         from time import time as now
 
@@ -237,6 +249,8 @@ def execute(caller, session, invocation, index):
                         match = next((entry for entry in entries if str(entry.item_id if hasattr(entity, "definition_id") else entry.currency_id) == str(entity.pk)), None)
                         if match is None or not can_take_entry(match.as_entry(), caller, now()):
                             raise rules.RuleError("원래 전리품을 회수할 권한이 없습니다.")
+                    if hasattr(entity, "quantity") and quantity is not None and quantity > entity.quantity:
+                        raise rules.RuleError("원래 대상의 수량이 부족합니다.")
             synchronous(service.handler)
             result = service.handler(ExecutionContext(caller, session, invocation, binding,
                                                       MappingProxyType(entities), MappingProxyType(dict(arguments)),

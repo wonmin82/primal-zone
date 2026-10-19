@@ -57,7 +57,8 @@ def parse_selector(value, known_names=()):
     return TargetSelector(value)
 
 
-def parse_loot(value, known_names=()):
+def loot_parts(value):
+    """출처만 분리한다. 품목 이름은 확정된 Source Scope에서 해석한다."""
     # 출처 구문은 접미 조사 '에서'가 붙은 토큰 경계에서만 나눈다.
     words = value.strip().split()
     boundaries = [i for i, word in enumerate(words) if word.endswith("에서")]
@@ -77,6 +78,11 @@ def parse_loot(value, known_names=()):
             if source.name != "시체" or source.mode == Mode.ALL:
                 raise RuleError("시체에서 · 시체 2에서 · 모든 시체에서처럼 지정하세요.")
         value = " ".join(words[position + 1 :])
+    return value, source
+
+
+def parse_loot(value, known_names=()):
+    value, source = loot_parts(value)
     target = (
         TargetSelector("전리품", Mode.ALL)
         if value.strip() == "모두"
@@ -223,12 +229,18 @@ def resolve(objects, selector, caller, action=None, supports=None, *, observed_a
     if candidates and all(not obj.destination
                           and getattr(obj, "action_provider_definition", None) for obj in candidates):
         from world.actions.resolver import select_role
-        from world.actions.schema import ReferenceKind, RoleDefinition
+        from world.actions.schema import DefaultTargetPolicy, RoleDefinition
         from world.selection_numbers.api import descriptor, resolve_reference
 
         query = selector.name + (f" {selector.index}" if selector.mode == Mode.INDEX else " 모두" if selector.mode == Mode.ALL else "")
-        references = select_role(caller, RoleDefinition("provider", (ReferenceKind.OBJECT,), allow_all=True),
-                                 query, candidates={descriptor(obj).reference for obj in candidates})
+        policies = {getattr(obj, "selection_default_policy", DefaultTargetPolicy.REQUIRE_UNIQUE)
+                    for obj in candidates}
+        if len(policies) != 1:
+            raise RuleError("대상들의 기본 선택 규칙이 다릅니다. 이름과 번호를 지정하세요.")
+        candidates = {descriptor(obj).reference for obj in candidates}
+        kinds = tuple(sorted({reference.kind for reference in candidates}))
+        references = select_role(caller, RoleDefinition("provider", kinds, DefaultTargetPolicy(next(iter(policies))), allow_all=True),
+                                 query, candidates=candidates)
         selected = [resolve_reference(ref) for ref in references]
     else:
         selected = select(candidates, selector)

@@ -39,7 +39,7 @@ class EconomyTests(WorldCommandTest):
             caller.execute_cmd(raw)
         return str(msg.call_args_list)
 
-    def native_shop_fixture(self):
+    def native_shop_fixture(self, player=None):
         """격리 테스트 캐릭터만 명시적으로 변환하고 원본 Legacy profile은 보존한다."""
         from world.item_migration.convert import convert_explorer
         from world.item_migration.scan import raw_source
@@ -47,10 +47,11 @@ class EconomyTests(WorldCommandTest):
         from world.multiplayer import world_change
 
         self.enterContext(patch("typeclasses.explorers.time", return_value=100))
-        original = deepcopy(deserialize(self.char1.db.profile))
+        player = player or self.char1
+        original = deepcopy(deserialize(player.db.profile))
         with world_change(), migration_context():
-            convert_explorer(self.char1, raw_source("explorer", self.char1), 100, False)
-        self.assertEqual(deserialize(self.char1.db.profile), original)
+            convert_explorer(player, raw_source("explorer", player), 100, False)
+        self.assertEqual(deserialize(player.db.profile), original)
 
     def take(self, raw, caller=None, now=103):
         return take_loot(caller or self.char1, request=parse_loot(raw, currency_names()), now=now)
@@ -60,6 +61,15 @@ class EconomyTests(WorldCommandTest):
                 "eligible_players": sorted(shares or {}), "remaining_shares": shares or {}, "protection_until": deadline}
 
     def test_give_drop_and_indexed_ground_take_conserve_wallets(self):
+        from world.item_entities.models import ItemRuntime
+        from world.item_runtime import VERSION
+        from world.loot_entities.models import CurrencyLoot
+
+        # 공개 버리기/가져를 실제 cutover 저장소로 연결한다. Legacy 감사 fixture는 유지한다.
+        for player in (self.char1, self.char2):
+            self.native_shop_fixture(player)
+            player.db.item_runtime_version = VERSION
+        ItemRuntime.objects.update_or_create(pk=1, defaults={"version": VERSION})
         self.command(f"{self.char2.key}에게 칩 줘")
         self.assertEqual([p.profile()["credits"] for p in (self.char1, self.char2)], [19, 21])
         self.command(f"{self.char2.key}에게 칩 모두 줘")
@@ -67,14 +77,18 @@ class EconomyTests(WorldCommandTest):
         self.command("20칩 버려", self.char2)
         self.command("칩 모두 버려", self.char2)
         ground = room_loot(self.char1.location, False)
-        self.assertEqual([obj.db.entries[0]["quantity"] for obj in ground], [20, 20])
+        rows = list(CurrencyLoot.objects.filter(owner_object__in=ground).order_by("pk"))
+        self.assertEqual([row.quantity for row in rows], [20, 20])
         self.command("칩 2 가져")
-        self.assertEqual([obj.db.entries[0]["quantity"] for obj in ground], [20, 19])
+        for row in rows:
+            row.refresh_from_db()
+        self.assertEqual([row.quantity for row in rows], [20, 19])
         self.command("10칩 가져")
         self.assertEqual(self.char1.profile()["credits"], 11)
         self.command("칩 모두 가져")
         self.assertEqual(self.char1.profile()["credits"], 40)
         self.assertEqual(room_loot(self.char1.location, False), [])
+        self.assertFalse(CurrencyLoot.objects.filter(pk__in=[row.pk for row in rows]).exists())
 
     def test_bad_amounts_and_recipients_leave_state_unchanged(self):
         # 실패 원자성의 전체 profile 비교가 실제 자연회복 경계를 지나지 않도록 고정한다.
@@ -221,7 +235,10 @@ class EconomyTests(WorldCommandTest):
         self.command("칩 버려")
         state = multiplayer_state(self.char1)
         entry = state["ground_loot"][0]["loot"][0]
-        self.assertEqual((entry["kind"], entry["amount_label"], entry["take_command"]), ("currency", "1칩", "칩 가져"))
+        self.assertEqual((entry["kind"], entry["amount_label"], entry["take_command"], entry["action"]),
+                         ("currency", "1칩", "", None))
+        self.assertEqual(state["ground_loot"][0]["take_command"], "")
+        self.assertIsNone(state["ground_loot"][0]["take_action"])
         self.assertIn("식별 표식", self.command("보급칩 봐"))
 
     def test_value_sale_and_server_actions_preserve_equipped_copy(self):
@@ -366,15 +383,38 @@ class EconomyTests(WorldCommandTest):
         self.assertEqual(self.char1.profile(), profile)
 
     def test_currency_display_and_indexed_take_target_are_independent(self):
+        from world.item_entities.models import ItemRuntime
+        from world.item_runtime import VERSION
+        from world.loot_entities.models import CurrencyLoot
+        from world.selection_numbers.api import descriptor, number_for
+
+        for player in (self.char1, self.char2):
+            self.native_shop_fixture(player)
+            player.db.item_runtime_version = VERSION
+        ItemRuntime.objects.update_or_create(pk=1, defaults={"version": VERSION})
+        sources = []
         for amount in (8, 1):
-            create_dropped_loot(self.char1.location, [self.currency_entry(amount)])
+            sources.append(create_dropped_loot(self.char1.location, [self.currency_entry(amount)]))
+        rows = [CurrencyLoot.objects.get(owner_object=source) for source in sources]
         entries = [s["loot"][0] for s in multiplayer_state(self.char1)["ground_loot"]]
         self.assertEqual([e["display_label"] for e in entries], ["8칩", "1칩"])
-        self.assertEqual([e["take_target"] for e in entries], ["칩 1", "칩 2"])
-        self.assertEqual([e["take_command"] for e in entries], ["칩 1 가져", "칩 2 가져"])
+        self.assertEqual([number_for(descriptor(row).reference) for row in rows], [1, 2])
+        self.assertEqual([e["take_target"] for e in entries], ["보급칩 1", "보급칩 2"])
+        self.assertEqual([e["take_command"] for e in entries], ["보급칩 1 가져", "보급칩 2 가져"])
+        self.assertEqual([e["action"]["roles"]["subject"][0]["identity"] for e in entries],
+                         [str(row.pk) for row in rows])
+        self.assertEqual([e["action"]["roles"]["source"][0]["identity"] for e in entries],
+                         [str(source.pk) for source in sources])
         self.command(entries[1]["take_command"])
         self.assertEqual(self.char1.profile()["credits"], 21)
-        self.assertEqual(room_loot(self.char1.location, False)[0].db.entries[0]["quantity"], 8)
+        self.assertFalse(CurrencyLoot.objects.filter(pk=rows[1].pk).exists())
+        rows[0].refresh_from_db()
+        self.assertEqual(rows[0].quantity, 8)
+        self.assertEqual(number_for(descriptor(rows[0]).reference), 1)
+        self.command("칩 가져")
+        rows[0].refresh_from_db()
+        self.assertEqual((self.char1.profile()["credits"], rows[0].quantity), (22, 7))
+        self.assertEqual(number_for(descriptor(rows[0]).reference), 1)
 
     def test_old_pr_currency_reads_without_write_and_decays_to_canonical_rights(self):
         corpse = create_object(Corpse, key="옛 화폐 시체", location=self.char1.location)

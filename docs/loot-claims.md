@@ -25,14 +25,14 @@ Phase 6 현재 상태: cutover 후 일반 gameplay는 native ItemEntity만 사�
 별도 Django app `world.loot_entities`의 `0001_initial`은 schema만 만든다. data migration은 없다.
 
 - `LootClaim`: ItemEntity OneToOne, reserved_party/player, assigned_player, protection_until. DB의 실제 root가 corpse_loot/world_loot일 때만 허용한다. state에 권리를 복제하지 않는다. inventory/equipment/storage/inside에는 claim을 남길 수 없다.
-- `CurrencyLoot`: Corpse/DroppedLoot owner, 양의 정수 quantity, reserved_party/player, protection_until. 보급칩은 ItemEntity가 아니다. 출처 내 생성 PK 순서를 사용하며 사용자에게 PK를 표시하지 않는다.
+- `CurrencyLoot`: Corpse/DroppedLoot owner, 양의 정수 quantity, reserved_party/player, protection_until. 보급칩은 ItemEntity가 아니다. 안정 PK를 실행 참조로 사용하며 표시 번호는 영속 SelectionNumber에서 조회한다. 사용자 표시 문자열에 PK를 쓰지 않는다.
 - `CurrencyLootShare`: currency_loot/player unique, 정수 remaining_amount≥0. 잔여 지분 합≤quantity를 검사하고 보호 상태 생성 시 합=quantity를 요구한다. eligible_players 저장 필드는 없다.
 
 실물·공간 owner·탐사자·share parent는 PROTECT이며 domain에서 관계를 먼저 정리한다. reserved_party만 SET_NULL이다. 기존 Party는 마지막 멤버 탈퇴로 삭제되므로 일행 참조만 비우고 assigned_player·share·보호 기한은 유지한다. 일행 해산으로 전리품이 삭제되거나 자유 획득으로 바뀌지 않는다.
 
 ## 조회와 명시적 native 생성
 
-`loot_service.loot_snapshot(source)`는 frozen `LootSourceSnapshot`/`LootEntrySnapshot`을 반환한다. `as_entry()`/`source_entries()`는 기존 pure helper와 presentation용 값만 제공한다. UUID/화폐 row ID는 Web payload에 보내지 않는다. 단순 조회는 DB를 바꾸지 않는다.
+`loot_service.loot_snapshot(source)`는 frozen `LootSourceSnapshot`/`LootEntrySnapshot`을 반환한다. `as_entry()`/`source_entries()`는 기존 pure helper와 presentation용 값만 제공한다. 공개 설명 문자열은 UUID/화폐 row ID를 표시하지 않는다. 회수 Action payload는 Source 참조와 실제 ItemEntity UUID/CurrencyLoot ID의 typed reference를 전달한다. 단순 조회는 DB를 바꾸지 않는다.
 
 `source.db.loot_backend="item_entities"`는 신뢰된 생성 경계다. `populate_source(source, entries)`는 비어 있는 Corpse/DroppedLoot를 명시적으로 선택해 모델을 만든다. 기존 blob을 조회하거나 명령을 실행한다고 변환하지 않는다. 비어 있지 않은 source는 거절한다. `create_claim()`/`create_currency()`는 이미 선택한 native 공간에만 쓴다.
 
@@ -78,13 +78,23 @@ Firearm root에만 claim이 있고 magazine child에는 없다. 전체 tree 회�
 
 ## 수령 알림의 커밋 경계 (Issue #54)
 
-`typeclasses.loot.take_loot()`은 Native/Legacy 공통 사용자 수령 경로다. 선택·권한·실물 이동·화폐 지분·profile 저장은 기존 `world_change()` 안에서 확정하고, 성공 메시지와 수령인/같은 방 탐사자의 `push_state()`는 그 안에서 `after_change()`에 등록한다. 가장 바깥 `world_change()`가 성공한 뒤에만 전송하며 상위 롤백 또는 예외를 처리한 내부 Savepoint 롤백에서는 해당 콜백을 폐기한다. `loot_service.pickup()`은 지급 domain이며 사용자 성공 출력은 공통 경로가 담당한다.
+`loot.take` Action이 현재 공개 사용자 수령 경로다. 기존 `typeclasses.loot.take_loot()`은 격리된 historical migration audit 전용이며 운영 명령에서 호출하지 않는다. 선택·권한·실물 이동·화폐 지분·profile 저장은 기존 `world_change()` 안에서 확정한다. `loot_service.notify_pickup()`은 확정된 수령 메시지를 `after_change()`에 등록하고, Gateway는 커밋된 상태의 화면 갱신을 예약한다. 가장 바깥 `world_change()`가 성공한 뒤에만 전송하며 상위 롤백 또는 예외를 처리한 내부 Savepoint 롤백에서는 해당 콜백을 폐기한다. `loot_service.pickup()`은 지급 domain이며 사용자 성공 출력은 공통 경로가 담당한다.
 
 메시지의 Semantic Text·수량·수신 대상과 순서를 지급 시점에 고정한다. 반환된 `received` 목록을 호출자가 변경해도 예약한 알림은 바뀌지 않는다. 화면 상태는 콜백 실행 시 커밋된 데이터를 조회한다. 기존 profile 저장의 상태 갱신과 명시적 수령/방 상태 갱신 횟수는 유지하며 알림 재전송 큐나 저장 이력은 추가하지 않는다. 수량·배정·보호 기한·지분·개인 확정 권리·ID 및 DB schema는 변경하지 않는다. 재현과 자동 수용 검사 TEST-01~08은 [검증 기록](playtest.md#issue-54-전리품-알림-커밋-경계)을 따른다.
 
 ## 검증과 호환 경계
 
 정상 사냥·pickup·decay는 native만 사용하며 legacy blob에 같은 unit을 다시 저장하지 않는다. Wallet은 profile credits다. 명시적 전체 legacy upgrade는 [item-migration](item-migration.md), 현재 자동 기준선과 Phase 7B/7C에서 완료한 검증 결과는 [Phase 7 audit](phase7-final-integration-audit.md)을 따른다. PostgreSQL contention·multi-server는 별도 infrastructure이며 실제 mobile device matrix는 이번 검증 범위 밖의 후속 검증이다.
+
+## M05 Action 전환과 공통 번호
+
+`game.loot` ContentPackage의 `loot.take`가 `가져`·`집` 및 기존 `시`·`시2`~`시5` 입력을 처리한다. 출처 생략은 Ground이고, `시체에서`는 기본 Source 하나를 선택한 뒤 그 Source의 Binding을 사용한다. `모든 시체에서`는 실제 복수 Source이며 대상에도 `모두`가 필요하다. 공개 Take Command와 웹의 take_command 문자열 실행은 활성 경로에서 제거한다.
+
+Corpse는 Room의 `world:corpse` 그룹, 내부 Item/Currency는 Corpse Scope의 각 안정 그룹, Ground는 Room 공통 Scope의 각 안정 그룹에서 영속 B-1 번호를 사용한다. Source ID와 ItemEntity UUID/CurrencyLoot ID는 번호와 독립이다. 같은 항목의 번호는 플레이어 A/B에서 같고 권한 변화·부분 회수로 재발급하지 않는다. Ground는 같은 Room 번호 Scope 안에서도 실제 owner Source를 다시 확인한다. 전체 소멸 전 결번 재사용과 단독 잔존 객체 재번호는 없다.
+
+웹 버튼은 Source와 Subject의 typed reference 및 수량, 서버 서명 snapshot을 보낸다. snapshot은 원래 Source/Entry·수량·권리·지분·요청자를 묶고 최종 잠금 이후 현재 상태와 비교한다. Session과 현재 권한 검사를 통과해야 하며 일부 회수·권리 변경·Source 이동·Entry 삭제/병합 후의 요청은 다른 항목을 지급하지 않는다. 무권한 보호 항목의 이름·수량·배정·snapshot은 표시하지 않는다. 번호를 아는 것만으로 해당 내용을 조회하거나 획득할 수 없다.
+
+도메인 지급은 기존 pickup·LootClaim·CurrencyShare를 사용하며 Action에 분배 계산을 복제하지 않는다. 최상위 변경이 실패하면 아이템/화폐/지분/프로필과 SelectionNumber/Counter 및 예약 알림이 함께 복구된다. 실제 검증과 미검증 범위는 [Action 전환표](action-migration.md)의 PR C 절과 해당 PR Validation에서 추적한다. 운영 DB migration/seed/복원은 실행하지 않는다.
 
 ## Historical Phase 4 implementation boundary
 

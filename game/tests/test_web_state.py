@@ -8,6 +8,7 @@ from typeclasses.parties import invite, respond
 from world.state import multiplayer_state
 
 from tests.base import WorldCommandTest
+from tests.loot_entity_fixture import NativeLootTest
 
 
 class WebStateTests(WorldCommandTest):
@@ -87,12 +88,14 @@ class WebStateTests(WorldCommandTest):
         enemy = room_enemies(self.rooms["grass"])[0]
         rng = Mock()
         rng.random.return_value = 0
+        rng.randint.side_effect = lambda low, high: low
         corpse = Corpse.from_enemy(
-            enemy, {f"player:{self.char1.id}": {self.char1.id: 10}}, 100, rng
+            enemy, {f"player:{self.char1.id}": {self.char1.id: 10}}, 100, rng, backend="item_entities"
         )
-        self.assertFalse(
-            multiplayer_state(self.char2, now=101)["corpses"][0]["loot"][0]["can_take"]
-        )
+        protected = multiplayer_state(self.char2, now=101)
+        self.assertEqual(protected["corpses"][0]["loot"], [])
+        self.assertIsNone(protected["corpses"][0]["take_action"])
+        self.assertIsNone(protected["loot_actions"]["corpses"])
         corpse.reconcile(now=130)
         snapshot = multiplayer_state(self.char2, now=221)
         self.assertEqual(snapshot["corpses"], [])
@@ -214,3 +217,59 @@ class WebStateTests(WorldCommandTest):
         with patch.object(self.char1, "msg") as message:
             Explorer.push_state(self.char1)
         self.assertFalse(message.call_args.kwargs["pz_state"][0][0]["training_available"])
+
+
+class NativeLootWebTests(NativeLootTest):
+    def test_player_rights_filter_keeps_shared_canonical_numbers_and_typed_entries(self):
+        from world import loot_service
+        from world.item_entities import api
+        from world.selection_numbers.api import descriptor, number_for
+        from world.state import loot_controls
+
+        first = self.loot_item("scrap", quantity=3, deadline=110)
+        second = api.create_item("scrap", quantity=4, location_kind="corpse_loot", owner_object=self.source)
+        loot_service.create_claim(second, reserved_player=self.char2, assigned_player=self.char2,
+                                  protection_until=110)
+        numbers = [number_for(descriptor(row).reference) for row in (first, second)]
+        self.assertEqual(numbers, [1, 2])
+        a = loot_controls(self.char1, 109)[self.source.pk]
+        b = loot_controls(self.char2, 109)[self.source.pk]
+        self.assertEqual(a["label"], b["label"])
+        self.assertEqual([row["label"] for row in a["loot"]], ["회수부품 1"])
+        self.assertEqual([row["label"] for row in b["loot"]], ["회수부품 2"])
+        for state, identity in ((a, first.pk), (b, second.pk)):
+            self.assertEqual(state["loot"][0]["action"]["roles"]["subject"][0]["identity"], str(identity))
+            self.assertEqual(state["loot"][0]["action"]["roles"]["source"][0]["identity"], str(self.source.pk))
+        # 권한이 풀려도 번호를 발급하거나 앞당기지 않는다.
+        for player in (self.char1, self.char2):
+            public = loot_controls(player, 110)[self.source.pk]
+            self.assertEqual([row["label"] for row in public["loot"]], ["회수부품 1", "회수부품 2"])
+            self.assertEqual([row["action"]["roles"]["subject"][0]["identity"] for row in public["loot"]],
+                             [str(first.pk), str(second.pk)])
+        self.assertEqual([number_for(descriptor(row).reference) for row in (first, second)], numbers)
+        json.dumps(public)
+
+    def test_corpse_hole_and_all_controls_preserve_original_source_refs(self):
+        from evennia import create_object
+        from world import loot_service
+        from world.actions.loot_presentation import all_controls
+        from world.state import loot_controls
+
+        second = create_object(Corpse, key="둘째 시체", location=self.char1.location)
+        third = create_object(Corpse, key="셋째 시체", location=self.char1.location)
+        second.db.decay_at = third.db.decay_at = 200
+        loot_service.populate_source(second, [])
+        loot_service.populate_source(third, [])
+        self.loot_item("scrap", quantity=2, deadline=110)
+        original = self.source
+        self.source = third
+        self.loot_item("scrap", quantity=2, deadline=110)
+        self.source = original
+        second.delete()
+        controls = loot_controls(self.char1, 109)
+        self.assertEqual([controls[source.pk]["label"] for source in (original, third)], ["시체 1", "시체 3"])
+        payload = all_controls(self.char1, 109)["corpses"]
+        self.assertEqual([reference["identity"] for reference in payload["roles"]["source"]],
+                         [str(original.pk), str(third.pk)])
+        self.assertEqual(payload["arguments"]["quantity"], 0)
+        self.assertTrue(payload["arguments"]["snapshot"])

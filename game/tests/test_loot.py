@@ -109,13 +109,11 @@ class LootTests(WorldCommandTest):
         take_loot(self.char1, "water", corpse=False, now=134)
         self.assertEqual(self.char1.profile()["inventory"]["water"], 1)
 
-    def test_raw_item_names_ignore_spaces(self):
+    def test_legacy_domain_item_names_ignore_spaces(self):
+        from world.targets import parse_loot
+
         self.kill()
-        with (
-            patch("typeclasses.loot.time", return_value=103),
-            patch("world.lifecycle.time", return_value=103),
-        ):
-            self.char1.execute_cmd("시체에서 정제 수 가져")
+        take_loot(self.char1, request=parse_loot("시체에서 정제 수"), now=103)
         self.assertEqual(self.char1.profile()["inventory"]["water"], 1)
 
     def test_death_failure_rolls_back_hp_rewards_and_corpse(self):

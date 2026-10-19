@@ -264,14 +264,15 @@ def _current_entry(source, selected):
     raise rules.RuleError("전리품의 출처가 바뀌었거나 이미 회수되었습니다.")
 
 
-def pickup(source, selected, caller, quantity, *, now):
+def pickup(source, selected, caller, quantity, *, now, locked=False):
     """권리를 lock 후 재검증하고 실물/화폐와 모든 지급 대상을 함께 갱신한다."""
     from typeclasses.loot import can_take_entry, recipient_for_item
 
     from world.equipment_service import entity_runtime
 
     with world_change():
-        lock_sources([source], caller)
+        if not locked:
+            lock_sources([source], caller)
         if source.location != caller.location:
             raise rules.RuleError("같은 장소의 전리품만 회수할 수 있습니다.")
         current = _current_entry(source, selected)
@@ -381,3 +382,35 @@ def integrity_errors(source):
         except ValidationError as error:
             issues.extend(error.messages)
     return issues
+
+
+def notify_pickup(caller, received, *, corpse, recovered_currency):
+    """확정한 지급 결과만 최상위 commit 후 알린다."""
+    from world import text as ft
+    from world.currency import format_currency
+    from world.multiplayer import after_change
+    from world.target_presentation import count_word
+
+    totals = {}
+    for target, identity, quantity in received:
+        totals[(target, identity)] = totals.get((target, identity), 0) + quantity
+    own = [ft.text(ft.item(identity), " ", count_word(quantity), " 개")
+           for (target, identity), quantity in totals.items() if target == caller and identity != CURRENCY["id"]]
+    if own:
+        message = ft.text("시체를 뒤져 " if corpse else "바닥에서 ", ft.join(own, "와 "), "를 챙겼다.")
+        after_change(lambda message=message: caller.msg(message))
+    if recovered_currency:
+        message = ft.text("시체에서 " if corpse else "바닥에서 ", ft.token("reward", format_currency(recovered_currency)), "을 회수했다.")
+        after_change(lambda message=message: caller.msg(message))
+        message = ft.join([ft.text(ft.token("player", target.key), " ", ft.token("reward", format_currency(amount)))
+                           for (target, identity), amount in totals.items() if identity == CURRENCY["id"]], " · ")
+        after_change(lambda message=message: caller.msg(message))
+    for (target, identity), quantity in totals.items():
+        if target != caller:
+            if identity == CURRENCY["id"]:
+                message = ft.text("전리품 분배로 ", ft.token("reward", format_currency(quantity)), "을 받았다.")
+            else:
+                message = ft.text(ft.item(identity), " ", count_word(quantity), " 개는 이번 순번인 ",
+                                  ft.token("player", target.key), "에게 돌아갔다.")
+                after_change(lambda message=message: caller.msg(message))
+            after_change(lambda target=target, message=message: target.msg(message))

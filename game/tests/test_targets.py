@@ -9,7 +9,7 @@ from typeclasses.explorers import Explorer
 from typeclasses.interactables import SupplyCache
 from typeclasses.loot import Corpse, DroppedLoot, room_loot, take_loot
 from typeclasses.parties import invite, respond
-from world import rules
+from world import loot_service, rules
 from world.state import multiplayer_state
 from world.targets import (
     Mode,
@@ -83,6 +83,8 @@ class TargetIntegrationTests(WorldCommandTest):
     def setUp(self):
         super().setUp()
         self.rooms = self.world_rooms()
+        self.enterContext(patch("world.actions.loot_resolution.time", return_value=100))
+        self.enterContext(patch("world.actions.loot_services.time", return_value=100))
         for player in (self.char1, self.char2):
             player.location = self.rooms["grass"]
             player.push_state = Mock()
@@ -120,8 +122,40 @@ class TargetIntegrationTests(WorldCommandTest):
             obj.db.decay_at = 130
         return obj
 
+    def native_source(self, entries=None, corpse=True, name="갈퀴사냥룡의 시체"):
+        from world.item_migration.convert import convert_explorer
+        from world.item_migration.scan import raw_source
+        from world.item_migration.workflow import migration_context
+        from world.multiplayer import world_change
+
+        for player in (self.char1, self.char2):
+            if player.db.equipment_backend != "item_entities":
+                with world_change(), migration_context():
+                    convert_explorer(player, raw_source("explorer", player), 100, False)
+        obj = create_object(Corpse if corpse else DroppedLoot, key=name, location=self.char1.location)
+        if corpse:
+            obj.db.decay_at = 130
+        loot_service.populate_source(obj, entries or [self.entry()])
+        return obj
+
+    def entries(self, source):
+        return loot_service.source_entries(source)
+
     def take(self, args, now=100):
         return take_loot(self.char1, now=now, request=parse_loot(args))
+
+    def action_take(self, args, now=100):
+        from world.actions.gateway import ResultStatus, execute
+        from world.actions.manifest import get_index
+        from world.actions.resolver import dispatch_text
+
+        with patch("world.actions.loot_resolution.time", return_value=now), patch("world.actions.loot_services.time", return_value=now):
+            index = get_index()
+            invocation = dispatch_text(self.char1, index, "game.take", args, "가져")
+            result = execute(self.char1, self.session, invocation, index)
+        if result.status != ResultStatus.SUCCESS:
+            raise rules.RuleError(" ".join(map(str, result.messages)))
+        return result
 
     def look(self, args):
         command = Look()
@@ -202,10 +236,10 @@ class TargetIntegrationTests(WorldCommandTest):
         self.assertEqual(resolve([obj], selector, self.char1), [obj])
         self.assertIn(obj.key, self.look("장치 2"))
 
-    def test_corpse_global_numbering_all_prose_and_decay_renumber(self):
-        corpses = [self.source(), self.source(), self.source(name="밀림의포식자의 시체")]
+    def test_corpse_global_numbering_all_prose_and_decay_keeps_holes(self):
+        corpses = [self.native_source([self.entry(quantity=1)]), self.native_source([self.entry(quantity=2)]),
+                   self.native_source([self.entry(quantity=3)], name="밀림의포식자의 시체")]
         for index, corpse in enumerate(corpses, 1):
-            corpse.db.entries = [self.entry(quantity=index)]
             if index > 1:
                 corpse.db.decay_at = 200
         self.assertIn("×1", self.look("시체"))
@@ -223,12 +257,12 @@ class TargetIntegrationTests(WorldCommandTest):
         self.assertEqual(
             [source["id"] for source in state["corpses"]], [corpses[1].id, corpses[2].id]
         )
-        self.assertEqual([source["label"] for source in state["corpses"]], ["시체 1", "시체 2"])
+        self.assertEqual([source["label"] for source in state["corpses"]], ["시체 2", "시체 3"])
 
     def test_named_corpse_overview_keeps_room_global_source_numbers(self):
-        self.source()
-        self.source(name="밀림의포식자의 시체")
-        self.source()
+        self.native_source()
+        self.native_source(name="밀림의포식자의 시체")
+        self.native_source()
         output = self.look("갈퀴사냥룡의 시체 모두")
         self.assertIn("첫 번째 갈퀴사냥룡의 시체", output)
         self.assertIn("세 번째 갈퀴사냥룡의 시체", output)
@@ -237,23 +271,22 @@ class TargetIntegrationTests(WorldCommandTest):
         self.assertNotIn("'시체 2'", output)
 
     def test_single_corpse_detail_provides_executable_source_command(self):
-        corpse = self.source()
+        corpse = self.native_source()
         control = multiplayer_state(self.char1, 100)["corpses"][0]
         output = self.look("시체")
-        self.assertIn("지정: 시체", output)
+        self.assertIn("지정: 시체 1", output)
         self.assertIn("회수: " + control["take_command"], output)
-        self.assertNotIn("시체 1", output)
         self.assertNotIn("가능한 행동 : 가져", output)
         self.assertIn({"role": "command", "text": "가져"}, output.segments)
         self.char1.execute_cmd(control["take_command"])
-        self.assertEqual(corpse.db.entries, [])
+        self.assertEqual(self.entries(corpse), [])
         self.assertEqual(self.char1.profile()["inventory"]["scrap"], 3)
         empty = self.look("시체")
         self.assertIn("남은 전리품이 없다", empty)
         self.assertNotIn("회수:", empty)
 
     def test_numbered_corpse_detail_matches_controls_and_current_order(self):
-        a, b, c = self.source(), self.source(), self.source(name="밀림의포식자의 시체")
+        a, b, c = self.native_source(), self.native_source(), self.native_source(name="밀림의포식자의 시체")
         b.db.decay_at = c.db.decay_at = 200
         control = multiplayer_state(self.char1, 100)["corpses"][1]
         self.assertEqual(control["id"], b.id)
@@ -261,47 +294,48 @@ class TargetIntegrationTests(WorldCommandTest):
         self.assertIn("지정: 시체 2", output)
         self.assertIn("회수: " + control["take_command"], output)
         self.char1.execute_cmd(control["take_command"])
-        self.assertTrue(a.db.entries)
-        self.assertFalse(b.db.entries)
-        self.assertTrue(c.db.entries)
+        self.assertTrue(self.entries(a))
+        self.assertFalse(self.entries(b))
+        self.assertTrue(self.entries(c))
         a.reconcile(130)
         control = multiplayer_state(self.char1, 130)["corpses"][0]
         self.assertEqual(control["id"], b.id)
-        self.assertEqual(control["label"], "시체 1")
-        self.assertIn("지정: 시체 1", self.look("시체 1"))
+        self.assertEqual(control["label"], "시체 2")
+        self.assertIn("지정: 시체 2", self.look("시체 2"))
+        self.assertIn("선택할 수 없는 대상", self.look("시체 1"))
         self.assertFalse(b.attributes.has("selector"))
         self.assertFalse(b.attributes.has("index"))
 
-    def test_ground_detail_matches_entry_command_and_renumbers(self):
-        a = self.source(corpse=False, name="회수부품")
-        b = self.source(corpse=False, name="회수부품")
+    def test_ground_detail_matches_entry_command_and_keeps_number(self):
+        a = self.native_source(corpse=False, name="회수부품")
+        b = self.native_source(corpse=False, name="회수부품")
         control = multiplayer_state(self.char1, 100)["ground_loot"][1]["loot"][0]
         output = self.look("회수부품 2")
         self.assertIn("회수: " + control["take_command"], output)
         self.assertNotIn("가능한 행동 : 가져", output)
         self.assertIn({"role": "command", "text": "가져"}, output.segments)
         self.char1.execute_cmd(control["take_command"])
-        self.assertEqual(a.db.entries[0]["quantity"], 3)
-        self.assertEqual(b.db.entries[0]["quantity"], 2)
+        self.assertEqual(self.entries(a)[0]["quantity"], 3)
+        self.assertEqual(self.entries(b)[0]["quantity"], 2)
         self.assertEqual(self.char1.profile()["inventory"]["scrap"], 1)
         for _ in range(3):
-            self.take("회수부품")
+            self.action_take("회수부품")
         control = multiplayer_state(self.char1, 100)["ground_loot"][0]["loot"][0]
-        self.assertEqual(control["take_command"], "회수부품 가져")
-        self.assertIn("회수: 회수부품 가져", self.look("회수부품"))
+        self.assertEqual(control["take_command"], "회수부품 2 가져")
+        self.assertIn("회수: 회수부품 2 가져", self.look("회수부품 2"))
 
     def test_corpse_ttl_selects_current_pool_and_never_duplicates(self):
-        a, b, c = self.source(), self.source(), self.source(name="밀림의포식자의 시체")
+        a, b, c = self.native_source(), self.native_source(), self.native_source(name="밀림의포식자의 시체")
         b.db.decay_at = c.db.decay_at = 200
         a.reconcile(130)
         state = multiplayer_state(self.char1, 130)
-        self.assertEqual([source["label"] for source in state["corpses"]], ["시체 1", "시체 2"])
+        self.assertEqual([source["label"] for source in state["corpses"]], ["시체 2", "시체 3"])
         self.assertEqual([source["id"] for source in state["corpses"]], [b.id, c.id])
-        self.take("시체 2에서 모두", 130)
-        self.assertEqual(c.db.entries, [])
-        self.assertTrue(b.db.entries)
+        self.action_take("시체 2에서 모두", 130)
+        self.assertEqual(self.entries(b), [])
+        self.assertTrue(self.entries(c))
         with self.assertRaises(rules.RuleError):
-            self.take("시체 2에서 모두", 130)
+            self.action_take("시체 2에서 모두", 130)
         self.assertEqual(self.char1.profile()["inventory"]["scrap"], 3)
         self.assertEqual(len(room_loot(self.char1.location, False)), 1)
         a.reconcile(131)
@@ -338,35 +372,36 @@ class TargetIntegrationTests(WorldCommandTest):
         self.assertEqual(self.char1.profile()["inventory"]["bandage"], 7)
 
     def test_index_entry_ground_quantity_and_shorthand(self):
-        a = self.source(corpse=False)
-        b = self.source([self.entry(quantity=4), self.entry("bandage", 2)], corpse=False)
+        a = self.native_source(corpse=False)
+        b = self.native_source([self.entry(quantity=4), self.entry("bandage", 2)], corpse=False)
         state = multiplayer_state(self.char1, 100)
         self.assertEqual(state["ground_loot"][1]["loot"][0]["take_command"], "회수부품 2 가져")
-        self.take("회수 부품 2")
-        self.assertEqual(a.db.entries[0]["quantity"], 3)
-        self.assertEqual(b.db.entries[0]["quantity"], 3)
-        self.take("회수부품")
-        self.assertEqual(a.db.entries[0]["quantity"], 2)
-        self.take("회수부품 모두")
+        self.action_take("회수 부품 2")
+        self.assertEqual(self.entries(a)[0]["quantity"], 3)
+        self.assertEqual(self.entries(b)[0]["quantity"], 3)
+        self.action_take("회수부품")
+        self.assertEqual(self.entries(a)[0]["quantity"], 2)
+        self.action_take("회수부품 모두")
         self.assertEqual(self.char1.profile()["inventory"]["scrap"], 7)
-        self.take("모두")
+        self.action_take("모두")
         self.assertEqual(room_loot(self.char1.location, False), [])
 
     def test_entry_index_and_default_do_not_skip_protected_items(self):
-        source = self.source([self.entry(player=self.char2), self.entry(quantity=2)])
+        source = self.native_source([self.entry(player=self.char2), self.entry(quantity=2)])
         before = self.char1.profile()
         with self.assertRaises(rules.RuleError):
-            self.take("시체에서 회수부품")
+            self.action_take("시체에서 회수부품")
         self.assertEqual(self.char1.profile(), before)
         controls = multiplayer_state(self.char1, 100)["corpses"][0]["loot"]
-        self.assertEqual(controls[1]["take_command"], "시체에서 회수부품 2 가져")
-        self.take("시체에서 회수부품 2")
-        self.assertEqual([e["quantity"] for e in source.db.entries], [3, 1])
-        self.take("시체에서 회수부품 모두")
-        self.assertEqual([e["quantity"] for e in source.db.entries], [3])
+        self.assertEqual(len(controls), 1)
+        self.assertEqual(controls[0]["take_command"], "시체 1에서 회수부품 2 가져")
+        self.action_take("시체에서 회수부품 2")
+        self.assertEqual([e["quantity"] for e in self.entries(source)], [3, 1])
+        self.action_take("시체에서 회수부품 모두")
+        self.assertEqual([e["quantity"] for e in self.entries(source)], [3])
         source.db.decay_at = 300
-        self.take("시체에서 모두", 200)
-        self.assertEqual(source.db.entries, [])
+        self.action_take("시체에서 모두", 200)
+        self.assertEqual(self.entries(source), [])
         self.assertEqual(self.char1.profile()["inventory"]["scrap"], 5)
 
     def test_take_reconciles_expiring_source_before_number_resolution(self):
@@ -430,10 +465,10 @@ class TargetIntegrationTests(WorldCommandTest):
         for raw in ("탐사용 벌목도 모두 무장", "탐사대 작업복 모두 착용"):
             self.char1.execute_cmd(raw)
             self.assertEqual(self.char1.profile(), before)
-        sources = [self.source(), self.source()]
+        sources = [self.native_source(), self.native_source()]
         state = multiplayer_state(self.char1, 100)
         self.char1.execute_cmd(state["corpses"][1]["take_command"])
-        self.assertTrue(sources[0].db.entries)
-        self.assertFalse(sources[1].db.entries)
+        self.assertTrue(self.entries(sources[0]))
+        self.assertFalse(self.entries(sources[1]))
         self.assertEqual(ordered(sources), sources)
         self.assertEqual(labels(sources, lambda obj: "시체")[sources[1].id], "시체 2")

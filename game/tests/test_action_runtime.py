@@ -25,6 +25,38 @@ from tests.item_entity_fixture import NativeItemTest
 
 @override_settings(ACTION_CONTENT_PACKAGES=("world.actions.validation_content",))
 class ActionRuntimeTests(NativeItemTest):
+    def test_custom_and_regular_resolver_candidates_share_ambiguity_boundary(self):
+        from world.actions.registry import compile_manifest
+        from world.actions.schema import (
+            ActionBinding,
+            ContentPackage,
+            PackageManifest,
+            SyntaxVariant,
+        )
+        from world.actions.validation_content import PACKAGE
+
+        station = self.instrument()
+
+        def custom(caller, index, action, args, command_name):
+            from world.actions.resolver import ActionInvocation
+            from world.selection_numbers.api import descriptor
+
+            return ActionInvocation(action.id, "normal", (("provider", (descriptor(station).reference,)),))
+
+        ordinary = replace(self.index.actions["validation.object"],
+                           variants=(SyntaxVariant("normal", r"(?P<provider>검증기)"),))
+        specialized = replace(ordinary, id="validation.custom",
+                              variants=(SyntaxVariant("normal", r"(?P<provider>다른이름)"),), text_resolver=custom)
+        package = ContentPackage("validation.custom_overlap", verbs=(PACKAGE.verbs[0],),
+                                 actions=(ordinary, specialized), services=(PACKAGE.services[1],),
+                                 bindings=tuple(ActionBinding("overlap." + action.id, "validation.instrument",
+                                                              action.id, PACKAGE.services[1].id)
+                                                for action in (ordinary, specialized)))
+        index = compile_manifest(PackageManifest((package,)))
+        with self.assertRaises(RuleError):
+            dispatch_text(self.char1, index, "validation.measure", "검증기", "검측")
+        self.assertEqual(self.events(), [])
+
     def test_intra_action_overlap_is_rejected_before_service_or_db_changes(self):
         from world.actions.registry import RegistryError, compile_manifest
         from world.actions.schema import PackageManifest, SyntaxVariant

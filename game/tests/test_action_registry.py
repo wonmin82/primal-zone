@@ -47,6 +47,46 @@ def package():
 
 
 class ActionRegistryTests(TestCase):
+    def test_custom_resolver_and_lock_prepare_callbacks_reject_unsafe_code(self):
+        def unsafe(*args):
+            args[0].execute_cmd("금지된 중첩 명령")
+
+        p = package()
+        with self.assertRaises(RegistryError):
+            self.compile(replace(p, actions=(replace(p.actions[0], text_resolver=unsafe),)))
+        for callback in ("locker", "prepare"):
+            with self.subTest(callback=callback), self.assertRaises(RegistryError):
+                service = replace(p.services[0], **{callback: unsafe})
+                self.compile(replace(p, services=(service,)))
+
+    def test_web_reference_and_utf8_byte_budgets_are_action_local(self):
+        from world.actions.gateway import from_web
+        from world.rules import RuleError
+
+        p = package()
+        action = replace(p.actions[0], arguments=(ArgumentDefinition("note", default=""),))
+        original = self.compile(replace(p, actions=(action,)))
+        extended = self.compile(replace(p, actions=(replace(action, max_references=4096,
+                                                            max_payload_bytes=262144),)))
+        reference = {"kind": "object", "identity": "1", "scope_id": "room:1"}
+        payload = {"action_id": action.id, "variant": "normal", "request_id": "budget",
+                   "roles": {"provider": [reference] * 33}, "arguments": {}}
+        self.assertEqual((action.max_references, action.max_payload_bytes), (32, 8192))
+        with self.assertRaises(RuleError):
+            from_web(payload, original)
+        self.assertEqual(len(dict(from_web(payload, extended).roles)["provider"]), 33)
+        payload = {**payload, "roles": {"provider": [reference]}, "arguments": {"note": "한" * 3000}}
+        with self.assertRaises(RuleError):
+            from_web(payload, original)
+        self.assertEqual(dict(from_web(payload, extended).arguments)["note"], "한" * 3000)
+        for field, values in (("max_references", (0, 4097, True)),
+                              ("max_payload_bytes", (8191, 262145, True))):
+            for value in values:
+                with self.subTest(field=field, value=value), self.assertRaises(RegistryError):
+                    self.compile(replace(p, actions=(replace(action, **{field: value}),)))
+        with self.assertRaises(RuleError):
+            from_web({**payload, "arguments": {"note": "한" * 90000}}, extended)
+
     def test_item_location_constraints_are_typed_and_do_not_expand_scope(self):
         p = package()
         subject = RoleDefinition("subject", (ReferenceKind.ITEM,), location_kinds=("inventory",))
