@@ -72,7 +72,7 @@ INPUT_FUNC_MODULES = ["evennia.server.inputfuncs", "server.conf.primal_inputfunc
 COMMAND_PARSER = "server.conf.cmdparser.cmdparser"
 ACTION_CONTENT_PACKAGES = ("world.actions.room_npc_content", "world.actions.item_shared_content",
                            "world.actions.item_equipment_content", "world.actions.storage_content",
-                           "world.actions.firearm_lighting_content")  # M01/M02 운영 Cutover.
+                           "world.actions.firearm_lighting_content", "world.actions.loot_content")  # M01/M02 운영 Cutover.
 INSTALLED_APPS = [*INSTALLED_APPS, "world.item_entities.apps.ItemEntitiesConfig"]  # noqa: F405
 INSTALLED_APPS += ["world.loot_entities.apps.LootEntitiesConfig"]
 INSTALLED_APPS += ["world.door_entities.apps.DoorEntitiesConfig"]

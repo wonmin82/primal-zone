@@ -302,8 +302,11 @@ class Scenario:
             await outsider.until(lambda state: not state["corpses"] and bool(state["ground_loot"]),
                                  self.timeouts.lifecycle)
             self.elapsed("corpse → ground", death_seen, self.timings["CORPSE_TTL_SECONDS"])
-            assert any(entry["protected"] for ground in outsider.state["ground_loot"]
-                       for entry in ground["loot"])
+            # 보호 정보는 권리 있는 참여자에게만 보이며 외부인에게는 숨긴다.
+            await first.until(lambda state: bool(state["ground_loot"]) and any(
+                entry["protected"] for ground in state["ground_loot"] for entry in ground["loot"]))
+            assert all(not ground["loot"] for ground in outsider.state["ground_loot"])
+            assert outsider.state["loot_actions"]["ground"] is None
             await outsider.expect_text("모두 가져", "보호된 전리품")
             self.report("lifecycle", "ground loot / protection 유지")
             self.phase = "respawn"
@@ -314,7 +317,7 @@ class Scenario:
                          self.timings["CORPSE_TTL_SECONDS"] + self.timings["RESPAWN_DELAY_SECONDS"])
             self.report("respawn", "같은 spawn / max HP / attack 가능")
             self.phase = "protection"
-            await outsider.until(lambda state: bool(state["ground_loot"]) and all(
+            await outsider.until(lambda state: any(ground["loot"] for ground in state["ground_loot"]) and all(
                 not entry["protected"] for ground in state["ground_loot"] for entry in ground["loot"]),
                 self.timeouts.lifecycle)
             self.elapsed("loot protection expiry", death_seen, self.timings["LOOT_PROTECTION_SECONDS"])

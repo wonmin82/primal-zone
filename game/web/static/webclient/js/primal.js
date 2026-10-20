@@ -201,8 +201,8 @@
       el.disabled = !enemy.can_attack;
       return el;
     });
-    if (state.corpses.length > 1) {
-      const all = button("모든 시체의 전리품 회수", "모든 시체에서 모두 가져");
+    if (state.corpses.length > 1 && state.loot_actions?.corpses) {
+      const all = actionButton("모든 시체의 전리품 회수", state.loot_actions.corpses);
       all.disabled = !state.corpses.some((source) => source.loot.some((item) => item.can_take));
       actions.push(all);
     }
@@ -211,25 +211,25 @@
       title.replaceChildren(semantic("remains", corpse.label), " · ", semantic("remains", corpse.name));
       actions.push(title);
       actions.push(button(corpse.label + " 봐", corpse.look_command));
-      if (corpse.loot.length) {
-        const all = button(corpse.label + " 전리품 회수", corpse.take_command);
+      if (corpse.loot.length && corpse.take_action) {
+        const all = actionButton(corpse.label + " 전리품 회수", corpse.take_action);
         all.disabled = !corpse.loot.some((item) => item.can_take); actions.push(all);
-      } else { const empty = document.createElement("small"); empty.textContent = corpse.loot_obscured ? "전리품을 식별하기 어려움" : "남은 전리품 없음"; actions.push(empty); }
+      } else { const empty = document.createElement("small"); empty.textContent = corpse.loot_obscured ? "전리품을 식별하기 어려움" : "회수 가능한 전리품 없음"; actions.push(empty); }
       for (const item of corpse.loot) {
-        const el = button(item.display_label + " → " + (item.protected ? item.assigned_name : "자유 획득"), item.take_command);
+        const el = actionButton(item.display_label + " → " + (item.protected ? item.assigned_name : "자유 획득"), item.action);
         el.replaceChildren(semantic(item.kind === "currency" ? "reward" : "item", item.display_label), " → ", semantic(item.protected ? "player" : "muted", item.protected ? item.assigned_name : "자유 획득"));
-        el.disabled = !item.can_take; actions.push(el);
+        el.disabled = !item.can_take || !item.action; actions.push(el);
       }
     }
-    if (state.ground_loot.length) {
-      const all = button("바닥에서 모두 가져", "모두 가져");
+    if (state.ground_loot.length && state.loot_actions?.ground) {
+      const all = actionButton("바닥에서 모두 가져", state.loot_actions.ground);
       all.disabled = !state.ground_loot.some((source) => source.loot.some((item) => item.can_take));
       actions.push(all);
     }
     for (const source of state.ground_loot) for (const item of source.loot) {
-      const el = button("바닥 · " + item.display_label + " → " + (item.protected ? item.assigned_name : "자유 획득"), item.take_command);
+      const el = actionButton("바닥 · " + item.display_label + " → " + (item.protected ? item.assigned_name : "자유 획득"), item.action);
       el.replaceChildren("바닥 · ", semantic(item.kind === "currency" ? "reward" : "item", item.display_label), " → ", semantic(item.protected ? "player" : "muted", item.protected ? item.assigned_name : "자유 획득"));
-      el.disabled = !item.can_take; actions.push(el);
+      el.disabled = !item.can_take || !item.action; actions.push(el);
     }
     renderGrowth(state);
     const party = state.party;

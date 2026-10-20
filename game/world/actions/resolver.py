@@ -9,6 +9,14 @@ from world.rules import RuleError
 from world.targets import Mode, normalized, parse_selector
 
 
+class TargetNotFound(RuleError):
+    """유효한 문법이지만 현재 후보가 없는 선택."""
+
+
+class TargetAmbiguous(RuleError):
+    """실제 후보의 이름·번호 충돌. 문법 오류와 구분한다."""
+
+
 @dataclass(frozen=True)
 class ActionInvocation:
     action_id: str
@@ -51,6 +59,12 @@ def role_records(caller, role, bindings=None, *, cache=None):
                         or not entity.access(caller, "view") or not entity.access(caller, "call")):
                     continue
                 scopes.add(f"personal_storage:{caller.pk}" if entity.personal else f"shared_storage:{entity.pk}")
+            elif role.scope == TargetScope.SOURCE:
+                from typeclasses.loot import Corpse, DroppedLoot
+
+                if isinstance(entity, (Corpse, DroppedLoot)) and entity.location == caller.location:
+                    scopes.add(f"corpse_loot:{entity.pk}" if isinstance(entity, Corpse)
+                               else f"ground:{caller.location.pk}")
             elif isinstance(entity, ItemEntity):
                 root = entity.root()
                 if root.location_kind in ("inventory", "equipment") and root.owner_object_id == caller.pk:
@@ -63,6 +77,10 @@ def role_records(caller, role, bindings=None, *, cache=None):
             cache[key] = records_for(caller, scope_ids=scopes)
         records = cache[key]
     records = tuple(record for record in records if record.reference.kind in role.kinds)
+    if role.scope == TargetScope.SOURCE:
+        owners = {ref.identity for ref in (bindings or {}).get(role.scope_from, ())}
+        records = tuple(record for record in records
+                        if str(getattr(resolve_reference(record.reference), "owner_object_id", "")) in owners)
     if role.definition_ids or role.location_kinds:
         def entity(record):
             key = ("entity", record.reference)
@@ -91,7 +109,7 @@ def select_role(caller, role, query=None, *, bindings=None, candidates=None, cac
         exact = [record for record in records if normalized(record.name) == normalized(query)]
         if exact:
             if len(exact) > 1 and re.search(r"\d+$", query.strip()):
-                raise RuleError("숫자로 끝나는 실제 이름이 여러 대상과 일치합니다. 다른 고유 이름을 지정하세요.")
+                raise TargetAmbiguous("숫자로 끝나는 실제 이름이 여러 대상과 일치합니다. 다른 고유 이름을 지정하세요.")
             matches, selector = exact, None
         else:
             known = [name for record in records for name in (record.name, *record.aliases)]
@@ -99,17 +117,17 @@ def select_role(caller, role, query=None, *, bindings=None, candidates=None, cac
             matches = [record for record in records if normalized(selector.name) in
                        {normalized(name) for name in (record.name, *record.aliases)}]
             if len({record.group_id for record in matches}) > 1:
-                raise RuleError("서로 다른 선택 그룹의 별칭이 겹칩니다. 실제 이름을 지정하세요.")
+                raise TargetAmbiguous("서로 다른 선택 그룹의 별칭이 겹칩니다. 실제 이름을 지정하세요.")
             if selector.mode == Mode.INDEX:
                 unique_match = len(matches) == 1
                 matches = [record for record in matches if record.number == selector.index or
                            (selector.index == 1 and unique_match and selector.name in record.unique_names)]
                 if len({record.scope_id for record in matches}) > 1:
-                    raise RuleError("서로 다른 보관 범위의 번호가 겹칩니다. 대상을 고유하게 지정하세요.")
+                    raise TargetAmbiguous("서로 다른 보관 범위의 번호가 겹칩니다. 대상을 고유하게 지정하세요.")
     if not matches:
         if (query is None or not query.strip()) and not role.required:
             return ()
-        raise RuleError("지금 선택할 수 없는 대상입니다.")
+        raise TargetNotFound("지금 선택할 수 없는 대상입니다.")
     if selector and selector.mode == Mode.ALL and not (role.allow_all or role.default == DefaultTargetPolicy.ALL):
         raise RuleError("이 행동은 전체 대상 선택을 지원하지 않습니다.")
     if selector and selector.mode == Mode.ALL or role.default == DefaultTargetPolicy.ALL:
@@ -123,7 +141,7 @@ def select_role(caller, role, query=None, *, bindings=None, candidates=None, cac
 
         return (min(matches, key=legacy_order).reference,)
     if len(matches) != 1:
-        raise RuleError("대상을 이름과 번호로 명확하게 지정하세요.")
+        raise TargetAmbiguous("대상을 이름과 번호로 명확하게 지정하세요.")
     return (matches[0].reference,)
 
 
@@ -238,9 +256,20 @@ def dispatch_text(caller, index, verb_id, args, command_name):
     selections = {}
     record_cache = {}  # 구문 선택 한 번에만 재사용한다. Gateway는 잠금 뒤 새로 검증한다.
     offers = provided(caller, index)
+    custom = {index.actions[binding.action_id] for _, binding in offers
+              if index.actions[binding.action_id].verb_id == verb_id
+              and index.actions[binding.action_id].text_resolver is not None}
+    custom_errors = []
+    for action in custom:
+        try:
+            result = action.text_resolver(caller, index, action, args, command_name)
+            if result is not None:
+                possible.append(result)
+        except RuleError as error:
+            custom_errors.append(error)
     for reference, binding in offers:
         action = index.actions[binding.action_id]
-        if action.verb_id != verb_id:
+        if action.verb_id != verb_id or action.text_resolver is not None:
             continue
         for variant in action.variants:
             suffix = " " + variant.suffix if variant.suffix else ""
@@ -300,6 +329,8 @@ def dispatch_text(caller, index, verb_id, args, command_name):
                 continue
             possible.append(ActionInvocation(action.id, variant.id, tuple(roles.items()), arguments))
     unique = tuple(dict.fromkeys(possible))
+    if not unique and custom_errors:
+        raise custom_errors[0]
     if len(unique) != 1:
         raise RuleError(verb.ambiguous_message if unique else verb.invalid_message)
     return unique[0]

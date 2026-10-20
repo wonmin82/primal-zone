@@ -74,23 +74,22 @@ def prepare(credentials):
         create_claim(row, reserved_party=party, assigned_player=players[0], protection_until=time()+1200)
         # 미래 보호 시각의 저장 fixture. 운영60/600초 상수·tick은 그대로다.
     if scenario in ("E2E-07", "E2E-12", "E2E-13"):
-        # Native cutover 도메인에 Legacy source를 몰래 편입하지 않는다.
-        # 기존 settings_test와 같은 historical audit DB에서 두 호환 경로를 검증한다.
+        # 공개 회수는 Native A/B 실물을 사용한다. E2E-12만 읽기 전용
+        # historical Legacy fixture를 함께 두어 재시작 시 보존을 검증한다.
         # 이 프로세스는 setup()의 marker/DB 검사를 통과한 새 격리 DB만 소유한다.
         from django.conf import settings
         from world.item_entities.models import ItemEntity, ItemRuntime
         settings.ITEM_MIGRATION_AUDIT = True
-        ItemRuntime.objects.all().delete()
-        # Legacy 실물은 Native 소지품으로 직접 회수할 수 없다는 계약도 유지한다.
-        # B는 서버 시작 전의 독립 Legacy fixture이며 A는 Native fixture다.
-        legacy = players[1]
-        ItemEntity.objects.filter(owner_object=legacy).delete()
-        legacy.db.equipment_backend = 'legacy'
-        legacy.db.active_weapon_item_id = None
-        legacy.db.active_light_item_id = None
-        p = rules.new_profile()
-        p.update(credits=2000)
-        legacy.db.profile = p
+        if scenario == "E2E-12":
+            ItemRuntime.objects.all().delete()
+            legacy = players[1]
+            ItemEntity.objects.filter(owner_object=legacy).delete()
+            legacy.db.equipment_backend = 'legacy'
+            legacy.db.active_weapon_item_id = None
+            legacy.db.active_light_item_id = None
+            p = rules.new_profile()
+            p.update(credits=2000)
+            legacy.db.profile = p
         party = None
         if scenario == "E2E-07":
             party = create_object(Party, key="통합 검증 일행")
@@ -100,7 +99,7 @@ def prepare(credentials):
             for player in players[:2]:
                 player.db.party_id = party.pk
         for native in (False, True):
-            corpse = create_object(Corpse, key="Native 검증 시체" if native else "Legacy 검증 시체", location=players[0].location)
+            corpse = create_object(Corpse, key="Legacy 검증 시체" if not native and scenario == "E2E-12" else "Native 검증 시체", location=players[0].location)
             corpse.db.decay_at = time() + 600
             if native:
                 populate_source(corpse, [])
@@ -109,10 +108,15 @@ def prepare(credentials):
                              assigned_player=players[0], protection_until=time() + 300)
                 create_currency(corpse, 20, shares={players[0]: 6, players[1]: 14},
                                 reserved_party=party, protection_until=time()+300)
-            else:
+            elif scenario == "E2E-12":
                 corpse.db.entries = [{"kind": "item", "id": "water", "quantity": 1,
                                       "assigned_player": players[1].pk, "reserved_player": players[1].pk if not party else None,
                                       "reserved_party": party.pk if party else None, "protection_until": time() + 300}]
+            else:
+                populate_source(corpse, [])
+                row = api.create_item("water", quantity=1, location_kind="corpse_loot", owner_object=corpse)
+                create_claim(row, reserved_player=players[1] if not party else None, reserved_party=party,
+                             assigned_player=players[1], protection_until=time() + 300)
 
 
 if __name__ == "__main__":

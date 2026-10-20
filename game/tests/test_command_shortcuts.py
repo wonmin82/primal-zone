@@ -349,7 +349,7 @@ class CommandShortcutsTests(WorldCommandTest):
 
     def test_reserved_names_and_invalid_local_syntax_do_not_replace_data(self):
         self.register("a", "b")
-        for name in ("상태", "공격", "해", "줄임말", "ㅂ", "봐", "준말", "집", "quit", "connect", "n", "2층", "4층", "5층", "계단", "emit",
+        for name in ("상태", "공격", "해", "줄임말", "ㅂ", "봐", "준말", "quit", "connect", "n", "2층", "4층", "5층", "계단", "emit",
                      "북동", "남동", "남서", "북서", "ne", "se", "sw", "nw"):
             before = self.saved()
             self.run_raw(f"{name} 소지품 줄임말")
@@ -360,6 +360,29 @@ class CommandShortcutsTests(WorldCommandTest):
             self.assertEqual(self.saved(), before)
         self.run_raw("a 장비 줄임말")
         self.assertEqual(self.saved()["a"], "장비")
+
+    def test_take_alias_personal_name_is_allowed_but_active_action_wins(self):
+        from evennia import create_object
+        from typeclasses.loot import DroppedLoot
+        from world import loot_service
+        from world.item_migration.convert import convert_explorer
+        from world.item_migration.workflow import migration_context
+
+        with migration_context():
+            convert_explorer(self.char1, dict(self.char1.profile()),
+                             self.char1.profile()["recovery"]["updated_at"], False)
+        self.connect_character(self.char1)
+        self.register("집", "장비")
+        self.assertIn("장비", self.run_raw("집"))
+        source = create_object(DroppedLoot, key="보급칩", location=self.char1.location)
+        loot_service.populate_source(source, [])
+        row = loot_service.create_currency(source, 1)
+        credits = self.char1.profile_snapshot()["credits"]
+        self.run_raw("칩 집")
+        self.assertEqual(self.char1.profile_snapshot()["credits"], credits + 1)
+        self.assertFalse(type(row).objects.filter(pk=row.pk).exists())
+        self.assertEqual(self.saved()["집"], "장비")
+        self.assertIn("장비", self.run_raw("집"))
 
     def test_runtime_real_and_locked_command_precedence_over_personal(self):
         self.char1.change(lambda p: p.update(command_shortcuts={"점검": "귀환", "상태": "귀환", "상": "귀환"}))

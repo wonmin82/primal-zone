@@ -130,6 +130,10 @@ Native 사용자 이전은 같은 owner 내부 위치 변경과 owner-changing t
 
 `generator_repair_part`는 max_stack3의 submit-only quest resource다. 일반 scrap과 별개이며 발전기 수리3개 제출 외 정상 소실·이전 경로를 차단한다. Migration의 정비부품/fixed discovery entitlement는 owner tree 기준이며 ItemEntity schema/operation framework를 변경하지 않는다.
 
+## M05 전리품 Action의 안정 참조
+
+시체·바닥 전리품 회수는 `loot.take`의 Source/Subject 참조를 Gateway에서 재검증한 뒤 기존 `loot_service.pickup()`을 호출한다. ItemEntity UUID/sequence/quantity와 B-1 번호를 구분하며 CurrencyLoot는 ItemEntity로 바꾸지 않는다. 부분 회수의 생존 UUID/번호, 전체 회수·분할·병합·Claim 제거 규칙은 기존 API가 소유한다. Ground의 번호는 Room 공통이지만 실제 owner Source ID도 고정한다. 수량·권리 변경 또는 삭제/병합 뒤의 오래된 웹 참조는 동일 이름·번호의 다른 Entity로 대체하지 않는다. 상세 매핑·검증은 [Action 전환표](action-migration.md), 권리는 [전리품 권리](loot-claims.md)를 따른다.
+
 ## Historical Phase 1~5 transition boundary
 
 아래 설명은 native runtime 전환 전의 단계별 경계다. 현재 ItemEntity SSOT·fresh bootstrap·legacy explicit migration 계약을 대체하지 않는다.

@@ -19,7 +19,6 @@ from commands.command_shortcuts import DeleteShortcut, Sequence, Shortcuts
 from commands.inventory import (
     Equipment,
     Inventory,
-    Take,
 )
 from commands.items import (
     Drop,
@@ -34,7 +33,6 @@ COMMANDS = [
     Skills,
     Experience,
     Equipment,
-    Take,
     *PARTY_COMMANDS,
     Look,
     Exits,

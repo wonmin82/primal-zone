@@ -202,3 +202,13 @@ PR B 구현·테스트·독립 리뷰·CI의 진행은 전환표에 기록한다
 `dispatch_text()`는 한 번의 순수 구문 선택 동안 같은 Scope의 후보 조회와 참조 해소를 재사용한다. 정의별 Role 필터가 다르더라도 월드·소지품을 다시 순회하지 않는다. 이 캐시는 Invocation 선택이 끝나면 버려지며 다음 입력이나 Gateway로 전달하지 않는다. Gateway는 잠금 이후 현재 Scope·권한·소유권을 다시 조회하므로 이동·권한 변경의 오래된 결과를 실행 권한으로 사용하지 않는다.
 
 장비의 순수 `EquipmentItem` snapshot에는 현재 B-1 번호를 전달한다. `entity_snapshot()`이 선택된 캐릭터 아이템 UUID 집합의 번호만 한 번 조회하고, 텍스트·소지품 행·Action 버튼이 그 번호를 사용한다. 개별 UUID는 구조화된 요청의 참조에 사용하며 일반 정보 본문에는 출력하지 않는다. M04의 명시 실행은 Gateway 트랜잭션 안에서 기존 자연 회복 경계를 정산하고, Help/Presenter는 시간 투영만 수행한다.
+
+## PR C의 Loot Source 역할과 실행 경계
+
+Loot의 Source/Subject는 같은 객체가 아니다. Corpse 또는 Ground Source가 Provider이며 실제 ItemEntity/CurrencyLoot가 Subject다. `TargetScope.SOURCE`는 선택된 출처의 항목만 반환하고, Room 공통 Ground 번호 Scope에서도 실제 owner ID를 확인한다. 기본 시체 선택은 Source를 먼저 확정한 다음 그 객체의 Binding을 사용한다.
+
+복합 전리품 문법은 콘텐츠의 `ActionDefinition.text_resolver`, 도메인 잠금은 `ServiceDefinition.locker` 선언으로 연결한다. 공통 Dispatcher/Gateway는 선언된 동기 콜백을 호출하고 Loot 이름으로 분기하지 않는다. Loot locker는 일부 Item을 먼저 잠그지 않고 기존 `lock_sources`에 전체 Source/지급 대상 집합을 전달한다. 기존 Service의 잠금 동작과 문법은 유지한다.
+
+`ServiceDefinition.prepare`는 실행 전 기존 생명주기 정산을 수행한다. Loot는 이 경계에서 `reconcile_room()`의 정상 TTL·보호 만료 처리를 유지하며 Action 목록 생성에는 추가 효과를 넣지 않는다. 웹 요청의 기본 제한은 역할당 32개·8192byte로 유지하고, 다중 Source 전체 회수만 해당 Action에 4096개·262144byte 한도를 명시한다. 한도를 넘는 요청은 일부만 처리하지 않고 거절한다.
+
+웹 선택 snapshot은 서버가 Source/Entry·수량·권리·지분·요청자를 서명한 값이다. 현재 권한 검사를 대체하지 않으며 일부 회수·권리 변경·출처 이동·삭제/병합 뒤의 오래된 요청은 동일 안정 ID여도 거절한다. 표시와 Help 생성은 번호 발급·지급·타이머 변경을 수행하지 않는다. 실제 M05 매핑과 실행 증거는 [전환표](action-migration.md)의 PR C 절에서 관리한다.

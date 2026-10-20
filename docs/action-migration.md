@@ -23,7 +23,7 @@
 | 넣어·꺼내 / 보관 | items.Store/Retrieve → Container.act | storage.store/retrieve → storage.transfer → item_transfer_native.transfer_selected / Container + CURRENT/STORAGE Subject | test_item_entities, test_phase6_runtime | B / 구현 중·통합 검증 진행 |
 | 재장전·장전·채워·넣어·꺼내 / 총기·탄창 | commands/firearms, items | item_ops.reload/load/fill/inside_fill/ammo_insert/magazine_remove/ammo_remove → item_ops.execute → firearm_service / Root Provider·Inside Subject·Source | test_firearms, test_equipment_entities | B / 구현 중·통합 검증 진행 |
 | 켜·꺼·확인·넣어 / 광원 | items.LightOn/Off/Status | item_ops.light_on/light_off/light_status/power_insert → item_ops.execute → lighting_service / Root 광원 Provider·전원 Source | test_lighting, test_lighting_entities | B / 구현 중·통합 검증 진행 |
-| 가져·집·시·시2~시5·다중 Source·부분/화폐 | inventory.Take → typeclasses/loot.take_loot | 계획: Corpse/Ground Source + 안정 Loot/Currency ID → loot_service | test_loot_entities, test_currency_loot, test_parties, test_targets | C / 미착수 |
+| 가져·집·시·시2~시5·다중 Source·부분/화폐 | inventory.Take → typeclasses/loot.take_loot | loot.take → loot.pickup → loot_service.pickup / Corpse·Ground Source + 안정 ItemEntity/Currency ID | test_loot_actions, test_loot_action_invariants, 기존 Loot·Currency·Party 회귀 | C / 구현 완료·최종 검증 진행 |
 | 전역 봐·말·도움 / 객체 상세·Help·Web | character.Help/Look, social.Say, state/web_actions | 전역 진입점 유지, 객체 Action 표시를 Compiled Index로 통합. A는 소유 기능만 동기화 | test_web_state, test_web_prompt, test_text, test_npc_dialogue | D / 전체 교차 검사 미착수 |
 
 ## 전환과 데이터 경계
@@ -108,3 +108,65 @@ PR A [#70](https://github.com/wonmin82/primal-zone/pull/70)은 Merge Commit `d33
 조회 비용은 같은 텍스트 Invocation 안에서만 Scope 레코드와 definition 필터의 참조 조회를 재사용한다. Gateway는 실행 직전 새 조회를 유지하고 명령 사이의 권한·대상 캐시는 추가하지 않는다. 교차 회귀의 무관한 월드 증가 검사에서는 다른 범위 80행을 추가해도 SQL 수 367→367, 무관한 대상 resolve 0을 확인했다. 이는 현재 fixture의 Query 범위 근거이며 운영 DB·PostgreSQL·다중 서버 성능 보장을 뜻하지 않는다.
 
 PR B의 최종 테스트 개수·실행 SHA·독립 리뷰·원격 CI는 코드 확정 후 실제 결과로 기록한다. 현재 문서 정리를 테스트 PASS로 간주하지 않는다. 운영 DB migration/seed/복원은 미실행이며 운영 UUID·수량·상태를 무단 변환하지 않는다. 전체 38개 종합 검증·수동 브라우저/Windows IME·Full Smoke는 #67의 후속 범위이고 PostgreSQL·다중 서버는 미검증이다. M03/M04 완료와 PR B 제출만으로 M05/M06이나 Phase 2 전체 Migration Gate를 PASS 처리하지 않는다.
+
+## PR C — M05 전리품 전환
+
+기준은 PR B와 운영 정책 PR #72가 병합된 main `28117016e56f762fd2a91c99798971e738d3457d`다. 아래는 M05 구현 범위이며, PR C 병합 전 Final Closeout과 Phase 2 Migration Gate를 의미하지 않는다.
+
+| 기존 입력·경로 | 신규 선택·실행 | 보존할 효과와 경계 |
+| --- | --- | --- |
+| Take.run → parse_loot → take_loot | 명시 Manifest의 Loot ContentPackage → DynamicActionCommand → 선언된 문법 Resolver → loot.take → Gateway → loot_service.pickup | 가져/집·후치 문법·고정 단축어·Session/Prompt를 같은 공개 진입점으로 이전 |
+| 시체에서 모두/품목 가져 | 기본 Source 하나 먼저 선택 → 해당 Source Binding | 복수 시체만으로 모호성 거절하지 않으며 실패 Source를 바꾸지 않음 |
+| 시체 N에서 / 시N | Room의 실제 Corpse B-1 번호 → 안정 Source ID | 2 삭제 후 3 유지·새 4·그룹 전체 소멸 후 1, 결번 대체 없음 |
+| 모든 시체에서 ... 모두 | 여러 Corpse Source와 확정 Entry 집합 | 다중 Source와 단일 출처의 전체 수량 구분, 한 변경 단위의 지급 |
+| 출처 없는 품목/칩/모두 가져 | Ground의 Room 공통 번호와 실제 owner Source | 동일 이름·번호로 새 객체가 생겨도 과거 UUID/ID 요청은 실패 |
+| 칩 N / 20칩 / 칩 모두 | CurrencyLoot 안정 ID와 명시 금액/전체 인자 | 기존 CurrencyShare eligibility·가중 정수 분배·부분 회수·만료 후 caller 지급 |
+| loot_controls의 peers.index / take_command 버튼 | 영속 SelectionNumber 표시와 Source/Subject typed Action | 권한 필터와 번호 발급 분리, 보호 내용 비공개, 문자열 재파싱 실행 제거 |
+
+Corpse 번호 Scope는 Room/`world:corpse`, 내부 Item/Currency는 `corpse_loot:<Source ID>`, Ground는 `ground:<Room ID>`다. ItemEntity UUID와 CurrencyLoot ID는 표시 번호와 별개이며 Ground의 Room 공통 Scope에서도 실제 owner Source를 재검증한다. 플레이어별 권리·파티·보호 만료는 번호를 재발급하지 않는다.
+
+새 어댑터는 LootClaim·Party 분배를 계산하지 않고 기존 `loot_service.lock_sources()`와 `pickup()`을 재사용한다. Object 소유자/Source → Item → Claim → Currency → Share → 번호 finalizer 순서와 최상위 `world_change()` 커밋 경계를 유지한다. 웹 선택의 Source·Entry·수량·권리·지분은 서버 서명 snapshot으로 고정하고 실행 시 현재 상태와 비교한다. 서명은 획득 권한이 아니며 현재 Session·시야·Scope·권리도 다시 확인한다.
+
+Legacy 공개 Take 등록과 재노출을 제거하고 웹 회수를 Typed Action으로 바꾼다. 구형 blob 회귀·데이터 감사 호환은 운영 fallback과 구분한다. 버려/줘, 기존 M01~M04 Action, 전역 봐·말·도움·pz_dialogue·Engine/Exit 및 전투/생명주기는 유지한다. 운영 DB migration/seed/복원은 실행하지 않는다. 기존 번호 데이터가 필요한 배포 환경은 기존 명시적 백업·번호 seed·verify·복구 절차를 따른다.
+
+Historical audit 모드의 구형 blob은 기존 권리 검사 후 품목·수량을 읽기 전용으로 표시한다. 실제 Entry ID가 없으므로 Action과 실행 명령을 제공하거나 배열 위치로 ID·정규 번호를 만들지 않는다. 운영 native runtime은 기존 migration 검증을 요구하며, 조회가 데이터 변환을 실행하지 않는다. 공개 회수 회귀는 Native ItemEntity/CurrencyLoot Fixture로 실행하고 구형 데이터의 무변경 조회 검사는 별도로 유지한다.
+
+### PR C 검증 상태
+
+검증 기준은 위 main SHA와 PR C 미커밋 Diff다. Windows Native Python 3.13.15, SQLite와 단일 Evennia Server의 격리 환경에서 실행했다. 과거 PR A/B 결과를 이번 성공 근거로 합산하지 않는다.
+
+| 검사·실행 근거 | 실제 결과 | 범위와 제한 |
+| --- | --- | --- |
+| 신규 `test_loot_actions`와 `test_loot_action_invariants` 직접 회귀 | 개발 중 관련 검사 PASS | 가져/집 실제 공개 실행, Source·Entry B-1, A/B 권리·파티·0 지분·부분 회수, stale UUID/수량/owner, Unique·수령자 오류, Rollback과 커밋 후 알림을 검증. 개별 실행의 중복 개수를 합산하지 않음 |
+| 보호 수량 추측 회귀 2개와 기존 Item 경계 2개 | 4개 PASS | 외부인의 작은/큰 요청이 같은 권한 거절, 권리자의 수량 부족은 유지. 수정 전 신규 2개 FAIL 재현 후 권리 검사를 수량 비교 앞으로 이동 |
+| 후속 조회·Legacy 호환·일반 Provider 기본 정책 | 4개 PASS | 기본 시체 조회·명시 번호, 구형 blob 무변경 읽기와 Action 없음, 기존 구형 Currency read/decay, 비Loot 유일 대상 정책 유지 |
+| `test_targets test_text test_distant_view` | 48개 중 43 PASS / 5 FAIL 후 해당 5개 PASS | 공개 회수 Fixture를 Native로 이전하고 B-1 결번 유지·정규 번호 표시·보호 정보 필터 기대를 반영. Historical 도메인 검사는 유지 |
+| 경제·명령 Overhaul·개인 줄임말 직접 회귀 | 4개 PASS | Native 지급/버리기/회수의 지갑 총량 보존, 시/시2 실제 지급, D02 동명 집 저장·활성 Action 우선·Provider 소멸 후 개인 정의 복귀 |
+| `scripts/dev.py check`, Node syntax, `git diff --check` | PASS | 코드·웹 문법 검사. 최종 JS 정적 수집 후 실제 Chromium 실행 |
+| `scripts/dev.py smoke` / `prc-smoke-final.log` | PASS, 193.877초 | 실제 WebSocket·scheduler·일행 보상·보호/부분 화폐 회수·TTL·리스폰·보호 만료·상점·재로그인. 소유 프로세스/임시 환경 정리, 운영 DB hash/mtime/size 불변 |
+| `.venv/Scripts/python.exe scripts/browser_e2e.py` | Chromium 12개 PASS, 오류 0, 146.880초 | TEST-66C-01 실제 UUID 버튼·동일 요청 재전송·삭제 후 새 Source에 stale 요청 거절·텍스트 동등 지급 포함. 브라우저/서버 프로세스·자격 증명 정리와 운영 DB 불변 확인 |
+| 독립 Auditor | 지정 소스 감사 A, 잔여 P0/P1/P2 0 | 전체 권리/잠금/영속/실패 경계 감사와 후속 수량 비공개·Legacy 읽기/기본 선택의 별도 좁은 감사를 수행. 감사자는 테스트를 실행하지 않음 |
+| 독립 Reviewer | 일반 검토 A, P0/P1/P2 0 | 고위험 감사와 구분해 공개 문법·Help·웹 Typed 버튼·운영 Manifest·Legacy 중복 제거와 유지 경로를 확인. 테스트 실행 없음 |
+| `scripts/dev.py test --parallel 4` / `prc-full-frozen.log` | 규칙 232 PASS, 통합 1,043개 중 2 FAIL / ERROR 0 | 통합 893.319초. 실패는 아래 Legacy 표시 기대 2개이며 전체 실행을 PASS로 집계하지 않음. 격리 clone DB와 소유 프로세스 정리 확인 |
+| 위 경제 테스트 2개 보완 후 직접 재검증 | 2개 PASS, 12.605초 | Legacy 읽기 전용 UI, Native CurrencyLoot/Source 실제 ID·B-1·8칩/1칩 표시·정규 명령과 칩 별칭 지급·삭제/잔량·번호 유지. 독립 Reviewer가 실제 보완 Diff 재확인, 새 지적 0 |
+| 정확한 PR HEAD 필수 CI | 제출 후 확인 | `test`·`smoke`·`contracts`·`browser-e2e`의 정확한 SHA/실행 URL/결과는 PR Validation에 기록 |
+
+첫 전체 검사는 순수 Python 232개 PASS, 통합 1,033개에서 6 FAIL/12 ERROR였다. 실행 도중 코드가 변경되어 최종 코드 근거로 사용하지 않는다. 구형 blob 조회의 안정 참조 오류와 기본 시체 조회 회귀를 수정하고, 공개 실행 Fixture·시각·B-1 기대를 보완한 뒤 위 직접 검사를 수행했다. 최초 실패를 성공 결과로 덮어쓰지 않는다.
+
+동결 후 전체 검사에 남은 2개는 `test_currency_display_and_indexed_take_target_are_independent`의 구형 blob 임시 번호·실행 명령 기대와 `test_legacy_read_take_and_decay_and_web_use_common_assets`의 구형 실행 명령 기대였다. 구형 데이터의 읽기·Decay·historical 지급 검사는 유지하고, 실행 번호 검사는 실제 Native CurrencyLoot ID·Source·B-1·공개 지급으로 이전하여 위 2개 직접 재검증을 통과했다. 이 테스트 Fixture 보완만으로 제품 코드가 바뀌지 않으므로 로컬 전체 검사를 반복하지 않으며, 필수 CI의 전체 검사는 생략하지 않는다. 최종 CI는 PR Validation에서 확인한다.
+
+운영 DB migration/seed/복원은 미실행이다. Full Smoke·전체 38개 종합/수동 검증·Windows OS IME·실제 모바일·PostgreSQL·다중 서버는 이번 PASS 범위에 포함하지 않는다. M06과 Phase 2 전체 Migration Gate는 미완료이며, PR C 병합 전 M05 Final Closeout을 선언하지 않는다.
+
+### PR #73의 통합 Fixture 보완
+
+최초 제출 HEAD `2bacd60c874ae6272e4ae2f9a96e62f3080c82f6`의 [CI 실행](https://github.com/wonmin82/primal-zone/actions/runs/39206621935)에서 기본 Chromium 12개와 E2E-01~06은 성공했으나 E2E-07이 실패했다. E2E-07/13의 기존 Fixture가 Legacy 플레이어와 blob을 공개 회수하는 경로를 요구했기 때문이다. 두 시나리오는 Native A/B의 실제 ItemEntity·CurrencyLoot 지급과 상위 Rollback으로 이전하고, E2E-12의 Legacy 데이터 읽기·동일 DB 재시작 보존 검사는 유지한다. 제품 코드·권한 예외·Legacy 실행 fallback은 추가하지 않는다.
+
+E2E-07은 외부인 요청의 화폐·지분 불변, A/B의 정확한 6칩/14칩 지급과 잔여 권리 제거를 추가한다. 일행 해체는 권리를 정상 변환하므로 외부인 요청의 불변 기준은 해체 직후 상태다. 보완 중 해체 이전 상태와 비교해 발생한 검사 실패도 별도 보존하며, 독립 Reviewer가 이 경계를 재확인했다. 실행 중 파일이 바뀐 최초 로컬 시도는 고정 기준 재현이나 성공 근거로 집계하지 않는다.
+
+고정된 보완 Diff에서 `.venv/Scripts/python.exe scripts/integration_e2e.py --scenario E2E-07 --scenario E2E-12 --scenario E2E-13`을 순차 실행해 3개 모두 PASS했다. 각각 123.639초·166.128초·91.519초이며 전체 381.649초다. 각 환경의 운영 DB 불변·서버/브라우저 프로세스 정리·자격 증명 제거를 확인했다. 통합 Runner 단위 검사 9개, Ruff·Node syntax·공백 검사도 PASS했다. 제품 코드가 동일하므로 로컬 전체 게임·Quick Smoke·기본 Chromium을 반복하지 않는다. 최초 HEAD의 `test`·`smoke`·`contracts` 성공과 `browser-e2e` 실패는 그대로 보존하며, 보완 커밋의 필수 네 Job 결과는 PR Validation에서 정확한 HEAD로 확인한다.
+
+### PR #73의 비공개 Loot 오류 계약
+
+보호된 Entry의 실제 이름·번호·Typed Reference와 존재하지 않는 Entry를 구분하는 공개 거절은 전리품의 존재를 노출할 수 있다. Loot Action은 이 대상 선택·권한 거절을 같은 공개 오류로 처리한다. 문법·Session·입력 모드 오류와 권리자의 수량 부족·전투·Unique 제한은 해당 오류를 유지한다.
+
+이 계약은 번호 저장이나 지급 권한을 바꾸지 않는다. 관찰용 공통 레코드와 B-1 번호·Scope·ID는 유지하고, 기본 선택에서 보호된 첫 항목을 건너뛰어 다른 항목을 대신 지급하지 않는다. 실제 Gateway와 잠금 이후 Service의 LootClaim·CurrencyShare 검증도 유지한다. 수정 전 재현과 수정 후 회귀·독립 감사·정확한 최신 HEAD CI의 실행 결과는 PR Validation에 기록한다.

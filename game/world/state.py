@@ -3,13 +3,10 @@
 from time import time
 
 from typeclasses.enemies import room_enemies
-from typeclasses.loot import can_take_entry, room_loot
+from typeclasses.loot import room_loot
 from typeclasses.parties import invitation_for, online, party_for, request_for, sessions_ready
 
 from world.content import ENEMIES
-from world.currency import currency_names, format_currency
-from world.loot_assets import asset_name, asset_text
-from world.loot_service import source_entries
 from world.multiplayer import object_by_id
 from world.targets import labels, room_objects
 
@@ -20,65 +17,17 @@ def player_name(identity):
 
 
 def loot_entries(source, player, now):
-    from world.observation import can_inspect_loot, context_for
+    """도메인 presenter가 허용한 항목만 상세 보기에도 제공한다."""
+    from world.actions.loot_presentation import visible_entries
 
-    if not can_inspect_loot(context_for(player, observed_at=now)):
-        return []
-    return [
-        {
-            **entry,
-            "name": asset_name(entry),
-            "amount_label": format_currency(entry["quantity"]) if entry["kind"] == "currency" else f"×{entry['quantity']}",
-            "display_label": str(asset_text(entry)),
-            "assigned_name": " · ".join(player_name(identity) for identity in entry["remaining_shares"]) if entry["kind"] == "currency" else player_name(entry["assigned_player"]),
-            "protected": now < entry["protection_until"],
-            "can_take": can_take_entry(entry, player, now),
-        }
-        for entry in source_entries(source)
-    ]
+    return visible_entries(source, player, now)
 
 
 def loot_controls(player, now, objects=None):
-    """상세 보기와 웹 control이 동일한 현재 출처/entry 번호를 사용한다."""
-    from world.observation import can_inspect_loot, context_for
+    """상세 보기와 웹은 동일한 영속 번호·권리·안정 참조를 사용한다."""
+    from world.actions.loot_presentation import source_controls
 
-    inspectable = can_inspect_loot(context_for(player, observed_at=now))
-    objects = room_objects(player, observed_at=now) if objects is None else objects
-    corpses = [obj for obj in room_loot(player.location) if obj in objects]
-    ground = [obj for obj in room_loot(player.location, corpse=False) if obj in objects]
-    corpse_controls = labels(corpses, lambda obj: "시체")
-    ground_entries = [(obj, i, entry) for obj in ground for i, entry in enumerate(source_entries(obj))]
-
-    def with_loot_controls(source):
-        entries = loot_entries(source, player, now)
-        pool = (
-            [(source, i, entry) for i, entry in enumerate(source_entries(source))]
-            if source in corpses
-            else ground_entries
-        )
-        for index, entry in enumerate(entries):
-            peers = [(obj, i) for obj, i, e in pool if (e["kind"], e["id"]) == (entry["kind"], entry["id"])
-                     and (entry["kind"] != "currency" or can_take_entry(e, player, now))]
-            suffix = f" {peers.index((source, index)) + 1}" if len(peers) > 1 and (source, index) in peers else ""
-            target = (currency_names()[1] if entry["kind"] == "currency" else entry["name"]) + suffix
-            prefix = corpse_controls[source.id] + "에서 " if source in corpses else ""
-            entry.update(label=target, take_target=target,
-                         display_label=entry["amount_label"] if entry["kind"] == "currency" else target + " " + entry["amount_label"],
-                         take_command=prefix + target + " 가져")
-        return entries
-
-    return {
-        **{
-            source.id: {
-                "label": corpse_controls[source.id],
-                "take_command": corpse_controls[source.id] + "에서 모두 가져",
-                "loot": with_loot_controls(source),
-                "loot_obscured": not inspectable,
-            }
-            for source in corpses
-        },
-        **{source.id: {"loot": with_loot_controls(source)} for source in ground},
-    }
+    return source_controls(player, now, objects)
 
 
 def multiplayer_state(player, now=None):
@@ -98,11 +47,13 @@ def multiplayer_state(player, now=None):
     controls = labels(objects)
     dialogue_controls = labels([obj for obj in objects if dialogue_supports(obj) and obj.access(player, "view")])
     loot = loot_controls(player, now, objects)
+    from world.actions.loot_presentation import all_controls
     from world.actions.manifest import get_index
     from world.actions.presentation import action_controls
     from world.selection_numbers.api import descriptor
 
     action_rows = action_controls(player, get_index(), now)
+    loot_actions = all_controls(player, now, objects)
 
     def object_actions(obj):
         if not getattr(obj, "action_provider_definition", None):
@@ -161,6 +112,7 @@ def multiplayer_state(player, now=None):
     requested, request = request_for(player, now, reconcile=False)
     return {
         "server_now": now,
+        "loot_actions": loot_actions,
         "action_controls": [row for row in action_rows if not (
             row["action"]["roles"].get("provider", [{}])[0].get("kind") == "door" or
             row["action"]["roles"].get("provider", [{}])[0].get("kind") == "object" and
