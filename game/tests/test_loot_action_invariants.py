@@ -72,6 +72,150 @@ class LootActionInvariantTests(NativeLootTest):
     def balances(self):
         return tuple(player.profile()["credits"] for player in (self.char1, self.char2))
 
+    def public_errors(self, command=None, payload=None):
+        """실제 공개 어댑터가 출력한 오류만 비교하고 Prompt는 별도로 보존한다."""
+        output = self.output[self.char2.pk]
+        output.reset_mock()
+        if command is not None:
+            completed = []
+            self.char2.execute_cmd(command, session=self.sessions[self.char2.pk]).addCallback(
+                lambda _: completed.append(True))
+            self.assertEqual(completed, [True])
+        else:
+            pz_action(self.sessions[self.char2.pk], payload)
+        self.assertFalse([call for call in output.call_args_list if call.kwargs.get("kind") == "event"])
+        return [str(call.args[0]) for call in output.call_args_list if call.kwargs.get("kind") == "error"]
+
+    def test_private_item_public_name_and_number_match_absent_without_side_effects(self):
+        from time import time
+
+        item = self.loot_item(quantity=7, deadline=time() + 300)
+        reference = descriptor(item).reference
+        before = self.state()
+        responses = [self.public_errors(command=f"시체에서 {query} 가져")
+                     for query in ("권총탄", "없는부품", "권총탄 1", "권총탄 999",
+                                   "권총탄 모두", "없는부품 모두")]
+        self.assertEqual(self.state(), before)
+        self.output[self.char1.pk].assert_not_called()
+        self.char1.push_state.assert_not_called()
+        self.char2.push_state.assert_not_called()
+        self.assertEqual(number_for(reference), 1)
+        self.assertTrue(all(responses))
+        self.assertEqual(responses, [responses[0]] * 6)
+
+    def test_private_currency_public_number_matches_absent_without_side_effects(self):
+        from time import time
+
+        self.currency(shares={self.char1: 20}, deadline=time() + 300)
+        before = self.state()
+        responses = [self.public_errors(command=f"시체에서 {query} 집")
+                     for query in ("칩 1", "칩 999", "20칩", "999칩")]
+        self.assertEqual(self.state(), before)
+        self.output[self.char1.pk].assert_not_called()
+        self.assertTrue(all(responses))
+        self.assertEqual(responses, [responses[0]] * 4)
+
+    def test_private_web_references_match_absent_for_items_and_currency(self):
+        from time import time
+        from uuid import uuid4
+
+        from world.actions.gateway import from_web
+
+        item = self.loot_item(quantity=7, deadline=time() + 300)
+        currency = self.currency(shares={self.char1: 20}, deadline=time() + 300)
+        before = self.state()
+        for query, row in (("권총탄 1", item), ("칩 1", currency)):
+            selected = self.invocation(f"시체에서 {query}")
+            roles = dict(selected.roles)
+            reference = roles["subject"][0]
+            missing = replace(reference, identity=str(uuid4()) if row is item else "999999999")
+            absent = replace(selected, roles=tuple((name, (missing,) if name == "subject" else refs)
+                                                  for name, refs in selected.roles))
+            results, public = [], []
+            for counter, invocation in enumerate((selected, absent)):
+                payload = self.payload(invocation, f"private-{query}-{counter}")
+                results.append(self.run_action(from_web(payload, self.index), self.char2))
+                public.append(self.public_errors(payload=payload))
+            self.assertEqual([result.status for result in results], [ResultStatus.REFUSED] * 2)
+            self.assertEqual(self.state(), before)
+            self.output[self.char1.pk].assert_not_called()
+            self.assertEqual(results[0].messages, results[1].messages)
+            self.assertTrue(all(public))
+            self.assertEqual(public[0], public[1])
+            self.assertNotIn(str(row.pk), str(public))
+
+    def test_mixed_private_number_never_falls_back_to_accessible_entry(self):
+        from time import time
+
+        private = self.loot_item(quantity=7, deadline=time() + 300)
+        accessible = self.loot_item(quantity=3, deadline=99)
+        loot_service.reconcile_claims(self.source, now=100)
+        refs = [descriptor(item).reference for item in (private, accessible)]
+        before = self.state()
+        denied = self.public_errors(command="시체에서 권총탄 1 가져")
+        absent = self.public_errors(command="시체에서 권총탄 999 가져")
+        default = self.public_errors(command="시체에서 권총탄 가져")
+        self.assertEqual(self.state(), before)
+        self.assertEqual([number_for(ref) for ref in refs], [1, 2])
+        self.assertTrue(denied)
+        self.assertEqual(denied, absent)
+        self.assertEqual(default, denied)
+        result = self.run_action(self.invocation("시체에서 권총탄 2", self.char2), self.char2)
+        self.assertEqual(result.status, ResultStatus.SUCCESS)
+        accessible.refresh_from_db()
+        private.refresh_from_db()
+        self.assertEqual((private.quantity, accessible.quantity), (7, 2))
+        self.assertEqual(ItemEntity.objects.get(owner_object=self.char2).quantity, 1)
+
+    def test_private_alias_collision_and_numeric_name_do_not_change_public_errors(self):
+        from time import time
+
+        from world.content import ITEMS
+
+        definitions = {name: {**deepcopy(ITEMS["ammo_9"]), "name": label, "aliases": ["비공개별칭"]}
+                       for name, label in (("hidden_a", "숨김부품 2"), ("hidden_b", "다른숨김부품"))}
+        with patch.dict(ITEMS, definitions):
+            for identity in definitions:
+                self.loot_item(identity, quantity=7, deadline=time() + 300)
+            before = self.state()
+            absent = self.public_errors(command="시체에서 없는부품 가져")
+            alias = self.public_errors(command="시체에서 비공개별칭 가져")
+            self.assertEqual(alias, absent)
+            malformed = [self.public_errors(command=f"시체에서 {query} 가져")
+                         for query in ("숨김부품 2 3", "없는부품 2 3")]
+            self.assertTrue(all(malformed))
+            self.assertEqual(malformed[0], malformed[1])
+            self.assertNotEqual(malformed[0], absent)
+            self.assertEqual(self.state(), before)
+
+    def test_authorized_quantity_error_and_success_keep_domain_behavior(self):
+        row = self.currency(shares={self.char1: 20})
+        before = self.state()
+        refused = self.run_action(self.invocation("시체에서 21칩"))
+        self.assertEqual(refused.status, ResultStatus.REFUSED)
+        self.assertEqual(refused.messages, ("원래 대상의 수량이 부족합니다.",))
+        self.assertEqual(self.state(), before)
+        self.assertEqual(self.run_action(self.invocation("시체에서 5칩")).status, ResultStatus.SUCCESS)
+        row.refresh_from_db()
+        self.assertEqual(row.quantity, 15)
+
+    def test_unrelated_private_entry_preserves_accessible_alias_ambiguity(self):
+        from time import time
+
+        from world.content import ITEMS
+        from world.rules import RuleError
+
+        definitions = {name: {**deepcopy(ITEMS["ammo_9"]), "name": label, "aliases": ["공개별칭"]}
+                       for name, label in (("public_a", "공개부품A"), ("public_b", "공개부품B"))}
+        with patch.dict(ITEMS, definitions):
+            for identity in definitions:
+                api.create_item(identity, quantity=2, location_kind="corpse_loot", owner_object=self.source)
+            self.loot_item(quantity=7, deadline=time() + 300)
+            before = self.state()
+            with self.assertRaisesMessage(RuleError, "서로 다른 선택 그룹의 별칭이 겹칩니다."):
+                self.invocation("시체에서 공개별칭", self.char2)
+            self.assertEqual(self.state(), before)
+
     def test_public_command_accepts_item_names_with_spaces_after_native_cutover(self):
         row = self.loot_item("water", quantity=2)
         completed = []

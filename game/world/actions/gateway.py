@@ -141,6 +141,11 @@ def _roles(caller, action, invocation):
             raise rules.RuleError("행동 대상 수를 확인하세요.")
         current = {record.reference for record in role_records(caller, role, bindings)}
         if any(ref.kind not in role.kinds or ref not in current for ref in refs):
+            if (action.id == "loot.take" and name == "subject"
+                    and all(ref.kind in role.kinds for ref in refs)):
+                from world.actions.loot_errors import LootUnavailable
+
+                raise LootUnavailable()
             raise rules.RuleError("원래 대상이 없어졌거나 위치·권한이 바뀌었습니다.")
         entities[name] = tuple(resolve_reference(ref) for ref in refs)
     if action.provider_from and bindings.get("provider") != bindings.get(action.provider_from):
@@ -248,6 +253,10 @@ def execute(caller, session, invocation, index):
                         entries = loot_snapshot(entity.owner_object).entries
                         match = next((entry for entry in entries if str(entry.item_id if hasattr(entity, "definition_id") else entry.currency_id) == str(entity.pk)), None)
                         if match is None or not can_take_entry(match.as_entry(), caller, now()):
+                            if action.id == "loot.take":
+                                from world.actions.loot_errors import LootUnavailable
+
+                                raise LootUnavailable()
                             raise rules.RuleError("원래 전리품을 회수할 권한이 없습니다.")
                     if hasattr(entity, "quantity") and quantity is not None and quantity > entity.quantity:
                         raise rules.RuleError("원래 대상의 수량이 부족합니다.")

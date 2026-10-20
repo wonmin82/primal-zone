@@ -164,3 +164,9 @@ Historical audit 모드의 구형 blob은 기존 권리 검사 후 품목·수�
 E2E-07은 외부인 요청의 화폐·지분 불변, A/B의 정확한 6칩/14칩 지급과 잔여 권리 제거를 추가한다. 일행 해체는 권리를 정상 변환하므로 외부인 요청의 불변 기준은 해체 직후 상태다. 보완 중 해체 이전 상태와 비교해 발생한 검사 실패도 별도 보존하며, 독립 Reviewer가 이 경계를 재확인했다. 실행 중 파일이 바뀐 최초 로컬 시도는 고정 기준 재현이나 성공 근거로 집계하지 않는다.
 
 고정된 보완 Diff에서 `.venv/Scripts/python.exe scripts/integration_e2e.py --scenario E2E-07 --scenario E2E-12 --scenario E2E-13`을 순차 실행해 3개 모두 PASS했다. 각각 123.639초·166.128초·91.519초이며 전체 381.649초다. 각 환경의 운영 DB 불변·서버/브라우저 프로세스 정리·자격 증명 제거를 확인했다. 통합 Runner 단위 검사 9개, Ruff·Node syntax·공백 검사도 PASS했다. 제품 코드가 동일하므로 로컬 전체 게임·Quick Smoke·기본 Chromium을 반복하지 않는다. 최초 HEAD의 `test`·`smoke`·`contracts` 성공과 `browser-e2e` 실패는 그대로 보존하며, 보완 커밋의 필수 네 Job 결과는 PR Validation에서 정확한 HEAD로 확인한다.
+
+### PR #73의 비공개 Loot 오류 계약
+
+보호된 Entry의 실제 이름·번호·Typed Reference와 존재하지 않는 Entry를 구분하는 공개 거절은 전리품의 존재를 노출할 수 있다. Loot Action은 이 대상 선택·권한 거절을 같은 공개 오류로 처리한다. 문법·Session·입력 모드 오류와 권리자의 수량 부족·전투·Unique 제한은 해당 오류를 유지한다.
+
+이 계약은 번호 저장이나 지급 권한을 바꾸지 않는다. 관찰용 공통 레코드와 B-1 번호·Scope·ID는 유지하고, 기본 선택에서 보호된 첫 항목을 건너뛰어 다른 항목을 대신 지급하지 않는다. 실제 Gateway와 잠금 이후 Service의 LootClaim·CurrencyShare 검증도 유지한다. 수정 전 재현과 수정 후 회귀·독립 감사·정확한 최신 HEAD CI의 실행 결과는 PR Validation에 기록한다.

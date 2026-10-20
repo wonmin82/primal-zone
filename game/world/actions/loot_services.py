@@ -6,6 +6,7 @@ from time import time  # noqa: F401 -- callback용 clock과 테스트 관찰 시
 from django.core import signing
 from world import rules
 from world.actions.gateway import ActionResult
+from world.actions.loot_errors import LootUnavailable
 
 
 def prepare(caller, invocation):
@@ -43,10 +44,10 @@ def take(context):
         entity = resolve_reference(ref)
         source = next(iter([source for source in sources if source.pk == getattr(entity, "owner_object_id", None)]), None)
         if source is None:
-            raise rules.RuleError("원래 전리품 출처가 바뀌었습니다.")
+            raise LootUnavailable()
         entry = next(iter([entry for entry in snapshots[source.pk].entries if entry_reference(entry) == ref]), None)
         if entry is None or not can_take_entry(entry.as_entry(), caller, now):
-            raise rules.RuleError("원래 전리품을 회수할 권한이 없습니다.")
+            raise LootUnavailable()
         selections.append((source, entry))
     try:
         expected = signing.loads(context.arguments["snapshot"], salt=SALT, max_age=300)

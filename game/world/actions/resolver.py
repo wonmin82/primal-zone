@@ -9,6 +9,14 @@ from world.rules import RuleError
 from world.targets import Mode, normalized, parse_selector
 
 
+class TargetNotFound(RuleError):
+    """유효한 문법이지만 현재 후보가 없는 선택."""
+
+
+class TargetAmbiguous(RuleError):
+    """실제 후보의 이름·번호 충돌. 문법 오류와 구분한다."""
+
+
 @dataclass(frozen=True)
 class ActionInvocation:
     action_id: str
@@ -101,7 +109,7 @@ def select_role(caller, role, query=None, *, bindings=None, candidates=None, cac
         exact = [record for record in records if normalized(record.name) == normalized(query)]
         if exact:
             if len(exact) > 1 and re.search(r"\d+$", query.strip()):
-                raise RuleError("숫자로 끝나는 실제 이름이 여러 대상과 일치합니다. 다른 고유 이름을 지정하세요.")
+                raise TargetAmbiguous("숫자로 끝나는 실제 이름이 여러 대상과 일치합니다. 다른 고유 이름을 지정하세요.")
             matches, selector = exact, None
         else:
             known = [name for record in records for name in (record.name, *record.aliases)]
@@ -109,17 +117,17 @@ def select_role(caller, role, query=None, *, bindings=None, candidates=None, cac
             matches = [record for record in records if normalized(selector.name) in
                        {normalized(name) for name in (record.name, *record.aliases)}]
             if len({record.group_id for record in matches}) > 1:
-                raise RuleError("서로 다른 선택 그룹의 별칭이 겹칩니다. 실제 이름을 지정하세요.")
+                raise TargetAmbiguous("서로 다른 선택 그룹의 별칭이 겹칩니다. 실제 이름을 지정하세요.")
             if selector.mode == Mode.INDEX:
                 unique_match = len(matches) == 1
                 matches = [record for record in matches if record.number == selector.index or
                            (selector.index == 1 and unique_match and selector.name in record.unique_names)]
                 if len({record.scope_id for record in matches}) > 1:
-                    raise RuleError("서로 다른 보관 범위의 번호가 겹칩니다. 대상을 고유하게 지정하세요.")
+                    raise TargetAmbiguous("서로 다른 보관 범위의 번호가 겹칩니다. 대상을 고유하게 지정하세요.")
     if not matches:
         if (query is None or not query.strip()) and not role.required:
             return ()
-        raise RuleError("지금 선택할 수 없는 대상입니다.")
+        raise TargetNotFound("지금 선택할 수 없는 대상입니다.")
     if selector and selector.mode == Mode.ALL and not (role.allow_all or role.default == DefaultTargetPolicy.ALL):
         raise RuleError("이 행동은 전체 대상 선택을 지원하지 않습니다.")
     if selector and selector.mode == Mode.ALL or role.default == DefaultTargetPolicy.ALL:
@@ -133,7 +141,7 @@ def select_role(caller, role, query=None, *, bindings=None, candidates=None, cac
 
         return (min(matches, key=legacy_order).reference,)
     if len(matches) != 1:
-        raise RuleError("대상을 이름과 번호로 명확하게 지정하세요.")
+        raise TargetAmbiguous("대상을 이름과 번호로 명확하게 지정하세요.")
     return (matches[0].reference,)
 
 

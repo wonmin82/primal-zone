@@ -4,6 +4,7 @@ from time import time
 
 from django.core import signing
 from world import rules
+from world.actions.loot_errors import LootUnavailable
 from world.actions.resolver import ActionInvocation
 from world.selection_numbers.api import descriptor
 
@@ -50,7 +51,7 @@ def resolve(caller, index, action, args, command_name):
     from typeclasses.loot import can_take_entry, room_loot
     from world.actions import loot_resolution as clock
     from world.actions.loot_resolution import entry_reference, make_invocation
-    from world.actions.resolver import role_records, select_role
+    from world.actions.resolver import TargetAmbiguous, TargetNotFound, role_records, select_role
     from world.actions.schema import DefaultTargetPolicy, ReferenceKind
     from world.currency import currency_names, currency_request
     from world.lifecycle import reconcile_room
@@ -82,17 +83,33 @@ def resolve(caller, index, action, args, command_name):
     bindings = {"source": tuple([describe(source).reference for source in sources])}
     subject = next(iter([role for role in action.roles if role.name == "subject"]))
     records = role_records(caller, subject, bindings)
-    request = parse_loot(args, [name for record in records for name in (record.name, *record.aliases)]
-                         + list(currency_names()))
-    currency = currency_request(request.target)
     matches = [(source, entry) for source in sources for entry in loot_snapshot(source).entries]
+    accessible = {entry_reference(entry) for _, entry in matches
+                  if can_take_entry(entry.as_entry(), caller, now)}
+    # 숨긴 이름은 문법 해석을 바꾸지 않는다. 실제 선택 후보/번호는 그대로 보존한다.
+    request = parse_loot(args, [name for record in records if record.reference in accessible
+                               for name in (record.name, *record.aliases)] + list(currency_names()))
+    currency = currency_request(request.target)
     if request.target.name != "전리품":
         kinds = (ReferenceKind.CURRENCY,) if currency else (ReferenceKind.LOOT,)
         role = replace(subject, kinds=kinds, default=DefaultTargetPolicy.ALL)
         query = "보급칩" if currency else request.target.name
         query += f" {request.target.index}" if request.target.mode == Mode.INDEX else " 모두" if request.target.mode == Mode.ALL else ""
-        selected = set(select_role(caller, role, query, bindings=bindings,
-                                   candidates={record.reference for record in records}))
+        try:
+            selected = set(select_role(caller, role, query, bindings=bindings,
+                                       candidates={record.reference for record in records}))
+        except TargetNotFound:
+            raise LootUnavailable() from None
+        except TargetAmbiguous:
+            # 공개 후보끼리 이미 모호하면 원래 안내를 유지한다. 숨긴 후보가
+            # 충돌을 만든 경우에만 존재 여부를 알 수 없는 거절로 바꾼다.
+            try:
+                select_role(caller, role, query, bindings=bindings, candidates=accessible)
+            except TargetAmbiguous:
+                raise
+            except TargetNotFound:
+                pass
+            raise LootUnavailable() from None
         matches = [(source, entry) for source, entry in matches if entry_reference(entry) in selected]
     if request.target.mode != Mode.ALL:
         # 공통 정식 이름/그룹/번호 판정 뒤 기존 Source PK·Entry 순서의 기본값을 보존한다.
@@ -100,5 +117,7 @@ def resolve(caller, index, action, args, command_name):
     else:
         matches = [(source, entry) for source, entry in matches
                    if can_take_entry(entry.as_entry(), caller, now)]
+    if request.target.name != "전리품" and not matches:
+        raise LootUnavailable()
     quantity = 0 if request.target.mode == Mode.ALL else currency[0] if currency else 1
     return make_invocation(caller, matches, quantity=quantity, now=now)

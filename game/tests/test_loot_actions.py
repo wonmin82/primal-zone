@@ -293,7 +293,7 @@ class LootActionTests(NativeLootTest):
                            self.index) for amount in (1, 999)]
         self.assertEqual([result.status for result in results], [ResultStatus.REFUSED] * 2)
         self.assertEqual(results[0].messages, results[1].messages)
-        self.assertIn("권한", str(results[0].messages))
+        self.assertEqual(results[0].messages, ("지금 선택할 수 없는 전리품입니다.",))
         own = self.run_take("시체에서 999칩")
         self.assertEqual(own.status, ResultStatus.REFUSED)
         self.assertIn("수량이 부족", str(own.messages))
@@ -318,7 +318,7 @@ class LootActionTests(NativeLootTest):
             results.append(execute(self.char2, session, from_web(forged, self.index), self.index))
         self.assertEqual([result.status for result in results], [ResultStatus.REFUSED] * 2)
         self.assertEqual(results[0].messages, results[1].messages)
-        self.assertIn("권한", str(results[0].messages))
+        self.assertEqual(results[0].messages, ("지금 선택할 수 없는 전리품입니다.",))
         item.refresh_from_db()
         self.assertEqual((item.owner_object_id, item.quantity), (self.source.pk, 17))
 
