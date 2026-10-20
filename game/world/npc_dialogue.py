@@ -192,14 +192,20 @@ def token_store(caller):
     return store
 
 
-def issue_token(caller, npc, intent):
+def issue_token(caller, npc, intent, *, session=None):
+    if session is None:
+        sessions = caller.sessions.all()
+        session = sessions[0] if len(sessions) == 1 else None
+    if session is None:
+        return None
     store = token_store(caller)
     while len(store) >= TOKEN_LIMIT:
         del store[next(iter(store))]
     token = secrets.token_urlsafe(24)
     now = time()
     store[token] = {"character_id": caller.id, "npc_id": npc.id, "intent_id": intent.intent_id,
-                    "keyword": intent.keyword, "issued_at": now, "expires_at": now + CONTEXT_TTL}
+                    "keyword": intent.keyword, "session": session,
+                    "issued_at": now, "expires_at": now + CONTEXT_TTL}
     caller.ndb.npc_dialogue_tokens = store
     return token
 
@@ -275,27 +281,28 @@ def keyword_guide(recipient, npc, active, *, force=False):
     recipient.ndb.npc_dialogue_guides = store
 
 
-def broadcast(caller, npc, raw, *, guide_requested=False):
+def broadcast(caller, npc, raw, *, guide_requested=False, private=False):
 
     from typeclasses.explorers import Explorer
 
     intents = {item.keyword: item for item in intents_for(type_name(npc))}
     # 같은 raw를 사용하면서 수신자마다 새 Text와 선택 토큰을 만든다.
-    for recipient in tuple(caller.location.contents):
+    for recipient in ((caller,) if private else tuple(caller.location.contents)):
         if not isinstance(recipient, Explorer):
             continue
-        parts = [ft.token("npc", npc.key), ": "]
         active = available_intents(recipient, npc)
         active_ids = {item.intent_id for item in active}
-        for part in re.split(r"(〈[^〉]+〉)", raw):
-            intent = intents.get(part[1:-1]) if part.startswith("〈") and part.endswith("〉") else None
-            if intent:
-                enabled = intent.intent_id in active_ids
-                selection = issue_token(recipient, npc, intent) if enabled else None
-                parts.append(ft.dialogue_keyword(intent.keyword, intent.kind, selection))
-            else:
-                parts.append(part)
-        recipient.msg(ft.text(*parts, kind="chat"))
+        for session in recipient.sessions.all() or (None,):
+            parts = [ft.token("npc", npc.key), ": "]
+            for part in re.split(r"(〈[^〉]+〉)", raw):
+                intent = intents.get(part[1:-1]) if part.startswith("〈") and part.endswith("〉") else None
+                if intent:
+                    enabled = session is not None and intent.intent_id in active_ids
+                    selection = issue_token(recipient, npc, intent, session=session) if enabled else None
+                    parts.append(ft.dialogue_keyword(intent.keyword, intent.kind, selection))
+                else:
+                    parts.append(part)
+            recipient.msg(ft.text(*parts, kind="chat"), session=session)
         keyword_guide(recipient, npc, active, force=guide_requested and recipient.id == caller.id)
 
 
@@ -311,7 +318,9 @@ def deliver(caller, npc, intent, raw, personal="", selection=None, *, guide_requ
         store.pop(selection, None)
         caller.ndb.npc_dialogue_tokens = store
     remember(caller, npc, intent)
-    broadcast(caller, npc, raw, guide_requested=guide_requested)
+    # 진행 안내만 개인 프로필에서 계산된다. 공공 대사와 개인 보상 경계는 유지한다.
+    private = type_name(npc) in QUEST_NPCS and intent.intent_id == "progress"
+    broadcast(caller, npc, raw, guide_requested=guide_requested, private=private)
     if personal:
         caller.msg(ft.text(ft.token("reward", personal)))
     if not caller.ndb.npc_dialogue_guided:
@@ -403,13 +412,15 @@ def say(caller, value):
 
 def select_keyword(caller, token, session):
     """인증된 수신 캐릭터가 원래 NPC/Intent를 실행한다. fallback은 없다."""
-    if (not session or not session.logged_in or session.get_puppet() != caller
-            or session not in caller.sessions.all() or session.get_account() != caller.account):
-        raise rules.RuleError("현재 캐릭터를 제어하는 세션에서만 선택할 수 있습니다.")
+    from world.actions.gateway import require_input_mode, require_session
+
+    require_session(caller, session)
+    require_input_mode(caller)
     if not isinstance(token, str) or len(token) > 128:
         raise rules.RuleError("잘못된 대화 선택입니다.")
     row = token_store(caller).get(token)
-    if not row or row["character_id"] != caller.id or not row["issued_at"] <= time() < row["expires_at"]:
+    if (not row or row["character_id"] != caller.id or row.get("session") is not session
+            or not row["issued_at"] <= time() < row["expires_at"]):
         raise rules.RuleError("대화 선택이 만료되었거나 유효하지 않습니다. NPC에게 다시 말을 걸어 주세요.")
     npc = object_by_id(row["npc_id"])
     intent = next((item for item in intents_for(type_name(npc)) if item.intent_id == row["intent_id"] and item.keyword == row["keyword"]), None) if npc else None

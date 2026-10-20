@@ -16,15 +16,15 @@
 | 배워 | skills.Learn → GrowthTrainer.act/train | training.skill.<기술> → room_npc.effect / 담당 Skill Provider + 기술 인자 | test_growth, test_growth_review | A / PR #70 병합·main CI 완료 |
 | 배분 | skills.Allocate → GrowthTrainer.act/train | training.attribute.<특성> → room_npc.effect / 담당 Attribute Provider + 양 | test_growth | A / PR #70 병합·main CI 완료 |
 | 재분배·재훈련 | skills.Retrain → GrowthTrainer.act/train | training.reset.attributes/skills/all → room_npc.effect / 관리관 Provider | test_growth | A / PR #70 병합·main CI 완료 |
-| 교환·exchange / 환율·rate | commands/settlement → SettlementOfficer.act | settlement.exchange/all/rate → room_npc.effect / 정산관 Provider | test_settlement | A / PR #70 병합·main CI 완료 |
+| 교환·exchange / 환율·rate | commands/settlement → SettlementOfficer.act | settlement.exchange/all → room_npc.settle / settlement.rate → room_npc.effect / 정산관 Provider | test_settlement | A / PR #70 병합·main CI 완료 |
 | 임무·보급·Credential 연계 | NPC 대화 및 시설 act | 조사/수리 효과는 도메인으로 이전, 전역 말/pz_dialogue는 유지 | test_npc_dialogue, test_regions, test_integration | A / PR #70 병합·main CI 완료 |
-| 사용·먹어·eat·마셔·drink | combat.Use / items.Eat/Drink | item.<정의>.use/eat/drink → item_equipment.execute → skill_services.use_support / rules.eat_or_drink + UUID 소비 바인딩 | test_item_interactions, test_combat, test_item_entities | B / 구현 중·통합 검증 진행 |
-| 착용·입어·입·무장·wield·벗어·벗·해제·unwield·주무기·정보 | inventory/items 장비 명령 | item.<정의>.equip/wield/remove/unwield/active_weapon/information → item_equipment.execute → equipment_service / information_for_item | test_equipment, test_equipment_entities, test_item_interactions | B / 구현 중·통합 검증 진행 |
-| 넣어·꺼내 / 보관 | items.Store/Retrieve → Container.act | storage.store/retrieve → storage.transfer → item_transfer_native.transfer_selected / Container + CURRENT/STORAGE Subject | test_item_entities, test_phase6_runtime | B / 구현 중·통합 검증 진행 |
-| 재장전·장전·채워·넣어·꺼내 / 총기·탄창 | commands/firearms, items | item_ops.reload/load/fill/inside_fill/ammo_insert/magazine_remove/ammo_remove → item_ops.execute → firearm_service / Root Provider·Inside Subject·Source | test_firearms, test_equipment_entities | B / 구현 중·통합 검증 진행 |
-| 켜·꺼·확인·넣어 / 광원 | items.LightOn/Off/Status | item_ops.light_on/light_off/light_status/power_insert → item_ops.execute → lighting_service / Root 광원 Provider·전원 Source | test_lighting, test_lighting_entities | B / 구현 중·통합 검증 진행 |
-| 가져·집·시·시2~시5·다중 Source·부분/화폐 | inventory.Take → typeclasses/loot.take_loot | loot.take → loot.pickup → loot_service.pickup / Corpse·Ground Source + 안정 ItemEntity/Currency ID | test_loot_actions, test_loot_action_invariants, 기존 Loot·Currency·Party 회귀 | C / 구현 완료·최종 검증 진행 |
-| 전역 봐·말·도움 / 객체 상세·Help·Web | character.Help/Look, social.Say, state/web_actions | 전역 진입점 유지, 객체 Action 표시를 Compiled Index로 통합. A는 소유 기능만 동기화 | test_web_state, test_web_prompt, test_text, test_npc_dialogue | D / 전체 교차 검사 미착수 |
+| 사용·먹어·eat·마셔·drink | combat.Use / items.Eat/Drink | item.<정의>.use/eat/drink → item_equipment.execute → skill_services.use_support / rules.eat_or_drink + UUID 소비 바인딩 | test_item_interactions, test_combat, test_item_entities | B / PR #71 병합·main CI 완료 |
+| 착용·입어·입·무장·wield·벗어·벗·해제·unwield·주무기·정보 | inventory/items 장비 명령 | item.<정의>.equip/wield/remove/unwield/active_weapon/information → item_equipment.execute → equipment_service / information_for_item | test_equipment, test_equipment_entities, test_item_interactions | B / PR #71 병합·main CI 완료 |
+| 넣어·꺼내 / 보관 | items.Store/Retrieve → Container.act | storage.store/retrieve → storage.transfer → item_transfer_native.transfer_selected / Container + CURRENT/STORAGE Subject | test_item_entities, test_phase6_runtime | B / PR #71 병합·main CI 완료 |
+| 재장전·장전·채워·넣어·꺼내 / 총기·탄창 | commands/firearms, items | item_ops.reload/load/fill/inside_fill/ammo_insert/magazine_remove/ammo_remove → item_ops.execute → firearm_service / Root Provider·Inside Subject·Source | test_firearms, test_equipment_entities | B / PR #71 병합·main CI 완료 |
+| 켜·꺼·확인·넣어 / 광원 | items.LightOn/Off/Status | item_ops.light_on/light_off/light_status/power_insert → item_ops.execute → lighting_service / Root 광원 Provider·전원 Source | test_lighting, test_lighting_entities | B / PR #71 병합·main CI 완료 |
+| 가져·집·시·시2~시5·다중 Source·부분/화폐 | inventory.Take → typeclasses/loot.take_loot | loot.take → loot.pickup → loot_service.pickup / Corpse·Ground Source + 안정 ItemEntity/Currency ID | test_loot_actions, test_loot_action_invariants, 기존 Loot·Currency·Party 회귀 | C / PR #73 병합·main CI 완료 |
+| 전역 봐·말·도움 / 객체 상세·Help·Web | character.Help/Look, social.Say, state/web_actions | 전역 진입점 유지, 객체 Action 표시를 Compiled Index로 통합. A는 소유 기능만 동기화 | test_web_state, test_web_prompt, test_text, test_npc_dialogue | D / M06 통합·기술 검증 진행 |
 
 ## 전환과 데이터 경계
 
@@ -170,3 +170,85 @@ E2E-07은 외부인 요청의 화폐·지분 불변, A/B의 정확한 6칩/14칩
 보호된 Entry의 실제 이름·번호·Typed Reference와 존재하지 않는 Entry를 구분하는 공개 거절은 전리품의 존재를 노출할 수 있다. Loot Action은 이 대상 선택·권한 거절을 같은 공개 오류로 처리한다. 문법·Session·입력 모드 오류와 권리자의 수량 부족·전투·Unique 제한은 해당 오류를 유지한다.
 
 이 계약은 번호 저장이나 지급 권한을 바꾸지 않는다. 관찰용 공통 레코드와 B-1 번호·Scope·ID는 유지하고, 기본 선택에서 보호된 첫 항목을 건너뛰어 다른 항목을 대신 지급하지 않는다. 실제 Gateway와 잠금 이후 Service의 LootClaim·CurrencyShare 검증도 유지한다. 수정 전 재현과 수정 후 회귀·독립 감사·정확한 최신 HEAD CI의 실행 결과는 PR Validation에 기록한다.
+
+
+## PR D — M06 최종 통합과 운영 경로
+
+PR D의 기준선은 PR C의 실제 Merge Commit `62635d985a2d27ccfb25d8ecd49374292aa24398`다. PR A [#70](https://github.com/wonmin82/primal-zone/pull/70), PR B [#71](https://github.com/wonmin82/primal-zone/pull/71), PR C [#73](https://github.com/wonmin82/primal-zone/pull/73)은 병합됐고, 기준 main의 [push CI](https://github.com/wonmin82/primal-zone/actions/runs/39397778596)는 필수 네 Job SUCCESS다. 이 사실은 위 개발 중 상태와 실패 기록을 소급하여 바꾸지 않는다. 아래는 현재 실행 매핑이며 PR D 자체의 리뷰·테스트·정확한 HEAD CI는 별도 기록한다.
+
+모든 전환 동사의 텍스트 경로는 Dynamic Command → `dispatch_text()` → 안정 Invocation → Gateway `execute()`다. 웹은 표시 이름·배열 인덱스 대신 Action ID·Variant·실제 Typed Role Reference·인자를 `pz_action`으로 전달한다. Gateway가 현재 Session·Prompt·Provider·Scope·권한을 다시 검사하며 실패 후 Legacy Command로 돌아가지 않는다.
+
+| 범위·공개 동사/별칭 | 이전 Handler | 현재 Action / Binding → Service | Provider·Role → Domain API | Help·Web·회귀 및 Cutover |
+| --- | --- | --- | --- | --- |
+| M01 문: 열어·닫아·잠궈·풀어 | `commands.doors.DoorCommand` | `door.open/close/lock/unlock` / `<Action>.binding` → `room_npc.door` | `world.door` 실제 Endpoint → `doors.operate_endpoint()` | Compiled Verb Help·Typed Endpoint, `test_doors`·`test_room_npc_actions`; 고정 Command 제거 |
+| M01 시설: 조사·수리 | `world_actions.TargetAction`, `ActionObject.perform_action/act` | `world.<시설 종류>` / `<Action>.binding` → `room_npc.effect` | 실제 World Object Provider → `interactable_services`의 시설별 함수 | 현재 Binding 기반 표현, `test_regions`·`test_room_npc_actions`; 기존 효과 Handler는 도메인으로 이동 |
+| M01 소각·소각 확정 | `incinerator.Burn` | `incinerator.burn` / `incinerator.burn.binding` → `room_npc.burn` | `world.incinerator` + Root Subject → `incinerator_service.incinerate_selected()` | 별도 확인 Variant·서버 토큰, `test_incinerator`·`test_credentials`; Legacy 공개 등록 제거 |
+| M02 상점: 목록/품목/품/목/메뉴·사/구입·가치/얼마·팔아/팔/판 | `inventory.Shop/Buy/Value/Sell`, `Shopkeeper.act` | `shop.menu.<상점>`, `shop.buy.<품목>`, `shop.value.<품목>`, `shop.sell.<상점>` / 각 상점 Binding → `room_npc.effect/buy/value/sell` | `shop.<상점>` + 고정 품목 인자 또는 Root Subject → `interactable_services.shopkeeper()` → `shop_service` | 선언 Help·상점 전용 Typed Presenter, `test_shops`·`test_shop_entities`; 고정 Command 제거 |
+| M02 의료: 회복·휴식/rest | `world_actions.Treat/Rest`, Doctor/Bed `act` | `medical.treat/rest` / `<Action>.binding` → `room_npc.effect` | `world.doctor/bed` + 회복 요청량 → `interactable_services.doctor/bed()` | 현재 Provider·기존 비용·전투 제한, `test_medical`·`test_prompt`; 고정 Command 제거 |
+| M02 성장: 배워·배분·재분배/재훈련 | `skills.Learn/Allocate/Retrain`, 교관 `act/train` | `training.skill.<기술>`, `training.attribute.<특성>`, `training.reset.attributes/skills/all` / `<Action>.binding` → `room_npc.effect` | `skill.<기술>`·`attribute.<특성>`·`world.trainingmanager` → `interactable_services` → 기존 성장 규칙 | 선언된 담당·범위와 Typed 인자, `test_growth`·`test_growth_review`; 고정 Command 제거 |
+| M02 정산: 교환/exchange·환율/rate | `commands.settlement`, `SettlementOfficer.act` | `settlement.exchange/all` → `room_npc.settle`, `settlement.rate` → `room_npc.effect`; `<Action>.binding` | `world.settlementofficer` + 안정 Inventory Source → `interactable_services.settlementofficer()`·기존 정산 규칙 | 집계 UUID/수량 snapshot, `test_settlement`·`test_economy`; 고정 Command 제거 |
+| M03 소비: 사용·먹어/eat·마셔/drink | `combat.Use`, `items.Eat/Drink` | `item.<정의>.use/eat/drink` / `<Action>.binding` → `item_equipment.execute` | 실제 Root UUID Subject가 Provider → `skill_services.use_support()` 또는 `rules.eat_or_drink()` + `bind_consumption()` | 한 번 소비·예약 UUID, `test_item_equipment_actions`·`test_combat`; 고정 Command 제거 |
+| M03 장비: 착용/입어/입·무장/wield·벗어/벗·해제/unwield·주무기·정보 | inventory/items 장비 Command | `item.<정의>.*`, `item.inside_information.<탄창>` / 정의별 Binding → `item_equipment.execute` | Root Provider·Subject 또는 명시 Inside Subject → `equipment_service`·`item_information` | 진단 Variant는 버튼 제외, `test_equipment`·`test_equipment_entities`; 고정 Command 제거 |
+| M03 보관: 넣어/store·꺼내/retrieve | `items.Store/Retrieve`, `Container.act/perform_action` | `storage.store/retrieve` / `<Action>.<Provider>` → `storage.transfer` | `world.container/personal_locker` + CURRENT/STORAGE Subject → `item_transfer_native.transfer_selected()` | 공유 Verb·현재 부모 Scope, `test_storage_actions`·`test_item_entities`; 기존 보관 실행 제거 |
+| M04 총기: 재장전·장전·채워·넣어·꺼내 | `commands.firearms`, items Command | `item_ops.reload/load/fill/inside_fill/ammo_insert/inside_ammo_insert/magazine_remove/ammo_remove.*/inside_ammo_remove.*` / `<Action>.<정의>` → `item_ops.execute` | Root Provider·Inside Subject·Root/Inventory Source → `firearm_service` | 명시 UUID·집계 snapshot, `test_firearm_lighting_actions`·`test_firearms`; 고정 Command 제거 |
+| M04 광원: 켜·꺼·확인·넣어 | `items.LightOn/Off/Status` | `item_ops.light_on/light_off/light_status/power_insert` / `<Action>.<정의>` → `item_ops.execute` | Root 광원 Provider·전원 Source → `lighting_service` | 시간 투영과 추가 소비 분리, `test_firearm_lighting_actions`·`test_lighting`; 고정 Command 제거 |
+| M05 전리품: 가져/집·시/시2~시5 | `inventory.Take.run` → `typeclasses.loot.take_loot` | `loot.take` / `loot.take.corpse/ground` → `loot.pickup` | Corpse/Ground Provider·Source + ItemEntity/Currency Subject → `loot_service.lock_sources/pickup()` | 영속 번호·권리 분리·LootUnavailable, `test_loot_actions`·`test_loot_action_invariants`; 공개 Take 제거·구형 blob 읽기만 유지 |
+| M06 표현: 봐/본/보/백틱·말/say/작은따옴표·도움/도움말 | `character.Look/Help`, `social.Say` | 전역 Command 유지, 현재 Compiled Index/Binding을 읽는 표현으로 통합 | 실제 관찰 문맥·Provider → 순수 Presenter, 대화는 `npc_dialogue` | 객체 상세·Contextual Help·웹은 현재 행동과 일치; 이 전역 명령을 새 Action으로 중복 등록하지 않음 |
+
+### 승인된 유지 경로와 Historical API
+
+| 분류 | 경로 | 유지 이유와 실행 경계 |
+| --- | --- | --- |
+| 승인된 전역 | `Look`, `Say`, `Help` | 관찰·공개 발화·정적 도움말의 기존 사용자 계약. Action 효과를 재실행하는 fallback이 아님 |
+| 승인된 대화 | `pz_dialogue` → `npc_dialogue.select_keyword()` | 수신자·Session·NPC·Intent에 결합된 대화 토큰, 기존 임무 Intent와 공개/개인 출력 경계 유지 |
+| 승인된 비전환 | Engine/Exit·이동·Player/Party·전투·`버려`/`줘` | M01~M05 Action 전환 대상 밖. 기존 권한·경제·동시성 규칙 유지 |
+| 비활성 과거 분기 | `commands.items.Drop.run()`의 `counterpart.perform_action()` | 과거 Store/Retrieve의 잔여 분기다. 현재 등록된 `Drop`은 `particle=None`으로 counterpart를 선택하지 않고, `Give`는 `isinstance(self, Give)`여서 해당 분기 조건이 거짓이다. 두 공개 클래스에서 도달하지 않으므로 활성 보관 실행 경로로 집계하지 않는다. `버려`/`줘` 자체의 transfer는 승인된 비전환 경로로 유지한다. 실제 조건과 등록을 독립 Reviewer가 확인했다 |
+| 입력 확장 | 전역 단축어·개인 줄임말·묶음 | 실제 Command/Exit 우선순위와 단계별 최신 입력 검증 유지. 별도 Service나 Legacy fallback을 만들지 않음 |
+| 표현용 호환 API | `ActionObject.web_actions()` 등 | 호출자가 필요한 현재 Typed Action 투영을 반환하는 표현 어댑터. 독립 비용·권리·지급 실행 없음 |
+| Domain API | `interactable_services`, `equipment_service`, `item_transfer_native`, `firearm_service`, `lighting_service`, `loot_service` | 기존 정책과 원자적 게임 효과의 소유자. 선택된 안정 참조를 받으며 Legacy 공개 Command 재호출 없음 |
+| Historical API·데이터 | 구형 blob·명시 audit 전용 `take_loot` 및 아이템 호환 함수 | 운영 fallback과 분리. 실제 호출자와 audit 설정으로 한정하며 구형 Loot 표시에는 가짜 ID·번호·실행 버튼을 만들지 않음 |
+
+문자열 `act`·`web_actions`의 존재만으로 활성 중복이라고 판정하지 않는다. Registry/CmdSet 등록, 버튼 payload와 실제 호출자를 함께 확인하고 전환 동사는 신규 Gateway 한 곳으로 실행하는지를 검증한다.
+
+### Migration Gate 기술 사전 검증
+
+| Gate | 현재 판정 | 확보할 증거와 제한 |
+| --- | --- | --- |
+| G01 단일 Action 경로 | PASS — 기술 사전 검증 | 최종 직접 회귀 34개에서 실제 Command/Typed Web의 Service 효과 1회·거절 0회와 등록 단일 경로 확인. 최종 Quick과 기존 Chromium의 실제 게임 효과를 함께 확인 |
+| G02 기존 행동 동등성 | PASS — 기술 사전 검증 | Help 별칭·6개 섹션·단축어·B-1 직접 회귀, 대화 25개와 Session/Help 추가 검사, 최종 Quick의 구매/판매·회복·재로그인·대화·Prompt 동작. 과거 실패와 의도된 개인 진행 비공개 보완은 아래에 별도 기록 |
+| G03 핵심 영속·권리 | PASS — 기술 사전 검증 | PR A/B/C에서 병합 검증한 변경 없는 도메인·잠금·지급·Door 60초/통과 연장 계약을 재사용. M06의 Corpse B-1 직접 회귀와 대화 보상/Rollback 검사, 최종 Quick의 일행·Loot·보호 만료·TTL/리스폰·영속성으로 변경 영향을 검증. 로컬 전체 검사의 2개 Fixture 실패는 아래 보존하며 전체 성공으로 대체하지 않음 |
+| G04 활성 Legacy·중복 UI/Help 0 | PASS — 기술 사전 검증 | 실제 Registry/CmdSet·Compiled Verb·웹 Typed payload와 신규 효과 1회 회귀를 교차 확인. 독립 Reviewer가 승인 유지 목록·Drop/Give 비활성 분기·Legacy fallback 부재를 확인. 전환 범위의 활성 중복 0건 |
+| G05 Help/Web/문서 | PASS — 기술 사전 검증 | 현재 Provider/가용성·Help 6개 섹션·Typed 투영·조회 무부작용 직접 회귀, Session/Prompt·개인 진행 보호, Chromium 12개·Contracts 57개와 문서 12개 대조/상대 링크·공백 검사. 독립 Reviewer가 최종 문서·로그를 대조해 A로 판정했다. 최종 Source HEAD CI는 제출 Gate로 별도 대기 |
+| G06 승인 병합/main CI | PENDING | PR A/B/C 병합과 main CI는 확인. PR D 사용자 승인 병합 및 정확한 병합 main CI는 아직 대기 |
+
+이 표의 PASS는 아래 실제 직접 회귀·최종 Quick·브라우저·독립 소스 검토와 변경 없는 도메인의 기존 병합 검증을 근거로 한 기술적 사전 판정이다. 로컬 전체 검사 성공이나 PR D의 최종 승인·병합을 의미하지 않는다. 최종 Source HEAD·CI URL은 제출 후 별도로 기록한다. PR D의 구현·리뷰·Source HEAD CI가 성공해도 Phase 2 전체 Migration Gate는 G06 완료 전 최종 PASS가 아니다.
+
+운영 DB Migration/Seed/복원·Full Smoke는 NOT RUN이다. 38개 종합 회귀·Windows 실제 한글 IME는 Phase 3, 실제 모바일 브라우저는 별도 검증이며 PostgreSQL/다중 서버는 미검증이다. 이번 작업은 SQLite·단일 Evennia Server의 격리 자원만 사용하고 Issue #67의 실행 범위를 시작하지 않는다.
+
+
+### PR D 개발 검증과 실패·보완 기록
+
+아래는 base `62635d985a2d27ccfb25d8ecd49374292aa24398`와 PR D 미커밋 Diff의 Windows Native / Python 3.13.15 / Evennia 6.1.0 / SQLite 단일 서버 검증이다. 중복 실행 건수를 합산하지 않으며 이후 제품 변경의 영향을 따로 적는다. 최종 Source HEAD CI는 이 로컬 기록과 별도다.
+
+| 실제 검사·근거 | 결과 | 확인한 범위·후속 상태 |
+| --- | --- | --- |
+| `scripts/dev.py check`, `git diff --check` | PASS | 최종 통합 코드·공백 검사. Service 효과 검증을 대신하지 않음 |
+| `scripts/dev.py test tests.test_action_cutover tests.test_targets tests.test_shortcut_help --parallel 1` | 최종 제품 34개 PASS, 75.828초 | Compiled Binding·현재 Provider·Help 별칭/6개 섹션·등록 단일 경로·Typed 투영·조회 무부작용·Corpse B-1·힌트 동사 필터. 이전 동일 범위 33개 PASS와 합산하지 않음 |
+| `tests.test_action_cutover`의 G04 보강 시점 | 당시 6개 PASS, 16.966초 | Legacy 등록·Historical Provider 속성·실제 Command/Web Service 효과·중복 UI 점검. 이후 힌트 보완을 포함한 위 34개 검사로 직접 영향을 재검증 |
+| `tests.test_npc_dialogue`의 공개 명령·웹 재현 | 수정 전 개인 진행 1개 테스트의 4개 subcase FAIL, 다른 Session·Prompt 2개 FAIL | Commander/Pathfinder 각각의 `execute_cmd()`·`pz_dialogue`에서 개인 Quest 진행 방송, 같은 캐릭터 다른 Session 토큰 재사용, Prompt 중 임무 수락을 실제 재현 |
+| 위 대화 수정 후 모듈 검사 | 당시 25개 PASS, 270.551초 | 개인 진행은 요청자만 수신, 원래 질문과 공개 대사는 유지. Session 바인딩과 공통 입력 모드 검사, 권한·보상·Rollback 회귀 |
+| `test_rendered_dialogue_tokens_are_separate_for_each_session_and_character` 직접 검사 | 1개 PASS, 12.970초 | 실제 Session별 독립 토큰·수신 대상, 다른 Session/캐릭터·로그아웃 거절, 원본 Session 성공 1회·재전송 중복 0회 |
+| `test_say_help_describes_private_progress_and_session_prompt_boundaries` 직접 검사 | 1개 PASS, 12.064초 | `말`/`say` 실제 Help의 개인 진행 예외·Session/Prompt 보호 설명. 위 대화 보안 제품 코드와 동일 |
+| `scripts/dev.py test --parallel 4` / `prd-full.log` | 규칙 232개 PASS, 통합 1,061개 중 1,059 PASS·2 FAIL·ERROR 0, 통합 927.185초 | 전체 실행은 FAIL로 보존. 실패는 훈련 가능한 예산 없는 교관 Fixture와 Native 실물이 없는 Container Fixture의 과거 행동 안내 기대 |
+| 위 Fixture 보완 후 실패 2개와 분리한 Legacy 의미 1개 직접 검사 | 3개 PASS, 37.353초 | 실제 훈련 예산·Native UUID 조건에서 안내와 비가용 숨김을 검증. 기존 띄어쓰기 조회·무장 token 검사를 별도 보존. 제품 변경 없이 Fixture를 보완했으며 로컬 전체 PASS로 표현하지 않음 |
+| 최초 `scripts/dev.py smoke` / `prd-smoke.log` | FAIL — 상점 구매 응답 타임아웃 | 이전 단계 성공과 별개로 전체 Quick은 실패. 실패 자원·로그 보존 |
+| 원본 Smoke 판정·제한을 유지한 진단 1회 / `prd-smoke-diagnostic.log` | FAIL — 같은 상점 구매 타임아웃 | 구매 응답·잔액 변화 없이 종료. 서버 예외가 없다는 사실만으로 원인을 확정하지 않음. 운영 DB 불변과 소유 listener 정리 확인 |
+| 방 힌트 성능 진단·직접 회귀 / `prd-presentation-hint-red/green.log` | 불필요한 구매 Presenter 호출 12회 RED → 0회 GREEN | 힌트의 정규 동사 Binding만 기존 권한·가용성·Presenter 검증으로 통과. 측정 Fixture에서 힌트 1.319초/1,846 queries → 0.0478초/73 queries, 상태 전송 3.3216초 → 1.7615초. 이는 타임아웃의 단독 원인을 확정한 결과가 아님 |
+| 보완 후 표준 `.venv/Scripts/python.exe -u scripts/dev.py smoke` / `prd-smoke-final.log` | PASS, 종료 0, 172.971초 | 인증·Prompt·대화·일행·전투·Loot·TTL·리스폰·보호 만료·상점 가치/구매/판매/재구매·회복·재로그인 영속성 성공. 운영 DB 크기/mtime/SHA256 불변, 소유 프로세스 종료와 임시 환경 정리 확인 |
+| `.venv/Scripts/python.exe scripts/browser_e2e.py` / `prd-browser.log` | Chromium 12개 PASS, 오류 0, 196.714초 | 힌트 성능 필터 직전 제품에서 실제 화면·Typed Web 경로 확인. 운영 DB 불변, 서버/브라우저 종료와 자격 증명 제거 확인. 웹 전체 투영은 후속 필터에서 유지하며 필터 자체는 위 34개 검사로 검증. 최신 HEAD CI는 별도 필요 |
+| `npm run test:contracts` / `prd-contracts.log` | 57개 PASS | 기존 JavaScript·Typed 요청 계약. 웹 JavaScript 제품 변경 없음 |
+| 독립 Auditor의 대화 권한·출력 감사 | A, 잔여 P0/P1/P2 0 | 개인 진행·Session·Prompt·출력·기존 보상/커밋 경계 검토. 감사자가 테스트를 실행한 것으로 집계하지 않음 |
+| 독립 Reviewer의 전체 Diff·Fixture·Legacy·힌트 보완 검토 | A — Ready for Review, 잔여 P0/P1/P2 0 | 최종 문서·표준 Quick·직접 회귀·성능 비교와 기존 브라우저/Contracts 로그를 독립 대조했다. 파일·Git·DB 쓰기와 추가 테스트 실행 없음. 최종 Source HEAD CI는 별도 제출 Gate |
+| 최종 PR Source HEAD 필수 CI | 제출 후 확인 대기 | `test`·`smoke`·`contracts`·`browser-e2e` 정확한 HEAD·실행 URL·결과 필요 |
+
+전체 검사 실패 뒤 Assertion을 제거하거나 권한·지급 정책을 완화하지 않았다. 현재 가용 상태에 맞는 실제 Fixture를 제공하고 숨김 조건과 기존 Legacy 조회 의미를 함께 검증했다. 힌트 비용 보완은 게임 효과나 대상 선택을 바꾸지 않고 이미 필요했던 Binding 조회 범위를 요청한 동사로 좁힌다. 기존 Smoke 두 실패와 성능 측정 사실을 구분하며 최소 범위 보완 뒤 최종 표준 Smoke가 성공했다. 타임아웃의 단독 원인은 확정하지 않는다. Reviewer가 최종 문서·로그를 대조해 A로 판정했으며 정확한 Source HEAD CI는 별도 확인한다.

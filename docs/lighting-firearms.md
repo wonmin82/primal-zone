@@ -96,7 +96,7 @@ equip/unequip은 root-only이며 load/unload도 조작하는 root의 명시적 p
 
 현재 Action 선택 번호는 sequence 기반 local index가 아닌 영속 B-1이다. state 변경과 같은 Character Scope의 inventory↔equipment 이동은 번호를 유지한다. Inside 이동은 직접 부모 UUID Scope로 바뀌므로 목적 Scope에서 새 번호를 발급한다. 결번은 다른 후보로 대체하지 않는다. UUID/global sequence는 사용자 번호로 표시하지 않는다. 정규화는 공백·`.`·`-`·`_`를 무시하고 digit/mm는 보존한다. 5.56과556의 점 처리 충돌은 사용자의 명시적 답변에 따라 Decision Log를 따랐다. stable ID/display name/alias의 전역 충돌은 integrity가 검사한다. 탄창·탄약에는 권총표준/카빈표준/중량표준·권총탄/카빈탄/중량탄 등 한글 alias가 있다.
 
-상태/장비/소지품/Web은 같은 equipment snapshot의 주무기 instance와 state summary를 사용한다. inside 탄창은 [장전]으로 표시하며 firearm은 loaded magazine/rounds, 탄창은 rounds/capacity를 표시한다. 전환된 웹 버튼은 명령 문자열 대신 Action ID·Variant·Typed 안정 참조·인자·Request ID를 `pz_action`으로 전달한다. 자동 재장전 추천은 생성 시 선택한 실제 탄창 Source UUID를 가진 명시 장전 요청이다. 서버가 오래된 버튼의 Source를 다른 아이템으로 바꾸지 않는다. 웹 채워도 텍스트처럼 여러 호환 탄약 스택을 순서대로 사용하는 의미를 보존해야 한다. 현재 Inventory Source·UUID/수량 snapshot 재검증을 사용하는 집계 실행으로 구현 완료·통합 검증 중이며 최종 테스트 전에는 동등성 PASS로 기록하지 않는다.
+상태/장비/소지품/Web은 같은 equipment snapshot의 주무기 instance와 state summary를 사용한다. inside 탄창은 [장전]으로 표시하며 firearm은 loaded magazine/rounds, 탄창은 rounds/capacity를 표시한다. 전환된 웹 버튼은 명령 문자열 대신 Action ID·Variant·Typed 안정 참조·인자·Request ID를 `pz_action`으로 전달한다. 자동 재장전 추천은 생성 시 선택한 실제 탄창 Source UUID를 가진 명시 장전 요청이다. 서버가 오래된 버튼의 Source를 다른 아이템으로 바꾸지 않는다. 웹 채워도 텍스트처럼 여러 호환 탄약 스택을 순서대로 사용하는 의미를 보존해야 한다. 현재 Inventory Source·UUID/수량 snapshot 재검증을 사용하는 집계 실행이며 PR B에서 검증·병합했다. 해당 검증 기록과 이후 공통 경로의 영향 검증은 [Action 전환표](action-migration.md)에서 구분한다.
 
 Action/Help/상태 조회는 배터리나 탄약을 추가 소비하지 않는다. 기존 시간 경과에 따른 광원 projection과 정당한 lifecycle reconcile은 유지한다. PR B의 개발 검증과 과거 Phase 3/7의 실행 기록은 [Action 전환표](action-migration.md)에서 구분하며 운영 DB migration/seed/복원은 이번 작업에서 실행하지 않는다.
 

@@ -212,3 +212,16 @@ Loot의 Source/Subject는 같은 객체가 아니다. Corpse 또는 Ground Sourc
 `ServiceDefinition.prepare`는 실행 전 기존 생명주기 정산을 수행한다. Loot는 이 경계에서 `reconcile_room()`의 정상 TTL·보호 만료 처리를 유지하며 Action 목록 생성에는 추가 효과를 넣지 않는다. 웹 요청의 기본 제한은 역할당 32개·8192byte로 유지하고, 다중 Source 전체 회수만 해당 Action에 4096개·262144byte 한도를 명시한다. 한도를 넘는 요청은 일부만 처리하지 않고 거절한다.
 
 웹 선택 snapshot은 서버가 Source/Entry·수량·권리·지분·요청자를 서명한 값이다. 현재 권한 검사를 대체하지 않으며 일부 회수·권리 변경·출처 이동·삭제/병합 뒤의 오래된 요청은 동일 안정 ID여도 거절한다. 표시와 Help 생성은 번호 발급·지급·타이머 변경을 수행하지 않는다. 실제 M05 매핑과 실행 증거는 [전환표](action-migration.md)의 PR C 절에서 관리한다.
+
+
+## Phase 2 PR D의 전역 표현과 최종 통합
+
+`봐`·`말`·`도움`/`도움말`은 전역 Command로 유지한다. `pz_dialogue`도 토큰 기반 전역 대화 입력이며 Action Verb나 Dynamic CmdSet으로 다시 등록하지 않는다. Engine/Exit·이동·Player/Party·개인 줄임말/묶음·버려/줘 등 승인된 비전환 경로는 [최종 매핑](action-migration.md#pr-d--m06-최종-통합과-운영-경로)에 구분한다.
+
+정적 Help는 `VerbDefinition`의 공개 메타데이터를 `help_metadata()`와 기존 Help renderer에 공급한다. 정규 동사·별칭·공개 Variant suffix·요약/사용법/예시/실행 규칙/제한/관련 도움말을 한 번 출력하며 현재 Provider가 없다는 이유로 공개 문법 자체를 삭제하지 않는다. 현재 사용 가능한 Contextual Action은 정적 Help와 달리 실제 Provider·Binding·Visibility·전문 Presenter의 결과를 따른다.
+
+`action_controls()`는 Compiled Index의 Binding과 현재 Provider를 읽고 Service별 순수 Presenter를 사용한다. `provider_controls()`는 같은 Typed 행을 실제 Provider 참조로 투영하며 `provider_verbs()`는 그 결과의 정규 동사를 중복 없이 반환한다. `ActionObject.current_actions()`를 객체 상세·Contextual Help·방 힌트에서 사용하고 웹 상태도 같은 행을 투영한다. 방 힌트는 요청한 정규 `verb_key`의 Binding만 선택한 뒤 같은 권한·가용성·전문 Presenter를 검사한다. 힌트 하나 때문에 해당 상점의 모든 구매·판매 Presenter를 실행하지 않으며 객체 상세와 웹의 전체 투영은 유지한다. `web_actions()`는 필요한 표현 호환 래퍼로 남을 수 있지만 독립 실행 Handler가 아니다. 시설·상점·Container·Door·Loot·아이템의 전문 Presenter를 하나의 범용 화면으로 강제 합치지 않는다.
+
+이 조회는 Service 실행·비용 차감·확인 토큰 발급·번호 재할당을 하지 않는다. 기존 `봐`와 월드 갱신의 Corpse TTL·Enemy 생명주기·Door 시간 경과·광원 시간 투영은 보존한다. Corpse ALL 개요도 배열 순서 대신 영속 B-1을 읽는다. 웹의 전환 행동은 `pz_action`과 Typed Reference를 사용하고 전역 관찰·발화·이동 버튼은 승인된 입력 경로를 유지한다.
+
+대화의 개인정보·Session·Prompt 보호는 [NPC 대화 계약](npc-dialogue.md#웹-선택과-접근성)을 따른다. 이 경계와 M01~M06의 직접 회귀·독립 리뷰·최종 CI는 전환표와 PR Validation에 기록한다. G01~G05 기술 검증과 PR D Source HEAD CI 성공만으로 G06 또는 Phase 2 전체 Migration Gate를 최종 PASS로 선언하지 않는다.

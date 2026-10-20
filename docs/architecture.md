@@ -2,7 +2,7 @@
 
 ## Action Phase 1 기반
 
-명시 ContentPackage·불변 Registry·Role Resolver·동적 CmdSet·공통 Gateway와 B-1 영속 번호의 구현 계약은 [Action 아키텍처](action-architecture.md)에 있다. Issue #66 PR A는 운영 Manifest에 `world.actions.room_npc_content`를 등록하여 방·문·시설·상점·의료·성장·정산을 전환한다. 전역 말/대화 경로는 유지하며 아이템·Storage·총기·광원·전리품의 나머지 전환은 후속 PR 범위다. [기능별 전환표](action-migration.md)에 현재와 역사적 경로를 구분한다.
+명시 ContentPackage·불변 Registry·Role Resolver·동적 CmdSet·공통 Gateway와 B-1 영속 번호의 구현 계약은 [Action 아키텍처](action-architecture.md)에 있다. Issue #66 PR A/B/C는 명시 Manifest의 room_npc·item_equipment·storage·firearm_lighting·loot 패키지로 방·문·시설·NPC 서비스·아이템·Storage·총기·광원·전리품을 전환했다. 전역 `봐`·`말`·`도움`과 `pz_dialogue`는 유지하며 M06에서 객체별 표현·Help·Web의 정합성을 통합한다. [기능별 전환표](action-migration.md)에 현재와 역사적 경로를 구분한다.
 
 ## 현재 runtime contract와 명시적 변환
 
@@ -224,15 +224,15 @@ Integrity는 세 판매자 배치·catalog ID/행동, catalog 비어 있지 않�
 
 `world/targets.py`의 `TargetSelector`는 DEFAULT / INDEX / ALL을 표현한다. 일반 대상은 `<대상>`, `<대상> <번호>`, `<대상> 모두`로, 전리품 출처는 `시체에서`, `시체 2에서`, `모든 시체에서`로 해석한다. 출처 ALL도 내부에서는 같은 ALL이며, 한국어 조사에 맞춰 표시 문법만 다르다. 번호와 모두는 함께 사용할 수 없다. 실제 이름/alias 전체가 일치하면 숫자로 끝나는 이름을 우선하고, 이후 접미 선택자를 해석한다. 이전 prefix `전체` 문법은 지원하지 않는다.
 
-`ordered()`의 객체 ID 오름차순을 Room 서술, SURROUNDINGS, 보기, 공격, 콘텐츠 행동, 시체 회수에서 공유한다. 번호는 방 안의 보이는 후보에 붙이는 1부터 시작하는 transient presentation index이며 DB에 저장하거나 객체 ID 자체를 노출하지 않는다. 같은 이름끼리 번호를 붙이되 `시체`는 방 전체 Corpse pool을 사용한다. 시체가 만료되면 남은 시체 번호도 다시 계산된다.
+일반 정렬과 기본 선택 정책은 기존 `targets` 계약을 따르며, 정규 선택 번호는 `world.selection_numbers`의 영속 B-1이 SSOT다. Room의 Corpse 그룹·Character의 Root Item 그룹·각 Source의 Loot 그룹·부모 UUID의 Inside 그룹을 분리한다. 삭제된 번호는 결번으로 남고 그룹 전체 소멸 후 새 그룹만 1부터 시작한다. 시체 하나만 남거나 권한이 변경됐다는 이유로 번호를 다시 매기지 않는다. ID·UUID·sequence·quantity는 사용자 선택 번호와 별개다.
 
-DEFAULT는 구조적으로 행동을 지원하는 첫 대상을 선택한다. INDEX는 표시 순서의 정확한 개체를 선택한다. 실제 점유·임무·한 번 보상·전리품 권한은 행동/규칙 계층이 판단하며 resolver가 가능한 다음 대상으로 자동 이동하지 않는다. 보기·가져와 허용된 물품 이전·스택 판매·소각은 각 행동의 ALL 계약을 따른다. 공격·대화·조사·수리·무장·착용·구매·학습·일행 인물 조작은 단일 대상이다. 정산의 교환은 NPC 하나를 선택하고 회수부품에는 1/N개/모두 수량을 적용한다. 스택 판매·소각도 같은 개 suffix 수량 parser를 사용한다. 전투가 시작된 뒤 공격·강타·사격·간파·견제·치료·호흡·도망는 기존 combat_target을 사용한다. 특성의 `힘 2 배분`처럼 수량을 받는 명령은 해당 명령의 인자 문법을 유지한다. 일행 초대/관리의 기존 원격 캐릭터 범위도 유지한다.
+DEFAULT는 구조적으로 행동을 지원하는 첫 대상을 선택한다. INDEX는 해당 Scope·선택 그룹의 정규 고정 번호를 선택한다. 실제 점유·임무·한 번 보상·전리품 권한은 행동/규칙 계층이 판단하며 resolver가 가능한 다음 대상으로 자동 이동하지 않는다. 보기·가져와 허용된 물품 이전·스택 판매·소각은 각 행동의 ALL 계약을 따른다. 공격·대화·조사·수리·무장·착용·구매·학습·일행 인물 조작은 단일 대상이다. 정산의 교환은 NPC 하나를 선택하고 회수부품에는 1/N개/모두 수량을 적용한다. 스택 판매·소각도 같은 개 suffix 수량 parser를 사용한다. 전투가 시작된 뒤 공격·강타·사격·간파·견제·치료·호흡·도망는 기존 combat_target을 사용한다. 특성의 `힘 2 배분`처럼 수량을 받는 명령은 해당 명령의 인자 문법을 유지한다. 일행 초대/관리의 기존 원격 캐릭터 범위도 유지한다.
 
-`world/target_presentation.py`는 개체 수를 자연어로 묘사하고 필요한 경우에만 `'갈퀴사냥룡 1'`, `'시체 2'` 같은 지정 방법을 문장으로 안내한다. Room 본문과 세계 서술은 객체 표가 아니다. SURROUNDINGS·버튼·상태/조작 control에서는 빠른 인식과 조작을 위해 `시체 1 · 갈퀴사냥룡의 시체` 같은 compact label·번호·상태를 사용할 수 있다. `world/state.py`가 label/command를 생성하고 웹은 그대로 텍스트 명령을 전송하므로 클라이언트에 선택 parser를 복제하지 않는다.
+`world/target_presentation.py`는 개체 수를 자연어로 묘사하고 필요한 경우에만 `'갈퀴사냥룡 1'`, `'시체 2'` 같은 지정 방법을 문장으로 안내한다. Room 본문과 세계 서술은 객체 표가 아니다. SURROUNDINGS·버튼·상태/조작 control에서는 빠른 인식과 조작을 위해 `시체 1 · 갈퀴사냥룡의 시체` 같은 compact label·번호·상태를 사용할 수 있다. 서버가 label과 실행 정보를 생성하므로 클라이언트에 선택 parser를 복제하지 않는다. 전환된 행동은 Action ID·Variant·실제 Typed Role Reference·인자를 `pz_action`으로 전달하고 전역 관찰·발화·이동은 승인된 입력 경로를 유지한다.
 
-`world.state.loot_controls()`는 웹 상태와 Corpse/DroppedLoot 상세 보기의 지정명·회수 명령을 함께 생성한다. 시체는 현재 보이는 방 전체 Corpse pool, 바닥 물건은 같은 아이템의 객체/entry 순서를 기존 helper로 계산한다. 상세 보기에는 단독으로 실행할 수 없는 `가져` 대신 `시체 2에서 모두 가져`, `회수부품 2 가져` 같은 명령을 안내한다. 시체가 하나면 번호를 생략하고, 빈 시체에는 회수 안내를 표시하지 않는다. 이 helper는 표시만 담당하며 번호를 저장하거나 권한·수량 규칙을 다시 구현하지 않는다. 실제 실행은 현재 방 상태에서 기존 resolver와 전리품 규칙을 사용한다.
+`world.state.loot_controls()`는 `world.actions.loot_presentation`에 위임한다. Corpse의 Room 공통 B-1 번호와 Source 내부 ItemEntity/CurrencyLoot의 정규 번호를 표시하며 Source ID·Entry UUID/ID는 Typed Reference에 보존한다. 권한 필터로 남은 항목을 재번호하지 않고, 회수 가능한 항목이 없는 Source에는 실행 버튼을 제공하지 않는다. 상세의 `시체 2에서 모두 가져`·`회수부품 2 가져`는 직접 입력 안내이며 버튼은 문자열을 다시 해석하지 않는다.
 
-전리품 요청은 `LootRequest(source, target)`로 정규화한다. `모두 가져`는 가상 target `전리품`의 ALL이다. source가 없으면 DroppedLoot를, DEFAULT source면 시체 하나만 처리한다. source ALL에는 target ALL이 필수다. target DEFAULT/INDEX는 선택 entry에서 한 개를, ALL은 일치하는 entry의 전체 quantity를 처리한다. entry 순서는 객체 ID와 객체 내부의 저장 entry 순서이며, 번호를 별도 저장하지 않는다. 회수 전 같은 timestamp로 lifecycle을 정리한 뒤 world_change에서 선택·수량 차감·배정자 저장을 원자적으로 처리한다. 보호된 entry는 ALL에서 건너뛰며 하나라도 지급되면 성공이다. can_take_entry가 회수 자격을, recipient_for_item이 item 순번 배정 대상을, currency_payouts가 잔여 금액 배분을 판단한다.
+전리품 문법은 `loot_resolution`에서 Source·Subject·quantity를 구분하고 `loot.take` → Gateway → `loot.pickup` → 기존 `loot_service.pickup()`으로 한 번 실행한다. 출처 없는 요청은 Ground, `시체에서`는 기존 기본 시체 하나, `모든 시체에서`는 여러 Source와 전체 선택을 의미한다. 명시 결번·권한 거절은 다른 Source/Entry로 대체하지 않는다. 이름·번호·웹 참조를 통한 비공개 Entry 존재 추측은 Loot 전용 `LootUnavailable` 공개 오류로 차단하며 권리자의 수량·전투·Unique 오류는 보존한다. 잠금 이후 권리·수량·지급 대상과 snapshot을 다시 확인하고 `world_change()`에서 지급·차감·지분·번호를 함께 커밋하거나 롤백한다. `can_take_entry`·`recipient_for_item`·`currency_payouts`의 기존 분배 규칙을 재사용하고 알림은 최상위 커밋 뒤 전달한다.
 
 ## 레벨·특성·기술의 세 성장축
 
