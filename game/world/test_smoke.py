@@ -143,26 +143,60 @@ class SmokeContractsTests(TestCase):
     def test_full_restart_requests_isolated_shutdown_and_checks_owned_process_exit(self):
         from unittest.mock import Mock
 
+        harness = SimpleNamespace(mode="full", check_alive=Mock(), graceful_stop=Mock())
+        order = Mock()
+        order.attach_mock(harness.check_alive, "alive")
+        order.attach_mock(harness.graceful_stop, "shutdown")
+        stop_for_restart(harness)
+        self.assertEqual([call[0] for call in order.mock_calls], ["alive", "shutdown"])
+        failure = RuntimeError("normal shutdown failed")
+        harness.graceful_stop.side_effect = failure
+        with self.assertRaises(RuntimeError) as raised:
+            stop_for_restart(harness)
+        self.assertIs(raised.exception, failure)
+        harness.graceful_stop.reset_mock(side_effect=True)
+        harness.check_alive.side_effect = RuntimeError("owned process exited")
+        with self.assertRaisesRegex(RuntimeError, "owned process exited"):
+            stop_for_restart(harness)
+        harness.graceful_stop.assert_not_called()
+        harness.check_alive.reset_mock(side_effect=True)
+        harness.mode = "quick"
+        with self.assertRaises(AssertionError):
+            stop_for_restart(harness)
+        harness.check_alive.assert_not_called()
+        harness.graceful_stop.assert_not_called()
+
+        # 위임한 공통 경계도 실제 명령·소유 exit 검사를 보존해야 한다.
+        # subprocess와 소유 DB 관측을 대체하므로 서버/DB는 실행하지 않는다.
         with tempfile.TemporaryDirectory() as folder:
             process = Mock()
             process.wait.return_value = 0
-            harness = SimpleNamespace(mode="full", run_dir=Path(folder), env={"isolated": "yes"},
-                                      processes=[("server", process)], check_alive=Mock())
-            with patch("scripts.smoke_closeout.subprocess.run") as command:
-                stop_for_restart(harness)
+            harness = smoke_harness.Harness("full")
+            harness.run_dir, harness.env = Path(folder), {"isolated": "yes"}
+            harness.processes = [("server", process)]
+            handle = Mock()
+            harness.handles = [handle]
+            with (patch.object(harness, "owned_database_fingerprint") as owned,
+                  patch("scripts.smoke_harness.subprocess.run") as command):
+                harness.graceful_stop()
+                owned.assert_called_once_with()
                 arguments = command.call_args.args[0]
-                self.assertEqual(arguments, [sys.executable, "-m", "evennia", "stop",
-                                             "--settings", "settings_smoke"])
+                self.assertEqual(arguments, [sys.executable, "-c",
+                                             "from evennia.server.evennia_launcher import main; main()",
+                                             "stop", "--settings", "settings_smoke"])
                 self.assertEqual(command.call_args.kwargs["cwd"], Path(folder) / "game")
                 self.assertEqual(command.call_args.kwargs["env"], harness.env)
                 self.assertTrue(command.call_args.kwargs["check"])
+                process.wait.assert_called_once_with(timeout=smoke_harness.SHUTDOWN_TIMEOUT)
+                handle.close.assert_called_once_with()
                 process.wait.return_value = 1
-                with self.assertRaises(AssertionError):
-                    stop_for_restart(harness)
-            harness.mode = "quick"
-            with patch("scripts.smoke_closeout.subprocess.run") as command, self.assertRaises(AssertionError):
-                stop_for_restart(harness)
-            command.assert_not_called()
+                with self.assertRaisesRegex(RuntimeError, "정상 종료"):
+                    harness.graceful_stop()
+                owned.side_effect = RuntimeError("unowned fixture")
+                command.reset_mock()
+                with self.assertRaisesRegex(RuntimeError, "unowned fixture"):
+                    harness.graceful_stop()
+                command.assert_not_called()
 
     def test_enemy_delay_canonical_setting_precedes_legacy_fallback(self):
         key = "ENEMY_RECOVERY_DELAY_SECONDS"
@@ -323,12 +357,19 @@ class SmokeRestartTests(TestCase):
         class PurchaseObserved(Exception):
             pass
 
-        player = SimpleNamespace(state={"inventory": [
-            {"id": "folding_shield", "count": 1}, {"id": "non_slip_boots", "count": 1}]})
+        from world.rules import purchase_price
+
+        player = SimpleNamespace(state={"credits": 10000, "inventory": [
+            {"id": "folding_shield", "count": 1, "identity": "shield-uuid", "selector": "접이식방패 1"},
+            {"id": "non_slip_boots", "count": 1, "identity": "dropped-boots-uuid",
+             "selector": "미끄럼방지탐사화 1"}]}, semantic_logs=[])
 
         async def act(command, predicate):
             if command == "미끄럼방지탐사화 사":
-                player.state["inventory"][1]["count"] += 1
+                player.state["inventory"].append({"id": "non_slip_boots", "count": 1,
+                                                  "identity": "purchased-boots-uuid",
+                                                  "selector": "미끄럼방지탐사화 2"})
+                player.state["credits"] -= purchase_price("non_slip_boots")
                 self.assertTrue(predicate(player.state), "기존 drop 1개 + 정상 구매 1개를 허용해야 한다")
                 raise PurchaseObserved
 
@@ -338,6 +379,9 @@ class SmokeRestartTests(TestCase):
             "scripts.smoke_closeout.travel_to", new_callable=AsyncMock
         ), self.assertRaises(PurchaseObserved):
             asyncio.run(closeout.prepare_boss())
+        self.assertEqual(player.state["inventory"][1]["identity"], "dropped-boots-uuid")
+        self.assertEqual(player.state["inventory"][1]["count"], 1)
+        self.assertEqual(player.state["credits"], 10000 - purchase_price("non_slip_boots"))
 
     def test_restart_reuses_directory_database_and_ports_without_fixture_reset(self):
         harness = smoke_harness.Harness("full")
@@ -355,13 +399,13 @@ class SmokeRestartTests(TestCase):
             self.assertTrue(harness.restarting)
             events.append("ready")
 
-        with patch.object(harness, "stop", side_effect=lambda: events.append("stop")), patch.object(
+        with patch.object(harness, "graceful_stop", side_effect=lambda: events.append("graceful_stop")), patch.object(
             harness, "start", side_effect=lambda: events.append("start")
         ), patch.object(harness, "ready", side_effect=ready), patch.object(
             harness, "checkpoint", side_effect=checkpoint
         ), patch.object(harness, "prepare") as prepare:
             self.assertEqual(asyncio.run(harness.restart()), stopped)
-        self.assertEqual(events, ["stop", "checkpoint", "start", "ready"])
+        self.assertEqual(events, ["graceful_stop", "checkpoint", "start", "ready"])
         self.assertEqual(harness.run_dir, Path("same-isolated-db"))
         self.assertEqual(harness.ports, {"ws": 12345})
         self.assertEqual(harness.env, {"PRIMAL_SMOKE_MODE": "full"})
@@ -370,9 +414,10 @@ class SmokeRestartTests(TestCase):
 
     def test_restart_failure_restores_premature_exit_monitoring(self):
         harness = smoke_harness.Harness("full")
-        with patch.object(harness, "stop"), patch.object(harness, "checkpoint", return_value={}), patch.object(
+        with patch.object(harness, "graceful_stop") as shutdown, patch.object(harness, "checkpoint", return_value={}), patch.object(
             harness, "start", side_effect=RuntimeError("start failed")
         ):
             with self.assertRaisesRegex(RuntimeError, "start failed"):
                 asyncio.run(harness.restart())
+        shutdown.assert_called_once_with()
         self.assertFalse(harness.restarting)

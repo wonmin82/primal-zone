@@ -5,10 +5,11 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
+import action_e2e  # noqa: E402
 from smoke_harness import Harness, smoke_environment  # noqa: E402
 
 
@@ -41,3 +42,44 @@ class OwnedDatabaseTests(unittest.TestCase):
         self.assertNotIn("PRIMAL_DB_NAME", env)
         self.assertEqual(env["PRIMAL_SMOKE_RUN_DIR"], "owned")
         self.assertEqual(env["DJANGO_SETTINGS_MODULE"], "server.conf.settings_smoke")
+
+
+class ActionCleanupTests(unittest.TestCase):
+    def run_main(self, harness, *, scenario_error=None):
+        harness.owned_database_fingerprint.return_value = {"size": 1}
+        with (patch.object(action_e2e, "Harness", return_value=harness),
+              patch.object(action_e2e, "scenario", new=Mock(return_value="scenario")),
+              patch.object(action_e2e.asyncio, "run", side_effect=scenario_error),
+              patch("builtins.print")):
+            action_e2e.main()
+
+    def test_success_requires_normal_shutdown_before_discard(self):
+        harness = Mock()
+        harness.owned_database_fingerprint.return_value = {"size": 1}
+        self.run_main(harness)
+        calls = [call[0] for call in harness.mock_calls]
+        self.assertLess(calls.index("graceful_stop"), calls.index("stop"))
+        self.assertLess(calls.index("stop"), calls.index("discard"))
+        harness.graceful_stop.assert_called_once_with()
+        harness.stop.assert_called_once_with()
+        harness.discard.assert_called_once_with()
+
+    def test_failed_normal_shutdown_still_stops_and_preserves_fixture(self):
+        harness = Mock()
+        original = RuntimeError("normal shutdown failed")
+        harness.graceful_stop.side_effect = original
+        with self.assertRaises(RuntimeError) as raised:
+            self.run_main(harness)
+        self.assertIs(raised.exception, original)
+        harness.stop.assert_called_once_with()
+        harness.discard.assert_not_called()
+
+    def test_failed_scenario_uses_existing_cleanup_and_preserves_original_failure(self):
+        harness = Mock()
+        original = RuntimeError("scenario failed")
+        with self.assertRaises(RuntimeError) as raised:
+            self.run_main(harness, scenario_error=original)
+        self.assertIs(raised.exception, original)
+        harness.graceful_stop.assert_not_called()
+        harness.stop.assert_called_once_with()
+        harness.discard.assert_not_called()

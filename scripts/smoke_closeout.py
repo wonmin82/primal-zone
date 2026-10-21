@@ -6,6 +6,7 @@ from time import monotonic
 from smoke import count_item, route, travel_to
 from world.content import ITEMS
 from world.lighting import project_power
+from world.rules import purchase_price
 
 
 def assert_shutdown_items(saved, restored, before_at, stopped_at):
@@ -44,11 +45,12 @@ class Closeout:
         self.scenario = scenario
         self.first, self.second, self.outsider = scenario.players
 
-    async def equipment_change(self, definition, *, equip=True):
+    async def equipment_change(self, definition, *, equip=True, identity=None):
         """공개 selector 실행을 같은 Native UUID의 장착 상태·주무기·표시와 연결한다."""
         player = self.first
-        candidates = [row for row in player.state["inventory"] if row["id"] == definition]
-        assert len(candidates) == 1, (definition, "Full 장비 UUID가 유일하지 않음", candidates)
+        candidates = [row for row in player.state["inventory"] if row["id"] == definition
+                      and (identity is None or row["identity"] == identity)]
+        assert len(candidates) == 1, (definition, identity, "Full 장비 UUID가 유일하지 않음", candidates)
         selected = candidates[0]
         identity, slot = selected["identity"], selected["slot"]
         assert identity and selected["count"] == 1 and selected["equipped"] is not equip
@@ -293,9 +295,29 @@ class Closeout:
             await self.equipment_change('tactical_protective_suit')
         else:
             await travel_to(player, 'armor_shop')
-            boots = count_item(player.state, 'non_slip_boots')
-            await player.act('미끄럼방지탐사화 사', lambda s: count_item(s, 'non_slip_boots') == boots + 1)
-            await self.equipment_change('non_slip_boots')
+
+            def boots_snapshot(state):
+                return {"items": {row["identity"]: row["count"] for row in state["inventory"]
+                                  if row["id"] == "non_slip_boots"}, "credits": state["credits"]}
+
+            before = boots_snapshot(player.state)
+            boots = sum(before["items"].values())
+            prior_logs = tuple(player.semantic_logs)
+            try:
+                await player.act('미끄럼방지탐사화 사', lambda s: count_item(s, 'non_slip_boots') == boots + 1)
+            except TimeoutError as error:
+                # 이번 공개 구매 뒤의 semantic 거절만 남긴다. 인증 요청/원문 로그는 수집하지 않는다.
+                refusals = ["".join(part["text"] for part in log["segments"])
+                            for log in player.semantic_logs
+                            if not any(log is prior for prior in prior_logs) and log.get("kind") == "error"]
+                raise AssertionError({"operation": "Full boots purchase", "before": before,
+                                      "after": boots_snapshot(player.state), "refusals": refusals[-3:]}) from error
+            after = boots_snapshot(player.state)
+            added = set(after["items"]) - set(before["items"])
+            assert len(added) == 1 and after["items"][next(iter(added))] == 1, (before, after)
+            assert {identity: after["items"].get(identity) for identity in before["items"]} == before["items"]
+            assert after["credits"] == before["credits"] - purchase_price("non_slip_boots"), (before, after)
+            await self.equipment_change('non_slip_boots', identity=next(iter(added)))
         if count_item(player.state, 'expedition_tag') and not player.state['equipment']['neck']:
             await self.equipment_change('expedition_tag')
         await self.restock_boss(advanced=advanced)
@@ -365,8 +387,9 @@ class Closeout:
         harness = self.scenario.harness
         harness.restarting = True
         try:
-            # Windows terminate는 callback을 건너뛴다. 실제 at_server_shutdown을 거친다.
-            await asyncio.to_thread(stop_for_restart, harness)
+            assert harness.mode == "full"
+            harness.check_alive()
+            # restart 자체가 정상 AMP 종료·stopped checkpoint·동일 DB 재시작을 수행한다.
             # stopped: 정상 shutdown 완료 후 DB. after: startup + relogin 후 DB.
             stopped = await harness.restart()
         finally:
