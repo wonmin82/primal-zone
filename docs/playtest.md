@@ -1,5 +1,13 @@
 # 테스트와 검증
 
+## Issue #66 PR D — M06 검증 범위
+
+M06은 전역 `봐`·`말`·`도움`과 `pz_dialogue`를 유지하면서 객체 상세·Contextual Help·웹 Typed Action을 현재 Compiled Index와 Binding에 맞춘다. 기능별 운영 경로와 G01~G06의 판정은 [Action 전환표](action-migration.md#pr-d--m06-최종-통합과-운영-경로)에 기록한다. 아래 과거 Issue/Phase 검증은 당시 기준을 보존하며 PR D에서 새로 실행한 결과로 합산하지 않는다.
+
+직접 영향 검사에는 현재 Provider 변화·숨김·중복 UI/Help·Corpse ALL의 B-1 결번, 실제 Command와 Typed Web 효과 1회/거절 0회, 개인 임무 진행 비공개·다른 Session 토큰 거절·Prompt 중 대화 거절을 포함한다. 개인 진행 누출과 Session/Prompt 우회는 수정 전 공개 경로의 실패를 확인한 뒤 같은 회귀로 재검증한다. 최종 명령·건수·기준 SHA·Quick Smoke·Chromium·필수 CI 결과는 실제 실행 후 PR Validation과 전환표에 기록한다. 미실행 검사를 PASS로 간주하지 않는다.
+
+운영 DB Migration/Seed/복원과 Full Smoke는 실행하지 않는다. Issue #67의 38개 종합 회귀·Windows 실제 한글 IME는 Phase 3, 실제 모바일·PostgreSQL·다중 서버는 별도 미검증 범위다. PR D의 기술 검증 성공도 사용자 승인 병합과 정확한 main CI를 요구하는 G06을 대신하지 않는다.
+
 ## Issue #59 Favicon 및 브라우저 오류 검증
 
 웹 클라이언트는 Django `{% static %}`으로 `/static/website/images/favicon.ico`를 명시한다. ICO는 16×16과 32×32 이미지를 포함한다. 기존 #50의 favicon 404 허용 및 실행 결과는 당시 이력으로 보존하며, 현재 검증에서는 favicon을 포함한 HTTP 400 이상 응답, 요청 전송 실패, Console error와 JavaScript 오류를 모두 실패로 처리한다. 오류 원문·URL·인증정보는 Artifact에 보존하지 않는다.

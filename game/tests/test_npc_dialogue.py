@@ -27,6 +27,17 @@ class NPCDialogueTests(NativeItemTest):
         self.enterContext(patch("world.npc_dialogue.time", return_value=100))
         self.char1.msg = Mock()
         self.char2.msg = Mock()
+        self.session1 = self.session_for(self.char1)
+        self.session2 = self.session_for(self.char2)
+        self.enterContext(patch.object(self.char1.sessions, "all", return_value=[self.session1]))
+        self.enterContext(patch.object(self.char2.sessions, "all", return_value=[self.session2]))
+
+    def session_for(self, character):
+        session = Mock(logged_in=True)
+        session.account = character.account
+        session.get_puppet.return_value = character
+        session.get_account.return_value = character.account
+        return session
 
     def messages(self, character):
         return [call.args[0] for call in character.msg.call_args_list if call.args]
@@ -202,6 +213,21 @@ class NPCDialogueTests(NativeItemTest):
         self.command("윤대장에게 화제 안내 말")
         self.assertEqual(len(self.guides(self.char1)), 1)
 
+    def test_say_help_describes_private_progress_and_session_prompt_boundaries(self):
+        before = deepcopy(self.atomic_state())
+        help_text = self.command("말 도움")
+        self.char1.msg.reset_mock()
+        self.assertEqual(self.command("say 도움"), help_text)
+        for rule in ("플레이어 발화와 NPC의 공공 대사는 같은 방 전체에 공개됩니다.",
+                     "개인 임무 진행 안내는 요청한 플레이어만 받으며, 질문한 발화 자체는 공개됩니다.",
+                     "NPC의 공공 대사 원문은 모두에게 같고",
+                     "보상 시스템 알림은 해당 플레이어만 받습니다.",
+                     "발급받은 원래 접속 세션에서만 선택할 수 있으며",
+                     "추가 입력 중에는 먼저 답을 입력해야 합니다."):
+            self.assertIn(rule, help_text)
+        self.assertNotIn("플레이어 발화와 NPC 대사는 같은 방 전체에 공개됩니다.", help_text)
+        self.assertEqual(self.atomic_state(), before)
+
     def test_numbered_guide_refresh_and_empty_topic_response(self):
         dialogue.say(self.char1, "윤대장에게 안녕")
         create_object("typeclasses.interactables.Commander", key="윤대장", location=self.char1.location,
@@ -318,6 +344,116 @@ class NPCDialogueTests(NativeItemTest):
         with patch("world.npc_dialogue.time", return_value=280):
             self.assertIsNone(dialogue.current_context(self.char1))
 
+    def test_personal_progress_is_private_in_public_command_and_web_selection(self):
+        from server.conf.primal_inputfuncs import pz_dialogue
+
+        cases = ((self.npc, "radio_tower"),
+                 (next(obj for obj in self.rooms["jungle_edge"].contents
+                       if dialogue.type_name(obj) == "Pathfinder"), "deep_jungle"))
+        for npc, quest_id in cases:
+            self.char1.location = self.char2.location = npc.location
+            self.char1.change(lambda p: p["quests"][quest_id].update(started=True))
+            intent = next(item for item in intents_for(dialogue.type_name(npc)) if item.intent_id == "progress")
+            expected = dialogue.response(self.char1, npc, intent)
+            self.assertNotEqual(expected, dialogue.response(self.char2, npc, intent))
+            for route in ("command", "web"):
+                with self.subTest(npc=dialogue.type_name(npc), route=route):
+                    dialogue.clear_context(self.char1)
+                    self.char1.msg.reset_mock()
+                    self.char2.msg.reset_mock()
+                    before = deepcopy(self.atomic_state())
+                    if route == "command":
+                        self.command(npc.key + "에게 진행 말")
+                    else:
+                        session = self.session_for(self.char1)
+                        token = dialogue.issue_token(self.char1, npc, intent, session=session)
+                        with patch.object(self.char1.sessions, "all", return_value=[session]):
+                            pz_dialogue(session, token)
+                    self.assertEqual([str(value) for value in self.npc_messages(self.char1, npc)],
+                                     [npc.key + ": " + expected])
+                    self.assertEqual(self.npc_messages(self.char2, npc), [])
+                    self.assertTrue(any(str(value) == self.char1.key + ": " + npc.key + "에게 진행"
+                                        for value in self.messages(self.char2)))
+                    self.assertFalse(any(expected in str(value) for value in self.messages(self.char2)))
+                    self.assertEqual(self.atomic_state(), before)
+
+    def test_web_dialogue_token_is_bound_to_original_session(self):
+        from server.conf.primal_inputfuncs import pz_dialogue
+
+        intent = next(item for item in intents_for("Commander") if item.intent_id == "mission")
+        sessions = [Mock(logged_in=True), Mock(logged_in=True)]
+        for number, session in enumerate(sessions):
+            session.account = self.char1.account
+            session.sessid = number + 1
+            session.get_puppet.return_value = self.char1
+            session.get_account.return_value = self.char1.account
+        with patch.object(self.char1.sessions, "all", return_value=[sessions[0]]):
+            token = dialogue.issue_token(self.char1, self.npc, intent)
+        before = deepcopy(self.atomic_state())
+        with patch.object(self.char1.sessions, "all", return_value=sessions):
+            pz_dialogue(sessions[1], token)
+        self.assertEqual(self.npc_messages(self.char1), [])
+        self.assertTrue(any(getattr(value, "kind", None) == "error" for value in self.messages(self.char1)))
+        self.assertEqual(self.atomic_state(), before)
+
+    def test_rendered_dialogue_tokens_are_separate_for_each_session_and_character(self):
+        from server.conf.primal_inputfuncs import pz_dialogue
+
+        second_session = self.session_for(self.char1)
+        sessions = [self.session1, second_session]
+        with patch.object(self.char1.sessions, "all", return_value=sessions):
+            self.command("윤대장에게 임무 말")
+            spoken = [call for call in self.char1.msg.call_args_list
+                      if call.args and str(call.args[0]).startswith(self.npc.key + ":")]
+            self.assertEqual(len(spoken), 2)
+            self.assertEqual(str(spoken[0].args[0]), str(spoken[1].args[0]))
+            tokens = [next(part["dialogue_selection"] for part in call.args[0].segments
+                           if part["text"] == "〈수락〉") for call in spoken]
+            self.assertNotEqual(*tokens)
+            for call, session, token in zip(spoken, sessions, tokens):
+                self.assertIs(call.kwargs["session"], session)
+                self.assertIs(dialogue.token_store(self.char1)[token]["session"], session)
+            before = deepcopy(self.atomic_state())
+            for session, token in ((second_session, tokens[0]), (self.session2, tokens[0])):
+                with self.subTest(recipient="other character" if session is self.session2 else "other session"):
+                    self.char1.msg.reset_mock()
+                    self.char2.msg.reset_mock()
+                    pz_dialogue(session, token)
+                    self.assertEqual(self.npc_messages(self.char1), [])
+                    self.assertEqual(self.npc_messages(self.char2), [])
+                    self.assertEqual(self.atomic_state(), before)
+            with patch.object(self.char1.sessions, "all", return_value=[second_session]):
+                self.char1.msg.reset_mock()
+                pz_dialogue(self.session1, tokens[0])
+                self.assertEqual(self.npc_messages(self.char1), [])
+                self.assertEqual(self.atomic_state(), before)
+            pz_dialogue(self.session1, tokens[0])
+            self.assertTrue(self.char1.profile_snapshot()["quests"]["radio_tower"]["started"])
+            self.assertEqual(len(self.npc_messages(self.char2)), 1)
+            pz_dialogue(self.session1, tokens[0])
+            self.assertEqual(len(self.npc_messages(self.char2)), 1)
+
+    def test_web_dialogue_waits_for_prompt_input(self):
+        from evennia.utils.evmenu import get_input
+        from server.conf.primal_inputfuncs import pz_dialogue
+
+        session = Mock(logged_in=True)
+        session.account = self.char1.account
+        session.get_puppet.return_value = self.char1
+        session.get_account.return_value = self.char1.account
+        intent = next(item for item in intents_for("Commander") if item.intent_id == "accept")
+        with patch.object(self.char1.sessions, "all", return_value=[session]):
+            token = dialogue.issue_token(self.char1, self.npc, intent)
+            get_input(self.char1, "답을 입력하세요.", lambda *args: None)
+            self.char1.msg.reset_mock()
+            self.char2.msg.reset_mock()
+            before = deepcopy(self.atomic_state())
+            pz_dialogue(session, token)
+        self.assertEqual(self.atomic_state(), before)
+        self.assertEqual(self.npc_messages(self.char1), [])
+        self.assertEqual(self.messages(self.char2), [])
+        self.assertTrue(any("추가 입력" in str(value) for value in self.messages(self.char1)))
+
     def test_personal_guides_semantics_keep_plain_text_and_separate_chat(self):
         dialogue.say(self.char1, "윤대장에게 임무")
         guide = next(value for value in self.messages(self.char1) if str(value).startswith("현재 사용 가능:"))
@@ -392,11 +528,8 @@ class NPCDialogueTests(NativeItemTest):
     def test_stale_action_tokens_cannot_report_twice_before_commit(self):
         self.char1.change(lambda p: p["quests"]["radio_tower"].update(started=True, generator_fixed=True, boss_defeated=True))
         intent = next(item for item in intents_for("Commander") if item.intent_id == "report")
-        tokens = [dialogue.issue_token(self.char1, self.npc, intent) for _ in range(2)]
-        sessions = [Mock(logged_in=True), Mock(logged_in=True)]
-        for session in sessions:
-            session.get_puppet.return_value = self.char1
-            session.get_account.return_value = self.char1.account
+        sessions = [self.session_for(self.char1), self.session_for(self.char1)]
+        tokens = [dialogue.issue_token(self.char1, self.npc, intent, session=session) for session in sessions]
         before = self.char1.profile_snapshot()
         self.char2.msg.reset_mock()
         with patch.object(self.char1.sessions, "all", return_value=sessions), world_change():
@@ -412,10 +545,8 @@ class NPCDialogueTests(NativeItemTest):
 
     def test_selection_tokens_bound_and_single_use(self):
         intent = next(item for item in intents_for("Commander") if item.intent_id == "accept")
-        token = dialogue.issue_token(self.char1, self.npc, intent)
-        session = Mock(logged_in=True)
-        session.get_puppet.return_value = self.char1
-        session.get_account.return_value = self.char1.account
+        session = self.session_for(self.char1)
+        token = dialogue.issue_token(self.char1, self.npc, intent, session=session)
         with patch.object(self.char1.sessions, "all", return_value=[session]):
             for invalid in ("tampered", token + "x"):
                 with self.assertRaises(rules.RuleError):
@@ -423,7 +554,7 @@ class NPCDialogueTests(NativeItemTest):
             with patch("world.npc_dialogue.time", return_value=280):
                 with self.assertRaises(rules.RuleError):
                     dialogue.select_keyword(self.char1, token, session)
-            token = dialogue.issue_token(self.char1, self.npc, intent)
+            token = dialogue.issue_token(self.char1, self.npc, intent, session=session)
             self.npc.location = self.rooms["grass"]
             with self.assertRaises(rules.RuleError):
                 dialogue.select_keyword(self.char1, token, session)
@@ -479,16 +610,14 @@ class NPCDialogueTests(NativeItemTest):
         from server.conf.primal_inputfuncs import pz_dialogue
 
         intent = next(item for item in intents_for("Commander") if item.intent_id == "mission")
-        token = dialogue.issue_token(self.char1, self.npc, intent)
-        session = Mock(logged_in=True)
-        session.get_puppet.return_value = self.char1
-        session.get_account.return_value = self.char1.account
+        session = self.session_for(self.char1)
+        token = dialogue.issue_token(self.char1, self.npc, intent, session=session)
         before = deepcopy(self.atomic_state())
         with patch.object(self.char1.sessions, "all", return_value=[session]):
             pz_dialogue(session, token)
             pz_dialogue(session, token)
             self.assertEqual(before, self.atomic_state())
-            session.get_account.return_value = Mock()
+            session.account = Mock()
             self.char1.msg.reset_mock()
             pz_dialogue(session, token)
             self.assertIn("세션", str(self.messages(self.char1)[0]))

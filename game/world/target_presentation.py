@@ -27,7 +27,7 @@ def selector_hint(objects, role, source=False, pool=None):
         pool if pool is not None else objects, lambda obj: "시체" if source else obj.key
     )
     return ft.text(
-        "현재 보이는 순서대로 ",
+        "고정 번호 ",
         ft.join(
             [ft.text("'", ft.token(role, controls[obj.id]), "'") for obj in ordered(objects)], ", "
         ),
@@ -67,6 +67,7 @@ def presence(objects, role, unit, sentence, source=False, pool=None):
 
 def corpse_overview(corpses, caller, now, pool=None):
     from world.observation import can_inspect_loot, context_for
+    from world.selection_numbers.api import descriptor, number_for
     from world.state import loot_entries
 
     lines = [ft.text("주변에 시체 ", count_word(len(corpses)), " 구가 남아 있다.")]
@@ -76,7 +77,7 @@ def corpse_overview(corpses, caller, now, pool=None):
         return ft.join(lines)
     pool = ordered(corpses if pool is None else pool)
     for corpse in ordered(corpses):
-        index = pool.index(corpse) + 1
+        index = number_for(descriptor(corpse).reference)
         entries = loot_entries(corpse, caller, now)
         items = []
         for entry in entries:

@@ -238,6 +238,9 @@ class GrowthReviewTests(WorldCommandTest):
                     self.assertNotIn("기술", result)
 
     def test_trainer_discovery_dialogue_and_web_provider_are_data_driven(self):
+        # 현재 실행 안내는 훈련 여유가 있는 두 관찰자에게 동일하게 제공한다.
+        for player in (self.char1, self.char2):
+            player.change(lambda profile: profile.update(xp=rules.xp_threshold(20)))
         trainers = [obj for room in self.rooms.values() for obj in action_objects(room)
                     if isinstance(obj, (SkillTrainer, AttributeTrainer, TrainingManager))]
         self.assertEqual(sum(type(obj) is SkillTrainer for obj in trainers), 8)
@@ -260,6 +263,13 @@ class GrowthReviewTests(WorldCommandTest):
                 self.assertIn(name + " 배워", appearance)
                 self.assertNotIn("재훈련", dialogue)
                 self.assertIn(obj.db.skill_id, growth_controls(self.char1))
+                # 같은 교관도 훈련 기회가 없는 플레이어에게 실행법을 제시하지 않는다.
+                self.char2.change(lambda profile: profile.update(xp=0))
+                unavailable = obj.return_appearance(self.char2)
+                self.assertNotIn("배워", [part["text"] for part in unavailable.segments
+                                        if part["role"] == "command"])
+                self.assertFalse(growth_controls(self.char2).get(obj.db.skill_id))
+                self.char2.change(lambda profile: profile.update(xp=rules.xp_threshold(20)))
             elif type(obj) is AttributeTrainer:
                 name = pg.ATTRIBUTES[obj.db.attribute_id]["name"]
                 self.assertIn(name + " 배분", appearance)

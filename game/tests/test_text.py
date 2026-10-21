@@ -10,6 +10,7 @@ from typeclasses.explorers import Explorer
 from typeclasses.interactables import (
     AttributeTrainer,
     Container,
+    Incinerator,
     SettlementOfficer,
     Shopkeeper,
     SkillTrainer,
@@ -61,12 +62,26 @@ class SemanticTextTests(WorldCommandTest):
             self.assertEqual(tokens(output, "command"), [])
 
     def test_target_appearance_actions_and_spaced_lookup(self):
+        from world.equipment_service import use_item_entities
+        from world.item_entities import api
+
+        # 현재 행동의 대상은 legacy dict가 아니라 실제 소지 UUID로 제공한다.
+        self.char1.change(lambda profile: profile.update(
+            inventory={}, equipment={"weapon": None, "armor": None},
+            xp=rules.xp_threshold(20), hp=1, credits=1000))
+        use_item_entities(self.char1)
+        self.char1.location = self.rooms["storage_room"]
+        container = next(obj for obj in action_objects(self.char1.location) if isinstance(obj, Container))
+        self.assertNotIn("넣어", tokens(container.return_appearance(self.char1), "command"))
+        # 보급·무기·장비 상점의 각 매입 분류 및 정산·보관에 필요한 실물을 갖춘다.
+        for identity in ("bandage", "cutting_machete", "reinforced_vest", "scrap"):
+            api.create_item(identity, location_kind="inventory", owner_object=self.char1)
         for room in self.rooms.values():
             self.char1.location = room
             for obj in action_objects(room):
                 output = obj.return_appearance(self.char1)
                 if isinstance(obj, Container):
-                    # 빈 보관함은 보관 방법만 안내하며 실제 내용이 있을 때 회수를 안내한다.
+                    # 보관 가능한 소지 실물이 있을 때만 보관 방법을 안내한다.
                     self.assertIn("넣어", tokens(output, "command"))
                     self.assertTrue(set(tokens(output, "command")) <= set(obj.actions))
                 elif isinstance(obj, SettlementOfficer):
@@ -81,6 +96,8 @@ class SemanticTextTests(WorldCommandTest):
                     self.assertIn(ATTRIBUTES[obj.db.attribute_id]["name"] + " 배분", output)
                 elif isinstance(obj, TrainingManager):
                     self.assertEqual(tokens(output, "command"), ["재분배", "재분배", "재훈련"])
+                elif isinstance(obj, Incinerator):
+                    self.assertEqual(tokens(output, "command"), ["소각"])
                 else:
                     self.assertEqual(tokens(output, "command"), list(obj.actions))
                 from dataclasses import replace
@@ -91,6 +108,9 @@ class SemanticTextTests(WorldCommandTest):
                 expected_label = (label(replace(record, number=number_for(record.reference)))
                                   if isinstance(obj, Container) and record else obj.key)
                 self.assertIn(expected_label, tokens(output, obj.semantic_role))
+
+    def test_spaced_enemy_and_legacy_item_lookup_keeps_semantic_roles(self):
+        # 과거 데이터의 읽기 전용 상세 표시는 기존 fixture로 별도 보존한다.
         self.char1.location = self.rooms["grass"]
         enemy = room_enemies(self.char1.location)[0]
         command = Look()

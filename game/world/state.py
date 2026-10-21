@@ -49,24 +49,16 @@ def multiplayer_state(player, now=None):
     loot = loot_controls(player, now, objects)
     from world.actions.loot_presentation import all_controls
     from world.actions.manifest import get_index
-    from world.actions.presentation import action_controls
-    from world.selection_numbers.api import descriptor
+    from world.actions.presentation import action_controls, provider_controls
 
     action_rows = action_controls(player, get_index(), now)
     loot_actions = all_controls(player, now, objects)
 
     def object_actions(obj):
-        if not getattr(obj, "action_provider_definition", None):
-            return obj.web_actions(player, controls[obj.id], now)
-        record = descriptor(obj)
-        if not record:
-            return []
         from world.actions.room_npc_presentation import sort_controls
 
-        rows = [row for row in action_rows
-                if row["action"]["roles"]["provider"][0]["identity"] == str(obj.pk)
-                and row["action"]["roles"]["provider"][0]["kind"] == "object"]
-        if obj.action_provider_definition in ("world.incinerator", "world.container", "world.personal_locker"):
+        rows = provider_controls(player, obj, now, rows=action_rows)
+        if getattr(obj, "action_provider_definition", None) in ("world.incinerator", "world.container", "world.personal_locker"):
             rows.insert(0, {"label": "봐", "command": controls[obj.id] + " 봐"})
         return sort_controls(obj, rows)
 
@@ -117,7 +109,7 @@ def multiplayer_state(player, now=None):
             row["action"]["roles"].get("provider", [{}])[0].get("kind") == "door" or
             row["action"]["roles"].get("provider", [{}])[0].get("kind") == "object" and
             row["action"]["roles"]["provider"][0]["identity"] in
-            {str(obj.pk) for obj in objects if getattr(obj, "action_provider_definition", None)})],
+            {str(obj.pk) for obj in objects if isinstance(obj, ActionObject)})],
         "enemies": [
             {
                 "id": enemy.id,

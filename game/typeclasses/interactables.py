@@ -43,8 +43,14 @@ class ActionObject(NumberedObjectMixin, DistantPresenceMixin, DefaultObject):
     @dialogue_appearance
     def return_appearance(self, looker, **kwargs):
         return ft.sheet(
-            ft.token(self.semantic_role, self.key), self.description, "", ft.actions(self.actions)
+            ft.token(self.semantic_role, self.key), self.description, "",
+            ft.actions(self.current_actions(looker, kwargs.get("observed_at")))
         )
+
+    def current_actions(self, caller, observed_at=None, *, verb_key=None):
+        from world.actions.presentation import provider_verbs
+
+        return provider_verbs(caller, self, observed_at, verb_key=verb_key)
 
     def at_object_creation(self):
         self.locks.add("get:false();puppet:false()")
@@ -111,8 +117,10 @@ class Container(ActionObject):
         )
         if not contents:
             lines.append("비어 있다.")
-        lines.append(ft.text("보관: ", ft.usage(f"{label}에 아이템이름 넣어", {"넣어"})))
-        if contents:
+        actions = self.current_actions(looker, kwargs.get("observed_at"))
+        if "넣어" in actions:
+            lines.append(ft.text("보관: ", ft.usage(f"{label}에 아이템이름 넣어", {"넣어"})))
+        if contents and "꺼내" in actions:
             identity = next(iter(contents))
             lines.append(
                 ft.text(
@@ -191,8 +199,11 @@ class GrowthTrainer(ActionObject):
     @dialogue_appearance
     def return_appearance(self, looker, **kwargs):
         offer, commands = self.training_offer()
+        actions = self.current_actions(looker, kwargs.get("observed_at"))
+        commands = [command for command in commands if command.rsplit(" ", 1)[-1] in actions
+                    or command.endswith(" 재훈련") and "재분배" in actions]
         return ft.sheet(ft.token("npc", self.key), self.description, "", offer, "",
-                        ft.join([ft.usage(command, set(self.actions) | {"재훈련"}) for command in commands], "\n"))
+                        ft.join([ft.usage(command, set(actions) | {"재훈련"}) for command in commands], "\n"))
 
 
 
@@ -250,14 +261,15 @@ class Doctor(ActionObject):
     @dialogue_appearance
     def return_appearance(self, looker, **kwargs):
         lines = [self.description]
-        if self.available(looker):
+        actions = self.current_actions(looker, kwargs.get("observed_at"))
+        if "회복" in actions:
             try:
                 restored, cost = self.quote(looker)
                 lines.append(f"현재 HP {restored} 전체 회복 예상 비용: {cost}칩 (실행 시 재계산)")
             except rules.RuleError as error:
                 lines.append(str(error))
             lines.append("회복 · 20 회복 · 의무관에게 20 회복 / 회복실 침대 휴식은 무료")
-            lines.append(ft.actions(self.actions))
+            lines.append(ft.actions(actions))
         return ft.sheet(ft.token(self.semantic_role, self.key), *lines)
 
 
@@ -273,7 +285,7 @@ class Bed(ActionObject):
 
     def return_appearance(self, looker, **kwargs):
         return ft.sheet(ft.token(self.semantic_role, self.key), self.description, "",
-                        ft.actions(self.actions if self.available(looker) else ()))
+                        ft.actions(self.current_actions(looker, kwargs.get("observed_at"))))
 
 
 
@@ -293,12 +305,13 @@ class SettlementOfficer(ActionObject):
         from world.targets import labels, room_objects
 
         usage = ""
-        if self.available(looker):
+        actions = self.current_actions(looker, kwargs.get("observed_at"))
+        if actions:
             target = labels(room_objects(looker))[self.id]
-            usage = ft.join([ft.usage(command, set(self.actions)) for command in (
+            usage = ft.join([ft.usage(command, set(actions)) for command in (
                 f"{target} 환율", "회수부품 교환", "회수부품 10개 교환", "회수부품 모두 교환",
                 f"{target}에게 회수부품 10개 교환",
-            )], " · ")
+            ) if command.rsplit(" ", 1)[-1] in actions], " · ")
         return ft.sheet(ft.token(self.semantic_role, self.key), self.description, "", usage)
 
 
@@ -323,11 +336,12 @@ class Shopkeeper(ActionObject):
         from world.targets import labels, room_objects
 
         usage = ""
-        if self.available(looker):
+        actions = self.current_actions(looker, kwargs.get("observed_at"))
+        if actions:
             target = labels(room_objects(looker))[self.id]
-            usage = ft.join([ft.usage(command, set(self.actions)) for command in (
+            usage = ft.join([ft.usage(command, set(actions)) for command in (
                 f"{target} 목록", f"{target}에게 물건이름 사", f"{target}에게 물건이름 가치", f"{target}에게 물건이름 팔아",
-            )], " · ")
+            ) if command.rsplit(" ", 1)[-1] in actions], " · ")
         return ft.sheet(ft.token("npc", self.key), self.description, "", usage)
 
 
@@ -338,10 +352,6 @@ class Incinerator(ActionObject):
     description = "불필요한 물품을 폐기한다. 출입증은 소각 확정이 필요하며 원래 발급자에게 재발급받을 수 있다."
     presence = "밀폐된 소각로에서 낮은 열기가 느껴진다."
     actions = ("봐",)
-
-    def act(self, caller, action, args):
-        caller.msg(self.return_appearance(caller))
-
 
 class Pathfinder(ActionObject):
     detectability = "conspicuous"

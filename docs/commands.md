@@ -1,6 +1,6 @@
 # 명령 어휘와 별칭 기준
 
-실행 어휘의 SSOT는 미전환 기능의 Command `key`·`aliases`와 전환된 M01~M04의 Compiled Action Index `VerbDefinition`이다. `commands/aliases.py`의 전역 단축어와 `content/directions.py`의 방향은 유지한다. 콘텐츠는 `world/actions/`의 room_npc/item_equipment/storage/firearm_lighting 패키지에 선언하며 정규 동사 하나당 Dynamic Command 하나가 현재 Provider의 Action을 선택한다. 넣어/꺼내 동사는 item_shared_content에서 한 번만 선언한다. 중앙 파서에 콘텐츠별 분기를 추가하지 않는다.
+실행 어휘의 SSOT는 미전환 기능의 Command `key`·`aliases`와 전환된 M01~M05의 Compiled Action Index `VerbDefinition`이다. `commands/aliases.py`의 전역 단축어와 `content/directions.py`의 방향은 유지한다. 콘텐츠는 `world/actions/`의 room_npc/item_equipment/storage/firearm_lighting/loot 패키지에 선언하며 정규 동사 하나당 Dynamic Command 하나가 현재 Provider의 Action을 선택한다. 넣어/꺼내 동사는 item_shared_content에서 한 번만 선언한다. 중앙 파서에 콘텐츠별 분기를 추가하지 않는다.
 
 도움말은 미전환 Command의 `commands/help_contracts.py`·`help_sections`와 공개 Compiled Verb의 `summary`·`usage`·`category`·`help_sections`를 같은 렌더러에서 표시한다. 전환된 문·시설·NPC 서비스는 `room_npc_help.py`, 소비·장비·정보는 `item_equipment_help.py`, 총기·광원은 `firearm_lighting_help.py`, 보관은 공유 Verb 선언의 도움말을 사용한다. 요약·사용법·예시·실행 규칙·제한·관련 도움말과 별칭·분류를 유지하며, 도움말 조회는 Service를 실행하지 않는다. 전환 범위와 Legacy 제거 근거는 [Action 전환표](action-migration.md)를 따른다.
 
@@ -54,7 +54,7 @@
 | 잠궈 | 없음 | 없음 (`잠가`를 추가하지 않음) |
 | 풀어 | 없음 | 없음 |
 
-M01/M02의 조사·수리·문·소각·의료·상점·성장·정산에 이어 PR B는 M03/M04의 소비·장비·정보·보관·총기·광원을 운영 ContentPackage로 전환한다. 표의 `소각 확정`은 Dynamic Command의 공개 선택 키이며 실행 의미는 별도 SyntaxVariant다. 공개 접미어와 서버 확인 토큰을 검사하며 웹의 단순 `confirmed=true`로 우회하지 않는다. PR C는 가져/집을 Corpse/Ground Source의 공통 Action으로 전환한다. 전역 봐·말·도움과 승인된 대화 경로는 유지한다.
+M01~M05의 조사·수리·문·소각·의료·상점·성장·정산·소비·장비·정보·보관·총기·광원·전리품은 운영 ContentPackage로 전환했다. 표의 `소각 확정`은 Dynamic Command의 공개 선택 키이며 실행 의미는 별도 SyntaxVariant다. 공개 접미어와 서버 확인 토큰을 검사하며 웹의 단순 `confirmed=true`로 우회하지 않는다. 가져/집은 Corpse/Ground Source의 공통 Action이다. 전역 봐·말·도움과 승인된 대화 경로는 유지한다.
 
 ItemEntity의 `이름 2`는 B-1 번호 2, `이름 2개`는 수량이다. `붕대 2 1개 사용`은 2번 스택에서 한 번 소비하며 소비·착탈·주무기·정보는 복수 수량이나 모두를 다회 실행으로 확장하지 않는다. `개인 보관함에 붕대 모두 넣어`는 해당 품목 전체 스택 선택이고 웹 `스택 전부`는 표시된 UUID 하나다. 내부 탄창은 `경비카빈의 카빈표준 채워`처럼 부모 총기를 명시할 수 있다. 번호 결번·원격 보관품·이동한 웹 대상은 다른 대상으로 바뀌지 않는다.
 
@@ -80,7 +80,7 @@ Evennia 기본 `look`, `inventory`, `help`, `who`는 새 사용자 명령과 중
 | `대답` | 없음 | 최근 성공적으로 주고받은 개인 상대: `알겠습니다 대답` |
 | `대화거부` | 없음 | 차단·해제: `철수 대화거부`; 단독 입력은 목록 |
 
-기존 NPC용 `대화` Command/Action은 제거한다. NPC를 못 찾은 `에게` 문장은 원문 전체 공개, 복수 후보·잘못된 번호는 발화 없이 오류다. NPC는 정확한 선언형 Intent를 실행하고 임무 질문·진행 조회와 `수락`·`보고`·`재발급`을 분리한다. 22개 NPC의 서비스 명령은 그대로다. 모든 NPC 발화는 방에 동일 원문 공개, 키워드의 청록색 화제·황금색 행동 강조와 클릭 여부만 수신자별로 결정한다.
+기존 NPC용 `대화` Command/Action은 제거한다. NPC를 못 찾은 `에게` 문장은 원문 전체 공개, 복수 후보·잘못된 번호는 발화 없이 오류다. NPC는 정확한 선언형 Intent를 실행하고 임무 질문·진행 조회와 `수락`·`보고`·`재발급`을 분리한다. 22개 NPC의 서비스 명령은 그대로다. 공개 NPC 발화는 방에 동일 원문을 전달하고 키워드의 청록색 화제·황금색 행동 강조와 클릭 여부는 수신자별로 결정한다. 개인 임무 진행 응답과 보상·활성 입력 안내는 요청자에게만 전달한다.
 
 `화제 안내`·`사용 가능한 화제`는 기존 인사 Intent의 읽기 전용 별칭이다. `윤대장에게 화제 안내 말`로 활성 입력을 다시 요청한다. 명시적 상대 또는 유효 문맥의 지시어를 포함한 후속 질문에 이해 실패 안내를 제공하며 실제 SSOT의 활성 읽기 전용 화제만 제시한다. 문맥의 연속 실패 안내는 한 번으로 제한하고 정상 대화 때 초기화한다. 개인 활성 목록은 첫 안내·목록 변경·명시적 요청·필요한 실패 안내에만 출력하며 공개 NPC 대사는 생략하지 않는다. 상세 경계는 [NPC 대화 설계](npc-dialogue.md#이해-실패와-화제-발견)를 따른다.
 

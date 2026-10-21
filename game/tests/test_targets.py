@@ -258,6 +258,10 @@ class TargetIntegrationTests(WorldCommandTest):
             [source["id"] for source in state["corpses"]], [corpses[1].id, corpses[2].id]
         )
         self.assertEqual([source["label"] for source in state["corpses"]], ["시체 2", "시체 3"])
+        overview = self.look("시체 모두")
+        self.assertIn("두 번째 갈퀴사냥룡의 시체", overview)
+        self.assertIn("세 번째 밀림의포식자의 시체", overview)
+        self.assertNotIn("첫 번째", overview)
 
     def test_named_corpse_overview_keeps_room_global_source_numbers(self):
         self.native_source()
