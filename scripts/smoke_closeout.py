@@ -1,8 +1,6 @@
 """Full 전용 본부·현재 두 임무·실제 restart 연결 검증. Quick 경로는 확장하지 않는다."""
 
 import asyncio
-import subprocess
-import sys
 from time import monotonic
 
 from smoke import count_item, route, travel_to
@@ -36,16 +34,9 @@ def assert_startup_items(stopped, restored):
 
 def stop_for_restart(harness):
     """Full 전용: 격리 Portal의 정상 종료를 요청하고 owned process exit를 확인한다."""
-    from smoke_harness import SHUTDOWN_TIMEOUT
-
     assert harness.mode == "full"
     harness.check_alive()
-    with (harness.run_dir / "restart-stop.log").open("w", encoding="utf-8") as log:
-        subprocess.run([sys.executable, "-m", "evennia", "stop", "--settings", "settings_smoke"],
-                       cwd=harness.run_dir / "game", env=harness.env, stdout=log,
-                       stderr=subprocess.STDOUT, timeout=SHUTDOWN_TIMEOUT, check=True)
-    for name, process in harness.processes:
-        assert process.wait(timeout=SHUTDOWN_TIMEOUT) == 0, (name, "정상 shutdown 실패")
+    harness.graceful_stop()
 
 
 class Closeout:

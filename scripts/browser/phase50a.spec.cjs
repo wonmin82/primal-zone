@@ -99,14 +99,14 @@ test('TEST-50A-05 실제 종료·재연결·재인증·세션 중복 없음', as
 });
 
 test('TEST-50A-06 Desktop/Narrow 구조·입력·버튼 이름·스크린샷 증거', async ({ actors }, testInfo) => {
-  for (const viewport of [{ width: 1366, height: 768 }, { width: 390, height: 844 }]) {
+  for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
     const a = await actors.create(0, viewport);
     await expect(a.page.locator('#command')).toBeVisible();
     await a.page.locator('#command').scrollIntoViewIfNeeded();
     expect(await a.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await expect(a.page.getByRole('button', { name: '실행 ↵', exact: true })).toBeVisible();
     await expect(a.page.getByRole('button', { name: '강타', exact: true })).toBeVisible();
-    if (viewport.width === 1366) await expect(a.page.getByRole('button', { name: '주변 살펴보기 ↗', exact: true })).toBeVisible();
+    if (viewport.width === 1280) await expect(a.page.getByRole('button', { name: '주변 살펴보기 ↗', exact: true })).toBeVisible();
     for (const button of await a.page.getByRole('button').all()) await expect(button).toHaveAccessibleName(/\S/);
     await a.command('점수');
     await expect(a.page.locator('#log .sheet').last()).toContainText('점수');
@@ -231,7 +231,7 @@ test('TEST-66B-01 아이템 행의 안정 UUID Action과 장비 해제·재장�
 
 
 test('TEST-66C-01 바닥 전리품 안정 UUID·중복 및 오래된 요청 거절·텍스트 동등 지급', async ({ actors }) => {
-  const a = await actors.create(0);
+  const a = await actors.create(0, { width: 1280, height: 900 });
   const count = () => a.state.inventory.filter(item => item.id === 'scrap').reduce((sum, item) => sum + item.count, 0);
   const initial = count();
   expect(initial).toBeGreaterThan(1);
@@ -275,6 +275,11 @@ test('TEST-66C-01 바닥 전리품 안정 UUID·중복 및 오래된 요청 거�
   }
   await replay(true);
   expect(count()).toBe(initial);
+  // 같은 실제 Typed 요청/서버 상태를 좁은 화면에서도 유지한다.
+  await a.page.setViewportSize({ width: 390, height: 844 });
+  await a.page.locator('#command').scrollIntoViewIfNeeded();
+  expect(await a.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await expect(a.page.locator('#command')).toBeEnabled();
   await a.command('회수부품 버려');
   const replacement = a.state.ground_loot.flatMap(source => source.loot).find(item => item.id === 'scrap');
   expect(replacement?.action.roles.source).not.toEqual(original.roles.source);

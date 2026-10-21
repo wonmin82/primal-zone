@@ -90,6 +90,15 @@ def prepare(credentials):
             p = rules.new_profile()
             p.update(credits=2000)
             legacy.db.profile = p
+            # 재시작 비교용 실제 UUID/inside/ground Scope. 시작 후 변경은 공개
+            # 명령만 사용한다. Container 기능을 새로 추가하는 fixture가 아니다.
+            from typeclasses.loot import DroppedLoot
+            parent = api.create_item("bandage", quantity=1, location_kind="inventory", owner_object=players[0])
+            api.create_item("water", quantity=3, location_kind="inside", parent_item=parent, socket="supplies")
+            ground = create_object(DroppedLoot, key="영속 바닥 fixture", location=rooms["hq_concourse"])
+            populate_source(ground, [])
+            api.create_item("bandage", quantity=2, location_kind="world_loot", owner_object=ground)
+            create_currency(ground, 17, shares={players[0]: 7, players[1]: 10}, protection_until=time()+600)
         party = None
         if scenario == "E2E-07":
             party = create_object(Party, key="통합 검증 일행")

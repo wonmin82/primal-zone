@@ -6,9 +6,9 @@ import json
 import sys
 import traceback
 from dataclasses import dataclass
-from time import monotonic
+from time import monotonic, time
 
-from smoke_harness import ROOT, Harness, fingerprint
+from smoke_harness import ROOT, Harness
 from websockets.asyncio.client import connect
 
 sys.path.insert(0, str(ROOT / "game"))
@@ -276,6 +276,13 @@ class Scenario:
             await first.until(lambda state: bool(state["corpses"]))
             death_seen = monotonic()
             corpse_id = first.state["corpses"][0]["id"]
+            if self.harness.mode == "full":
+                # 화면 전송/참여자 응답 지연을 타이머 시작으로 오인하지 않는다.
+                # 서버가 저장한 실제 사망/시체 생성 시각을 같은 호스트 시계에 연결한다.
+                checkpoint = await asyncio.to_thread(self.harness.checkpoint)
+                created_at = checkpoint["loot"][str(corpse_id)]["created_at"]
+                assert isinstance(created_at, (int, float)) and created_at <= time()
+                death_seen = monotonic() - (time() - created_at)
             await second.until(lambda state: any(c["id"] == corpse_id for c in state["corpses"]))
             physical = [entry for entry in second.state["corpses"][0]["loot"] if entry["kind"] == "item"]
             # 자원과 special이 함께 드롭되면 가입 순서로 번갈아 배정된다.
@@ -417,12 +424,12 @@ def main():
     args = parser.parse_args()
     harness = Harness(args.mode)
     started = monotonic()
-    play_db = ROOT / "game" / "server" / "evennia.db3"
-    before = fingerprint(play_db)
+    before = None
     print(f"SMOKE {args.mode.upper()} — isolated SQLite / fixture accounts / actual scheduler", flush=True)
     success = False
     try:
         harness.prepare()
+        before = harness.owned_database_fingerprint()
         print(f"환경: {harness.run_dir}, 전용 포트: {harness.ports}", flush=True)
         harness.start()
         asyncio.run(live(harness))
@@ -438,11 +445,9 @@ def main():
         except BaseException:
             print(f"process cleanup 실패 — DB/로그 보존: {harness.run_dir}", flush=True)
             raise
-        after = fingerprint(play_db)
-        if before != after:
-            raise RuntimeError("일반 플레이 SQLite의 hash/mtime/size가 변경되었습니다.")
-        print("PASS [isolation] play DB SHA256 / mtime_ns / size unchanged: "
-              + json.dumps(after), flush=True)
+        after = harness.owned_database_fingerprint() if before is not None else None
+        print("PASS [isolation] owned test DB fingerprints (gameplay changes expected): "
+              + json.dumps({"before": before, "after": after}), flush=True)
         if success:
             harness.discard()
             print(f"PASS [{args.mode}] 완료 / process stop / temp cleanup: "

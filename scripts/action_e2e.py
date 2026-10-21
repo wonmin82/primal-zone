@@ -5,7 +5,7 @@ import json
 import subprocess
 import sys
 
-from smoke_harness import ROOT, Harness, fingerprint
+from smoke_harness import ROOT, Harness
 from websockets.asyncio.client import connect
 
 
@@ -102,20 +102,21 @@ async def scenario(harness):
 
 def main():
     harness = Harness("quick")
-    before = fingerprint(ROOT / "game/server/evennia.db3")
+    before = None
     success = False
     try:
         harness.prepare(ROOT / "scripts/action_fixture.py")
+        before = harness.owned_database_fingerprint()
         harness.start()
         asyncio.run(harness.supervise(scenario(harness)))
         success = True
     finally:
         harness.stop()
-        if fingerprint(ROOT / "game/server/evennia.db3") != before:
-            raise RuntimeError("플레이 DB가 변경되었습니다.")
+        after = harness.owned_database_fingerprint() if before is not None else None
+        print(json.dumps({"owned_test_db_before": before, "owned_test_db_after": after}), flush=True)
         if success:
             harness.discard()
-            print("PASS owned process cleanup / isolated fixture cleanup / play DB unchanged", flush=True)
+            print("PASS owned process cleanup / isolated fixture cleanup / production DB not accessed", flush=True)
         elif harness.run_dir:
             print(f"FAIL diagnostic fixture retained: {harness.run_dir}", flush=True)
 

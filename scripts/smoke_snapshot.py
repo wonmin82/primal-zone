@@ -49,7 +49,8 @@ def snapshot():
         "clock": deserialize(script.db.environment)["clock"],
         "enemies": {str(enemy.id): {"state": enemy.db.state, "combatants": list(enemy.db.combatants or []),
                                     "claim": deserialize(enemy.db.claim)} for enemy in Enemy.objects.all()},
-        "loot": {str(obj.id): {"corpse": isinstance(obj, Corpse), "entries": source_entries(obj)}
+        "loot": {str(obj.id): {"corpse": isinstance(obj, Corpse), "entries": source_entries(obj),
+                              "created_at": obj.db.created_at if isinstance(obj, Corpse) else None}
                  for model in (Corpse, DroppedLoot) for obj in model.objects.all()},
         "stale": stale_definitions(),
     }

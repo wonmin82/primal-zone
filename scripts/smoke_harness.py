@@ -56,6 +56,20 @@ class Harness:
         self.credentials = [(name, secrets.token_urlsafe(24))
                             for name in ("검증가", "검증나", "검증다")]
 
+    def owned_database_fingerprint(self):
+        """운영 파일을 열지 않고 이 실행이 소유한 격리 DB만 관측한다."""
+        parent = (ROOT / "work" / "smoke").resolve()
+        if (self.run_dir is None or self.run_dir.parent != parent
+                or not (self.run_dir / ".primal-smoke").is_file()
+                or self.env.get("PRIMAL_SMOKE_RUN_DIR") != str(self.run_dir)
+                or self.env.get("DJANGO_SETTINGS_MODULE") != "server.conf.settings_smoke"
+                or any(key.startswith("PRIMAL_DB_") for key in self.env)):
+            raise RuntimeError("소유 격리 DB 환경이 아닙니다.")
+        database = self.run_dir / "evennia-smoke.sqlite3"
+        if database.is_symlink() or database.resolve().parent != self.run_dir:
+            raise RuntimeError("격리 DB 경로가 소유 실행 밖을 가리킵니다.")
+        return fingerprint(database)
+
     def prepare(self, setup_script=None):
         parent = ROOT / "work" / "smoke"
         parent.mkdir(parents=True, exist_ok=True)
@@ -151,7 +165,7 @@ class Harness:
         """같은 DB/설정/포트에서 소유한 Portal과 Server를 실제로 재시작한다."""
         self.restarting = True
         try:
-            await asyncio.to_thread(self.stop)
+            await asyncio.to_thread(self.graceful_stop)
             self.processes.clear()
             self.handles.clear()
             # 실행 중 checkpoint와 종료 사이에도 정상 전투 라운드가 진행될 수 있다.
@@ -168,6 +182,22 @@ class Harness:
             [sys.executable, str(ROOT / "scripts" / "smoke_snapshot.py")],
             cwd=self.run_dir / "game", env=self.env, text=True, encoding="utf-8", timeout=SETUP_TIMEOUT)
         return json.loads(output.splitlines()[-1])
+
+    def graceful_stop(self):
+        """공식 AMP 종료로 shutdown hook을 완료한다. 강제 정리는 성공 근거가 아니다."""
+        self.owned_database_fingerprint()  # 소유 경로/환경/marker부터 확인한다.
+        with (self.run_dir / "graceful-stop.log").open("a", encoding="utf-8") as log:
+            subprocess.run([sys.executable, "-c",
+                            "from evennia.server.evennia_launcher import main; main()",
+                            "stop", "--settings", "settings_smoke"],
+                           cwd=self.run_dir / "game", env=self.env,
+                           stdout=log, stderr=subprocess.STDOUT,
+                           timeout=SHUTDOWN_TIMEOUT, check=True)
+        for name, process in self.processes:
+            if process.wait(timeout=SHUTDOWN_TIMEOUT) != 0:
+                raise RuntimeError(f"소유 {name}의 정상 종료가 확인되지 않았습니다.")
+        for handle in self.handles:
+            handle.close()
 
     def stop(self):
         failures = []

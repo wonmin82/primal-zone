@@ -83,6 +83,7 @@ def snapshot(*, timing=False):
     from world.door_entities.models import Door, DoorInstallation
     from world.item_entities.models import ItemEntity
     from world.loot_entities.models import CurrencyLoot, CurrencyLootShare, LootClaim
+    from world.selection_numbers.models import NumberScope, SelectionNumber
     players = {}
     for player in Explorer.objects.all():
         if player.key == "admin":
@@ -110,6 +111,8 @@ def snapshot(*, timing=False):
             "claims": list(LootClaim.objects.order_by("pk").values()),
             "currency": list(CurrencyLoot.objects.order_by("pk").values()),
             "shares": list(CurrencyLootShare.objects.order_by("pk").values()),
+            "number_scopes": list(NumberScope.objects.order_by("pk").values()),
+            "selection_numbers": list(SelectionNumber.objects.order_by("pk").values()),
             "legacy_loot": {str(c.pk): list(c.db.entries or []) for c in Corpse.objects.all()},
             "routes": {key: data["exits"] for key, data in ROOMS.items()}}
 
