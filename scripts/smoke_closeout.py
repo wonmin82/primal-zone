@@ -44,6 +44,40 @@ class Closeout:
         self.scenario = scenario
         self.first, self.second, self.outsider = scenario.players
 
+    async def equipment_change(self, definition, *, equip=True):
+        """공개 selector 실행을 같은 Native UUID의 장착 상태·주무기·표시와 연결한다."""
+        player = self.first
+        candidates = [row for row in player.state["inventory"] if row["id"] == definition]
+        assert len(candidates) == 1, (definition, "Full 장비 UUID가 유일하지 않음", candidates)
+        selected = candidates[0]
+        identity, slot = selected["identity"], selected["slot"]
+        assert identity and selected["count"] == 1 and selected["equipped"] is not equip
+        action = selected["equip_action"] if equip else selected["remove_action"]
+
+        def changed(state):
+            rows = [row for row in state["inventory"] if row["identity"] == identity]
+            return len(rows) == 1 and rows[0]["equipped"] is equip and (
+                not selected["weapon"] or rows[0]["active_weapon"] is equip)
+
+        await player.act(f"{selected['selector']} {action}", changed)
+        current = next(row for row in player.state["inventory"] if row["identity"] == identity)
+        assert current["id"] == definition and current["count"] == 1
+        assert current["selector"] == selected["selector"], "장착 전후 B-1 번호 변경"
+        equipped = [row for row in player.state["inventory"] if row["equipped"] and row["slot"] == slot]
+        expected = " · ".join(
+            row["selector"] + (" [주무기]" if row["active_weapon"] else "")
+            + (f" · {row['state_summary']}" if row["state_summary"] else "")
+            for row in equipped
+        ) or None
+        assert player.state["equipment"][slot] == expected, (slot, expected, player.state["equipment"][slot])
+        saved = (await asyncio.to_thread(self.scenario.harness.checkpoint))["players"][player.name]
+        item = saved["items"][identity]
+        assert item["definition"] == definition and item["quantity"] == 1
+        assert item["location"] == ("equipment" if equip else "inventory")
+        assert item["slot"] == (slot if equip else None)
+        if selected["weapon"]:
+            assert saved["active_weapon"] == (identity if equip else None)
+
     async def floor(self, player, stop, zone):
         await player.act("승강기", lambda s: s["zone"] == "support_elevator")
         await player.act(stop, lambda s: s["zone"] == zone)
@@ -122,9 +156,9 @@ class Closeout:
         await player.act("강화방호조끼 사", lambda s: count_item(s, "reinforced_vest") == 1)
         # 격리 smoke fixture는 준비 단계에서 기본 손 무기를 명시 해제한다.
         assert player.state["equipment"]["hands"] is None
-        await player.act("절단마체테 무장", lambda s: s["equipment"]["hands"] == "절단마체테 [주무기]")
-        await player.act("탐사대 작업복 벗어", lambda s: s["equipment"]["body"] is None)
-        await player.act("강화방호조끼 착용", lambda s: s["equipment"]["body"] == "강화방호조끼")
+        await self.equipment_change("cutting_machete")
+        await self.equipment_change("expedition_workwear", equip=False)
+        await self.equipment_change("reinforced_vest")
         self.scenario.report("hq", "보관/정산/훈련/Doctor/Bed/귀환/승강기/3종 상점 실제 연결")
         await self.progression()
         await self.restart()
@@ -242,28 +276,28 @@ class Closeout:
         await travel_to(player, 'weapon_shop')
         if not count_item(player.state, 'folding_shield'):
             await player.act('접이식방패 사', lambda s: count_item(s, 'folding_shield') == 1)
-            await player.act('접이식방패 착용', lambda s: '접이식방패' in s['equipment']['hands'])
+            await self.equipment_change('folding_shield')
         if advanced:
             # 첫 보고의 실제 출입증으로 열린 전초 병기고에서 T2를 구매한다.
             await travel_to(player, 'outpost_weapon')
             await player.act('정글장도 사', lambda s: count_item(s, 'jungle_longblade') == 1)
-            await player.act('절단마체테 해제', lambda s: '절단마체테' not in s['equipment']['hands'])
-            await player.act('정글장도 무장', lambda s: '정글장도 [주무기]' in s['equipment']['hands'])
+            await self.equipment_change('cutting_machete', equip=False)
+            await self.equipment_change('jungle_longblade')
         if advanced:
             await player.act('귀환', lambda s: s['zone'] == 'support_roof')
             await self.floor(player, '5층', 'support_5f_c')
             await travel_to(player, 'outpost_equipment')
-            await player.act('강화방호조끼 벗어', lambda s: s['equipment']['body'] is None)
+            await self.equipment_change('reinforced_vest', equip=False)
             await player.act('강화방호조끼 팔아', lambda s: count_item(s, 'reinforced_vest') == 0)
             await player.act('전술방호복 사', lambda s: count_item(s, 'tactical_protective_suit') == 1)
-            await player.act('전술방호복 착용', lambda s: s['equipment']['body'] == '전술방호복')
+            await self.equipment_change('tactical_protective_suit')
         else:
             await travel_to(player, 'armor_shop')
             boots = count_item(player.state, 'non_slip_boots')
             await player.act('미끄럼방지탐사화 사', lambda s: count_item(s, 'non_slip_boots') == boots + 1)
-            await player.act('미끄럼방지탐사화 착용', lambda s: s['equipment']['feet'] == '미끄럼방지탐사화')
+            await self.equipment_change('non_slip_boots')
         if count_item(player.state, 'expedition_tag') and not player.state['equipment']['neck']:
-            await player.act('탐사인식표 착용', lambda s: s['equipment']['neck'] == '탐사인식표')
+            await self.equipment_change('expedition_tag')
         await self.restock_boss(advanced=advanced)
 
     async def restock_boss(self, advanced=False, target_rank=2):
