@@ -270,6 +270,7 @@ test('TEST-66C-01 바닥 전리품 안정 UUID·중복 및 오래된 요청 거�
   await a.command('회수부품 버려');
   expect(count()).toBe(initial - 1);
   const entry = a.state.ground_loot.flatMap(source => source.loot).find(item => item.id === 'scrap');
+  expect(entry.label).toBe('회수부품 1');
   expect(entry?.action.action_id).toBe('loot.take');
   const original = entry.action;
   expect(original.roles.source[0].identity).toBeTruthy();
@@ -299,6 +300,7 @@ test('TEST-66C-01 바닥 전리품 안정 UUID·중복 및 오래된 요청 거�
   // UUID를 보유한 실제 버튼 프레임이며 생존 스택에 다시 적용되면 안 된다.
   expect(a.state.inventory.filter(item => item.id === 'scrap').map(item => item.identity).sort()).toEqual(initialIdentities);
   expect(initialIdentities).not.toContain(original.roles.subject[0].identity);
+  expect(a.state.ground_loot.flatMap(source => source.loot).filter(item => item.id === 'scrap')).toEqual([]);
   async function replay(sameRequest) {
     await a.page.evaluate(sameRequest => {
       const replay = window.lootReplay;
@@ -318,6 +320,11 @@ test('TEST-66C-01 바닥 전리품 안정 UUID·중복 및 오래된 요청 거�
   await expect(a.page.locator('#command')).toBeEnabled();
   await a.command('회수부품 버려');
   const replacement = a.state.ground_loot.flatMap(source => source.loot).find(item => item.id === 'scrap');
+  // 실물이 모두 사라진 동일 Ground 그룹이 번호 1을 다시 받더라도
+  // 원래 UUID의 요청은 새 실물에 적용되지 않아야 한다.
+  expect(replacement.label).toBe(entry.label);
+  expect(replacement.action.roles.subject[0].identity).not.toBe(original.roles.subject[0].identity);
+  expect(replacement.action.roles.subject[0].scope_id).toBe(original.roles.subject[0].scope_id);
   expect(replacement?.action.roles.source).not.toEqual(original.roles.source);
   await replay(false);
   expect(count()).toBe(initial - 1);

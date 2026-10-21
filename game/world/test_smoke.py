@@ -31,6 +31,66 @@ from scripts.smoke_closeout import (  # noqa: E402
 
 
 class SmokeContractsTests(TestCase):
+    def test_command_state_budget_defaults_and_explicit_timeout_take_precedence(self):
+        from smoke import STATE_TIMEOUT, Client
+
+        async def check():
+            for configured in (STATE_TIMEOUT, 15):
+                client = Client("fixture", "unused", "ws://unused", command_timeout=configured)
+                client.revision = 7
+                client.send, client.until = AsyncMock(), AsyncMock(return_value={"ok": True})
+                predicate = lambda state: state["ok"]  # noqa: E731
+                for requested, expected in ((None, configured), (3, 3), (0, 0)):
+                    self.assertEqual(await client.act("상태", predicate, timeout=requested), {"ok": True})
+                    client.send.assert_awaited_with("text", ["상태"])
+                    client.until.assert_awaited_with(predicate, expected, 7)
+                client.send.reset_mock()
+                client.until.side_effect = TimeoutError("command deadline")
+                with self.assertRaisesRegex(TimeoutError, "command deadline"):
+                    await client.act("상태", predicate)
+                client.send.assert_awaited_once_with("text", ["상태"])
+            self.assertEqual(Client("fixture", "unused", "ws://unused").command_timeout, 10)
+
+        asyncio.run(check())
+
+    def test_full_command_budget_does_not_extend_quick_or_other_state_waits(self):
+        from smoke import STATE_TIMEOUT, Client, Scenario, Timeouts
+
+        self.assertEqual(STATE_TIMEOUT, 10)
+        for mode, expected in (("quick", 10), ("full", 15)):
+            scenario = Scenario(SimpleNamespace(mode=mode, ws_url="ws://unused",
+                                                credentials=[("fixture", "unused")]), None)
+            self.assertEqual(scenario.players[0].command_timeout, expected)
+            timings = smoke_timings(mode)
+            self.assertEqual(scenario.timeouts, Timeouts(combat=timings["COMBAT_INTERVAL"] * 20 + 10,
+                                                         lifecycle=timings["LOOT_PROTECTION_SECONDS"] + 10))
+
+        async def check_action():
+            client = Client("fixture", "unused", "ws://unused", command_timeout=15)
+            client.send, client.until = AsyncMock(), AsyncMock()
+            await client.action({"action_id": "fixture"})
+            self.assertEqual(client.until.await_args.args[1], 10)
+            direct = Client("fixture", "unused", "ws://unused", command_timeout=15)
+            direct.state = {"ready": True}
+            with patch("smoke.asyncio.timeout", wraps=asyncio.timeout) as deadline:
+                await direct.until(lambda state: state["ready"])
+            deadline.assert_called_once_with(10)
+
+        asyncio.run(check_action())
+
+    def test_full_elapsed_uses_actual_clock_and_original_timing_upper_bound(self):
+        from smoke import Scenario
+
+        scenario = Scenario(SimpleNamespace(mode="full", ws_url="ws://unused", credentials=[]), None)
+        scenario.report = lambda *args: None
+        for expected in (30, 45, 120):
+            with self.subTest(expected=expected):
+                with patch("smoke.monotonic", return_value=100 + expected + 10):
+                    scenario.elapsed("production boundary", 100, expected)
+                with patch("smoke.monotonic", return_value=100 + expected + 10.001):
+                    with self.assertRaises(AssertionError):
+                        scenario.elapsed("production boundary", 100, expected)
+
     def test_recovery_route_opens_closed_door_in_both_directions_before_moving(self):
         player = SimpleNamespace(state={'zone': 'support_3f_e1'})
         commands, opened = [], False

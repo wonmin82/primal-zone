@@ -33,8 +33,9 @@ class Timeouts:
 
 
 class Client:
-    def __init__(self, name, password, url):
+    def __init__(self, name, password, url, *, command_timeout=STATE_TIMEOUT):
         self.name, self.password, self.url = name, password, url
+        self.command_timeout = command_timeout
         self.socket = self.reader = self.state = None
         self.revision = 0
         self.changed = asyncio.Condition()
@@ -103,10 +104,10 @@ class Client:
                 await self.changed.wait()
             return self.state
 
-    async def act(self, text, predicate=lambda state: True, timeout=STATE_TIMEOUT):
+    async def act(self, text, predicate=lambda state: True, timeout=None):
         before = self.revision
         await self.send("text", [text])
-        return await self.until(predicate, timeout, before)
+        return await self.until(predicate, self.command_timeout if timeout is None else timeout, before)
 
     async def action(self, payload, predicate=lambda state: True, timeout=STATE_TIMEOUT):
         """실제 구조화 웹 요청을 보내고 같은 Gateway의 최종 상태를 기다린다."""
@@ -140,7 +141,11 @@ class Client:
         return {"player": self.name, "revision": self.revision,
                 "received": self.received, "error": str(self.error) if self.error else None,
                 "state": {key: self.state.get(key) for key in
-                          ("zone", "hp", "mental", "xp", "credits", "combat_target")} if self.state else None}
+                          ("zone", "hp", "mental", "xp", "credits", "combat_target")} if self.state else None,
+                "inventory": [{key: row.get(key) for key in ("id", "identity", "count", "equipped")}
+                              for row in self.state.get("inventory", ())] if self.state else None,
+                "public_errors": ["".join(part["text"] for part in log["segments"])
+                                  for log in self.semantic_logs if log.get("kind") == "error"][-3:]}
 
     async def close(self):
         self.closing = True
@@ -187,7 +192,9 @@ class Scenario:
     def __init__(self, harness, log):
         self.harness, self.log = harness, log
         self.phase = "auth"
-        self.players = [Client(name, password, harness.ws_url)
+        # Full에서 관측한 10.073초 상태 전달을 위한 유한 수신 예산이다. 게임 타이밍 상한은 유지한다.
+        self.players = [Client(name, password, harness.ws_url,
+                               command_timeout=15 if harness.mode == "full" else STATE_TIMEOUT)
                         for name, password in harness.credentials]
         self.timings = smoke_timings(harness.mode)
         self.timeouts = Timeouts.for_mode(harness.mode)
