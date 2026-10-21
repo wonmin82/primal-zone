@@ -121,12 +121,15 @@ class Phase3ItemDoorTests(NativeItemTest):
         """P3-R18-C01/C02/C07/C11: 시설 record 대용 없이 Item 실물 번호·표시."""
         first, second = self.create("bandage", quantity=2), self.create("bandage", quantity=5)
         reference = descriptor(second).reference
+        from world.equipment import inventory_rows
+
+        initial = {row["identity"]: row for row in inventory_rows(self.char1.profile())}
+        self.assertEqual(initial[str(first.pk)]["selector"], "붕대 1")
+        self.assertEqual(initial[str(second.pk)]["selector"], "붕대 2")
         api.delete_item(first)
         record = next(record for record in records_for(self.char1, ReferenceKind.ITEM)
                       if record.reference == reference)
         self.assertEqual(label(record, 1), "붕대 2")
-        from world.equipment import inventory_rows
-
         # 실제 텍스트/Web 소지품 Presenter가 같은 UUID의 영속 번호와 수량을 결합한다.
         row = next(row for row in inventory_rows(self.char1.profile()) if row["identity"] == str(second.pk))
         self.assertEqual((row["selector"], row["count"], row["information_command"]),
@@ -142,6 +145,13 @@ class Phase3ItemDoorTests(NativeItemTest):
         api.delete_item(third)
         fresh = self.create("bandage")
         self.assertEqual(number_for(descriptor(fresh).reference), 1)
+        only = next(row for row in inventory_rows(self.char1.profile()) if row["identity"] == str(fresh.pk))
+        # 단독 1의 생략은 허용 사항이지 의무가 아니다. 현재 구현은 숨은
+        # 그룹원의 존재를 표시 차이로 노출하지 않도록 1도 명시한다.
+        self.assertEqual(only["selector"], "붕대 1")
+        fresh_record = next(record for record in records_for(self.char1, ReferenceKind.ITEM)
+                            if record.reference == descriptor(fresh).reference)
+        self.assertEqual(label(fresh_record, 1), "붕대 1")
         self.assertEqual(verify(), ())
 
     def test_item_definition_name_alias_change_preserves_uuid_group_and_counter(self):

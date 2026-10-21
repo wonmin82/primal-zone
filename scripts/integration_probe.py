@@ -76,6 +76,7 @@ def snapshot(*, timing=False):
     evennia._init()
     from django.db.models import Q
     from evennia.objects.models import ObjectDB
+    from evennia.utils.dbserialize import deserialize
     from typeclasses.explorers import Explorer
     from typeclasses.loot import Corpse
     from typeclasses.parties import Party
@@ -103,7 +104,9 @@ def snapshot(*, timing=False):
                       "installation_ids": sorted(j["door_id"] for j in journals if any(e["exit_pk"] == obj.pk for e in j["endpoints"]))})
     rooms = {tag: obj.pk for obj in ObjectDB.objects.filter(db_tags__db_category="primal_zone_room").distinct()
              for tag in obj.tags.get(category="primal_zone_room", return_list=True)}
+    race_room = ObjectDB.objects.filter(db_key="Phase3 경합 방").first()
     return {"players": players, "parties": {str(p.pk): p.state() for p in Party.objects.all()},
+            "phase3_race": deserialize(race_room.db.phase3_race) if race_room else None,
             "exits": exits, "rooms": rooms,
             "doors": list(Door.objects.order_by("door_id").values()),
             "installations": journals,

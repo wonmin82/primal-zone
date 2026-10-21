@@ -338,6 +338,14 @@ test('TEST-E2E-12 정상 Portal/Server 재시작·같은 DB·재인증', async (
   // items assertion, Corpse/Ground Item·Currency·Door·Enemy는 typed row로 검증.
   expect(stopped.number_scopes).toEqual(before.number_scopes);
   expect(stopped.selection_numbers).toEqual(before.selection_numbers);
+  expect(stopped.phase3_race).toEqual(before.phase3_race);
+  const race = stopped.phase3_race;
+  expect(Array.isArray(race.survivors)).toBe(true);
+  expect(race.survivors).toHaveLength(2);
+  expect(stopped.number_scopes.find(row => row.id === race.scope).next_number).toBe(4);
+  expect(stopped.selection_numbers.filter(row => row.scope_id === race.scope).map(row => row.number).sort()).toEqual([2, 3]);
+  for (const identity of race.survivors) expect(stopped.selection_numbers.some(row => row.kind === 'corpse' && row.identity === identity)).toBe(true);
+  expect(stopped.selection_numbers.some(row => row.kind === 'corpse' && row.identity === race.removed)).toBe(false);
   for (const kind of ['item', 'loot', 'currency', 'corpse', 'door', 'enemy']) {
     expect(before.selection_numbers.some(row => row.kind === kind)).toBe(true);
   }

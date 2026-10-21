@@ -224,8 +224,39 @@ test('TEST-66B-01 아이템 행의 안정 UUID Action과 장비 해제·재장�
   expect(a.state.inventory.find(item => item.identity === weapon.identity).equipped).toBe(true);
   await click('unwield');
   expect(a.state.inventory.find(item => item.identity === weapon.identity).equipped).toBe(false);
+  await a.page.evaluate(() => {
+    const send = WebSocket.prototype.send;
+    window.itemScopeReplay = { send };
+    WebSocket.prototype.send = function(frame) {
+      const value = JSON.parse(frame);
+      if (value[0] === 'pz_action' && value[1][0].action_id.endsWith('.wield')) {
+        window.itemScopeReplay.socket = this;
+        window.itemScopeReplay.frame = frame;
+        WebSocket.prototype.send = send;
+      }
+      return send.call(this, frame);
+    };
+  });
   await click('wield');
   expect(a.state.inventory.find(item => item.identity === weapon.identity).equipped).toBe(true);
+  await click('unwield');
+  await a.command(`${weapon.name} 버려`);
+  expect(a.state.inventory.some(item => item.identity === weapon.identity)).toBe(false);
+  expect(a.state.ground_loot.flatMap(source => source.loot).some(entry =>
+    entry.action?.roles.subject[0].identity === weapon.identity)).toBe(true);
+  const inventory = a.state.inventory.map(({ identity, count, equipped }) => ({ identity, count, equipped }));
+  const credits = a.state.credits;
+  await a.page.evaluate(() => {
+    const replay = window.itemScopeReplay;
+    const value = JSON.parse(replay.frame);
+    value[1][0].request_id = 'phase3-stale-root-item';
+    replay.send.call(replay.socket, JSON.stringify(value));
+  });
+  await a.command('봐');
+  expect(a.state.inventory.map(({ identity, count, equipped }) => ({ identity, count, equipped }))).toEqual(inventory);
+  expect(a.state.credits).toBe(credits);
+  expect(a.state.ground_loot.flatMap(source => source.loot).some(entry =>
+    entry.action?.roles.subject[0].identity === weapon.identity)).toBe(true);
   expect(a.errors).toEqual([]);
 });
 
@@ -233,6 +264,7 @@ test('TEST-66B-01 아이템 행의 안정 UUID Action과 장비 해제·재장�
 test('TEST-66C-01 바닥 전리품 안정 UUID·중복 및 오래된 요청 거절·텍스트 동등 지급', async ({ actors }) => {
   const a = await actors.create(0, { width: 1280, height: 900 });
   const count = () => a.state.inventory.filter(item => item.id === 'scrap').reduce((sum, item) => sum + item.count, 0);
+  const initialIdentities = a.state.inventory.filter(item => item.id === 'scrap').map(item => item.identity).sort();
   const initial = count();
   expect(initial).toBeGreaterThan(1);
   await a.command('회수부품 버려');
@@ -263,6 +295,10 @@ test('TEST-66C-01 바닥 전리품 안정 UUID·중복 및 오래된 요청 거�
   });
   await buttons.nth(index).click();
   await expect.poll(count).toBe(initial);
+  // 회수된 분할 Entry는 기존 스택으로 병합된다. 이후 stale 요청은 소멸한
+  // UUID를 보유한 실제 버튼 프레임이며 생존 스택에 다시 적용되면 안 된다.
+  expect(a.state.inventory.filter(item => item.id === 'scrap').map(item => item.identity).sort()).toEqual(initialIdentities);
+  expect(initialIdentities).not.toContain(original.roles.subject[0].identity);
   async function replay(sameRequest) {
     await a.page.evaluate(sameRequest => {
       const replay = window.lootReplay;
