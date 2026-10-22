@@ -212,13 +212,15 @@ Release workflow의 현재-main guard 때문에 승인 전 PR을 위해 dispatch
 이전 Reviewer A는 이전 문서 버전의 독립 검토 기록이며 이번 보완의 새 독립 리뷰 결과로 표현하지 않는다. 이번 작은 문서 보완은 새 에이전트 없이 Orchestrator가 패키지 9개/공식38행/변경 Assertion/CSV 형식·집계·승인 경계를 직접 대조했다. 검토한 P2 네 범주는 해소됐고 확인된 잔여 P0/P1/P2는 0/0/0이다. **A — Ready for Stage 2(문서·실행 계획 준비만)**이며 실제 Phase3 Case/행은 모두 NOT RUN, Stage2는 별도 지시 전 미착수다.
 
 
-## 9. Stage 2 실행 결과 및 Stage 3 인계 — 2026-10-22 KST
+## 9. Stage 2 실행 결과 및 Stage 3 인계 — 2026-10-22~23 KST
+
+이 절은 시간순 실행 이력을 보존한다. 중간 실패·판정과 후속 보완을 구분하며 최신 종합 상태는 마지막 결과 절과 PR #75 Validation을 따른다.
 
 ### 기준선·범위와 증거 채택
 
 시작 main/origin/main은 `ea4072c0e01f14dad268591fda1096e1f413ef2b`, 열린 PR0, Worktree1개였다. 기존 미커밋 Stage1 문서2개를 보존해 `codex/issue67-phase3-integration` 하나에서 진행했다. #44/#67 OPEN, #65/#66 CLOSED이며 v4.3 원문/기존 Closeout은 변경하지 않는다. T01~T07의106개 Case만 대상이며 T08의4개 Case는 NOT RUN으로 남긴다.
 
-기존 REUSABLE79 중 Stage2 주담당은77개(T08의2개 제외)다. 관련 제품/규칙/저장/Loader/Parser/Registry/Resolver/Gateway/Service/ContentPackage/가격/권리 정의는 기준선과 동일하다. 기존 규칙232·통합1063 및 실제 브라우저/Action E2E의 Assertion·fixture·SHA와 연결되는 좁은 계약을 채택한다. 새 fixture/검증 Harness 변경은 기존 Domain 성공을 새 실행으로 표현하지 않으며 영향받은 실행기·실제 재시작·브라우저 조건만 새로 확인한다. PARTIAL/CANDIDATE/GAP은 해당 추가 근거가 확보되기 전까지 PASS로 올리지 않는다.
+기존 REUSABLE79 중 Stage2 주담당은77개(T08의2개 제외)다. 초기 근거 채택 당시 관련 제품/규칙/저장/Loader/Parser/Registry/Resolver/Gateway/Service/ContentPackage/가격/권리 정의는 기준선과 동일했다. 이후 표시 계산 보완(0e9b87c)은 공통 Presentation의 반복 관찰 조회만 바꾸므로, 해당 표시 경로는 별도 영향 회귀와 실제 브라우저/Full로 재검증한다. 실행·지급·권한·번호·저장 도메인은 변경하지 않았다. 기존 규칙232·통합1063 및 실제 브라우저/Action E2E의 Assertion·fixture·SHA와 연결되는 좁은 계약을 채택한다. 새 fixture/검증 Harness 변경은 기존 Domain 성공을 새 실행으로 표현하지 않으며 영향받은 실행기·실제 재시작·브라우저 조건만 새로 확인한다. PARTIAL/CANDIDATE/GAP은 해당 추가 근거가 확보되기 전까지 PASS로 올리지 않는다.
 
 ### T07의 Scope·실행 경로 정합성
 
@@ -329,9 +331,9 @@ R10-C03의 기존66C는 split/merge뒤삭제한원UUID와새Source를 구분했�
 
 Full 공개 명령의 수신 예산을 15초로 분리한 코드는 `03a2b0d2ecb45da3084874d9f84e7e9b2286ce1c`에 고정했다. 기본·Quick은10초, 명시 timeout(0포함)이 우선이며 Typed Action/Prompt/실제30·45·120초의 허용 상한은 그대로다. 재전송·강제조회·결과 완화는 없다. 순수 경계 회귀3개 PASS(0.012초), 코드 검사 PASS, 지정 Diff 독립 Reviewer A/잔여0이다. 이는 처리 지연의 원인 해결이나 성능 개선 주장이 아니며 새 표준 Full 전체 결과를 별도로 확인한다.
 
-### Stage 2 최종 로컬 결과 — Draft / HOLD
+### 표시 계산 보완 전 로컬 결과 — Draft / HOLD
 
-이 표와 CSV가 현재 상태다. 위의 진행형 문장은 당시의 이력이며 후속 성공으로 과거 실패를 삭제하지 않는다. 최종 검증 코드 스냅샷은 `03a2b0d2ecb45da3084874d9f84e7e9b2286ce1c`이며 이후 두 증거 문서만 통합한다. 최종 PR Source HEAD 및 원격 CI의 정확한 URL·결과는 PR Validation에서 별도 확인한다.
+이 표는 표시 계산 보완 전 상태다. 현재 상태는 이 절 끝의 후속 결과와 CSV를 따른다. 위 진행형 문장은 당시의 이력이며 후속 성공으로 과거 실패를 삭제하지 않는다. 당시 검증 코드 스냅샷은 `03a2b0d2ecb45da3084874d9f84e7e9b2286ce1c`이며 이후 두 증거 문서만 통합한다. 최종 PR Source HEAD 및 원격 CI의 정확한 URL·결과는 PR Validation에서 별도 확인한다.
 
 | Task | Case | PASS | FAIL | BLOCKED | NOT RUN |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -353,7 +355,7 @@ Full 공개 명령의 수신 예산을 15초로 분리한 코드는 `03a2b0d2ecb
 
 독립 Reviewer `reviewer_celadon`의 실제 코드 Diff 검토는 A/잔여 P0·P1·P2=0/0/0이며, Full/IME의 필수 증거 미완료를 해결됐다고 판단한 것은 아니다. 소유 자원·정상 종료·backup/restore에 대한 `auditor_linden`의 정적 감사 A와 root의 실제 실행 증거를 구분한다. Implementer의 할당 파일 구현·직접 검사와 Reviewer의 읽기 전용 검토를 구분했고 파일 소유권을 반환받았다. Agent 결과 Done은 확인했으나 전용 Close 기능이 없어 스레드 Close·슬롯 해제를 보장하지 않는다. 설정의 모델/Effort와 실제 런타임 적용도 구분하며 강제 OS 격리를 주장하지 않는다.
 
-**현재 판정은 C — Hold**다. R29-C08의 표준 Full 전체 성공과 R29-C03의 실제 Windows/Chrome IME 수동 증거가 없으므로 Stage 2 완료·Merge Ready로 제출하지 않는다. 단일 PR을 Draft/HOLD로 만들고 최신 Source HEAD의 필수 CI 네 Job을 별도 확인한다. CI가 성공해도 이 두 공백을 덮지 않는다. Full 지연 진단·영향 검사/전체 재검증과 §4의 실제 OS IME 절차가 병합 전 필요하다. Stage 3 T08/38행 전수 최종 감사·사용자 Merge 승인·병합 후 main CI·Issue Closeout은 미착수로 남긴다. 운영 DB 접근·Migration·Seed·복원, Release dispatch, PR Merge·브랜치 삭제·Issue 변경은 수행하지 않았다.
+**이 중간 시점의 판정은 C — Hold**다. R29-C08의 표준 Full 전체 성공과 R29-C03의 실제 Windows/Chrome IME 수동 증거가 없으므로 Stage 2 완료·Merge Ready로 제출하지 않는다. 단일 PR을 Draft/HOLD로 만들고 최신 Source HEAD의 필수 CI 네 Job을 별도 확인한다. CI가 성공해도 이 두 공백을 덮지 않는다. Full 지연 진단·영향 검사/전체 재검증과 §4의 실제 OS IME 절차가 병합 전 필요하다. Stage 3 T08/38행 전수 최종 감사·사용자 Merge 승인·병합 후 main CI·Issue Closeout은 미착수로 남긴다. 운영 DB 접근·Migration·Seed·복원, Release dispatch, PR Merge·브랜치 삭제·Issue 변경은 수행하지 않았다.
 
 최종 문서 후속 확인에서 Reviewer는 38/110·104 PASS/1 FAIL/1 BLOCKED/4 NOT RUN, 분류106/1/0/3, 채택77+새근거27, 행35/1/2가 실제 CSV와 일치함을 독립 확인했다. 실행 당시6644+명시 Diff와03a2의 동일 spec 대응, 정제 메타데이터의 root 원본 열람 provenance, 최신 Full FAIL/최종 재시작 미도달 및 IME/HOLD 보존을 확인했다. 새 문서·코드 P0/P1/P2 지적은0이며 코드 A와 Stage2 필수 증거 미완료 C를 구분한다. Reviewer의 원본 Artifact 직접 열람 범위를 과장하지 않는다.
 
@@ -365,3 +367,90 @@ PR #75의 Source `48beea9c3791e5c0a7012169d63c675f8e409f68`에 대한 [CI 396894
 
 GitHub Check Run annotation도 `The job has exceeded the maximum execution time of 20m0s`를 명시해 1차 취소의 직접 사유를 확인했다. 진행 관측 변경은 기본off/켜짐·buffer false/true·정상/실패/오류 이벤트·flush·부모 예외 전파의 순수8검사와 코드 검사 PASS다. Reviewer의 좁은 정적 검토 A/지적0이며, 25분 예산은 hang 해결이나 완료 보장이 아니므로 새 HEAD의 실제 전체 CI 결과가 필요하다.
 추가 순수 pickle 왕복도 기본 RemoteTestResult와 비교해 기본off/on 각각 정상·실패·오류 이벤트/테스트수/성공·중단 상태를 보존함을 확인했다. stdout/stderr 제외 규약은 그대로이고 새 직렬화 상태는 None/float 시각만 포함한다. 기존8검사는 반복하지 않았다.
+
+
+### 표시 계산의 반복 조회 보완 — 고정 코드 0e9b87c
+
+소유 실패 Full DB의 원본 hash를 보존하며 별도의 새 소유 DB에 복제하고 테스트 계정 인증만 새 소유 자격으로 바꿔 관측했다. 자원·권한·진행은 추가하지 않았으며 이 진단을 Full 또는 Gate PASS로 채택하지 않는다. `full-l1un7azt`의 공개 정글장도 재구매는 수량1→2·174→64칩을 정확히 반영했고 응답6.721초/명령6.657초, 호출자 push_state 두번3.003/3.051초를 관측했다. cProfile 별도 복제 `full-6_fcaqch`는 측정 오버헤드 포함 상태 한 번6.5초, action_controls6.26초, NPC render47회, profile_snapshot243회, SQL4006회를 기록했다. 모든 과거15초 실패의 원인을 이 값만으로 확정하지 않는다.
+
+`0e9b87cf2d27f3a418af9fb1261e0b763982156c`는 한 action_controls 호출의 ContextVar 범위 안에서만 동일 Actor의 관찰 프로필을 재사용하고 반환마다 깊은 사본을 만든다. 동일 Provider 객체·고정 non-None 시각의 available만 재사용하며, 다른 Actor·다음 요청·중첩·예외·직접 Presenter·None 시각은 격리한다. Binding별 access(view/call), Scope·Role·UUID·정규번호, 실제 Gateway/Domain 재검증과 잠금·커밋·지급·게임 타이머는 변경하지 않았다. 제어 Row/권한 결과를 프로세스 전체에 저장하지 않는다.
+
+신규6개 경계 method는 최초5개 전체 PASS(본문12.187/전체21.235초) 및 직접 Presenter·채워진 캐시 예외 복원 보강2개 후속 PASS(전체19.060초)로 검증했다. 첫5ERROR는 직접 deepcopy import가 동기 검사기의 표준 라이브러리 참조 탐색 한도에 걸린 문제이며, 검사기 정책을 바꾸지 않고 동기 copy.deepcopy 모듈 경유로 수정했다. 다음1FAIL은 available 내부 view 조회 감소와 Binding별 접근 횟수를 합산한 테스트 기대 오류로, Binding별 call 불변 비교로 구분했다. 이 정정은 실제 권한 루프를 완화하지 않으며 Auditor와 Reviewer가 독립 확인했다.
+
+후속 기존 `test_action_cutover/test_action_runtime/test_web_state/test_npc_dialogue/test_phase3_extension`는92 PASS(본문279.209/전체288.758초)다. 캐시 없는 동일 관측 기준과 Typed control Row가 같고 실제 DB·SelectionNumber·Counter가 변하지 않음을 신규 native fixture에서 확인했다. 기존 채택77개 중34 Case의 인용 모듈이 이92개에 포함돼 해당 Assertion을 새 코드로 재확인했다. 77은 최초 채택 수이며 이후 영향 재검증과 상호 배타적인 실행 수가 아니다. 다른 인용 근거의 원래 SHA와 부분 검증 범위를 유지한다.
+
+프로파일러 없는 후속 동일 소유 DB 복제 `full-u5fewm5x`는 같은 구매 수량/가격을 반영하며 응답4.098초, 명령4.032초, 호출자 상태 계산1.784/1.677초를 관측했다. 이는 단일 관측의 비용 감소이며 보편적 성능 보장·과거 실패 원인 전체 확정·Full 성공을 의미하지 않는다. 원본 hash와 소유 프로세스 종료를 확인했다. 최초 py_compile은 외부 PyCache 쓰기 권한 때문에 실패했으므로 통과로 기록하지 않으며, 파일 쓰기 없는 compile과 실제 진단 실행을 별도로 확인했다.
+
+보완 HEAD의 Chromium은12/12 PASS(143.589초, run-sjl1mnfe)다. 소유 서버·브라우저 종료/자격 제거를 확인했고, 마스킹된1280×900/390×844 스크린샷을 직접 확인해 가로 overflow 없는 배치와 조작 표시를 확인했다. 자동화/이미지 확인은 실제 OS IME 증거가 아니다.
+
+독립 `auditor_rosequartz`는 지정4파일 해시가 같은 상태에서 Actor/시간/수명·정보 격리·readonly·실행 재검증/원자성을 소스로 확인해 A/지적0으로 판정했다. 테스트/서버/DB는 실행하지 않았다. Reviewer의 지정 Diff 일반 정확성·Typed control/Help/API/검증 기준 확인도 정적 A/지적0이며 실제 성능/Full을 새로 실행한 것으로 표현하지 않는다. 기존 Linux1078 CI 성공은 표시 보완 전 d96ebd8 기준이므로 후속 최종 HEAD CI와 구별한다.
+
+표준 Full `full-0935ya4g`는 실제30/45/120초 경계(34.986/46.199/124.642초), 본부 서비스·두 임무·두 보스, 정상 shutdown의 광원 정산과 동일 DB startup/relogin의 Item UUID·수량·트리 보존을 통과한 뒤 마지막 Loot façade 딕셔너리 비교에서 실패했다(exit1). 전후 Loot snapshot이 저장되지 않아 실제로 달라진 필드는 미확정이며 정상 Claim 만료 또는 데이터 소실로 단정하지 않는다. 소유 프로세스 종료와 격리 DB fingerprint를 확인했고 실패 자료를 보존했다. 전체 성공 전 R29-C08은 FAIL로 유지한다. 실제 IME BLOCKED와 T08의4 NOT RUN도 유지한다. 표시 보완을 이유로 기존 실제 Door60/Party600/강화 E2E12를 무조건 반복하지 않는다. 해당 Domain·타이머·영속 상태와 Harness는 그대로이며, 변경된 표시는 위 직접 회귀와 브라우저·표준 Full/최종 CI에서 다시 확인한다.
+
+
+### Full 최종 보존검사 보강 — 고정 코드 21fdf04
+
+`21fdf0401f29c693fe0c12ede71821a0ab624c74`는 표시용 entry dict 대신 Native Item UUID/수량/sequence/state/tree, LootClaim 행 ID·권리, CurrencyLoot ID·금액·0 지분 Share를 비교한다. 실제 `decay_source`의 entry별 신규 Ground Source 분리와 같은 Room을 검증하며, 기존 Source 재사용·서로 다른 entry의 합류·실물/지분 손실·미만료 Claim 삭제·새 보호 부여를 거절한다. 기존 Item Claim이 관측 완료 시각까지 만료한 경우 삭제만 허용한다. 게임 Domain·Lock·지급·타이머 정책은 바꾸지 않았다.
+
+Reviewer가 지적한 혼합 시점 snapshot과 Source 전환 검사의 P2 두 건을 반영했다. 소유 SQLite의 전체 eager projection을 단일 `BEGIN DEFERRED` 읽기로 묶고 항상 rollback해 공통 IMMEDIATE 설정을 변경하지 않는다. before/stopped/after/final JSON은 marker·DB 경로를 검증한 소유 실행 경로에 배타 저장한다. 현재 Harness 구조상 startup 자체가 실패하면 stopped 파일 저장 전일 수 있다. 순수 신규10개 검사와 Ruff·`scripts/dev.py check` PASS, 독립 Reviewer의 좁은 재검토 A/잔여0이다. 중간 루트 순수29개 성공과 이후10개 보완 검사를 같은 시점의31개 전체 실행으로 합산하지 않는다. 최초 루트 unittest discovery는 game import 경로 오류로2ERROR 후 올바른 경로의29개로 정정했다.
+
+실제 집중 Fixture `full-1xb0mee4`는 정상 Portal/Server 종료·같은 DB 재시작·재인증과 실제120초 보호 만료(관측126.530초)를 확인했다. ItemUUID2개/CurrencyID1개/0지분을 보존하고 Item Claim2개 만료 삭제를 확인했다. 옛 entry dict 비교 실패도 재현됐으며 실제 차이는 assigned_player/protection_until/reserved_player였다. 총157.625초 PASS, 소유 프로세스 종료·테스트 DB 전후 fingerprint를 확인하고4단계 JSON을 보존했다. 이는 별도의 합성 격리 Fixture 결과이며 이전 Full의 미저장 전후 필드나 Full 전체 성공을 증명하지 않는다. 최초 집중 실행 `full-4tqkcmyk`는 서버 startup 전 lifecycle script 미생성 상태의 snapshot 호출 오류로36.145초 FAIL했고 서버 실행/DB 변경 없이 정리했다. 관측을 서버 ready 뒤로 옮겨 재실행했으며 Domain 수정은 없다.
+
+고정 코드21fdf04의 표준 Full 전체를 새 소유 격리 실행으로 검증했으며 결과는 아래 후속 기록과 같다. 집중 Fixture PASS만으로 R29-C08을 변경하지 않으며 최종 전체 결과와 정상 정리 확인 후 갱신한다. 실제 OS IME는 BLOCKED이고 T08의4개 Case는 NOT RUN이다.
+
+
+표준 Full `full-wy4onm34`(21fdf04)는30/45/120초를31.021/45.859/122.934초로 통과했고 본부·패배/회복·실제Lv4/HP126 장비 준비까지 통과했으나 첫 보스전에서 패배해 종료했다. 재시작 보존 검사에 미도달해 전체FAIL을 유지한다. 소유 프로세스 종료·DB fingerprint 확인·진단 보존을 완료했다. 게임 수치·Fixture 자원을 바꾸지 않고 공개 전투의 자동 클라이언트 전략을 소스에서 조사한다.
+
+
+### Full 전투 클라이언트의 응답·소비 경계 보완 — 2026-10-23
+
+`scout_kestrelwood`는 공개 전투 명령이 다음2.5초 Player 기회를 대체하는 단일 큐를 사용하지만 기존 `Client.act()`는 임의 새 상태만 기다려 명령 수락·소비와 구분하지 못함을 소스에서 확인했다. 실제 실패 run에서 이 경합이 패배의 단독 원인이었다고 확정하지 않는다. 예고보다 강타를 우선하는 기존 전략은 그대로 두며, 새로운 자원·밸런스·치료 전략·타이머·대기 예산을 추가하지 않는다.
+
+`implementer_larchsong`은 Full에서만 명령 전의 응답 경계, 명시 성공 ack와 이후 queue→attack 및 Player round 증가를 구분하고 미소비 큐 덮어쓰기·재전송·대상 교체·패배·오류를 거절하도록 보완했다. ack 시점에 이미 소비된 경우 한 번의 자연 라운드를 더 기다릴 수 있으며 이를 정확한 서버 명령 토큰 보장이라고 확대하지 않는다. 전투 종료는 별도 진단이며 기존 kill의 XP 증가·의무실 패배 아님 assertion을 유지한다. 회복실 도착 때 자연회복으로 이미 HP·정신력이 최대이면 불필요한 침대 요청만 생략하며, 부족하면 기존 실제 회복을 그대로 검증한다.
+
+최초 복제 진단 `full-5ayslo2j`는 이미 자원이 가득한 침대의 정상 거절 후 상태 대기로128.387초 FAIL했다. 다음 `full-6rhej_1s`는 붕대의 실제 일반 text 응답을 semantic pz_log만 기다리는 초기 helper가 놓쳐142.781초 FAIL했다. 실제 로그에서 round47/HP66/붕대8개 전송 후 round52/7개로 소모됐으나 ack를 못 봤음을 확인했다. 이 P1은 독립 Reviewer `reviewer_sagewing`도 코드로 확인했다. 두 진단 모두 소유 복제의 공개 구매·회복만 사용했고 원본 hash 불변·소유 프로세스 종료와 실패 자료 보존을 확인했다. 원래 Full 패배와 새 helper의 채널 결함을 구분한다.
+
+붕대 text와 강타·견제 pz_log가 모두 적재되는 실제 Client messages에서 새 성공 ack를 확인하고, 새 구조화 오류는 별도로 거절하도록 고쳤다. 기존 응답은 전송 전에 분리하고 수신 Condition으로 놓친 wake를 방지한다. 공통 Client와 서버 프로토콜은 변경하지 않는다. 실제 `Client.receive()`를 raw text/pz_log/pz_state로 구동한 프로토콜 회귀를 포함해 순수36개 PASS(1.598초), Ruff·diff check PASS다. 중간35개 성공과 P1 미수정 상태를 최종 성공으로 덮지 않는다. 새 실제 보스전 집중 재현과 표준 Full 전체 결과는 별도 기록한다.
+
+
+위 전투 helper의 고정 코드는 `93724ec64a9840f5085c68bcbbf3c667ddb85237`이다. 독립 `reviewer_sagewing`이 같은 두 파일의 blob hash를 확인해 P1 해결·코드 A/잔여0으로 판정했다. 읽기 전용 리뷰이며36개 검사와 실제 전투를 직접 실행한 결과는 아니다. 소비 상태 뒤에 오류 로그가 별도 패킷으로 늦게 도착하는 경계는 직접 검증하지 않았고, 현재 단독 Full Fixture에서 수락 후 자원이 외부 변경되는 구체 조건도 확인하지 못했다. 이를 범용 명령 완료 토큰이나 모든 네트워크 순서의 보장으로 확대하지 않는다.
+
+
+수정된 helper의 집중 복제 `full-a2cj74qg`는 공개 준비(실제 붕대8개 구매·기존T1 장비·Lv4/HP126) 뒤 첫 보스 실제 승리로 끝났다. HP27·XP421을 관측했고164.290초에 종료·원본 hash 불변·소유 프로세스 종료를 확인했다. 실행 당시93724ec와 동일한 두 파일 Diff를 사용했다. client.log에서 붕대의 실제 예약→20HP 회복/수량차감, 강타의 예약→정신력8 소모/피해 반영을 확인했다. 전투 기회·재고·타이머를 늘리지 않았다. 이 한 번의 집중 승리는 기존 Full 패배 원인 전체 확정이나 표준 Full PASS를 대신하지 않는다. 고정93724ec에서 새 표준 Full을 실행해 전체 결과를 별도로 확인한다.
+
+
+표준 Full `full-ztl8ybql`(93724ec)은33.530/46.399/121.355초의 실제30/45/120초, 본부·성장 준비까지 통과했으나 첫 보스전 패배로 전체FAIL이다. 이번에는 로그에서 모든 성공 ack·붕대8개 차감과20HP 회복·강타 비용/피해가 소비 경계에 반영됐음을 확인했다. 마지막 붕대 소진 뒤 HP45/적HP34·정신력31 상태에서 사망했고 재시작 구간은 미도달이다. 원본 전후 차이가 없었던 과거 Full과 달리 이번 단계의 전투 관측은 실제 저장된 로그에 근거한다. 소유 프로세스 종료·격리 DB fingerprint 및 실패 자료를 보존했다. 동일 설정을 성공할 때까지 재실행하지 않는다.
+
+새 최종 통합 `reviewer_willowfinch`는93724ec+당시 문서2개의 Diff·관련 Assertion·정제 근거를 독립 확인해 코드 A/신규P0·P1·P2=0/0/0, 현재 Stage2 C—Hold로 판정했다. 38/110·104PASS/1FAIL/1BLOCKED/4NOTRUN 및분류106/1/0/3, 기존채택77/표시영향재확인34의 구분이 일치함을 확인했다. 실행·원본DB/Artifact·CI를 직접 확인한 것으로 확대하지 않는다. 첫 보스 준비 단계의 후속 변경은93724ec 밖의 별도 Delta로 검토한다.
+
+첫 보스도 기존 두 번째 보스 준비와 같이 실제 공개 사냥으로 한 단계 더 성장한 뒤 도전하는 제한적 보완을 계획한다. 기존 profile XP/자원·권한을 쓰거나 미리 지급하지 않고 최대3회의 고정 공개 사냥으로 실제 XP 증가를 확인한다. 기존 game 규칙의Lv5 임계360XP와 현재291XP를 비교해 갈퀴사냥룡38+청소룡22+청소룡22의 기존 보상 경로를 사용하며, 이미충분하면 불필요 사냥을 하지 않는다. 이 보완도 실제 사냥·상점·성장·전투·임무의 도메인 효과를 그대로 검증하고 생존/XP assertion·타이머/timeout을 유지해야 한다. 구현·실행이 완료됐다고 미리 표시하지 않는다.
+
+
+공개 사냥 준비 보완의 고정 코드는 `5ab989db5f79117ac3fd69dc919e343f02977320`이다. `implementer_pineglade`가 지정2파일만 수정했고 최대3회의 실제 사냥·회수, 목표 즉시중단·무부작용·대상 부재/생존/XP/유한 실패 경계를 보강했다. 순수39개 PASS, Ruff·diff check PASS다. `reviewer_willowfinch`는 실제 보상38+22+22와360XP 임계, 기존 kill·구매·성장·회복·보스 승리 조건 유지 및 사전 지급0을 확인해 좁은 Delta A/신규지적0으로 판정했다. Lv4 난이도 benchmark가 이번 규범 수용 조건이 아닌 통합 검증 목적에서 실제 사냥 준비는 성공 조건 완화가 아니며, 실제 실행은 별도 근거가 필요함을 명시했다.
+
+집중 복제 `full-90ogghd4`는 공개 사냥으로 XP291→329→351→373/Lv5를 실제 관측했다. 실제 성장 배분·침대 회복 뒤 HP144로 준비하고 보스전 승리 HP85·XP503을 확인했다. 총233.248초, 원본 hash 불변·소유 프로세스 종료·진단 보존을 확인했다. 실행 당시 두 파일은5ab989d와 동일하다. 준비 전 자원·XP를 미리 지급하지 않았고 예산/타이머도 변경하지 않았다. 이 집중 승리는 표준 Full을 대신하지 않는다. 고정5ab989d에서 새 표준 Full 전체와 콘솔 증거를 별도 소유 작업 경로에 기록한다.
+
+
+### Stage 2 최신 로컬 결과 및 제출 경계 — 고정 실행 코드5ab989d
+
+표준 `scripts/dev.py smoke-full`의 `full-9pigsbrh`가 **exit0 / PASS1297.484초**로 완료됐다. 별도 콘솔 `work/issue67/full-5ab989d-console.log`에 원 실행 출력을 보존했으며 Source는5ab989d다. 실제30/45/120초는31.058/45.868/120.922초, 실제 공개XP291→329→351→373/Lv5, T1 HP144/T2최종Lv7 HP184, 두 보스·최종보고·추가훈련을 통과했다. 정상 AMP shutdown은 광원ON/active UUID를OFF/None으로 정산했고 잔량1800→874.566은project_power 범위 안이다. 정상 startup/relogin은Item UUID·quantity·sequence·tree/state·주무기를 엄격 보존했다. 기존NativeItem1/Currency2를 보존했고 이번 Full의 만료Claim삭제는0건이다. 별도 집중 실시간 만료Claim삭제2건과 합쳐 같은 실행처럼 표현하지 않는다. 프로필·party·world/시설·시계 및 전투/권리 정합화와 process stop/temp cleanup까지 통과했으며 실행 경로가 실제로 없음을 후속 확인했다. 성공 Run의 임시4단계JSON은 정상정리로 삭제됐고, 원콘솔/소유DB 전후fingerprint·정제 metadata는 보존했다. 원본 DB를 보관한 실패/집중 Run과 구분한다.
+
+| Task | Case | PASS | FAIL | BLOCKED/NOT RUN |
+| --- | ---: | ---: | ---: | ---: |
+| T01 | 38 | 38 | 0 | 0 |
+| T02 | 27 | 27 | 0 | 0 |
+| T03 | 20 | 20 | 0 | 0 |
+| T04 | 10 | 10 | 0 | 0 |
+| T05 | 4 | 3 | 0 | 1 BLOCKED |
+| T06 | 5 | 5 | 0 | 0 |
+| T07 | 2 | 2 | 0 | 0 |
+| Stage2 합계 | 106 | 105 | 0 | 1 BLOCKED |
+| T08(Stage3) | 4 | 0 | 0 | 4 NOT RUN |
+
+38개 규범 행·110개 Case ID/요구/Task 관계를 유지했다. 현재 전체105 PASS/1 BLOCKED/4 NOT RUN이며 행35 PASS/1 BLOCKED(R29)/2 NOT RUN(R30,R38)이다. 분류는107 REUSABLE/0 PARTIAL/0 CANDIDATE/3 GAP이다. 직전106/1/0/3에서 R29-C08만 표준Full 전체 성공으로 PARTIAL→REUSABLE/FAIL→PASS로 변경했다. 최초기존채택77개 중34개는표시영향92검사로재확인했으며, 새 근거의PASS Case는28개다. 이Case집계는물리적실행수나테스트method수와다르다.
+
+최종 코드의 `scripts/dev.py check`와 문서 `git diff --check`를 확인한다. Smoke 순수 검사는공개사냥의3개추가method를포함39 PASS이며, 중간36개1.598초와39개의실행시간을같은값으로표현하지않는다. 최종 Full1297.484초와각집중실행157.625/164.290/233.248초는각실측이며미측정실패Run의총시간을추정해합산하지않는다. 동일Domain의실제Door60/Party600/강화E2E12는유효기존근거를재사용해대기를반복하지않았다. 제품표시변경은92개영향회귀/6개경계검사/최신Chromium12개와Full에서재확인했다.
+
+**IME Case P3-R29-C03은 BLOCKED**다. 실제 Windows/Chrome OS 입력기를 이용한 수동증거가 없고 Native 컴퓨터 입력이 제공되지 않으므로 DOM/composition 자동화나이미지로대체하지않는다. §4 수동절차를수행해실제환경·SHA·입력·1회실행/정확한대상·서버결과를기록해야한다. T08 4개Case·38행전수FinalGate·사용자Merge승인·병합후mainCI·IssueCloseout은Stage3 미착수다. Stage2의자동로컬근거완료를Phase3완료나Merge승인으로확대하지않는다.
+
+최종 Source HEAD와필수CI(test/smoke/contracts/browser-e2e)의정확한Run URL·결과는 [PR #75 Validation](https://github.com/wonmin82/primal-zone/pull/75)에서Source별관리한다. d96ebd8의 [CI39716657961](https://github.com/wonmin82/primal-zone/actions/runs/39716657961) 규칙235/통합1078·4/4 SUCCESS는표시/Full보완전근거이며최종HEAD를대신하지않는다. 코드5ab989d 뒤에는증거문서만변경하고한번에Push해최신CI를확인한다. IME미완료이므로PR은Draft/HOLD로유지하며, 최종SourceCI까지성공하면제출판정은 **B — Conditional(IME 해결 전Merge 불가)**다. SourceCI가실패하거나미확인이면C/Hold로기록한다. 운영DB 접근·Migration·Seed·복원, Release dispatch, Merge·브랜치삭제·Issue변경은수행하지않았다.
