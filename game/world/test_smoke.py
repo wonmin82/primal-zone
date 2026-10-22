@@ -622,6 +622,92 @@ class SmokeContractsTests(TestCase):
 
 
 
+class SmokeFirstBossPreparationTests(TestCase):
+    def preparation(self, xp=291, *, reward=None, defeat=False, unavailable=False):
+        from world.content import ENEMIES, ROOMS
+        from world.rules import level_of
+
+        player = SimpleNamespace(state={"xp": xp, "level": level_of({"xp": xp}), "zone": "marsh",
+                                        "combat_target": None, "hp": 100, "max_hp": 100,
+                                        "mental": 0, "player_round": 0, "inventory": []})
+        commands, waits, reports = [], [], []
+
+        async def act(command, predicate=lambda s: True):
+            commands.append(command)
+            state = player.state
+            if command in ("남", "동"):
+                state['zone'] = ROOMS[state['zone']]['exits'][command]
+                enemy = ENEMIES[ROOMS[state['zone']]['enemies'][0]]
+                state['enemies'] = [dict(enemy, can_attack=True)]
+            elif command.endswith(' 공격'):
+                self.assertEqual(command, state['enemies'][0]['name'] + ' 공격')
+                state['combat_target'] = {"id": 1}
+            else:
+                self.assertEqual(command, '시체에서 모두 가져')
+            self.assertTrue(predicate(state))
+
+        async def until(predicate, *args):
+            state = player.state
+            if state['combat_target'] is not None:
+                state['combat_target'] = None
+                state['xp'] += state['enemies'][0]['xp'] if reward is None else reward
+                state['level'] = level_of(state)
+                if defeat:
+                    state['zone'] = 'infirmary'
+            else:
+                waits.append(state['zone'])
+                enemy = state['enemies'][0]
+                for invalid in ([], [dict(enemy, name='다른적')], [dict(enemy, hp=0)],
+                                [dict(enemy, can_attack=False)]):
+                    self.assertFalse(predicate(dict(state, enemies=invalid)))
+                if unavailable:
+                    raise TimeoutError('기존 유한 상태 대기 종료')
+            self.assertTrue(predicate(state))
+            return state
+
+        player.act, player.until = act, until
+        scenario = SimpleNamespace(players=[player, None, None], timeouts=SimpleNamespace(combat=.1),
+                                   report=lambda *args: reports.append(args))
+        return Closeout(scenario), commands, waits, reports
+
+    def test_first_boss_preparation_uses_public_fixed_route_kills_and_loot(self):
+        closeout, commands, waits, reports = self.preparation()
+        asyncio.run(closeout.prepare_first_boss_level())
+        self.assertEqual(commands, ['남', '갈퀴사냥룡 공격', '시체에서 모두 가져',
+                                    '남', '어린청소룡 공격', '시체에서 모두 가져',
+                                    '동', '어린청소룡 공격', '시체에서 모두 가져'])
+        self.assertEqual(waits, ['trail', 'grass', 'wreck'])
+        self.assertEqual((closeout.first.state['xp'], closeout.first.state['level']), (373, 5))
+        self.assertIn('XP 291→329 / Lv.4→4', reports[0][1])
+        self.assertIn('XP 351→373 / Lv.4→5', reports[-1][1])
+
+    def test_first_boss_preparation_stops_when_level_is_sufficient(self):
+        for xp, hunts in ((360, 0), (340, 1), (320, 2)):
+            with self.subTest(xp=xp):
+                closeout, commands, waits, reports = self.preparation(xp)
+                asyncio.run(closeout.prepare_first_boss_level())
+                self.assertEqual(len(commands), hunts * 3)
+                self.assertEqual(len(waits), hunts)
+                self.assertEqual(len(reports), hunts)
+                self.assertGreaterEqual(closeout.first.state['level'], 5)
+
+    def test_first_boss_preparation_preserves_failure_boundaries_without_retry(self):
+        for options, error, commands_count in (
+            ({'reward': 0}, AssertionError, 2),
+            ({'defeat': True}, AssertionError, 2),
+            ({'unavailable': True}, TimeoutError, 1),
+            ({'reward': 1}, AssertionError, 9),
+        ):
+            with self.subTest(options=options):
+                closeout, commands, waits, reports = self.preparation(**options)
+                with self.assertRaises(error):
+                    asyncio.run(closeout.prepare_first_boss_level())
+                self.assertEqual(len(commands), commands_count)
+                self.assertLessEqual(len(waits), 3)
+        self.assertEqual(len(reports), 3)
+        self.assertEqual(closeout.first.state['xp'], 294)
+
+
 class SmokeLootPreservationTests(TestCase):
     def setUp(self):
         item = {"definition": "bandage", "quantity": 2, "sequence": 7,

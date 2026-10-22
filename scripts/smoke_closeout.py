@@ -374,6 +374,7 @@ class Closeout:
         await self.kill('고장난경비기')
         await player.act('시체에서 모두 가져')
         assert player.state['level'] >= 4
+        await self.prepare_first_boss_level()
         await self.prepare_boss()
         await self.dock(player)
         await route(player, (("북", "grass"), ("북", "trail"), ("북", "marsh"), ("북", "ridge")))
@@ -420,6 +421,32 @@ class Closeout:
         rank = next(skill["rank"] for skill in player.state["growth"]["skills"] if skill["id"] == "heavy")
         await player.act("타격교관에게 강타 배워", lambda s: any(skill["id"] == "heavy" and skill["rank"] == rank + 1 for skill in s["growth"]["skills"]))
         self.scenario.report("training", "Lv.1 훈련 없음 / 실제 임무 XP 이후 NPC Rank +1 / 무료")
+
+    async def prepare_first_boss_level(self):
+        """Full 첫 보스의 Lv5 준비를 고정 경로의 공개 사냥 최대 세 번으로 마친다."""
+        player = self.first
+        if player.state['level'] >= 5:
+            return
+        assert player.state['zone'] == 'marsh', '첫 보스 추가 사냥 시작 위치 불일치'
+        for steps, enemy_name in (
+            ((("남", "trail"),), '갈퀴사냥룡'),
+            ((("남", "grass"),), '어린청소룡'),
+            ((("동", "wreck"),), '어린청소룡'),
+        ):
+            await route(player, steps)
+            # 재등장하지 않은 적을 대체하거나 production 시간을 바꾸지 않는다.
+            await player.until(lambda s: any(e['name'] == enemy_name and e['hp'] > 0 and e['can_attack']
+                                            for e in s['enemies']))
+            before_xp, before_level = player.state['xp'], player.state['level']
+            await self.kill(enemy_name)
+            await player.act('시체에서 모두 가져')
+            self.scenario.report('first-boss-level',
+                                 f"{player.state['zone']} {enemy_name} 실제 사냥/시체 회수 / "
+                                 f"XP {before_xp}→{player.state['xp']} / "
+                                 f"Lv.{before_level}→{player.state['level']}")
+            if player.state['level'] >= 5:
+                return
+        assert player.state['level'] >= 5, ('첫 보스 유한 사냥 후 Lv5 미달', player.state['xp'], player.state['level'])
 
     async def prepare_boss(self, advanced=False):
         player = self.first
