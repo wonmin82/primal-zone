@@ -356,3 +356,12 @@ Full 공개 명령의 수신 예산을 15초로 분리한 코드는 `03a2b0d2ecb
 **현재 판정은 C — Hold**다. R29-C08의 표준 Full 전체 성공과 R29-C03의 실제 Windows/Chrome IME 수동 증거가 없으므로 Stage 2 완료·Merge Ready로 제출하지 않는다. 단일 PR을 Draft/HOLD로 만들고 최신 Source HEAD의 필수 CI 네 Job을 별도 확인한다. CI가 성공해도 이 두 공백을 덮지 않는다. Full 지연 진단·영향 검사/전체 재검증과 §4의 실제 OS IME 절차가 병합 전 필요하다. Stage 3 T08/38행 전수 최종 감사·사용자 Merge 승인·병합 후 main CI·Issue Closeout은 미착수로 남긴다. 운영 DB 접근·Migration·Seed·복원, Release dispatch, PR Merge·브랜치 삭제·Issue 변경은 수행하지 않았다.
 
 최종 문서 후속 확인에서 Reviewer는 38/110·104 PASS/1 FAIL/1 BLOCKED/4 NOT RUN, 분류106/1/0/3, 채택77+새근거27, 행35/1/2가 실제 CSV와 일치함을 독립 확인했다. 실행 당시6644+명시 Diff와03a2의 동일 spec 대응, 정제 메타데이터의 root 원본 열람 provenance, 최신 Full FAIL/최종 재시작 미도달 및 IME/HOLD 보존을 확인했다. 새 문서·코드 P0/P1/P2 지적은0이며 코드 A와 Stage2 필수 증거 미완료 C를 구분한다. Reviewer의 원본 Artifact 직접 열람 범위를 과장하지 않는다.
+
+### PR CI 1차 취소 및 제한적 재현
+
+PR #75의 Source `48beea9c3791e5c0a7012169d63c675f8e409f68`에 대한 [CI 39689479142](https://github.com/wonmin82/primal-zone/actions/runs/39689479142)는 contracts/smoke/browser-e2e SUCCESS, test는20분 Job 제한으로 CANCELLED다. 규칙235개는1.296초 PASS, 통합1078개를 발견했으나 완료 결과가 없어 통합 PASS로 기록하지 않는다. 전체 CI4/4도 아직 충족하지 못했다. 병렬 worker가 subsuite 전체 결과를 모아 전송하는 구조라 마지막 Door 로그/도트로 정지 test를 특정할 수 없다. 이전 main의1063개1113.645초 성공은 참고 근거이며 새 CI 성공으로 대체하지 않는다.
+
+같은 신규15개를 `scripts/dev.py test tests.test_phase3_regression tests.test_phase3_extension --parallel 2`로 분리해 **15 PASS /본문21.496초·전체33.991초**를 확인했다. Windows spawn 조건의 성공이며 Ubuntu fork의 전체1078개 무정지를 증명하지 않는다. 실제20분취소와 이전18.56분 통합 검사의 제한된 여유를 근거로 CI test Job에만 유한25분 예산과 opt-in worker별 test ID·시작/종료 시각 관측을 적용한다. 테스트·Assertion·병렬수·게임시간·Full 응답 예산은 바꾸지 않으며 25분 내에도 완료되지 않으면 실제 active test를 바탕으로 진단한다. 시간 부족이 원인이라고 미리 확정하지 않는다.
+
+GitHub Check Run annotation도 `The job has exceeded the maximum execution time of 20m0s`를 명시해 1차 취소의 직접 사유를 확인했다. 진행 관측 변경은 기본off/켜짐·buffer false/true·정상/실패/오류 이벤트·flush·부모 예외 전파의 순수8검사와 코드 검사 PASS다. Reviewer의 좁은 정적 검토 A/지적0이며, 25분 예산은 hang 해결이나 완료 보장이 아니므로 새 HEAD의 실제 전체 CI 결과가 필요하다.
+추가 순수 pickle 왕복도 기본 RemoteTestResult와 비교해 기본off/on 각각 정상·실패·오류 이벤트/테스트수/성공·중단 상태를 보존함을 확인했다. stdout/stderr 제외 규약은 그대로이고 새 직렬화 상태는 None/float 시각만 포함한다. 기존8검사는 반복하지 않았다.

@@ -1,6 +1,7 @@
 """Django의 DB 격리에 Evennia worker 초기화와 실패 정보 전달을 더한다."""
 
 import os
+import time
 from unittest.suite import _ErrorHolder
 
 import django
@@ -19,6 +20,30 @@ def setup_evennia_worker():
 
 
 class PrimalRemoteTestResult(RemoteTestResult):
+    def startTest(self, test):
+        super().startTest(test)
+        self._progress_started_at = None
+        if os.environ.get("PRIMAL_TEST_PROGRESS") == "1":
+            self._progress_started_at = time.monotonic()
+            print(
+                f"[test-progress] START pid={os.getpid()} test={test.id()} "
+                f"monotonic={self._progress_started_at:.6f}",
+                file=self._original_stdout,
+                flush=True,
+            )
+
+    def stopTest(self, test):
+        super().stopTest(test)
+        if self._progress_started_at is not None:
+            stopped_at = time.monotonic()
+            print(
+                f"[test-progress] STOP pid={os.getpid()} test={test.id()} "
+                f"monotonic={stopped_at:.6f} "
+                f"elapsed={stopped_at - self._progress_started_at:.6f}s",
+                file=self._original_stdout,
+                flush=True,
+            )
+
     def addSubTest(self, test, subtest, err):
         if err is not None:
             # 테스트 객체의 Evennia cache/Mock를 전송하지 않는다. 조건과 traceback은 보존한다.
