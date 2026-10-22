@@ -1,6 +1,7 @@
 """Full 전용 본부·현재 두 임무·실제 restart 연결 검증. Quick 경로는 확장하지 않는다."""
 
 import asyncio
+import json
 from time import monotonic
 
 from smoke import count_item, route, travel_to
@@ -31,6 +32,86 @@ def assert_shutdown_items(saved, restored, before_at, stopped_at):
 def assert_startup_items(stopped, restored):
     """Shutdown 정산 이후 startup/relogin은 item 전체를 그대로 보존한다."""
     assert stopped == restored, "startup/relogin item 변경"
+
+
+def assert_preserved_loot(before, final):
+    """Native identity/tree/권리를 보존하며 기한이 지난 item claim 삭제만 허용한다."""
+    assert before["observed_at"] <= before["completed_at"] <= final["observed_at"] <= final["completed_at"], \
+        "snapshot 관측 시각 순서 오류"
+
+    def indexed(snapshot, field):
+        rows = {}
+        for source_id, source in snapshot["loot"].items():
+            assert source["native"] is True, "Full restart는 native loot만 검증한다"
+            for identity, row in source[field].items():
+                assert identity not in rows, (field, identity, "native identity 중복")
+                rows[identity] = (source_id, source, row)
+        return rows
+
+    def check_source(old_id, old, new_id, new):
+        assert old["room"] == new["room"], "loot room 변경"
+        if old["corpse"]:
+            assert not new["corpse"], "시체 callback 이후 ground 이동 누락"
+            assert new_id not in before["loot"], "시체 entry가 기존 source를 재사용함"
+        else:
+            assert old_id == new_id and not new["corpse"], "ground source 변경"
+
+    old_items, new_items = indexed(before, "items"), indexed(final, "items")
+    old_currency, new_currency = indexed(before, "currency"), indexed(final, "currency")
+    assert old_items or old_currency, "native loot 보존 검사의 기존 asset이 없음"
+    expired = 0
+    decay_destinations = {}
+    decay_roots = set()
+
+    def record_decay_entry(source_id, field, identity, *, root):
+        if root:
+            assert source_id not in decay_roots, "서로 다른 시체 entry가 한 ground source로 병합됨"
+            decay_roots.add(source_id)
+        destination = decay_destinations.setdefault(source_id, {"items": set(), "currency": set()})
+        destination[field].add(identity)
+
+    for identity, (source_id, source, item) in old_items.items():
+        assert identity in new_items, (identity, "native item 소실")
+        new_id, new_source, restored = new_items[identity]
+        check_source(source_id, source, new_id, new_source)
+        if item["parent"] is not None:
+            assert old_items[item["parent"]][0] == source_id, (identity, "기존 tree source 불일치")
+            assert new_items[item["parent"]][0] == new_id, (identity, "복원 tree source 불일치")
+        if source["corpse"]:
+            record_decay_entry(new_id, "items", identity, root=item["parent"] is None)
+        expected = dict(item)
+        if source["corpse"] and item["parent"] is None:
+            assert item["location"] == "corpse_loot", (identity, "잘못된 corpse root 위치")
+            expected["location"] = "world_loot"
+        assert restored == expected, (identity, "native item 수량/state/tree 변경")
+        claim = source["claims"].get(identity)
+        new_claim = new_source["claims"].get(identity)
+        if claim is not None and new_claim is None:
+            assert claim["protection_until"] <= final["completed_at"], (identity, "미만료 claim 소실")
+            expired += 1
+        else:
+            assert claim == new_claim, (identity, "claim identity/권리 변경")
+    for identity, (source_id, source, currency) in old_currency.items():
+        assert identity in new_currency, (identity, "native currency 소실")
+        new_id, new_source, restored = new_currency[identity]
+        check_source(source_id, source, new_id, new_source)
+        assert currency == restored, (identity, "currency 수량/권리/share 변경")
+        if source["corpse"]:
+            record_decay_entry(new_id, "currency", identity, root=True)
+    for source_id, expected in decay_destinations.items():
+        for field in ("items", "currency"):
+            assert final["loot"][source_id][field].keys() == expected[field], \
+                (source_id, field, "시체 entry의 새 source에 다른 asset이 병합됨")
+    return {"items": len(old_items), "currency": len(old_currency), "expired_claims": expired}
+
+
+def save_restart_snapshot(harness, label, snapshot):
+    """소유한 격리 실행 경로에만 fixture snapshot을 배타적으로 저장한다."""
+    assert harness.mode == "full"
+    assert label in {"before", "stopped", "after", "final"}
+    harness.owned_database_fingerprint()
+    with (harness.run_dir / f"restart-{label}.json").open("x", encoding="utf-8") as stream:
+        json.dump(snapshot, stream, ensure_ascii=False, indent=2)
 
 
 def stop_for_restart(harness):
@@ -376,6 +457,7 @@ class Closeout:
         await self.second.act("갈퀴사냥룡 공격", lambda s: s["combat_target"] is not None)
         # before: live server의 shutdown 직전 DB. 실제 ON 광원/주무기가 전제다.
         before = await asyncio.to_thread(self.scenario.harness.checkpoint)
+        save_restart_snapshot(self.scenario.harness, "before", before)
         assert before["players"][self.second.name]["profile"]["combat_target"] is not None
         assert before["facilities"]["states"]["outpost_power"] and before["loot"]
         live = before["players"][player.name]
@@ -392,6 +474,7 @@ class Closeout:
             # restart 자체가 정상 AMP 종료·stopped checkpoint·동일 DB 재시작을 수행한다.
             # stopped: 정상 shutdown 완료 후 DB. after: startup + relogin 후 DB.
             stopped = await harness.restart()
+            save_restart_snapshot(harness, "stopped", stopped)
         finally:
             harness.restarting = False
         assert before["players"].keys() == stopped["players"].keys()
@@ -410,6 +493,7 @@ class Closeout:
         for client in self.scenario.players:
             await client.open()
         after = await asyncio.to_thread(self.scenario.harness.checkpoint)
+        save_restart_snapshot(harness, "after", after)
         assert stopped["players"].keys() == after["players"].keys()
         preserved = ("xp", "credits", "inventory", "equipment", "storage", "attributes", "skills",
                      "skill_ready_at", "quests", "discoveries", "visited")
@@ -434,7 +518,6 @@ class Closeout:
         # 이미 만료한 시체는 ground로, 남은 시체는 실제 callback으로 재예약되어야 한다.
         await travel_to(player, 'hq_concourse')
         await self.floor(player, "3층", "support_3f_c")
-        old_entries = [entry for loot in before["loot"].values() for entry in loot["entries"]]
         pending_corpses = {identity for identity, loot in before["loot"].items() if loot["corpse"]}
         pending_enemies = {identity for identity, enemy in before["enemies"].items() if enemy["state"] != "alive"}
         deadline = monotonic() + self.scenario.timings["CORPSE_TTL_SECONDS"] + self.scenario.timings["RESPAWN_DELAY_SECONDS"] + 10
@@ -446,7 +529,12 @@ class Closeout:
             ):
                 break
             if monotonic() >= deadline:
+                save_restart_snapshot(harness, "final", final)
                 raise TimeoutError("restart 후 실제 corpse/respawn callback이 완료되지 않았습니다.")
             await asyncio.sleep(1)  # 실제 DB predicate polling; future reconcile/delay mock 없음
-        assert all(entry in [e for loot in final["loot"].values() for e in loot["entries"]] for entry in old_entries)
+        save_restart_snapshot(harness, "final", final)
+        loot_summary = assert_preserved_loot(before, final)
+        self.scenario.report("restart-loot", f"native item {loot_summary['items']} / "
+                             f"currency {loot_summary['currency']} 보존 / "
+                             f"만료 claim 삭제 {loot_summary['expired_claims']}")
         self.scenario.report("restart", "actual Portal+Server / 같은 DB / relogin / profile·party·world 보존 / combat·claim 정리")

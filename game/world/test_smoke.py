@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import TestCase
@@ -24,10 +25,13 @@ from smoke import route  # noqa: E402
 from scripts import dev, smoke_harness  # noqa: E402
 from scripts.smoke_closeout import (  # noqa: E402
     Closeout,
+    assert_preserved_loot,
     assert_shutdown_items,
     assert_startup_items,
+    save_restart_snapshot,
     stop_for_restart,
 )
+from scripts.smoke_snapshot import read_snapshot_transaction  # noqa: E402
 
 
 class SmokeContractsTests(TestCase):
@@ -410,6 +414,215 @@ class SmokeContractsTests(TestCase):
             harness.check_alive()
         with self.assertRaisesRegex(RuntimeError, "소유권"):
             harness.discard()
+
+
+
+class SmokeLootPreservationTests(TestCase):
+    def setUp(self):
+        item = {"definition": "bandage", "quantity": 2, "sequence": 7,
+                "location": "corpse_loot", "parent": None, "slot": None, "socket": None,
+                "state": {"quality": "saved"}}
+        claim = {"id": 21, "reserved_party": 3, "reserved_player": None,
+                 "assigned_player": 8, "protection_until": 50}
+        source = {"native": True, "corpse": True, "room": 4, "entries": [],
+                  "items": {"root": item, "duplicate": dict(item, sequence=8),
+                            "child": dict(item, sequence=9, location="inside", parent="root")},
+                  "claims": {"root": claim, "duplicate": dict(claim, id=22, protection_until=100)},
+                  "currency": {"31": {"quantity": 5, "reserved_party": 3, "reserved_player": None,
+                                      "protection_until": 50,
+                                      "shares": {"41": {"player": 8, "remaining": 5},
+                                                 "42": {"player": 9, "remaining": 0}}}}}
+        ground = dict(deepcopy(source), corpse=False, items={"ground": dict(item, location="world_loot")},
+                      claims={}, currency={})
+        self.before = {"observed_at": 10, "completed_at": 11, "loot": {"1": source, "2": ground}}
+        self.final = {"observed_at": 59, "completed_at": 60, "loot": {"2": deepcopy(ground)}}
+        for source_id, roots, currencies in (("3", ("root", "child"), {}),
+                                            ("4", ("duplicate",), {}), ("5", (), source["currency"])):
+            restored = deepcopy(source)
+            restored.update(corpse=False, items={key: deepcopy(source["items"][key]) for key in roots},
+                            claims={key: deepcopy(source["claims"][key]) for key in roots
+                                    if key in source["claims"]}, currency=deepcopy(currencies))
+            for row in restored["items"].values():
+                if row["parent"] is None:
+                    row["location"] = "world_loot"
+            self.final["loot"][source_id] = restored
+
+    def test_preserves_native_duplicates_tree_rights_and_new_combat_loot(self):
+        self.final["loot"]["6"] = dict(deepcopy(self.final["loot"]["2"]),
+                                         items={"new": deepcopy(self.final["loot"]["2"]["items"]["ground"])})
+        self.assertEqual(assert_preserved_loot(self.before, self.final),
+                         {"items": 4, "currency": 1, "expired_claims": 0})
+
+    def test_decay_rejects_existing_sources_and_entry_merges(self):
+        for destination in ("1", "2"):
+            final = deepcopy(self.final)
+            moved = final["loot"].pop("3")
+            if destination in final["loot"]:
+                final["loot"][destination]["items"].update(moved["items"])
+                final["loot"][destination]["claims"].update(moved["claims"])
+            else:
+                final["loot"][destination] = moved
+            with self.subTest(existing=destination), self.assertRaises(AssertionError):
+                assert_preserved_loot(self.before, final)
+        for source_id in ("4", "5"):
+            final = deepcopy(self.final)
+            merged = final["loot"].pop(source_id)
+            for field in ("items", "claims", "currency"):
+                final["loot"]["3"][field].update(merged[field])
+            with self.subTest(merged=source_id), self.assertRaises(AssertionError):
+                assert_preserved_loot(self.before, final)
+        final = deepcopy(self.final)
+        final["loot"]["3"]["items"]["new-unrelated-root"] = deepcopy(final["loot"]["3"]["items"]["root"])
+        with self.assertRaises(AssertionError):
+            assert_preserved_loot(self.before, final)
+
+    def test_snapshot_read_transaction_is_deferred_and_rolled_back_without_database_access(self):
+        from unittest.mock import MagicMock
+
+        connection = MagicMock(vendor="sqlite", in_atomic_block=False)
+        connection.get_autocommit.return_value = True
+        cursor = connection.cursor.return_value.__enter__.return_value
+        with read_snapshot_transaction(connection):
+            cursor.execute.assert_called_once_with("BEGIN DEFERRED")
+            connection.rollback.assert_not_called()
+        connection.rollback.assert_called_once_with()
+        connection.reset_mock()
+        with self.assertRaisesRegex(RuntimeError, "projection failure"):
+            with read_snapshot_transaction(connection):
+                raise RuntimeError("projection failure")
+        connection.rollback.assert_called_once_with()
+        for vendor, autocommit, atomic in (("postgresql", True, False), ("sqlite", False, False),
+                                           ("sqlite", True, True)):
+            connection.reset_mock()
+            connection.vendor, connection.in_atomic_block = vendor, atomic
+            connection.get_autocommit.return_value = autocommit
+            with self.subTest(vendor=vendor, autocommit=autocommit, atomic=atomic), self.assertRaises(AssertionError):
+                with read_snapshot_transaction(connection):
+                    self.fail("잘못된 transaction 경계로 진입함")
+            connection.cursor.assert_not_called()
+
+    def test_item_identity_loss_replacement_and_duplicate_are_rejected(self):
+        for mutation in ("missing", "replacement", "duplicate"):
+            final = deepcopy(self.final)
+            items = final["loot"]["4"]["items"]
+            if mutation == "missing":
+                items.clear()
+            elif mutation == "replacement":
+                items["other-uuid"] = items.pop("duplicate")
+            else:
+                final["loot"]["2"]["items"]["duplicate"] = deepcopy(items["duplicate"])
+            with self.subTest(mutation=mutation), self.assertRaises(AssertionError):
+                assert_preserved_loot(self.before, final)
+
+    def test_item_state_quantity_and_tree_mutations_are_rejected(self):
+        for field, value in (("definition", "scrap"), ("quantity", 1), ("sequence", 99),
+                             ("state", {}), ("parent", "duplicate"), ("location", "inventory"),
+                             ("slot", "hands"), ("socket", "power")):
+            final = deepcopy(self.final)
+            final["loot"]["3"]["items"]["child"][field] = value
+            with self.subTest(field=field), self.assertRaises(AssertionError):
+                assert_preserved_loot(self.before, final)
+        final = deepcopy(self.final)
+        final["loot"]["4"]["items"]["child"] = final["loot"]["3"]["items"].pop("child")
+        with self.assertRaises(AssertionError):
+            assert_preserved_loot(self.before, final)
+
+    def test_wrong_room_ground_source_and_unfinished_corpse_are_rejected(self):
+        for source_id, field, value in (("3", "room", 99), ("2", "room", 99), ("3", "corpse", True)):
+            final = deepcopy(self.final)
+            final["loot"][source_id][field] = value
+            with self.subTest(source=source_id, field=field), self.assertRaises(AssertionError):
+                assert_preserved_loot(self.before, final)
+        final = deepcopy(self.final)
+        final["loot"]["other-source"] = final["loot"].pop("2")
+        with self.assertRaises(AssertionError):
+            assert_preserved_loot(self.before, final)
+
+    def test_claim_expiry_uses_snapshot_completion_and_rejects_other_changes(self):
+        for deadline in (0, 10, 59, 60):
+            before, final = deepcopy(self.before), deepcopy(self.final)
+            before["loot"]["1"]["claims"]["root"]["protection_until"] = deadline
+            del final["loot"]["3"]["claims"]["root"]
+            with self.subTest(deadline=deadline):
+                self.assertEqual(assert_preserved_loot(before, final)["expired_claims"], 1)
+        final = deepcopy(self.final)
+        del final["loot"]["4"]["claims"]["duplicate"]
+        with self.assertRaises(AssertionError):
+            assert_preserved_loot(self.before, final)
+        for field, value in (("id", 99), ("reserved_party", None), ("reserved_player", 9),
+                             ("assigned_player", 9), ("protection_until", 0)):
+            final = deepcopy(self.final)
+            final["loot"]["3"]["claims"]["root"][field] = value
+            with self.subTest(field=field), self.assertRaises(AssertionError):
+                assert_preserved_loot(self.before, final)
+        final = deepcopy(self.final)
+        final["loot"]["2"]["claims"]["ground"] = deepcopy(final["loot"]["3"]["claims"]["root"])
+        with self.assertRaises(AssertionError):
+            assert_preserved_loot(self.before, final)
+
+    def test_currency_identity_reservation_and_zero_share_eligibility_are_preserved(self):
+        for mutation in ("missing", "replacement", "quantity", "deadline", "party", "player",
+                         "zero-share", "amount", "share-player", "share-id"):
+            final = deepcopy(self.final)
+            currency = final["loot"]["5"]["currency"]
+            row = currency["31"]
+            if mutation == "missing":
+                currency.clear()
+            elif mutation == "replacement":
+                currency["32"] = currency.pop("31")
+            elif mutation == "quantity":
+                row["quantity"] = 4
+            elif mutation == "deadline":
+                row["protection_until"] = 0
+            elif mutation == "party":
+                row["reserved_party"] = None
+            elif mutation == "player":
+                row["reserved_player"] = 8
+            elif mutation == "zero-share":
+                del row["shares"]["42"]
+            elif mutation == "amount":
+                row["shares"]["41"]["remaining"] = 4
+            elif mutation == "share-player":
+                row["shares"]["42"]["player"] = 10
+            elif mutation == "share-id":
+                row["shares"]["43"] = row["shares"].pop("42")
+            with self.subTest(mutation=mutation), self.assertRaises(AssertionError):
+                assert_preserved_loot(self.before, final)
+
+    def test_restart_snapshot_storage_checks_ownership_and_uses_exclusive_creation(self):
+        from unittest.mock import MagicMock, Mock
+
+        path = MagicMock()
+        harness = SimpleNamespace(mode="full", run_dir=path, owned_database_fingerprint=Mock())
+        for label in ("before", "stopped", "after", "final"):
+            save_restart_snapshot(harness, label, {"fixture": "한글"})
+            path.__truediv__.assert_called_with(f"restart-{label}.json")
+            path.__truediv__.return_value.open.assert_called_with("x", encoding="utf-8")
+        self.assertEqual(harness.owned_database_fingerprint.call_count, 4)
+        path.reset_mock()
+        harness.owned_database_fingerprint.side_effect = RuntimeError("unowned")
+        with self.assertRaisesRegex(RuntimeError, "unowned"):
+            save_restart_snapshot(harness, "final", {})
+        path.__truediv__.assert_not_called()
+        harness.mode = "quick"
+        with self.assertRaises(AssertionError):
+            save_restart_snapshot(harness, "before", {})
+        harness.mode = "full"
+        with self.assertRaises(AssertionError):
+            save_restart_snapshot(harness, "../escape", {})
+        path.__truediv__.assert_not_called()
+
+    def test_legacy_empty_and_invalid_observation_bounds_cannot_pass(self):
+        for snapshot in ("before", "final"):
+            before, final = deepcopy(self.before), deepcopy(self.final)
+            (before if snapshot == "before" else final)["loot"]["2"]["native"] = False
+            with self.subTest(snapshot=snapshot), self.assertRaises(AssertionError):
+                assert_preserved_loot(before, final)
+        with self.assertRaises(AssertionError):
+            assert_preserved_loot(dict(self.before, loot={}), self.final)
+        for started, completed in ((9, 60), (60, 59)):
+            with self.subTest(started=started, completed=completed), self.assertRaises(AssertionError):
+                assert_preserved_loot(self.before, dict(self.final, observed_at=started, completed_at=completed))
 
 
 class SmokeRestartTests(TestCase):
