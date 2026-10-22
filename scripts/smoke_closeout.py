@@ -180,14 +180,83 @@ class Closeout:
             enemy = next((e for e in state['enemies'] if e['name'] == enemy_name), {})
             # 예고가 회복/강타 기회를 계속 가로채지 않도록 생존과 공격을 우선한다.
             if state["hp"] < state["max_hp"] * .55 and count_item(state, "bandage"):
-                await player.act("붕대 사용")
+                await self.combat_action("붕대 사용", "bandage", "다음 차례에는 공격 대신 붕대를 사용한다.")
             elif state["mental"] >= 8 and state["heavy_ready"]:
-                await player.act("강타")
+                await self.combat_action("강타", "heavy", "다음 차례에 강타 행동을 준비한다.")
             elif enemy.get('telegraph') and state['mental'] >= 6:
-                await player.act('견제')
-            await player.until(lambda s: s["combat_target"] is None or s["player_round"] > turn,
-                               self.scenario.timeouts.combat)
+                await self.combat_action("견제", "suppress", "다음 차례에 견제 행동을 준비한다.")
+            else:
+                await player.until(lambda s: s["combat_target"] is None or s["player_round"] > turn,
+                                   self.scenario.timeouts.combat)
         assert player.state["xp"] > xp and player.state["zone"] != "infirmary"
+
+    def combat_diagnostic(self, command, phase):
+        state = self.first.state
+        target = state.get("combat_target") or {}
+        line = json.dumps({"command": command, "phase": phase,
+                           "player_round": state.get("player_round"), "queue": state.get("queued_action"),
+                           "hp": state.get("hp"), "mental": state.get("mental"),
+                           "bandages": count_item(state, "bandage"),
+                           "target_hp": target.get("hp"), "target_round": target.get("round")}, ensure_ascii=False)
+        self.scenario.log.write("OBSERVED [combat] " + line + "\n")
+        self.scenario.log.flush()
+
+    async def combat_action(self, command, action, acknowledgement):
+        """Full에서 예약 성공 응답과 이후 차례 소비를 구분하여 한 번만 전송한다."""
+        player = self.first
+        assert player.state["combat_target"] is not None and player.state["queued_action"] == "attack", \
+            "이전 예약이 남은 상태에서는 후속 전투 명령을 보내지 않는다"
+        previous_logs = tuple(player.semantic_logs)
+        old_logs = {id(row) for row in previous_logs}
+        # pz_log는 semantic_logs와 messages 양쪽에, 일반 text(붕대 예약)는
+        # messages에만 들어간다. 전송 전 응답은 두 채널에서 모두 분리한다.
+        while not player.messages.empty():
+            player.messages.get_nowait()
+        acknowledged = False
+        target_id = player.state["combat_target"]["id"]
+        self.combat_diagnostic(command, "send")
+
+        def check():
+            nonlocal acknowledged
+            if player.error:
+                raise player.error
+            state = player.state
+            assert state["hp"] > 0 and state["zone"] != "infirmary", "예약 행동 대기 중 패배"
+            assert state["combat_target"] is None or state["combat_target"]["id"] == target_id, \
+                "예약 행동 대기 중 대상 변경"
+            fresh = [row for row in player.semantic_logs if id(row) not in old_logs]
+            assert not any(row.get("kind") == "error" for row in fresh), (command, "전투 명령 오류 응답")
+            while not player.messages.empty():
+                message = player.messages.get_nowait()
+                acknowledged = acknowledged or acknowledgement in message
+            return acknowledged
+
+        try:
+            await player.send("text", [command])
+            async with asyncio.timeout(player.command_timeout), player.changed:
+                while not check():
+                    if player.state["combat_target"] is None:
+                        self.combat_diagnostic(command, "battle-ended-before-ack")
+                        return
+                    await player.changed.wait()
+            self.combat_diagnostic(command, "ack")
+            # Client가 state/log의 전체 수신 순서를 저장하지 않으므로 이미 소비된 경합은
+            # ack 시점 이후 자연 차례를 보수적으로 기다린다. 명령을 다시 보내지 않는다.
+            acknowledged_round = player.state["player_round"]
+            async with asyncio.timeout(self.scenario.timeouts.combat), player.changed:
+                while True:
+                    check()
+                    state = player.state
+                    if state["combat_target"] is None:
+                        break
+                    assert state["queued_action"] in ("attack", action), "예약 행동이 다른 행동으로 변경됨"
+                    if state["queued_action"] == "attack" and state["player_round"] > acknowledged_round:
+                        break
+                    await player.changed.wait()
+            self.combat_diagnostic(command, "consumed-or-finished")
+        except BaseException:
+            self.combat_diagnostic(command, "failed")
+            raise
 
     async def run(self):
         await self.enemy_recovery()
@@ -442,6 +511,12 @@ class Closeout:
                              f"Lv.{player.state['level']} HP {player.state['max_hp']}")
         await travel_to(player, 'infirmary')
         await travel_to(player, 'recovery_room')
+        await self.rest_if_needed()
+
+    async def rest_if_needed(self):
+        player = self.first
+        if player.state['hp'] == player.state['max_hp'] and player.state['mental'] == player.state['max_mental']:
+            return
         await player.act('침대 휴식', lambda s: s['hp'] == s['max_hp'] and s['mental'] == s['max_mental'])
 
     async def restart(self):

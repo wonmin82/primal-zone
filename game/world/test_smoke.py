@@ -1,6 +1,7 @@
 """Smoke 타이밍·DB guard·CLI·실패 정리 계약. 실제 게임 시간 검증은 live 실행이 맡는다."""
 
 import asyncio
+import io
 import json
 import os
 import shutil
@@ -35,6 +36,210 @@ from scripts.smoke_snapshot import read_snapshot_transaction  # noqa: E402
 
 
 class SmokeContractsTests(TestCase):
+    def test_full_combat_uses_actual_client_receive_text_and_pz_log_protocol(self):
+        from smoke import Client
+
+        async def exercise(plain_text):
+            client = Client("fixture", "unused", "ws://unused", command_timeout=.5)
+            client.state = {"combat_target": {"id": 9}, "queued_action": "attack", "player_round": 3,
+                            "hp": 80, "mental": 25, "zone": "arena", "inventory": []}
+            packets = asyncio.Queue()
+            ack_seen = asyncio.Event()
+
+            class Log(io.StringIO):
+                def write(self, value):
+                    result = super().write(value)
+                    if '"phase": "ack"' in value:
+                        ack_seen.set()
+                    return result
+
+            async def incoming():
+                while True:
+                    yield await packets.get()
+
+            client.socket = incoming()
+            reader = asyncio.create_task(client.receive())
+            command, action, acknowledgement = (("붕대 사용", "bandage", "다음 차례에는 공격 대신 붕대를 사용한다.")
+                                                if plain_text else ("강타", "heavy", "다음 차례에 강타 행동을 준비한다."))
+
+            async def send(*args):
+                if plain_text:
+                    packet = ["text", [acknowledgement], {}]
+                else:
+                    packet = ["pz_log", [{"kind": "info", "segments": [{"text": acknowledgement}]}], {}]
+                packets.put_nowait(json.dumps(packet))
+                # 응답이 send() 반환 전에 들어온 경우에도 Condition 알림을 놓치지 않는다.
+                async with client.changed:
+                    while client.messages.empty():
+                        await client.changed.wait()
+
+            client.send = AsyncMock(side_effect=send)
+            scenario = SimpleNamespace(players=[client, None, None], log=Log(), timeouts=SimpleNamespace(combat=.5))
+            pending = asyncio.create_task(Closeout(scenario).combat_action(command, action, acknowledgement))
+            try:
+                async with asyncio.timeout(.5):
+                    await ack_seen.wait()
+                self.assertEqual(len(client.semantic_logs), 0 if plain_text else 1)
+                consumed = dict(client.state, player_round=4, queued_action="attack")
+                packets.put_nowait(json.dumps(["pz_state", [consumed], {}]))
+                await pending
+                client.send.assert_awaited_once_with("text", [command])
+            finally:
+                client.closing = True
+                reader.cancel()
+                await asyncio.gather(reader, return_exceptions=True)
+                if not pending.done():
+                    pending.cancel()
+                    await asyncio.gather(pending, return_exceptions=True)
+
+        asyncio.run(exercise(False))
+        asyncio.run(exercise(True))
+
+    def test_full_combat_waits_for_both_ack_channels_and_consumption_without_resending(self):
+        from smoke import Client
+
+        async def exercise(already_consumed, plain_text):
+            client = Client("fixture", "unused", "ws://unused")
+            client.state = {"combat_target": {"id": 9, "hp": 50, "round": 2}, "queued_action": "attack", "player_round": 3,
+                            "hp": 80, "mental": 25, "zone": "arena", "inventory": []}
+            acknowledgement = ("다음 차례에는 공격 대신 붕대를 사용한다." if plain_text else
+                               "다음 차례에 강타 행동을 준비한다.")
+            command, action = ("붕대 사용", "bandage") if plain_text else ("강타", "heavy")
+            row = {"kind": "info", "segments": [{"text": acknowledgement}]}
+            client.semantic_logs = [row]
+            client.messages.put_nowait(acknowledgement)
+            sent = asyncio.Event()
+            client.send = AsyncMock(side_effect=lambda *args: sent.set())
+            scenario = SimpleNamespace(players=[client, None, None], log=io.StringIO(),
+                                       timeouts=SimpleNamespace(combat=.5))
+            closeout = Closeout(scenario)
+            pending = asyncio.create_task(closeout.combat_action(command, action, acknowledgement))
+            await sent.wait()
+            # 이전의 동일 메시지와 무관한 새 state/차례 증가로는 명령 성공을 판정하지 않는다.
+            async with client.changed:
+                client.state = dict(client.state, player_round=4)
+                client.revision += 1
+                client.changed.notify_all()
+            await asyncio.sleep(0)
+            self.assertFalse(pending.done())
+            async with client.changed:
+                if not plain_text:
+                    client.semantic_logs.append(deepcopy(row))
+                client.messages.put_nowait(acknowledgement)
+                client.state = dict(client.state, queued_action="attack" if already_consumed else action)
+                client.changed.notify_all()
+            await asyncio.sleep(0)
+            self.assertFalse(pending.done())
+            async with client.changed:
+                client.state = dict(client.state, player_round=5, queued_action="attack",
+                                    combat_target={"id": 9, "hp": 42, "round": 3})
+                client.changed.notify_all()
+            await pending
+            client.send.assert_awaited_once_with("text", [command])
+            self.assertIn('"phase": "ack"', scenario.log.getvalue())
+            self.assertIn('"phase": "consumed-or-finished"', scenario.log.getvalue())
+            self.assertNotIn("password", scenario.log.getvalue())
+
+        for consumed in (False, True):
+            for plain_text in (False, True):
+                asyncio.run(exercise(consumed, plain_text))
+
+    def test_full_combat_preserves_rejections_and_timeout_without_resending(self):
+        from smoke import Client
+
+        async def exercise(failure):
+            client = Client("fixture", "unused", "ws://unused", command_timeout=.03)
+            client.state = {"combat_target": {"id": 9}, "queued_action": "attack", "player_round": 3,
+                            "hp": 80, "mental": 25, "zone": "arena", "inventory": []}
+            acknowledgement = "다음 차례에는 공격 대신 붕대를 사용한다."
+            sent = asyncio.Event()
+            client.send = AsyncMock(side_effect=lambda *args: sent.set())
+            closeout = Closeout(SimpleNamespace(players=[client, None, None], log=io.StringIO(),
+                                                timeouts=SimpleNamespace(combat=.03)))
+            pending = asyncio.create_task(closeout.combat_action("붕대 사용", "bandage", acknowledgement))
+            await sent.wait()
+            async with client.changed:
+                if failure == "error":
+                    client.semantic_logs.append({"kind": "error", "segments": [{"text": "거절"}]})
+                elif failure == "disconnect":
+                    client.error = ConnectionError("closed")
+                elif failure == "defeat":
+                    client.state = dict(client.state, hp=1, zone="infirmary", combat_target=None)
+                elif failure == "target-changed":
+                    client.state = dict(client.state, combat_target={"id": 10})
+                elif failure == "queue-changed":
+                    client.messages.put_nowait(acknowledgement)
+                    client.state = dict(client.state, queued_action="heavy")
+                elif failure == "consume-timeout":
+                    client.messages.put_nowait(acknowledgement)
+                    client.state = dict(client.state, queued_action="bandage")
+                client.changed.notify_all()
+            expected = ConnectionError if failure == "disconnect" else (
+                TimeoutError if failure in ("ack-timeout", "consume-timeout") else AssertionError)
+            with self.assertRaises(expected):
+                await pending
+            client.send.assert_awaited_once_with("text", ["붕대 사용"])
+
+        for failure in ("error", "disconnect", "defeat", "target-changed", "queue-changed", "ack-timeout", "consume-timeout"):
+            asyncio.run(exercise(failure))
+
+    def test_full_combat_distinguishes_battle_end_and_refuses_existing_queue(self):
+        from smoke import Client
+
+        async def exercise(ack):
+            client = Client("fixture", "unused", "ws://unused")
+            client.state = {"combat_target": {"id": 9}, "queued_action": "heavy", "player_round": 3,
+                            "hp": 80, "mental": 25, "zone": "arena", "inventory": []}
+            client.send = AsyncMock()
+            scenario = SimpleNamespace(players=[client, None, None], log=io.StringIO(),
+                                       timeouts=SimpleNamespace(combat=.1))
+            closeout = Closeout(scenario)
+            acknowledgement = "다음 차례에 강타 행동을 준비한다."
+            with self.assertRaisesRegex(AssertionError, "이전 예약"):
+                await closeout.combat_action("강타", "heavy", acknowledgement)
+            client.send.assert_not_awaited()
+            client.state["queued_action"] = "attack"
+            sent = asyncio.Event()
+            client.send.side_effect = lambda *args: sent.set()
+            pending = asyncio.create_task(closeout.combat_action("강타", "heavy", acknowledgement))
+            await sent.wait()
+            if ack:
+                async with client.changed:
+                    client.semantic_logs.append({"kind": "info", "segments": [{"text": acknowledgement}]})
+                    client.messages.put_nowait(acknowledgement)
+                    client.state = dict(client.state, queued_action="heavy")
+                    client.changed.notify_all()
+                await asyncio.sleep(0)
+            async with client.changed:
+                client.state = dict(client.state, combat_target=None, queued_action="attack")
+                client.changed.notify_all()
+            await pending
+            expected = "consumed-or-finished" if ack else "battle-ended-before-ack"
+            self.assertIn(expected, scenario.log.getvalue())
+            client.send.assert_awaited_once_with("text", ["강타"])
+
+        asyncio.run(exercise(False))
+        asyncio.run(exercise(True))
+
+    def test_full_rest_skips_only_when_both_resources_are_full(self):
+        async def exercise(hp, mental):
+            player = SimpleNamespace(state={"hp": hp, "mental": mental, "max_hp": 126, "max_mental": 55},
+                                     act=AsyncMock())
+            closeout = Closeout(SimpleNamespace(players=[player, None, None]))
+            await closeout.rest_if_needed()
+            if hp == 126 and mental == 55:
+                player.act.assert_not_awaited()
+            else:
+                player.act.assert_awaited_once()
+                command, predicate = player.act.await_args.args
+                self.assertEqual(command, "침대 휴식")
+                self.assertFalse(predicate(player.state))
+                self.assertFalse(predicate(dict(player.state, hp=126, mental=54)))
+                self.assertTrue(predicate(dict(player.state, hp=126, mental=55)))
+
+        for hp, mental in ((126, 55), (125, 55), (126, 54), (125, 54)):
+            asyncio.run(exercise(hp, mental))
+
     def test_command_state_budget_defaults_and_explicit_timeout_take_precedence(self):
         from smoke import STATE_TIMEOUT, Client
 
