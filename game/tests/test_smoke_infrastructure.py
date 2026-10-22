@@ -3,20 +3,23 @@
 import sys
 from pathlib import Path
 from unittest import TestCase
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from django.conf import settings
+from django.db import connection
+from django.test import TransactionTestCase
 from evennia import create_object, create_script, search_tag
+from typeclasses.explorers import Explorer
 from typeclasses.loot import Corpse
 from typeclasses.scripts import WorldLifecycle
-from world import environment, multiplayer
+from world import environment, equipment_service, multiplayer, recovery, rules
 from world.bootstrap import build_world
 from world.item_entities import api
 from world.item_entities.models import ItemEntity, ItemSequence
 from world.loot_service import populate_source
 from world.timing import PRODUCTION_TIMING, configured_timings
 
-from tests.item_entity_fixture import NativeItemTest
+from tests.base import clear_test_caches
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from scripts.smoke_setup import setup  # noqa: E402
@@ -37,12 +40,27 @@ class SmokeInfrastructureTests(TestCase):
             command.assert_not_called()
 
 
-class NativeSmokeSnapshotTests(NativeItemTest):
+class NativeSmokeSnapshotTests(TransactionTestCase):
+    """standalone snapshot과 같이 외부 atomic 없이 실제 DB를 읽는 fixture."""
+
+    def tearDown(self):
+        clear_test_caches()
+        super().tearDown()
+
     def test_checkpoint_reads_native_storage_equipment_and_loot_without_archive_fallback(self):
+        self.enterContext(patch("typeclasses.explorers.time", return_value=100))
+        self.enterContext(patch("typeclasses.explorers.delay"))
+        self.enterContext(patch("world.lighting_service.time", return_value=100))
         rooms = build_world()
         script = create_script(WorldLifecycle, autostart=False)
         script.db.environment = environment.new_environment(100)
-        self.char1.location = rooms["grass"]
+        self.char1 = create_object(Explorer, key="smoke 탐사자", location=rooms["grass"], home=rooms["grass"])
+        self.char1.push_state = Mock()
+        profile = rules.new_profile()
+        profile.update(inventory={}, equipment={"weapon": None, "armor": None},
+                       hp=30, mental=20, recovery=recovery.initialize(100))
+        self.char1.db.profile = profile
+        equipment_service.use_item_entities(self.char1)
         box = search_tag("shared_container", category="primal_interactable")[0]
         shared = api.create_item("bandage", quantity=2, location_kind="shared_storage", owner_object=box)
         personal = api.create_item("water", quantity=1, location_kind="personal_storage", owner_object=self.char1)
@@ -55,8 +73,12 @@ class NativeSmokeSnapshotTests(NativeItemTest):
         self.assertFalse(corpse.db.entries)
         before = (list(ItemEntity.objects.order_by("sequence").values()),
                   ItemSequence.objects.get(pk=1).last_value)
+        self.assertTrue(connection.get_autocommit())
+        self.assertFalse(connection.in_atomic_block)
         with patch("server.conf.smoke_support.require_smoke"), patch("django.setup"), patch("evennia._init"):
             saved = snapshot()
+        self.assertTrue(connection.get_autocommit())
+        self.assertFalse(connection.in_atomic_block)
         self.assertEqual(saved["box"][str(shared.pk)]["quantity"], 2)
         owned = saved["players"][self.char1.key]["items"]
         self.assertEqual(owned[str(personal.pk)]["location"], "personal_storage")
