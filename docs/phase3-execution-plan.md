@@ -1,6 +1,6 @@
 # Issue #67 Phase 3 — 증거 매핑 및 통합 실행 기록
 
-Stage 1 기준일: 2026-10-21 KST. **아래 1~8절은 Stage 1 준비 당시의 기록이다. 당시 Phase 3 테스트/서버/DB/CI 실행은 0회였고 Stage 2·T08·Final Gate는 NOT RUN이었다. Stage 2의 실제 수행 결과는 9절에 별도로 기록하며 T08/Final Gate는 이번 범위 밖이다.** 이 문서와 [CSV](phase3-regression-matrix.csv)의 매핑 완료는 게임 검증 완료가 아니다.
+Stage 1 기준일: 2026-10-21 KST. **아래 1~8절은 Stage 1 준비 당시의 기록이다. 당시 Phase 3 테스트/서버/DB/CI 실행은 0회였고 Stage 2·T08·Final Gate는 NOT RUN이었다. Stage 2의 실제 수행 결과는 9절, Stage 3의 병합 전 감사는 10절에 기록한다. 사용자 승인·실제 병합·병합 후 CI·최종 Closeout은 아직 미완료다.** 이 문서와 [CSV](phase3-regression-matrix.csv)의 매핑 완료는 게임 검증 완료가 아니다.
 
 ## 1. 기준선·SSOT·현재 상태
 
@@ -484,3 +484,84 @@ Reviewer가 지적한 혼합 시점 snapshot과 Source 전환 검사의 P2 두 �
 표준Full후제품·검증코드변경없이문서만갱신한다. 최종Source필수CI와같은회차Reviewer의콘솔/JSON/문서후속결과는PR #75 Validation에기록한다. 기존Draft는사용자지시에따라유지한다. Stage2준비A판정은Stage3 T08/동일최종SHA·IME메타적합성감사·사용자병합승인·mainCI·Closeout을완료했다는뜻이아니다. 미기록IME메타데이터외에수동재수행을새필수조건으로추가하지않는다. 운영DB접근·Migration/Seed/Reset·Merge·브랜치삭제·Issue변경은0이다.
 
 최종동일회차후속에서 `reviewer_marigold`는고정db44e25와문서2개Diff·원콘솔·4JSON을직접읽고 **A — Ready for Review / 잔여P0/P1/P2 0/0/0**으로판정했다. 실제Full성공과신규death0/14건Ledger불변,38/110·106P4N·36행P2N·108R2G,규범/Task변경0 및USER-ATTESTED출처/미기록정보를독립확인했다. 코드추가변경0과정적diff-check도확인했다. Reviewer는테스트·서버·DB·Git쓰기를수행하지않았으며최신SourceCI는root가Push후별도확인한다. Agent Done은확인했지만전용Close도구가없어스레드Close/슬롯해제를보장하지않는다. 추가Auditor는제품지급·권한·원자성코드변경이없어반복하지않았다.
+
+
+## 10. Stage 3 병합 전 최종 증거 감사
+
+이 절은 Stage 3의 현행 감사 기록이다. 앞선 Stage 1/2의 미착수·IME BLOCKED·실패·수정·성공 기록은 당시 기준으로 보존한다. 시작 main은 `ea4072c0e01f14dad268591fda1096e1f413ef2b`, PR #75 Source는 `f0bda7dc2cf6ad012fb32b2f6a68fcdb49769882`다. Stage 3에서 발견한 선택 결함의 동결된 7파일 Diff와 공식 38행·110 Case를 대조했으며, 최신 Source와 CI는 아래 최종 결과 및 [PR #75 Validation](https://github.com/wonmin82/primal-zone/pull/75)에서 구분한다. 전체 검사·Fixture 직접 보완·Quick의 실제 종료 결과는 아래 기록한다. 최신 Source CI 확인 전에는 병합 전 Gate A를 선언하지 않으며 최종 원격 결과는 PR Validation에서 확인한다.
+
+### 선행 Gate와 T08 경계
+
+이번 fresh GitHub 조회에서 Issue #65/#66은 CLOSED/COMPLETED이고, 아래 PR은 모두 실제 Merge Commit으로 병합됐다. 각 실행은 해당 Merge SHA의 `main`/`push`이며 test/smoke/contracts/browser-e2e 4/4 SUCCESS다. Merge Commit의 두 번째 부모가 승인 Source임을 로컬 Git에서도 확인했고 현재 main의 이력에 포함된다. 선행 Phase의 CI를 Phase 3의 최신 검증으로 대체하지 않는다.
+
+| Phase/PR | 실제 Merge Commit | 정확한 main CI |
+| --- | --- | --- |
+| Phase 1 #69 | `e93e6c70c88653c4695d065c3d82a15813379643` | [38702888155](https://github.com/wonmin82/primal-zone/actions/runs/38702888155) |
+| Phase 2 #70 | `d33e3ef5b12001eb84b41ff875c04122ffdcd851` | [38871494369](https://github.com/wonmin82/primal-zone/actions/runs/38871494369) |
+| Phase 2 #71 | `1eda1c8bf5eb0c28b10142fd65514c034c1aed4c` | [39116270075](https://github.com/wonmin82/primal-zone/actions/runs/39116270075) |
+| Phase 2 #73 | `62635d985a2d27ccfb25d8ecd49374292aa24398` | [39397778596](https://github.com/wonmin82/primal-zone/actions/runs/39397778596) |
+| Phase 2 #74 | `ea4072c0e01f14dad268591fda1096e1f413ef2b` | [39535034732](https://github.com/wonmin82/primal-zone/actions/runs/39535034732) |
+
+P3-R30-C01은 선행 승인 병합·정확 main CI·현재 ancestry를 확인하여 PASS로 판정했다. P3-R38-C01도 설계 확정/선행 구현 완료/Phase 3 실제 증거/남은 승인 절차를 분리했으므로 PASS로 판정했다. Issue #44/#67은 OPEN이며 본문의 과거 NOT STARTED/BLOCKED 문구와 실제 Draft PR 진행을 구분한다. Issue 본문·상태는 이번 작업에서 변경하지 않는다.
+
+**P3-R30-C02와 P3-R38-C02는 NOT RUN 유지**다. 병합 전 110 Case 감사와 코드 검증이 끝나도 사용자 승인·실제 Merge Commit·정확한 병합 후 main CI·최종 Closeout은 미실행이다. 두 Case와 R30/R38 행을 조기 PASS로 올리지 않으며 Phase 3 전체 완료를 선언하지 않는다.
+
+### 감사에서 발견한 선택 결함과 최소 수정
+
+`auditor_quartzfern`이 Enemy가 B-1 대상이지만 Action Provider가 아니라 공개 `targets.resolve()/labels()`에서 후보 배열 순서로 선택·표시되는 P1을 발견했다. 실제 `execute_cmd()`로 죽은 1번 대신 살아 있는 2번을 공격하고, 단독 2번과 A/B의 표시가 당겨지는 반례를 재현했다. 기존 R23-C02의 사망·리스폰 Assertion만으로 명시 죽은 번호의 대체 금지까지 PASS로 확장한 공백을 이번 직접 회귀로 보완한다.
+
+단독 작성자 `implementer_sunreed`에게 파일별 소유권을 순차 배정했다. 제품 변경은 `targets.py`, `bootstrap.py`, `commands/party.py`, `npc_dialogue.py`의 선택·생성 경계에 한정했다. Enemy INDEX는 descriptor/number_for SSOT, 그 밖의 B-1 실물은 Provider 속성이 아닌 실제 descriptor에 따라 기존 typed resolver를 사용한다. 표시도 저장 번호를 읽으며 조회·거절 시 발급하지 않는다. 신규 bootstrap Enemy는 생성 attributes에 enemy_id를 선언한다. 정상 기존 ID·번호·HP·교전·리스폰을 초기화하지 않으며 기존 누락 번호에 대한 운영 maintenance는 실행하지 않았다. 기존 bootstrap의 key save가 누락 번호를 보충할 수 있는 경계와 명시적 seed/backfill 절차는 코드상 존재하므로, 재구축으로도 절대 발급되지 않는다고 확대하지 않는다.
+
+같은 원인의 일행공격·NPC 명시 대화, 서로 다른 그룹/종류의 공유 별칭, 숫자 실명 우선·복수 실명, 지원하지 않는 실제 시설을 Enemy 별칭으로 대체하는 경계도 공개 입력으로 재현해 수정했다. 일반 공격의 무번호 첫 Enemy, 일행공격/NPC의 기존 무번호 모호성 거절·ALL 거절, Player/PartyMember/PrivateTalk 번호 예외, Engine/이동, 미발견 원문의 공개 발화, Session·대화 화제·개인 보상·경제·전투 타이머·Loot 지급 규칙은 유지한다. 이는 #44 §4.2/4.4/4.14의 기존 계약을 만족시키는 수정이며 새 정책·게임 콘텐츠를 추가하지 않는다.
+
+`test_phase3_regression.Phase3EnemySelectionTests`에 13개 실제 선택·실물·번호·부작용 회귀를 추가했다. `test_targets`는 생성 시 식별자를 선언하는 Fixture와 숨김 뒤 정규 번호 3을 기대하도록 교정했다. `test_npc_dialogue`의 단독 1 표시, 같은 그룹 비대화 실물의 번호 점유, 번호 불변에 따른 중복 안내 0회도 B-1에 맞췄다. 권한·Quest·실제 결과 Assertion을 삭제/완화하거나 Skip을 추가하지 않았다.
+
+실패 이력도 보존한다. 최초 4개 중 3 FAIL, bootstrap 번호 1 FAIL, 공유 별칭/혼합 종류/일행공격 3 FAIL, 삭제 NPC 1 FAIL, 숫자 실명 2 FAIL, 일행 숫자 실명 1 FAIL, NPC 숫자 실명/지원 불가 시설 2 FAIL을 먼저 확인했다. 중간 41개는 36 PASS/5 FAIL(266.360초)로 구형 B-1 안내 기대치를 드러냈고, 후속 16개는 15 PASS/1 FAIL(85.134초)로 동일 문자열의 잘못된 위치를 수정한 편집 오류를 드러냈다. 마지막 고정 13개+기존 NPC 3개는 **16/16 PASS 51.896초, 전체 62.082초**다. 이 집중 실행은 Implementer의 실제 도구 결과 보고이며 root의 후속 전체 원콘솔과 구분한다.
+
+### 전체 증거 적용성과 출처
+
+Reviewer는 전체 CSV 구조와 T01/T05/T06/T07/T08의 53 Case를, Auditor는 T02/T03/T04의 57 Case와 고위험 소스를 독립 대조했다. 공식 38개 규범 원문·110 ID·Task 관계를 보존했고 필수 필드·Task/CrossTask 오류는 0이다. 원본을 접근하지 못한 상태를 직접 확인으로 기록하지 않는다. 허용된 기존 run.json/results.json·마스킹 PNG·Full 콘솔/네 Snapshot은 실제 읽었으며, 초기 권한 거절 뒤 승인된 읽기로 원본을 확인한 사실과 증거 부재를 구분한다. 운영 DB·인증 파일·운영 서버 로그는 읽지 않았다.
+
+기존 강화 Full `full-f8iyys_d`의 코드 `db44e25`, 1259.302초, 실제 31.110/45.695/123.581초, Ledger 14→14→14→14 및 각 Snapshot Item1/Currency2의 exact-ID/수량/트리/권리 보존은 재사용한다. 이번 수정은 원래 Loot roll/관측 Ledger/트랜잭션/4단계 Snapshot/타이머/종료·재시작 코드를 바꾸지 않는다. Full의 무번호 정상 사냥 정책도 유지되므로 형식적으로 Full을 반복하지 않는다. 재시작 창의 신규 처치 0과 별도 실제 처치 생성·Rollback 검사는 구분한다. 새 Enemy/NPC 선택 수정의 성공을 과거 Full로 대신하지 않는다.
+
+E2E-12 `run-9vhx95hr`의 run.json 당시 HEAD는 5f63f7e이며, 경합 Fixture/Assertion은 당시 미커밋 Diff로 실행한 뒤 `86dd2c6db5dd7e7b72004e762fad7cb5055d9e17`에 고정했다(§9의 원 실행·Diff 기록 참조). 전체206.500초/시나리오156.339초다. 명시 native Fixture의 번호·Counter·UUID·권리·backup/restore·실제 재시작 검증은 변경 없는 계약에서 채택한다. Door `run-oj5sp81j`는 실제 Source **ea4072c0**, 전체215.962초/본문162.451초이며 CSV의 부정확한 5f63f7e 기록을 교정했다. Party `run-yfkl0jor`는 Source5f63f7e, 전체747.262초/본문689.990초다. Door/Party의 실제 60/600초 도메인과 시나리오는 변경0이다. Chromium `run-sjl1mnfe`(Source0e9b87c,12/12 PASS143.589초)의1280/390 마스킹 화면은 JS/CSS/템플릿 변경0인 시각 범위에서 재사용한다. 새 선택 실행은 직접 회귀·새 Quick·최신 CI Chromium으로 확인한다.
+
+**IME는 PASS — USER-ATTESTED 유지**다. 사용자는 실제 Windows/Chrome OS 한글 IME 확인 완료와 실행본이 **PR #75 작업 브랜치**였음을 명시했다. Codex 직접 실행 또는 합성 composition으로 바꾸지 않는다. 정확 당시 SHA·Windows 빌드·Chrome/IME 버전·수동 시각·항목별 로그/스크린샷/전송 횟수는 미기록이다. 실제 입력 JS/입력함수는 baseline 이후 변경0이며 이번 서버 대상 선택 수정은 OS 조합·전송 경로를 변경하지 않는다. 그 범위의 사용자 확인을 채택하고 새 선택 동작은 자동 공개 입력 회귀로 확인한다. 미제공 세부 결과·정확 SHA를 추정하거나 재수행을 새 조건으로 요구하지 않는다. R10-C03의 과거 IME BLOCKED Gap도 현행 결과와 맞췄다.
+
+동결된 7파일의 동일 회차 좁은 후속에서 Reviewer/Auditor는 모두 **A — Ready for Review, 잔여 P0/P1/P2 0/0/0**으로 판정했다. 두 역할은 실제 Diff·소스·Assertion·허용 증거를 읽었으며 게임 검사·서버·DB·파일/Git 쓰기는 수행하지 않았다. 중간 사용량 제한 뒤 같은 역할·컨텍스트로 복원했고 다른 모델이나 Orchestrator 단독 리뷰로 대체하지 않았다. 전용 Close 도구가 없어 Done과 실제 Close·슬롯 해제를 구분한다. 최종 전체 검사·Quick·최신 Source CI·문서 정합성 Gate는 root가 별도로 완료해야 한다.
+
+
+### 최종 통합 검사에서 확인한 후속 관찰 경계
+
+고정 7파일의 집중/정적 A 뒤 root가 `scripts/dev.py test --parallel 4`를 실행했다. 규칙 **255 PASS3.030초**, 통합 **1102개 중1093 PASS/9 FAIL1139.908초, 통합전체1153.392초**로 종료했다. 원콘솔은 `work/issue67/stage3/targets-final-tests.log`에 보존한다. Django의 네 Windows 병렬 clone은 테스트 설정 `:memory:`에서 runner가 생성한 실행 전 없던 `game/default_1~4.sqlite3`이며, Destroying 로그와 종료 후 git status로 정상 삭제를 확인했다. 운영 DB를 조회하거나 복사·해시하지 않았다.
+
+9개 실패는 발급 경계를 우회한 Enemy Fixture2개(`test_distant_view`, `test_item_interactions`), NPC 단독1 안내 기대치3개(`test_lighting`, `test_medical`, `test_shops`), 실제 불필요 관찰4개(`test_environment`3개/`test_lighting`1개)로 구분했다. 앞의 기존 성공으로 덮어쓰지 않는다. 마지막4개는 새 Enemy 번호가 Dynamic CmdSet 구성의 `provided→role_records→records_for→_visible`에서 실제 Provider가 아니어도 환경을 조회해 blocked Exit와 조회 Snapshot 1회 계약을 위반한 결과다. Mock을 넓히거나 Assertion을 완화하지 않고, 실제 compiled public Binding의 Provider 종류를 관찰 이전 SQL 후보에 적용하며 Scope와 종류 집합을 포함한 캐시 경계를 보완한다. 번호 할당·실질 권한 검사는 유지하고 수정 후 관련 실패·Action 회귀·최종 Quick/CI를 별도로 확인해야 한다. 이 후속 수정과 검증이 끝나기 전 최종 Gate는 보류한다.
+
+
+후속 수정에서는 `resolver.provided()`가 실제 공개 Binding의 Provider Role 종류만 요청하고, `records_for(kinds=...)`는 관찰 전 SQL 종류 필터를 적용한다. `role_records()` 캐시는 Scope와 종류 집합으로 분리한다. 실제 후보의 가시성·Scope·Source 소유자·정렬·단일 kind 호환·번호 SSOT는 유지한다. 새 두 회귀와 기존 실패9개·Action Registry/Runtime/Cutover를 묶은 **106/106 테스트 PASS94.511초, 전체104.457초**를 수집했다. 이는 Stage2의 106Case와 같은 집합이라는 의미가 아니다. 새 테스트 총15개(앞선13+이번2)를 최종 전체 검사에서 함께 확인한다. 두 독립 역할의 후속 코드 판정은 모두 A/잔여P0/P1/P2 0이며, 앞선 전체9FAIL을 최종 전체 성공으로 바꾸어 기록하지 않는다. `test_environment.py`의 관찰 금지 Assertion과 Mock은 수정0이다.
+
+그 뒤 root의 `scripts/dev.py test --parallel 1`은 규칙 **255 PASS2.807초**, 통합 **1104개 중1103 PASS/1 ERROR3683.613초(전체3694.305초)**로 종료했다. 신규15개와 앞선9개 실패는 이 실행에서 성공했지만 전체 성공은 아니다. 원콘솔 `work/issue67/stage3/final-tests.log`를 보존한다. 남은 오류는 `NativeSmokeSnapshotTests.test_checkpoint_reads_native_storage_equipment_and_loot_without_archive_fallback`의 ItemSequence 초기 행 부재다. 제품 발급기는 이를 정상 거절했으며 테스트의 TransactionTestCase 초기화/선행 flush 경계를 별도로 조사한다. 오래 실행된 소유 프로세스의 함수 스택 진단은 프로세스가 이미 종료돼 읽지 못했고, 지역변수·DB 내용을 수집하지 않았다. 이전 실패를 삭제하거나 실행하지 않은 전체 성공으로 승격하지 않는다.
+
+추가 조사에서 Snapshot 단독 **1 PASS10.144초(전체25.415초)**, 앞선 `SelectionNumberConcurrencyTests` 다음 Snapshot은 **1 PASS/1 ERROR10.416초(전체19.449초)**로 동일 순서 의존성을 재현했다. TransactionTestCase의 flush는 data migration의 ItemSequence 행도 지우지만 Snapshot Fixture에는 초기화가 없었다. `test_smoke_infrastructure.py`만 추가 소유권으로 배정해 빈 ItemEntity DB를 먼저 확인하고 실제 `0002_initialize_sequence.initialize_sequence()`를 재사용한 뒤 초기 행을 검증했다. get_or_create는 기존 Counter를 덮어쓰지 않으며 제품 가드·Snapshot의 autocommit/비중첩·UUID·Storage·수량·권리 Assertion은 변경0이다. serialized_rollback·실행 순서 변경·Skip을 추가하지 않았다.
+
+수정 후 `scripts/dev.py test tests.test_selection_numbers.SelectionNumberConcurrencyTests tests.test_smoke_infrastructure --parallel 1`은 **9/9 PASS57.284초(전체66.863초)**, 반대 순서의 Snapshot→Concurrency 2개는 **2/2 PASS9.699초(전체19.430초)**였다. 두 실행 모두 소유 메모리 테스트 DB를 정상 정리했다. Reviewer가 실제 migration과 Fixture Diff를 독립 확인해 A/잔여P0/P1/P2 0으로 판정했다. 한 시간짜리 전체를 형식적으로 반복하지 않고 마지막 단일 Fixture 수정의 직접 검증과 최종 Source CI 전체 검사를 조합한다. 이전 로컬 전체의 1 ERROR를 삭제하거나 1104 PASS로 표현하지 않는다.
+
+감사 수정 코드 15파일은 `9e3e9bd3e90c65bb56d732b192288d17f37a72eb`에 확정했다. 초기 집중은 f0bda7d+7파일 Diff, 후속 집중/전체는 f0bda7d+14파일 Diff, 마지막 Snapshot Fixture 직접 검사는 최종15파일 Diff에서 실행했다. 실행 당시 코드 Commit이 이미 존재했던 것으로 기록하지 않는다. 동결 파일 해시와 확정 Commit의 동일 내용을 확인했으며 이후 두 증거 문서만 수정한다. 정확한 최종 문서 포함 Source SHA 및 필수 CI URL·4개 결과는 PR #75 Validation에서 추적한다.
+
+### 최종 병합 전 집계·승인 경계
+
+확정 코드 `9e3e9bd`에서 root가 `scripts/dev.py smoke`를 1회 실행했다. `quick-sqhiv1uk`는 **PASS139.403초/exit0**, 인증·Prompt·대화·파티·공동 전투·Loot 권한/분배·경제·재접속·정상 종료·임시 정리를 확인했다. 테스트 전용 DB의 전후 fingerprint만 수집했고 정리 후 소유 run 경로 부재도 확인했다. 단축 Corpse8.819/Respawn10.580/보호21.363초를 production30/45/120초의 증거로 확대하지 않는다. 실제 production 시간은 앞의 기존 강화 Full·Timing 원본을 재사용한다. 원콘솔은 `work/issue67/stage3/quick-9e3e9bd-console.log`다. 최종 `scripts/dev.py check`와 `git diff --check`도 통과했다.
+
+| 범위 | 전체 | PASS | FAIL | BLOCKED | NOT RUN |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| T01~T07 | 106 | 106 | 0 | 0 | 0 |
+| T08 | 4 | 2 | 0 | 0 | 2 |
+| 합계 | 110 | 108 | 0 | 0 | 2 |
+
+공식 규범38행·110Case·Task 관계를 보존했으며 행 상태는 **36 PASS/2 NOT RUN(R30,R38)**, 분류는 **108 REUSABLE/2 GAP**이다. R30-C01은 선행 승인 병합/정확 main CI, R38-C01은 설계 확정/실제 검증/최종 완료 구분의 증거로 PASS다. R30-C02/R38-C02는 사용자 승인·실제 Merge·병합 후 정확 main CI·최종 Closeout 미완료이므로 NOT RUN/GAP이다. 병합 전 감사 완료를 38/38 최종 완료로 바꾸지 않는다.
+
+Reviewer의 전체 구조·53Case와 Auditor의 고위험57Case 감사, 수정 Diff의 좁은 후속 및 Snapshot Fixture 독립 검토는 모두 A/잔여P0/P1/P2 0이다. 최초 Enemy B-1 P1, 실명·별칭 선택/관찰 경계 및 테스트 초기화의 지적사항은 직접 재현 후 수정했고 과거 실패는 보존했다. P3 개선을 위한 추가 리팩터링은 하지 않았다. 실제 OS IME 사용자 확인의 정확 SHA/환경 메타데이터 미기록은 공개된 제한이며 새 수동 재검증 조건으로 만들지 않는다. PostgreSQL·다중 서버 보장, 운영 DB Migration/Seed/Restore는 검증·실행하지 않았다.
+
+최종 Source는 위 코드와 동일한 제품·테스트에 증거 문서만 더한 Commit이다. 정확한 Source의 test/smoke/contracts/browser-e2e가 모두 성공한 것을 확인한 뒤에만 **A — Ready for Merge Approval**로 보고한다. 이 문서의 로컬·재사용 증거가 최신 Source CI 성공을 미리 의미하지 않으며, 실제 Source SHA·Run URL·결과·병합 전 최종 판정은 [PR #75 Validation](https://github.com/wonmin82/primal-zone/pull/75)에서 확인한다. Source와 동등한 코드의 기존 Full/Timing/E2E-12/화면 증거는 명시한 범위로 재사용하고 최신 CI는 생략하지 않는다.
+
+이번 작업은 **PR OPEN/Draft 유지, Issue #44/#67 OPEN·변경 없음, 소스 브랜치 보존**으로 끝낸다. 사용자 명시 승인 뒤에만 최신 Source/Base/보호 규칙·CI를 다시 확인하고 Merge Commit→정확 main CI4/4→남은 두 Case와38/38 최종 판정→승인된 Issue Closeout·브랜치 정리를 수행할 수 있다. 그 절차는 이번에 실행하지 않는다.
