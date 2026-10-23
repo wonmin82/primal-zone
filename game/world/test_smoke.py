@@ -739,10 +739,64 @@ class SmokeLootPreservationTests(TestCase):
             self.final["loot"][source_id] = restored
 
     def test_preserves_native_duplicates_tree_rights_and_new_combat_loot(self):
-        self.final["loot"]["6"] = dict(deepcopy(self.final["loot"]["2"]),
-                                         items={"new": deepcopy(self.final["loot"]["2"]["items"]["ground"])})
-        self.assertEqual(assert_preserved_loot(self.before, self.final),
-                         {"items": 4, "currency": 1, "expired_claims": 0})
+        self.before["enemies"] = {"enemy": {"state": "alive", "combatants": [8], "room": 4}}
+        birth = dict(deepcopy(self.before["loot"]["1"]), items={"new": dict(
+            deepcopy(self.before["loot"]["1"]["items"]["root"]), parent=None)},
+            claims={}, currency={"new-currency": deepcopy(self.before["loot"]["1"]["currency"]["31"])}, created_at=12)
+        event = {"at": 12, "source_id": "combat-corpse", "source": birth}
+        self.final["loot_births"] = {"enemy": [event]}
+        self.final["loot"]["6"] = dict(deepcopy(birth), corpse=False,
+                                         items={"new": dict(birth["items"]["new"], location="world_loot")}, currency={})
+        self.final["loot"]["7"] = dict(deepcopy(birth), corpse=False, items={})
+        stopped = {"completed_at": 15, "loot_births": deepcopy(self.final["loot_births"])}
+        after = {"loot_births": deepcopy(self.final["loot_births"])}
+        self.assertEqual(assert_preserved_loot(self.before, self.final, stopped=stopped, after=after),
+                         {"items": 5, "currency": 2, "expired_claims": 0})
+        for mutation in ("missing-stopped", "new-startup", "unknown-enemy", "duplicate-death",
+                         "old-id", "wrong-room", "late-event"):
+            before, final, stop, start = map(deepcopy, (self.before, self.final, stopped, after))
+            if mutation == "missing-stopped":
+                stop = None
+            elif mutation == "new-startup":
+                start["loot_births"] = {}
+            elif mutation == "unknown-enemy":
+                before["enemies"] = {}
+            elif mutation == "duplicate-death":
+                final["loot_births"]["enemy"].append(deepcopy(event))
+            elif mutation == "old-id":
+                final["loot_births"]["enemy"][0]["source"]["items"]["root"] = birth["items"]["new"]
+            elif mutation == "wrong-room":
+                before["enemies"]["enemy"]["room"] = 99
+            else:
+                final["loot_births"]["enemy"][0]["at"] = 16
+            with self.subTest(mutation=mutation), self.assertRaises(AssertionError):
+                assert_preserved_loot(before, final, stopped=stop, after=start)
+
+    def test_intermediate_snapshots_allow_only_same_live_corpse_or_exact_decay(self):
+        stopped = deepcopy(self.before)
+        stopped.update(observed_at=12, completed_at=13)
+        self.assertEqual(assert_preserved_loot(self.before, stopped, require_decay=False)["items"], 4)
+        after = deepcopy(stopped)
+        after.update(observed_at=14, completed_at=15)
+        self.assertEqual(assert_preserved_loot(stopped, after, require_decay=False)["currency"], 1)
+        self.assertEqual(assert_preserved_loot(after, self.final)["items"], 4)
+        stopped["loot"]["2"]["items"]["transient-duplicate"] = deepcopy(stopped["loot"]["2"]["items"]["ground"])
+        with self.assertRaisesRegex(AssertionError, "신규 native item"):
+            assert_preserved_loot(self.before, stopped, require_decay=False)
+
+    def test_unwitnessed_new_assets_in_old_or_new_sources_are_rejected(self):
+        for field, original, new_id in (("items", "ground", "unwitnessed-item"),
+                                        ("currency", "31", "99")):
+            for destination in ("2", "new-source"):
+                final = deepcopy(self.final)
+                if destination not in final["loot"]:
+                    final["loot"][destination] = dict(deepcopy(final["loot"]["2"]),
+                                                       items={}, claims={}, currency={})
+                row = (final["loot"]["2"]["items"][original] if field == "items"
+                       else final["loot"]["5"]["currency"][original])
+                final["loot"][destination][field][new_id] = deepcopy(row)
+                with self.subTest(field=field, destination=destination), self.assertRaises(AssertionError):
+                    assert_preserved_loot(self.before, final)
 
     def test_decay_rejects_existing_sources_and_entry_merges(self):
         for destination in ("1", "2"):

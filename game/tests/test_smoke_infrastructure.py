@@ -88,3 +88,116 @@ class NativeSmokeSnapshotTests(TransactionTestCase):
                          {("item", "bandage", 3), ("currency", "credits", 8)})
         self.assertEqual(before, (list(ItemEntity.objects.order_by("sequence").values()),
                                   ItemSequence.objects.get(pk=1).last_value))
+
+
+from tests.item_entity_fixture import NativeItemTest  # noqa: E402
+
+
+class SmokeLootBirthObserverTests(NativeItemTest):
+    """실제 격리 test DB의 죽음·생성·ledger rollback 경계를 검증한다."""
+
+    def setUp(self):
+        super().setUp()
+        from server.conf.smoke_startstop import install_observer
+        from typeclasses import loot
+        from typeclasses.enemies import Enemy, room_enemies
+
+        self.rooms = build_world()
+        from world.item_entities.models import ItemRuntime
+        ItemRuntime.objects.update_or_create(pk=1, defaults={"version": 1})
+        for char in (self.char1, self.char2):
+            char.db.item_runtime_version = 1
+            char.location = self.rooms["grass"]
+        self.enemy = room_enemies(self.rooms["grass"])[0]
+        self.enterContext(patch("typeclasses.enemies.delay"))
+        self.enterContext(patch("typeclasses.loot.delay"))
+        self.enterContext(patch.object(Enemy, "_finish_death", Enemy._finish_death))
+        self.enterContext(patch.object(loot, "build_entries", loot.build_entries))
+        with patch("server.conf.smoke_support.require_smoke"), self.settings(PRIMAL_SMOKE_MODE="full"):
+            install_observer()
+
+    def death(self):
+        from random import Random
+        self.enemy.engage(self.char1, now=100)
+        self.enemy.db.hp = 1
+        self.enemy.receive_attack(self.char1, now=102.5, rng=Random(1))
+
+    def test_actual_native_death_observed_once_with_exact_rows(self):
+        from evennia.utils.dbserialize import deserialize
+        from server.conf.smoke_startstop import owned_loot
+
+        self.death()
+        corpse = Corpse.objects.all().get()
+        events = deserialize(self.enemy.db.smoke_loot_births)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0], {"at": 102.5, "source_id": str(corpse.pk), "source": owned_loot(corpse)})
+        self.assertTrue(events[0]["source"]["currency"])
+        self.enemy.finish_death(self.char1, now=103)
+        self.assertEqual(deserialize(self.enemy.db.smoke_loot_births), events)
+
+    def test_duplicate_creation_inside_death_is_rejected_and_rolled_back(self):
+        from world.loot_service import populate_source as actual_populate
+        original_count = ItemEntity.objects.count()
+
+        from world.loot_service import create_currency
+        for field in ("item", "currency"):
+            def duplicated(source, entries):
+                actual_populate(source, entries)
+                if field == "item":
+                    api.create_item("bandage", quantity=1, location_kind="corpse_loot", owner_object=source)
+                else:
+                    create_currency(source, 1)
+
+            with self.subTest(field=field), patch("world.loot_service.populate_source", side_effect=duplicated):
+                with self.assertRaisesRegex(AssertionError, "생성 계약"):
+                    self.death()
+            self.assertFalse(Corpse.objects.all().exists())
+            self.assertEqual(ItemEntity.objects.count(), original_count)
+            self.assertFalse(self.enemy.db.smoke_loot_births)
+            self.assertEqual(self.enemy.db.state, "alive")
+
+    def test_outer_rollback_removes_assets_and_ledger_together(self):
+        from world.multiplayer import world_change
+        original_count = ItemEntity.objects.count()
+        with self.assertRaisesRegex(RuntimeError, "rollback"), world_change():
+            self.death()
+            self.assertTrue(self.enemy.db.smoke_loot_births)
+            raise RuntimeError("rollback")
+        self.assertFalse(Corpse.objects.all().exists())
+        self.assertEqual(ItemEntity.objects.count(), original_count)
+        self.assertFalse(self.enemy.db.smoke_loot_births)
+
+    def test_observer_refuses_non_smoke_before_installing(self):
+        from server.conf.smoke_startstop import install_observer
+        with self.assertRaisesRegex(RuntimeError, "marker"):
+            install_observer()
+
+    def test_firearm_child_and_zero_share_contract_is_exact(self):
+        from copy import deepcopy
+
+        from server.conf.smoke_startstop import assert_generated_tree, entry_contract, owned_loot
+        source = create_object(Corpse, key="선언 생성", location=self.rooms["grass"])
+        entries = [{"kind": "item", "id": "guard_carbine", "quantity": 1,
+                    "acquisition": {"mode": "partial", "magazine_definition": "magazine_556", "rounds": 3}}]
+        from world.content import ITEMS
+        from world.firearm_service import STANDARD_MAGAZINES
+        family = ITEMS["guard_carbine"]["firearm_family"]
+        entries[0]["acquisition"]["magazine_definition"] = STANDARD_MAGAZINES[family]
+        populate_source(source, entries)
+        saved = owned_loot(source)
+        assert_generated_tree(entries, saved)
+        child = next(identity for identity, row in saved["items"].items() if row["parent"])
+        for mutation in ("duplicate", "rounds"):
+            changed = deepcopy(saved)
+            if mutation == "duplicate":
+                changed["items"]["extra-child"] = deepcopy(changed["items"][child])
+            else:
+                changed["items"][child]["state"]["rounds"] += 1
+            with self.subTest(mutation=mutation), self.assertRaises(AssertionError):
+                assert_generated_tree(entries, changed)
+        currency = {"kind": "currency", "id": "credits", "quantity": 1,
+                    "eligible_players": [self.char1.pk, self.char2.pk],
+                    "remaining_shares": {self.char1.pk: 1}}
+        changed = deepcopy(currency)
+        changed["eligible_players"].remove(self.char2.pk)
+        self.assertNotEqual(entry_contract([currency]), entry_contract([changed]))
