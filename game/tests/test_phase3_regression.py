@@ -249,6 +249,249 @@ class Phase3ItemDoorTests(NativeItemTest):
             self.assertEqual(verify(), ())
 
 
+class Phase3EnemySelectionTests(NativeItemTest):
+    def setUp(self):
+        super().setUp()
+        from typeclasses.enemies import Enemy
+        from world.content import ENEMIES
+
+        for module in ("commands.character", "world.lifecycle", "typeclasses.enemies", "world.observation"):
+            self.enterContext(patch(module + ".time", return_value=100))
+        for module in ("typeclasses.enemies", "typeclasses.loot"):
+            self.enterContext(patch(module + ".delay"))
+        self.connect_character(self.char1)
+        identity = next(key for key, value in ENEMIES.items() if not value.get("boss"))
+        self.enemies = [create_object(Enemy, key="회귀 사냥감", location=self.char1.location,
+                                     attributes=[("enemy_id", identity)]) for _ in range(2)]
+        for enemy in self.enemies:
+            enemy.db.hp = enemy.db.max_hp = ENEMIES[identity]["hp"]
+        self.refs = [descriptor(enemy).reference for enemy in self.enemies]
+        self.assertEqual([number_for(ref) for ref in self.refs], [1, 2])
+
+    def command(self, value):
+        with patch.object(self.char1, "msg") as output:
+            done = []
+            self.char1.execute_cmd(value, session=self.session).addCallback(lambda _: done.append(True))
+            self.assertEqual(done, [True])
+        return "\n".join(str(call.args[0]) for call in output.call_args_list if call.args)
+
+    def test_public_attack_dead_number_does_not_fallback_to_live_two(self):
+        from random import Random
+
+        first, second = self.enemies
+        first.db.hp = 0
+        first.finish_death(self.char1, now=100, rng=Random(1))
+        self.assertEqual(first.db.state, "respawning")
+        before = self.char1.profile_snapshot()
+        numbers = list(SelectionNumber.objects.order_by("pk").values())
+        with patch.object(self.char1, "start_combat", wraps=self.char1.start_combat) as start:
+            self.command("회귀 사냥감 1 공격")
+            start.assert_not_called()
+            self.assertEqual(self.char1.profile_snapshot(), before)
+            self.command("회귀 사냥감 2 공격")
+            start.assert_called_once_with(second)
+        self.assertEqual(self.char1.profile_snapshot()["combat_target"], second.pk)
+        self.assertEqual([number_for(ref) for ref in self.refs], [1, 2])
+        self.assertEqual(list(SelectionNumber.objects.order_by("pk").values()), numbers)
+
+    def test_two_alone_labels_and_public_web_look_keep_same_enemy_id(self):
+        from world.state import multiplayer_state
+        from world.targets import labels, room_objects
+
+        first, second = self.enemies
+        first.db.state = "respawning"
+        first.db.respawn_at = 1000
+        self.assertEqual(labels(room_objects(self.char1))[second.pk], "회귀 사냥감 2")
+        rows = multiplayer_state(self.char1, now=100)["enemies"]
+        self.assertEqual([(row["id"], row["label"], row["attack_command"], row["look_command"]) for row in rows],
+                         [(second.pk, "회귀 사냥감 2", "회귀 사냥감 2 공격", "회귀 사냥감 2 봐")])
+        self.assertNotIn("체력", self.command("회귀 사냥감 1 봐"))
+        self.assertIn("체력", self.command(rows[0]["look_command"]))
+
+    def test_player_visibility_keeps_canonical_number_without_hidden_fallback(self):
+        from world.state import multiplayer_state
+        from world.targets import labels, room_objects
+
+        first, second = self.enemies
+        # A는 1/2를 보고 B는 2만 본다. 번호·Counter 저장값은 양쪽 공통이다.
+        first.locks.add(f"view:id({self.char1.pk})")
+        before = list(SelectionNumber.objects.order_by("pk").values())
+        counters = list(NumberScope.objects.order_by("pk").values())
+        self.assertEqual(labels(room_objects(self.char1))[second.pk], "회귀 사냥감 2")
+        self.assertEqual(labels(room_objects(self.char2))[second.pk], "회귀 사냥감 2")
+        rows_a = multiplayer_state(self.char1, now=100)["enemies"]
+        rows_b = multiplayer_state(self.char2, now=100)["enemies"]
+        self.assertEqual([row["id"] for row in rows_a], [first.pk, second.pk])
+        self.assertEqual([(row["id"], row["label"]) for row in rows_b], [(second.pk, "회귀 사냥감 2")])
+        from world.targets import parse_selector, resolve
+
+        with self.assertRaises(RuleError):
+            resolve(room_objects(self.char2), parse_selector("회귀 사냥감 1"), self.char2)
+        self.assertEqual(resolve(room_objects(self.char2), parse_selector("회귀 사냥감 2"), self.char2), [second])
+        self.assertEqual(list(SelectionNumber.objects.order_by("pk").values()), before)
+        self.assertEqual(list(NumberScope.objects.order_by("pk").values()), counters)
+
+    def test_default_enemy_legacy_first_and_numeric_real_name_are_preserved(self):
+        first, second = self.enemies
+        with patch.object(self.char1, "start_combat") as start:
+            self.command("회귀 사냥감 공격")
+            start.assert_called_once_with(first)
+            start.reset_mock()
+            second.key = "회귀 사냥감 1"
+            self.command("회귀 사냥감 1 공격")
+            start.assert_called_once_with(second)
+
+    def test_fresh_bootstrap_enemy_is_numbered_before_observation_and_rebuild_keeps_id(self):
+        from typeclasses.enemies import room_enemies
+        from world.bootstrap import build_world
+
+        rooms = build_world()
+        enemy = room_enemies(rooms["grass"])[0]
+        reference = descriptor(enemy).reference
+        self.assertEqual(number_for(reference), 1)
+        before = list(SelectionNumber.objects.order_by("pk").values())
+        self.assertEqual(build_world()["grass"].pk, rooms["grass"].pk)
+        self.assertEqual(room_enemies(rooms["grass"])[0].pk, enemy.pk)
+        self.assertEqual(number_for(reference), 1)
+        self.assertEqual(list(SelectionNumber.objects.order_by("pk").values()), before)
+
+    def test_shared_alias_and_number_across_enemy_groups_refuses_public_attack(self):
+        from typeclasses.enemies import Enemy
+
+        first, second = self.enemies
+        second.delete()
+        other = create_object(Enemy, key="다른 사냥감", location=first.location,
+                              attributes=[("enemy_id", first.db.enemy_id),
+                                          ("selection_group_id", "p3:other-enemies")])
+        other.db.hp = other.db.max_hp = first.db.max_hp
+        first.aliases.add("공유 사냥감")
+        other.aliases.add("공유 사냥감")
+        self.assertEqual([number_for(descriptor(obj).reference) for obj in (first, other)], [1, 1])
+        with patch.object(self.char1, "start_combat") as start:
+            self.command("공유 사냥감 1 공격")
+            start.assert_not_called()
+
+    def test_enemy_and_facility_shared_alias_does_not_fallback_to_enemy(self):
+        from typeclasses.interactables import SupplyCache
+
+        first = self.enemies[0]
+        facility = create_object(SupplyCache, key="경합 보급함", location=first.location)
+        first.aliases.add("공유 표적")
+        facility.aliases.add("공유 표적")
+        self.assertEqual([number_for(descriptor(obj).reference) for obj in (first, facility)], [1, 1])
+        with patch.object(self.char1, "start_combat") as start:
+            self.command("공유 표적 1 공격")
+            start.assert_not_called()
+
+    def test_party_attack_dead_number_refuses_and_default_ambiguity_is_preserved(self):
+        from typeclasses.parties import create_party
+
+        self.enterContext(patch("typeclasses.parties.time", return_value=100))
+        create_party(self.char1, now=100)
+        first, second = self.enemies
+        with patch("typeclasses.parties.Party.attack") as attack:
+            self.command("회귀 사냥감 일행공격")
+            attack.assert_not_called()
+            first.db.state = "respawning"
+            first.db.respawn_at = 1000
+            self.command("회귀 사냥감 1 일행공격")
+            attack.assert_not_called()
+            self.command("회귀 사냥감 2 일행공격")
+            attack.assert_called_once_with(self.char1, second)
+
+    def test_public_say_deleted_npc_number_is_not_replaced_by_remaining_two(self):
+        from typeclasses.interactables import Commander
+
+        npcs = [create_object(Commander, key="윤대장", location=self.char1.location) for _ in range(2)]
+        self.assertEqual([number_for(descriptor(npc).reference) for npc in npcs], [1, 2])
+        npcs[0].delete()
+        with patch("world.npc_dialogue.execute") as execute:
+            self.command("윤대장 1에게 임무 말")
+            execute.assert_not_called()
+            self.command("윤대장 2에게 임무 말")
+            self.assertEqual(execute.call_count, 1)
+            self.assertEqual(execute.call_args.args[1], npcs[1])
+
+    def test_numeric_real_enemy_name_wins_earlier_alias(self):
+        first, second = self.enemies
+        first.aliases.add("사냥감 1")
+        second.key = "사냥감 1"
+        with patch.object(self.char1, "start_combat") as start:
+            self.command("사냥감 1 공격")
+            start.assert_called_once_with(second)
+        from typeclasses.parties import create_party
+
+        create_party(self.char1, now=100)
+        with patch("typeclasses.parties.Party.attack") as attack:
+            self.command("사냥감 1 일행공격")
+            attack.assert_called_once_with(self.char1, second)
+
+    def test_duplicate_numeric_real_enemy_name_refuses_instead_of_default_first(self):
+        for enemy in self.enemies:
+            enemy.key = "사냥감 1"
+        with patch.object(self.char1, "start_combat") as start:
+            self.command("사냥감 1 공격")
+            start.assert_not_called()
+
+    def test_public_say_numeric_real_npc_name_is_not_broadcast_as_unknown_target(self):
+        from typeclasses.interactables import Commander
+
+        npc = create_object(Commander, key="관측 책임자 1", location=self.char1.location)
+        with patch("world.npc_dialogue.execute") as execute:
+            self.command("관측 책임자 1에게 임무 말")
+            self.assertEqual(execute.call_count, 1)
+            self.assertEqual(execute.call_args.args[1], npc)
+
+    def test_unsupported_numeric_real_name_does_not_select_enemy_alias(self):
+        from typeclasses.interactables import SupplyCache
+
+        self.enemies[0].aliases.add("관측 장치 1")
+        create_object(SupplyCache, key="관측 장치 1", location=self.char1.location)
+        with patch.object(self.char1, "start_combat") as start:
+            self.command("관측 장치 1 공격")
+            start.assert_not_called()
+
+    def test_provider_discovery_does_not_observe_unrelated_enemies(self):
+        from typeclasses.interactables import SupplyCache
+        from world.actions.resolver import provided, role_records
+
+        # Enemy에는 번호가 있지만 운영 Action Provider Binding은 없다.
+        index = get_index()
+        with patch("world.observation.context_for", side_effect=AssertionError("불필요한 Enemy 관찰")), \
+                patch("world.actions.resolver.role_records", wraps=role_records) as discovered:
+            self.assertEqual(provided(self.char1, index), ())
+        kinds = set(discovered.call_args.args[1].kinds)
+        self.assertNotIn(ReferenceKind.ENEMY, kinds)
+        # 현재 공용 Binding 전체가 선언한 Provider kind를 빠짐없이 관찰한다.
+        # Inventory/화폐 등이 Subject인 경우는 Provider로 오인하지 않는다.
+        for binding in index.bindings.values():
+            action = index.actions[binding.action_id]
+            if action.public:
+                for role in action.roles:
+                    if role.name == "provider":
+                        self.assertLessEqual(set(role.kinds), kinds)
+        source = create_object(SupplyCache, key="관찰 경계 상자", location=self.char1.location)
+        reference = descriptor(source).reference
+        source.locks.add("view:false()")
+        self.assertNotIn(reference, {ref for ref, _ in provided(self.char1, get_index())})
+        source.locks.add("view:all()")
+        self.assertIn(reference, {ref for ref, _ in provided(self.char1, get_index())})
+
+    def test_role_kind_filter_keeps_shared_cache_and_number_state_separate(self):
+        from world.actions.resolver import role_records
+
+        before = list(SelectionNumber.objects.order_by("pk").values())
+        counters = list(NumberScope.objects.order_by("pk").values())
+        cache = {}
+        role_records(self.char1, RoleDefinition("provider", (ReferenceKind.OBJECT,)), cache=cache)
+        enemy_role = RoleDefinition("subject", (ReferenceKind.ENEMY,))
+        self.assertEqual({record.reference for record in role_records(self.char1, enemy_role, cache=cache)}, set(self.refs))
+        self.assertEqual(records_for(self.char1, ReferenceKind.ENEMY),
+                         records_for(self.char1, kinds=(ReferenceKind.ENEMY,)))
+        self.assertEqual(list(SelectionNumber.objects.order_by("pk").values()), before)
+        self.assertEqual(list(NumberScope.objects.order_by("pk").values()), counters)
+
+
 @override_settings(ACTION_CONTENT_PACKAGES=("world.actions.validation_content",))
 class Phase3NumericNameTests(NativeItemTest):
     def setUp(self):

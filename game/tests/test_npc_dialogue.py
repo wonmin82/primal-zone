@@ -113,7 +113,7 @@ class NPCDialogueTests(NativeItemTest):
         dialogue.say(self.char1, "윤대장에게 안녕")
         self.assertEqual(len(self.guides(self.char1)), 1)
         self.assertEqual(len(self.guides(self.char2)), 1)
-        self.assertIn("'윤대장에게 수락", self.guides(self.char1)[0])
+        self.assertIn("'윤대장 1에게 수락", self.guides(self.char1)[0])
         self.assertNotIn("보고", self.guides(self.char1)[0])
         listener_context = deepcopy(self.char1.ndb.npc_dialogue_context)
         dialogue.say(self.char2, "윤대장에게 임무")
@@ -130,7 +130,7 @@ class NPCDialogueTests(NativeItemTest):
         self.char1.change(lambda p: p["quests"]["radio_tower"].update(generator_fixed=True, boss_defeated=True))
         dialogue.say(self.char2, "윤대장에게 임무")
         self.assertEqual(len(self.guides(self.char1)), 3)
-        self.assertIn("'윤대장에게 보고", self.guides(self.char1)[-1])
+        self.assertIn("'윤대장 1에게 보고", self.guides(self.char1)[-1])
         self.assertEqual(len(self.guides(self.char2)), 2)
         self.assertEqual([str(v) for v in self.npc_messages(self.char1)],
                          [str(v) for v in self.npc_messages(self.char2)])
@@ -233,7 +233,8 @@ class NPCDialogueTests(NativeItemTest):
         create_object("typeclasses.interactables.Commander", key="윤대장", location=self.char1.location,
                       attributes=self.shared_npc_group())
         dialogue.say(self.char1, "윤대장 1에게 임무")
-        self.assertEqual(len(self.guides(self.char1)), 2)
+        # 새 실물이 추가돼도 기존 번호 1의 label은 바뀌지 않아 안내를 재전송하지 않는다.
+        self.assertEqual(len(self.guides(self.char1)), 1)
         self.assertIn("'윤대장 1에게 임무", self.guides(self.char1)[-1])
         with patch("world.npc_dialogue.available_intents", return_value=()):
             self.char1.msg.reset_mock()
@@ -296,16 +297,16 @@ class NPCDialogueTests(NativeItemTest):
 
         shared = self.shared_npc_group()
         create_object("typeclasses.interactables.ActionObject", key="윤대장", location=self.char1.location, attributes=shared)
-        self.assertEqual(render(context_for(self.char1)), "'윤대장에게 안녕")
+        self.assertEqual(render(context_for(self.char1)), "'윤대장 1에게 안녕")
         state = multiplayer_state(self.char1)
         actions = [action["command"] for obj in state["interactables"] for action in obj["actions"]
                    if action["label"] == "말 걸기"]
-        self.assertEqual(actions, ["'윤대장에게 안녕"])
+        self.assertEqual(actions, ["'윤대장 1에게 안녕"])
         second = create_object("typeclasses.interactables.Commander", key="윤대장", location=self.char1.location, attributes=shared)
         state = multiplayer_state(self.char1)
         actions = [action["command"] for obj in state["interactables"] for action in obj["actions"]
                    if action["label"] == "말 걸기"]
-        self.assertEqual(actions, ["'윤대장 1에게 안녕", "'윤대장 2에게 안녕"])
+        self.assertEqual(actions, ["'윤대장 1에게 안녕", "'윤대장 3에게 안녕"])
         dialogue.say(self.char1, actions[1][1:])
         self.assertEqual(dialogue.current_context(self.char1)["npc_id"], second.id)
 
@@ -461,7 +462,7 @@ class NPCDialogueTests(NativeItemTest):
         self.assertEqual(guide.kind, "event")
         self.assertEqual(guide.segments[0], {"role": "muted", "text": "현재 사용 가능: "})
         commands = [part["text"] for part in guide.segments if part["role"] == "command"]
-        self.assertEqual(commands, ["'윤대장에게 " + word for word in ("임무", "진행", "지역", "출입증", "수락")])
+        self.assertEqual(commands, ["'윤대장 1에게 " + word for word in ("임무", "진행", "지역", "출입증", "수락")])
         self.assertEqual(str(guide), "현재 사용 가능: " + " · ".join(commands))
         self.assertEqual([part for part in guide.segments if part["role"] == "text"],
                          [{"role": "text", "text": " · "}] * (len(commands) - 1))
@@ -575,7 +576,7 @@ class NPCDialogueTests(NativeItemTest):
 
         with patch.dict(ITEMS, {key: value for key, value in ITEMS.items() if key != "test_pistol"}, clear=True):
             self.assertEqual(errors(INTERACTABLES), [])
-        self.assertEqual(render(context_for(self.char1)), "'윤대장에게 안녕")
+        self.assertEqual(render(context_for(self.char1)), "'윤대장 1에게 안녕")
         for identity, row in definitions.items():
             npc = next(obj for obj in self.rooms[row["room"]].contents if obj.tags.has(identity, category="primal_interactable"))
             self.char1.location = npc.location

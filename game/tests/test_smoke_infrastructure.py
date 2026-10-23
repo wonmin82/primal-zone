@@ -1,10 +1,13 @@
 """실제 일반 설정에서의 타이머와 fixture DB 접근 차단."""
 
 import sys
+from importlib import import_module
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import Mock, patch
 
+from django.apps import apps
 from django.conf import settings
 from django.db import connection
 from django.test import TransactionTestCase
@@ -42,6 +45,17 @@ class SmokeInfrastructureTests(TestCase):
 
 class NativeSmokeSnapshotTests(TransactionTestCase):
     """standalone snapshot과 같이 외부 atomic 없이 실제 DB를 읽는 fixture."""
+
+    def setUp(self):
+        super().setUp()
+        # 앞선 TransactionTestCase의 flush는 RunPython 초기 행도 지운다.
+        # 빈 테스트 DB에서 실제 migration의 멱등 초기화를 재사용한다.
+        self.assertFalse(ItemEntity.objects.exists())
+        initialize_sequence = import_module(
+            "world.item_entities.migrations.0002_initialize_sequence"
+        ).initialize_sequence
+        initialize_sequence(apps, SimpleNamespace(connection=connection))
+        self.assertEqual(ItemSequence.objects.get(pk=1).last_value, 0)
 
     def tearDown(self):
         clear_test_caches()

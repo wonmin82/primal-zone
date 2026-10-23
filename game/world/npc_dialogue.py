@@ -16,8 +16,8 @@ from world.targets import (
     matching,
     names,
     parse_selector,
+    resolve,
     room_objects,
-    strict_single,
 )
 
 CONTEXT_TTL = 180
@@ -105,12 +105,13 @@ def explicit_target(caller, original):
         base = prefix.rsplit(None, 1)
         numbered = len(base) == 2 and (base[-1].lstrip("+-").isdecimal() or base[-1] == "모두")
         base_name = base[0] if numbered else prefix
-        if not matching(pool, TargetSelector(base_name)):
+        literal = matching(pool, TargetSelector(prefix))
+        if not literal and not matching(pool, TargetSelector(base_name)):
             return None, original
-        if numbered and base[-1].startswith(("-", "+")):
+        if not literal and numbered and base[-1].startswith(("-", "+")):
             raise rules.RuleError("대상 번호는 1 이상의 정수로 지정하세요.")
         selector = parse_selector(prefix, known)
-        npc = strict_single(matching(pool, selector), selector, "말")
+        npc = resolve(pool, selector, caller, "말")[0]
         body = " ".join(words[position + 1:])
         if not body:
             raise rules.RuleError("NPC에게 할 말을 입력하세요.")

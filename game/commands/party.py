@@ -286,10 +286,22 @@ class PartyAttack(PartyCreate):
     summary = "리더가 참가 가능한 구성원의 기존 자동 전투를 시작합니다."
 
     def run(self):
-        from typeclasses.enemies import room_enemies
+        from typeclasses.enemies import Enemy
+        from world.targets import Mode, normalized, room_objects
+        from world.targets import resolve as resolve_target
+
         party = required(self.caller)
         party.require_leader(self.caller)
-        target = resolve(self.args, room_enemies(self.caller.location)) if self.args.strip() else self.caller.combat_target()
+        target = self.caller.combat_target()
+        if self.args.strip():
+            pool = [obj for obj in room_objects(self.caller) if isinstance(obj, Enemy)]
+            selector = parse_selector(self.args, [name for obj in pool for name in names(obj)])
+            # 일행공격의 무번호 복수 후보 거절은 일반 공격의 기본 첫 대상과 다르다.
+            if selector.mode == Mode.DEFAULT:
+                matches = matching(pool, selector)
+                exact = [obj for obj in matches if normalized(obj.key) == normalized(selector.name)]
+                strict_single(exact or matches, selector, self.key)
+            target = resolve_target(pool, selector, self.caller, self.key)[0]
         party.attack(self.caller, target)
 
 

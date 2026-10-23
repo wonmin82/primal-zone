@@ -50,8 +50,8 @@ class DistantViewTests(WorldCommandTest):
         return output[0] if isinstance(output, tuple) else output
 
     def enemy(self, room, identity="hunter"):
-        obj = create_object(Enemy, key=ENEMIES[identity]["name"], location=room)
-        obj.db.enemy_id = identity
+        obj = create_object(Enemy, key=ENEMIES[identity]["name"], location=room,
+                            attributes=[("enemy_id", identity)])
         obj.db.hp = obj.db.max_hp = ENEMIES[identity]["hp"]
         return obj
 
