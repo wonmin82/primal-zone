@@ -136,7 +136,7 @@ def multiplayer_state(player, now=None):
                 "look_command": loot[corpse.id]["label"] + " 봐",
                 "decay_at": corpse.db.decay_at,
             }
-            for corpse in corpses
+            for corpse in corpses if controls[corpse.id] is not None
         ],
         "ground_loot": [
             {"id": dropped.id, **loot[dropped.id]} for dropped in ground

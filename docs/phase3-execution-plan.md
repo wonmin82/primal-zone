@@ -614,3 +614,74 @@ R03/R05의 실제 Corpse 결번·동시성·Rollback/Counter 증거는 번호 Al
 단독 작성자 `implementer_ashbrook`는 할당한 제품6파일·회귀1파일만 수정하고 소유권을 반환했다. 독립 `reviewer_bracken`은 실제 Diff·모든 labels 운영 소비자·Assertion·원로그와 정상 Hint delta를 확인해 **A/잔여P0/P1/P2/P3 0/0/0/0**으로 판정했다. 모델·권한 설정값과 실제 강제 격리를 혼동하지 않는다. 정상 번호 도메인의 권한·DB·지급 변경이 없어 Auditor를 형식적으로 추가하지 않았다. 중단 후 같은 스레드 복원과 결과 수집은 확인했지만 전용 Close/슬롯 해제를 보장하지 않는다.
 
 공식 집계는 **110Case:108 PASS/2 NOT RUN, 38행:36 PASS/2 NOT RUN, 108 REUSABLE/2 GAP**으로 유지한다. 정확한 최종 Source SHA·새 CI URL/4개 결과·P3 최종 판정은 [PR #75 Validation](https://github.com/wonmin82/primal-zone/pull/75)에서 관리한다. 새 CI 전에는 이전 Run40039991891을 새 Source 성공으로 대신하지 않는다. CI 성공 후에도 PR은 **OPEN/Draft/사용자 승인 대기**이며 R30-C02/R38-C02의 승인·실제 병합·병합 후 main CI·Closeout 조건은 미완료다.
+
+## 12. PR #75 Loot P2 보완 — Source/Entry 번호 누락
+
+이번 보완의 시작 Source는 `8291c4ab91f37e5b32616524001fed751fc5a375`, main은 `ea4072c0e01f14dad268591fda1096e1f413ef2b`다. [Run40062613886](https://github.com/wonmin82/primal-zone/actions/runs/40062613886)의 4/4 성공은 앞선 P3 보완까지의 근거로 보존하고, 이번 변경의 새 Source CI로 대신하지 않는다. 기존 Stage 1~3·P2/P3 실패·수정·검증 이력과 IME USER-ATTESTED는 유지한다.
+
+### 원인과 수정 경계
+
+Loot 전용 Presenter가 `label(record with number=None)`의 이름 fallback을 실행 대상으로도 사용했다. Source 번호가 없으면 `시체에서 모두 가져`, native Item/Currency 번호가 없으면 무번호 회수 명령과 Typed Payload를 생성할 수 있었다. `corpse_overview()`는 `None 번째`를 출력했고, 직접 Container `web_actions()`도 누락 번호를 확인하지 않고 raw-name 보기 명령을 반환했다. 실제 격리 DB 신규8개 메서드의 수정 전 실행은 **2 PASS/6 FAIL 메서드, 하위 사례 포함7 failures/25.455초(전체40.424초)**였다.
+
+작은 `_numbered_target()`은 현재 descriptor와 저장 번호가 모두 있을 때만 선택용 이름을 반환한다. Corpse Source와 native Entry를 독립 검증하며, 읽기 전용 표시 이름을 실행 가능한 선택 참조로 간주하지 않는다. native Entry는 기존 `can_take_entry` 권리 필터를 통과한 뒤 번호를 확인해 누락 실행 행을 제외한다. 누락 Source의 직접 controls는 안전한 읽기 전용 설명과 빈 명령/None Action을 반환하고, Web State는 해당 Corpse의 실행 행을 만들지 않는다. overview는 확인 불가 문장으로 처리하며 정상1/2·결번은 그대로다. Container 직접 API의 누락 guard만 추가하고 Shop/Growth의 기존 Provider 가용성 검사는 유지한다.
+
+`_selections()`는 기존 권한 허용 raw 후보 전체를 유지한다. `payload()`는 입력을 한 번 tuple로 고정하고 Source/Entry 저장 참조가 하나라도 누락되면 **전체 Payload를 None**으로 만든다. 유효한 부분집합만 조용히 서명해 텍스트 ALL과 다른 부분 회수를 제공하지 않는다. 정상 개별 Entry와 다른 Source별 회수는 유지한다. 정상 empty/protected Source의 원래 메타데이터와 Legacy Blob 읽기 전용 계약도 유지한다.
+
+Ground는 계속 `바닥 전리품` 표시·`모두 가져` 문법을 쓰며 Source 번호를 새로 표시하거나 입력에 요구하지 않는다. 내부 Ground Provider 행은 기존 Gateway가 이미 검증하는 안정 참조이므로 파손된 Payload는 제공하지 않는다. Ground 내부 Item/Currency의 누락도 별도로 차단한다. 새 번호 정책·발급기·캐시·자동 복구를 추가하지 않았다.
+
+Ground Source별 generic take_command는 기존 호환 메타데이터다. 운영 전체 버튼은 `all_controls.ground`, Drop 상세와 개별 버튼은 Entry 명령/안정 참조를 사용한다. 혼합 Ground 전체가 불완전하면 활성 전체 Payload는 None이며, 정상 Source의 호환 메타데이터를 Source별 실행 식별자로 재해석하지 않는다.
+
+### Gateway·권리·원자성 증거
+
+Source/Item/Currency의 stale Typed 요청은 **수정 전부터 기존 Gateway가 실제 REFUSED**했다. Pickup·지급 알림은0, UUID/수량/화폐/Claim/Share/Scope/Counter는 동일했다. 최종 확장 검사에서는 Ground Source 행 누락도 변경 없는 Gateway로 거절되는 것을 확인했다. `make_invocation()`은 원래 안정 참조와 서명을 만드는 Factory로 유지하며 실제 실행 직전/Lock 뒤 역할 검증을 UI 숨김으로 대체하지 않는다. Gateway·Resolver·Loot Service·Pickup·권리·분배·Unique·Lock·타이머·번호 Allocator 코드 변경은 없다.
+
+숨긴 Entry의 번호 유무가 다른 플레이어의 표시·수량·권리·유효 Subject를 바꾸지 않는지도 검증했다. 공개 표시 필드의 전후 동등성과 Subject의 실제 visible UUID를 비교하며, 불투명 서명/UUID 안의 임의 숫자 문자열을 숨긴 수량 노출로 오판하지 않는다. 기존 protected/zero-share/partial/rollback 검증을 약화하지 않는다.
+
+### 수용 조건과 실행 근거
+
+| 조건 | 검증 |
+| --- | --- |
+| L01/L02/L06/L10/L12 | 실제 Corpse1 번호 행 삭제, 정상2 명령·번호 유지, 누락 Source의 command/Action/보기 행 없음, overview의 가짜 서수/None 없음, 반복 조회 전체 상태 불변 |
+| L03/L04/L05 | 같은 Scope의 Item/Currency1 번호만 누락, 해당 행·Payload 제외, 명시1 텍스트는 효과0·정상2의 partial 효과1회·UUID/번호 유지 |
+| L07/L08 | Ground 정상 표시/모두 문법, 정상 Source별 aggregate 보존, 혼합 불완전 ALL은 전체 차단·정상 부분집합 서명 없음 |
+| L09 | 번호 유효 시 받은 Payload를 보관 후 Source/Item/Currency/Ground Source 번호 제거, 실제 Gateway 거절·픽업/알림0·모든 상태 불변 |
+| L11/L13/L14 | 기존 정상 결번/TTL/보호 만료 회귀, Legacy 읽기 전용과 직접 payload 없음, 보호 Entry 누락이 다른 플레이어 정보/권리를 바꾸지 않음 |
+| L15 | 실제 direct Container API의 누락 raw-name 명령 차단, Shop/Growth Provider 필터 유지, Drop Detail에는 누락 실행 행/None 명령이 섞이지 않음 |
+
+최초 수정 후 신규8개는 **8 PASS32.180초(전체43.869초)**였다. 중복 실물 조회를 줄인 뒤 Loot Action 전체 **28 PASS110.955초(전체124.020초)**를 확인했다. 그 뒤 동등한 payload Source predicate·tuple 고정과 명시 텍스트/정상2 효과/Ground stale/직접 Legacy 검증을 확장한3개는 **3 PASS16.839초(전체28.311초)**였다. 최종 신규8개와 나머지 직접 영향6모듈은 **141 PASS296.301초(전체310.795초)**다. 앞선28개 중 기존 정상20개를 형식적으로 다시 실행하지 않았으며 실행 기준 차이를 보존한다.
+
+실행은 `8291c4a + 동결 Python5파일 Diff`의 테스트 전용 메모리 SQLite였고 모두 정상 DB 정리를 확인했다. 로그는 `work/issue67/loot-p2-mossvale/{before,after,loot-actions,extended-focused,impact}.log`에 보존한다. 로컬 전체·Full·실제 Timing·재시작·OS IME는 반복하지 않는다. 그 도메인은 변경하지 않았으므로 기존 증거를 적용 범위 내에서 재사용하며, 정확한 최종 Source의 필수 CI Smoke·Chromium을 별도로 확인해야 한다. 운영 DB 접근·조회·복사·해시·Migration/Seed/Reset/Backfill은 수행하지 않는다.
+
+최종141개와 동일 선택 범위의 재현 명령은 다음과 같다. 원로그에는 결과와 settings_test만 있어 당시 PowerShell 변수명·quoting까지 보존된 것으로 표현하지 않는다.
+
+```powershell
+$p2Names = @(
+  'test_missing_corpse_number_has_no_take_look_or_payload_and_valid_two_survives'
+  'test_missing_item_and_currency_numbers_hide_only_bad_entry_and_disable_aggregate'
+  'test_mixed_all_controls_never_silently_sign_a_valid_subset'
+  'test_ground_keeps_existing_label_and_all_syntax_but_missing_entry_blocks_aggregate'
+  'test_missing_number_stale_web_is_already_refused_without_domain_effect'
+  'test_missing_corpse_overview_and_legacy_remain_readonly_without_fake_ordinal'
+  'test_missing_protected_entry_does_not_change_other_players_visible_rights'
+  'test_direct_container_controls_with_missing_number_do_not_fall_back_to_raw_name'
+)
+$p2Labels = @($p2Names | ForEach-Object { "tests.test_loot_actions.LootActionTests.$_" }) + @(
+  'tests.test_loot_action_invariants', 'tests.test_phase3_regression', 'tests.test_selection_numbers'
+  'tests.test_targets', 'tests.test_web_state', 'tests.test_room_npc_actions'
+)
+& .\.venv\Scripts\python.exe scripts/dev.py test @p2Labels --parallel 1
+```
+
+공식38행·110Case·Task 관계와 **108 PASS/2 NOT RUN, 행36 PASS/2 NOT RUN, 108 REUSABLE/2 GAP**을 유지한다. R30-C02/R38-C02는 사용자 승인·실제 Merge Commit·정확 main CI·최종 Closeout 대기다. PR은 OPEN/Draft, Source 브랜치 보존, Issue #44/#67은 변경하지 않는다.
+
+### 직접 소비자 P3 문구와 Node 검증
+
+독립 리뷰에서 aggregate가 차단돼도 정상 개별 Action은 남는 새 상태에 `primal.js`가 “회수 가능한 전리품 없음”을 함께 표시하는 P3를 확인했다. `else if (!corpse.loot.some(item => item.action))` 조건 하나로 정상 개별 Action이 있을 때만 잘못된 빈 상태 문구를 생략한다. 기존 empty/dark/protected/Legacy 분기는 유지한다. 실제 client 전체를 실행하는 기존 VM/DOM 계약 테스트에 신규1개를 추가해 stable 역할/인자 전송·문자 명령0·aggregate 부재와 기존 빈 상태를 확인했다.
+
+신규 Node 테스트는 수정 전 **1 FAIL**, 최종 **1 PASS104.1162ms(runner, shell0.5285초)**였다. `node --check game/web/static/webclient/js/primal.js` PASS, `npm.cmd run test:contracts`는 **58 PASS/0 FAIL/0 SKIP332.3671ms(runner, shell10.0855초)**다. Nodecheck 시간0.1357초는 구현자 실행 보고와 구분한다. 중간 수정 후1 FAIL은 Legacy의 기존 `dataset="null"` 비활성 행을 행0으로 기대한 신규 테스트 오류였고, 원래 결함 Assertion을 유지한 채 실제 null Payload·비활성 계약으로 정정했다. 이 중간 실패는 구현자 보고이며 현재 `node-after.log`는 최종1 PASS만 담고 있으므로 중간 실패 원로그를 직접 확인했다고 표현하지 않는다. 수정 전 `node-before.log`, 최종 `node-after.log`, `contracts.log`와 구현자 보고를 구분해 보존한다.
+
+이번에는 JS 파일 자체가 변경됐다. 변경은 Loot 렌더의 빈 상태 조건에 한정하며 composition/keydown/submit/send·Session/Prompt 입력 경로는 변경하지 않는다. 따라서 기존 **PASS — USER-ATTESTED IME**의 수행 주체·미기록 메타데이터를 보존하며 재수행을 요구하지 않는다. 이전 §10/11의 당시 JS 불변 기록을 이번 실행 사실로 확대하지 않는다. 새 Source CI의 격리 정적 파일 수집·Chromium에서 실제 서버 렌더의 정상 동작을 별도로 확인한다.
+
+`implementer_mossvale`는 지정 Python5파일과 후속 JS/계약2파일만 작성했고, 최종7파일 해시를 동결하고 소유권을 반환했다. `reviewer_silverfern`은 실제 소스·직접 소비자·Assertion·원로그와 마지막 JS delta를 독립 확인해 **A/잔여P0/P1/P2/P3 0/0/0/0**으로 판정했다. 모델을 대체하지 않고 일시 용량/사용량 제한 뒤 같은 컨텍스트를 복원했으며, 완료된 Python141개를 Node 변경 때문에 반복하지 않았다. 원격 CI·Git·PR/문서 통합은 root 담당이다. 번호/지급 도메인 변경이 없어 Auditor를 형식적으로 추가하지 않았고, Done과 실제 Close/슬롯 해제 미확인을 구분한다.
+
+최종 로컬 실행 기준은 `8291c4a + 동결 Python5파일`, Node는 그 코드에 렌더/계약2파일을 추가한 Diff다. 확정 Commit에서 실행한 것으로 바꾸어 기록하지 않는다. Source SHA·새 CI Run/4개 결과·병합 전 최종 판정은 [PR #75 Validation](https://github.com/wonmin82/primal-zone/pull/75)에서 추적하며, 새 CI 성공 전에는 이전 Source 성공으로 대신하지 않는다. CI 성공도 사용자 병합 승인이나 Final Closeout 완료가 아니다.

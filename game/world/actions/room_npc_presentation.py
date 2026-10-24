@@ -131,9 +131,12 @@ def controls_for(caller, provider, observed_at=None):
     from typeclasses.interactables import Container
     from world.actions.manifest import get_index
     from world.actions.presentation import action_controls
-    from world.selection_numbers.api import descriptor
+    from world.selection_numbers.api import descriptor, number_for
 
     if isinstance(provider, Container):
+        record = descriptor(provider)
+        if record is None or number_for(record.reference) is None:
+            return []
         return [{"label": "봐", "command": provider.key + " 봐"}]
     record = descriptor(provider)
     if not record:

@@ -83,6 +83,9 @@ def corpse_overview(corpses, caller, now, pool=None):
     pool = ordered(corpses if pool is None else pool)
     for corpse in ordered(corpses):
         index = number_for(descriptor(corpse).reference)
+        if index is None:
+            lines.append(ft.text("선택 번호를 확인할 수 없는 ", ft.token("remains", corpse.key), "가 남아 있다."))
+            continue
         entries = loot_entries(corpse, caller, now)
         items = []
         for entry in entries:
