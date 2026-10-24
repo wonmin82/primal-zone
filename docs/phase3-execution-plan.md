@@ -565,3 +565,52 @@ Reviewer의 전체 구조·53Case와 Auditor의 고위험57Case 감사, 수정 D
 최종 Source는 위 코드와 동일한 제품·테스트에 증거 문서만 더한 Commit이다. 정확한 Source의 test/smoke/contracts/browser-e2e가 모두 성공한 것을 확인한 뒤에만 **A — Ready for Merge Approval**로 보고한다. 이 문서의 로컬·재사용 증거가 최신 Source CI 성공을 미리 의미하지 않으며, 실제 Source SHA·Run URL·결과·병합 전 최종 판정은 [PR #75 Validation](https://github.com/wonmin82/primal-zone/pull/75)에서 확인한다. Source와 동등한 코드의 기존 Full/Timing/E2E-12/화면 증거는 명시한 범위로 재사용하고 최신 CI는 생략하지 않는다.
 
 이번 작업은 **PR OPEN/Draft 유지, Issue #44/#67 OPEN·변경 없음, 소스 브랜치 보존**으로 끝낸다. 사용자 명시 승인 뒤에만 최신 Source/Base/보호 규칙·CI를 다시 확인하고 Merge Commit→정확 main CI4/4→남은 두 Case와38/38 최종 판정→승인된 Issue Closeout·브랜치 정리를 수행할 수 있다. 그 절차는 이번에 실행하지 않는다.
+
+## 11. PR #75 P3 보완 — B-1 번호 누락 표시
+
+사용자가 추가 요청한 비차단 P3 한 건을 기존 브랜치에서 보완한다. 시작 Source는 `17cb21cb6ba168615da563a65cc7556c8f923242`, main은 `ea4072c0e01f14dad268591fda1096e1f413ef2b`이며 기존 [Run40039991891](https://github.com/wonmin82/primal-zone/actions/runs/40039991891)의 4/4 성공은 이 수정 전 근거다. 앞의 Stage 1/2/3 실패·수정·감사 기록을 보존하고 새 Source CI와 구분한다.
+
+### 원인·최소 수정
+
+`targets.labels()`가 B-1 descriptor가 없을 때와 descriptor는 있지만 SelectionNumber가 없을 때를 같은 목록 순번 fallback으로 처리했다. 실제 테스트 DB에서 Enemy A의 번호1 행만 제거하면 A에 가짜 번호1, 정상 B에는 번호2를 표시하고 A의 웹 공격/보기·NPC의 대화 안내까지 만들 수 있었다. 신규6개 회귀의 수정 전 결과는 **3 PASS/3 FAIL8.947초(전체24.706초)**다. 정상 번호·결번/리스폰·비적용 예외와 기존 Typed Reference 누락 거절은 수정 전에도 통과했으므로 새 수정 성과로 바꾸어 표현하지 않는다.
+
+B-1 적용 여부는 기존 descriptor/ReferenceKind로 판단하며 ROOM 예외를 유지한다. 저장 번호가 없으면 `labels()`는 해당 ID의 키를 유지하고 값만 **None(선택 안내 불가)**으로 반환한다. 정상 B-1은 저장 번호1도 그대로 표시하고 Player/Party·일반 Engine·Room은 기존 표시를 유지한다. 새 객체 종류 목록·번호 정책·발급·자동 복구·번호 재사용을 추가하지 않는다. 진단은 기존 `verify()`의 `(kind, identity, "missing")`을 재사용하며 일반 화면 렌더링에서 전수 verify를 호출하지 않는다.
+
+그 값으로 명령을 만드는 운영 소비자도 최소 보완했다. `state`는 누락 Enemy/ActionObject의 실행 행을 제외하여 잘못된 공격·일행공격·보기·대화 버튼을 생성하지 않고 다른 정상 행은 유지한다. `target_presentation`은 정상 번호만 안내하고 누락 대상은 선택 번호를 확인할 수 없다는 설명을 제공한다. `room_hints`와 NPC discovery/keyword guide는 누락 대상의 명령 안내를 생략한다. Container 상세 제목에는 실제 이름만 표시하며 실행 명령에는 이름 fallback을 추가하지 않는다. 정상 Help·권한·가시성·Scope·무번호 Enemy 선택·일행공격 모호성·Loot·경제·타이머와 Typed Gateway 검증은 변경하지 않는다.
+
+### P3 수용 조건·증거 적용 범위
+
+| 회귀 | 직접 확인 |
+| --- | --- |
+| P3-01/03/08/10 | 두 Enemy/단독 Enemy의 번호 행만 누락, 임시 번호 없음·정상2 유지·반복 labels/verify 후 SelectionNumber/NumberScope 동일·missing 진단 |
+| P3-02/05/09 | 누락 Enemy의 웹 명령 행 없음, 명시1 공격은 실행0, 정상2 웹 명령은 실제 B만 공격 |
+| P3-04/06 | 정상1/2 출력, 실제 삭제 결번·리스폰 대기는 데이터 누락으로 오인하지 않음 |
+| P3-07 | Player/Engine/Room의 기존 표시·Engine 선택과 기존 Web State의 Party 구성원 번호/명령 회귀 |
+| P3-05/09 | 실제 dock 대화 Hint 정상1/2→누락 후2만, NPC 대화가 다른 NPC로 대체되지 않음, 상세/선택 안내에 None·가짜 명령 없음 |
+| P3-09 | 실제 시설의 누락 Provider는 새 Typed 버튼 없음·기존 stable ID 요청 거절/효과0, 정상2는 원래 ID에 효과1회. 번호 없는 Container 상세 제목도 안전 |
+
+Enemy 공격은 승인된 비전환 전역 Command이므로 새 Action Verb로 만들지 않는다. Enemy는 실제 공개 Command와 웹 문자열 명령의 대상 동등성을 확인하고, Typed Web은 기존 시설 Action의 실제 안정 참조로 검증한다. 기존 Typed Gateway는 수정하지 않았다.
+
+R03/R05의 실제 Corpse 결번·동시성·Rollback/Counter 증거는 번호 Allocator·Lifecycle·DB 계약 변경이 없어 유효 범위로 재사용한다. R23의 공개 Enemy 선택/표시에 이번 누락 회귀를 보조 근거로 연결한다. API·schema·Scope·Counter·Loot 지급·Lock·Timer·Snapshot/재시작 경로는 변경0이며, 정상 번호 조건의 표시·힌트도 기존 구조를 유지한다. 따라서 강화 Full·실제 Door60/Party600·Corpse30/Respawn45/보호120초·E2E-12를 로컬에서 반복하지 않는다. 새 Source의 CI Smoke/Chromium은 반드시 따로 확인한다. 운영 DB 접근·조회·복사·해시·Migration/Seed/Reset/Backfill은 수행하지 않는다.
+
+공식38행·110Case와 기존 T08 두 C02의 NOT RUN은 유지한다. 이번 보완은 사용자 승인·Draft 해제·Merge·브랜치 삭제·Issue #44/#67 변경·최종 Closeout 승인이 아니다.
+
+### 실행 결과·독립 리뷰
+
+수정 후 신규6개는 **6 PASS7.772초(전체21.794초)**, 실제 dock Hint/Container 제목을 확장한 선택 클래스는 **21 PASS29.681초(전체40.702초)**였다. 다음 직접 영향 묶음은 **138/138 PASS518.051초(전체529.424초)**다.
+
+```powershell
+.\.venv\Scripts\python.exe scripts/dev.py test tests.test_phase3_regression tests.test_selection_numbers tests.test_targets tests.test_npc_dialogue tests.test_web_state tests.test_room_npc_actions tests.test_action_presentation_cache --parallel 1
+```
+
+그 뒤 정상 selector_hint의 빈 Text segment 추가를 없애 기존 wire/ANSI 구조까지 유지했다. 해당 delta 후 다음 좁은 검사는 **22/22 PASS42.219초(전체54.946초)**였다. 138개 성공은 delta 전, 마지막22개는 delta 후 실행임을 구분한다. 동일한 전체 묶음을 형식적으로 반복하지 않았다.
+
+```powershell
+.\.venv\Scripts\python.exe scripts/dev.py test tests.test_phase3_regression.Phase3EnemySelectionTests tests.test_npc_dialogue.NPCDialogueTests.test_hint_and_web_start_use_npc_only_numbering --parallel 1
+```
+
+실행 기준은 `17cb21c + 동결 P3 7파일 Diff`이며 최종 Commit에서 실행한 것으로 바꾸어 기록하지 않는다. 각 실행은 테스트 전용 메모리 SQLite를 사용했고 정상 Destroying을 확인했다. 원로그는 `work/issue67/p3-ashbrook/{before,after,final-focused,impact,final-hint-delta}.log`에 보존한다. check/Ruff/diff-check는 통과했다. 로컬 전체·Quick·Full·Timing은 이번 P3에서 재실행하지 않았으며, 정상 번호의 동일 동작에 대한 기존 근거를 재사용하고 정확한 새 Source CI의 test/Smoke/Contracts/Chromium을 별도로 요구한다.
+
+단독 작성자 `implementer_ashbrook`는 할당한 제품6파일·회귀1파일만 수정하고 소유권을 반환했다. 독립 `reviewer_bracken`은 실제 Diff·모든 labels 운영 소비자·Assertion·원로그와 정상 Hint delta를 확인해 **A/잔여P0/P1/P2/P3 0/0/0/0**으로 판정했다. 모델·권한 설정값과 실제 강제 격리를 혼동하지 않는다. 정상 번호 도메인의 권한·DB·지급 변경이 없어 Auditor를 형식적으로 추가하지 않았다. 중단 후 같은 스레드 복원과 결과 수집은 확인했지만 전용 Close/슬롯 해제를 보장하지 않는다.
+
+공식 집계는 **110Case:108 PASS/2 NOT RUN, 38행:36 PASS/2 NOT RUN, 108 REUSABLE/2 GAP**으로 유지한다. 정확한 최종 Source SHA·새 CI URL/4개 결과·P3 최종 판정은 [PR #75 Validation](https://github.com/wonmin82/primal-zone/pull/75)에서 관리한다. 새 CI 전에는 이전 Run40039991891을 새 Source 성공으로 대신하지 않는다. CI 성공 후에도 PR은 **OPEN/Draft/사용자 승인 대기**이며 R30-C02/R38-C02의 승인·실제 병합·병합 후 main CI·Closeout 조건은 미완료다.

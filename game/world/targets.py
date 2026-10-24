@@ -276,7 +276,8 @@ def resolve(objects, selector, caller, action=None, supports=None, *, observed_a
 
 
 def labels(objects, name_values=lambda obj: obj.key):
-    """B-1 실물은 저장된 번호를, 비전환 목록은 기존 표시 인덱스를 쓴다."""
+    """B-1 실물은 저장 번호만 쓴다. 번호가 누락된 실물의 값은 None이다."""
+    from world.actions.schema import ReferenceKind
     from world.selection_numbers.api import descriptor, label, number_for
 
     pool = ordered(objects)
@@ -284,10 +285,11 @@ def labels(objects, name_values=lambda obj: obj.key):
     for obj in pool:
         name = name_values(obj)
         record = descriptor(obj)
-        if record and (number := number_for(record.reference)) is not None:
+        if record and record.reference.kind != ReferenceKind.ROOM:
             from dataclasses import replace
 
-            result[obj.id] = label(replace(record, number=number))
+            number = number_for(record.reference)
+            result[obj.id] = None if number is None else label(replace(record, number=number))
             continue
         peers = [other for other in pool if normalized(name_values(other)) == normalized(name)]
         result[obj.id] = f"{name} {peers.index(obj) + 1}" if len(peers) > 1 else name

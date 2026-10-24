@@ -26,13 +26,18 @@ def selector_hint(objects, role, source=False, pool=None):
     controls = labels(
         pool if pool is not None else objects, lambda obj: "시체" if source else obj.key
     )
-    return ft.text(
+    selectable = [obj for obj in ordered(objects) if controls[obj.id] is not None]
+    missing = "선택 번호를 확인할 수 없는 대상의 번호 안내는 제공하지 않습니다."
+    if not selectable:
+        return ft.text(missing)
+    hint = ft.text(
         "고정 번호 ",
         ft.join(
-            [ft.text("'", ft.token(role, controls[obj.id]), "'") for obj in ordered(objects)], ", "
+            [ft.text("'", ft.token(role, controls[obj.id]), "'") for obj in selectable], ", "
         ),
         " 같은 표기로 구분해 지정할 수 있다.",
     )
+    return ft.text(hint, " ", missing) if len(selectable) != len(objects) else hint
 
 
 def presence(objects, role, unit, sentence, source=False, pool=None):

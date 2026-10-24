@@ -126,7 +126,7 @@ def multiplayer_state(player, now=None):
                 "mode": ENEMIES[enemy.db.enemy_id]["combat_mode"],
                 "can_attack": enemy.can_attack(player),
             }
-            for enemy in enemies
+            for enemy in enemies if controls[enemy.id] is not None
         ],
         "corpses": [
             {
@@ -153,7 +153,7 @@ def multiplayer_state(player, now=None):
                 "look_command": controls[obj.id] + " 봐",
             }
             for obj in objects
-            if isinstance(obj, ActionObject)
+            if isinstance(obj, ActionObject) and controls[obj.id] is not None
         ] + door_controls(player, now, action_rows=action_rows),
         "party": party_data,
         "invitation": {

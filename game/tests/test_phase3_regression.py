@@ -491,6 +491,162 @@ class Phase3EnemySelectionTests(NativeItemTest):
         self.assertEqual(list(SelectionNumber.objects.order_by("pk").values()), before)
         self.assertEqual(list(NumberScope.objects.order_by("pk").values()), counters)
 
+    def test_missing_number_has_no_label_or_allocation_and_verify_identifies_real_object(self):
+        from world.targets import labels
+
+        first, second = self.enemies
+        SelectionNumber.objects.filter(kind=self.refs[0].kind, identity=self.refs[0].identity).delete()
+        numbers = list(SelectionNumber.objects.order_by("pk").values())
+        scopes = list(NumberScope.objects.order_by("pk").values())
+        for _ in range(2):
+            self.assertIsNone(labels(self.enemies)[first.pk])
+            self.assertEqual(labels(self.enemies)[second.pk], "회귀 사냥감 2")
+            self.assertIsNone(labels([first])[first.pk])
+            self.assertEqual(labels([second])[second.pk], "회귀 사냥감 2")
+            self.assertIn((self.refs[0].kind, self.refs[0].identity, "missing"), verify())
+        self.assertEqual(list(SelectionNumber.objects.order_by("pk").values()), numbers)
+        self.assertEqual(list(NumberScope.objects.order_by("pk").values()), scopes)
+
+    def test_missing_enemy_number_does_not_create_web_commands_or_select_survivor(self):
+        from world.state import multiplayer_state
+
+        first, second = self.enemies
+        SelectionNumber.objects.filter(kind=self.refs[0].kind, identity=self.refs[0].identity).delete()
+        numbers = list(SelectionNumber.objects.order_by("pk").values())
+        scopes = list(NumberScope.objects.order_by("pk").values())
+        for _ in range(2):
+            rows = multiplayer_state(self.char1, now=100)["enemies"]
+            self.assertEqual([(row["id"], row["label"], row["attack_command"], row["look_command"])
+                              for row in rows],
+                             [(second.pk, "회귀 사냥감 2", "회귀 사냥감 2 공격", "회귀 사냥감 2 봐")])
+        with patch.object(self.char1, "start_combat") as start:
+            self.command("회귀 사냥감 1 공격")
+            start.assert_not_called()
+            self.command(rows[0]["attack_command"])
+            start.assert_called_once_with(second)
+        self.assertEqual(list(SelectionNumber.objects.order_by("pk").values()), numbers)
+        self.assertEqual(list(NumberScope.objects.order_by("pk").values()), scopes)
+        self.assertTrue(first.pk)
+
+    def test_normal_one_two_hole_and_respawning_object_are_not_missing(self):
+        from world.targets import labels, room_objects
+
+        first, second = self.enemies
+        self.assertEqual(labels([first]), {first.pk: "회귀 사냥감 1"})
+        self.assertEqual(labels(self.enemies), {first.pk: "회귀 사냥감 1", second.pk: "회귀 사냥감 2"})
+        first.db.state = "respawning"
+        first.db.respawn_at = 1000
+        self.assertEqual(labels(room_objects(self.char1))[second.pk], "회귀 사냥감 2")
+        self.assertEqual(number_for(self.refs[0]), 1)
+        self.assertEqual(verify(), ())
+        first.delete()
+        self.assertEqual(labels([second]), {second.pk: "회귀 사냥감 2"})
+        self.assertIsNone(number_for(self.refs[0]))
+        self.assertEqual(verify(), ())
+
+    def test_non_b1_players_engine_and_room_keep_legacy_labels_and_selection(self):
+        from evennia.objects.objects import DefaultObject
+        from world.targets import labels, parse_selector, resolve
+
+        self.char1.key = self.char2.key = "같은 탐사자"
+        players = [self.char1, self.char2]
+        for index, character in enumerate(sorted(players, key=lambda obj: obj.pk), 1):
+            self.assertIsNone(descriptor(character))
+            self.assertEqual(labels(players)[character.pk], f"같은 탐사자 {index}")
+        engines = [create_object(DefaultObject, key="엔진 장식", location=self.char1.location)
+                   for _ in range(2)]
+        self.assertTrue(all(descriptor(obj) is None for obj in engines))
+        self.assertEqual(labels(engines), {engines[0].pk: "엔진 장식 1", engines[1].pk: "엔진 장식 2"})
+        self.assertEqual(resolve(engines, parse_selector("엔진 장식 2"), self.char1), [engines[1]])
+        room = self.char1.location
+        self.assertEqual(descriptor(room).reference.kind, ReferenceKind.ROOM)
+        self.assertIsNone(number_for(descriptor(room).reference))
+        self.assertEqual(labels([room]), {room.pk: room.key})
+
+    def test_missing_npc_number_hides_command_guides_and_never_talks_to_other_npc(self):
+        from typeclasses.interactables import Commander
+        from world.npc_dialogue import available_intents, discovery, keyword_guide
+        from world.observation import context_for
+        from world.room_hints import render
+        from world.state import multiplayer_state
+        from world.target_presentation import selector_hint
+
+        self.char1.location.db.zone_id = "dock"
+        npcs = [create_object(Commander, key="윤대장", location=self.char1.location,
+                              tags=[("commander", "primal_interactable")]) for _ in range(2)]
+        self.assertEqual(render(context_for(self.char1, observed_at=100)),
+                         "'윤대장 1에게 안녕 · '윤대장 2에게 안녕")
+        normal_hint = selector_hint(npcs, "npc")
+        self.assertEqual(normal_hint.segments[-1],
+                         {"role": "text", "text": " 같은 표기로 구분해 지정할 수 있다."})
+        self.assertTrue(all(part["text"] for part in normal_hint.segments))
+        reference = descriptor(npcs[0]).reference
+        SelectionNumber.objects.filter(kind=reference.kind, identity=reference.identity).delete()
+        numbers = list(SelectionNumber.objects.order_by("pk").values())
+        scopes = list(NumberScope.objects.order_by("pk").values())
+        self.assertNotIn("에게", discovery(npcs[0], self.char1))
+        self.assertIn("선택", discovery(npcs[0], self.char1))
+        with patch.object(self.char1, "msg") as output:
+            keyword_guide(self.char1, npcs[0], available_intents(self.char1, npcs[0]), force=True)
+        self.assertNotIn("에게", str(output.call_args_list))
+        hint = str(selector_hint(npcs, "npc"))
+        self.assertIn("윤대장 2", hint)
+        self.assertNotIn("윤대장 1", hint)
+        self.assertNotIn("None", hint)
+        self.assertIn("선택", hint)
+        self.assertIn("윤대장 2에게", discovery(npcs[1], self.char1))
+        self.assertEqual(render(context_for(self.char1, observed_at=100)), "'윤대장 2에게 안녕")
+        rows = multiplayer_state(self.char1, now=100)["interactables"]
+        self.assertEqual([row["label"] for row in rows], ["윤대장 2"])
+        self.assertNotIn("None", str(rows))
+        with patch("world.npc_dialogue.execute") as execute:
+            self.command("윤대장 1에게 임무 말")
+            execute.assert_not_called()
+            self.command("윤대장 2에게 임무 말")
+            self.assertEqual(execute.call_count, 1)
+            self.assertEqual(execute.call_args.args[1], npcs[1])
+        self.assertEqual(list(SelectionNumber.objects.order_by("pk").values()), numbers)
+        self.assertEqual(list(NumberScope.objects.order_by("pk").values()), scopes)
+
+    def test_missing_facility_number_is_not_a_typed_provider_or_stale_web_replacement(self):
+        from typeclasses.interactables import Container, SupplyCache
+        from world import interactable_services
+        from world.actions.gateway import ResultStatus, execute, from_web
+        from world.actions.presentation import action_controls, reference_json
+
+        boxes = [create_object(SupplyCache, key="회귀 보급함", location=self.char1.location) for _ in range(2)]
+        references = [descriptor(obj).reference for obj in boxes]
+        self.assertEqual([number_for(ref) for ref in references], [1, 2])
+        container = create_object(Container, key="회귀 보관상자", location=self.char1.location)
+        container_ref = descriptor(container).reference
+        SelectionNumber.objects.filter(kind=container_ref.kind, identity=container_ref.identity).delete()
+        appearance = str(container.return_appearance(self.char1, observed_at=100))
+        self.assertIn(container.key, appearance)
+        self.assertNotIn("None", appearance)
+        self.assertNotIn("보관:", appearance)
+        index = get_index()
+        old = next(row["action"] for row in action_controls(self.char1, index, 100)
+                   if row["action"]["roles"]["provider"] == [reference_json(references[0])])
+        SelectionNumber.objects.filter(kind=references[0].kind, identity=references[0].identity).delete()
+        numbers = list(SelectionNumber.objects.order_by("pk").values())
+        scopes = list(NumberScope.objects.order_by("pk").values())
+        before = self.char1.profile_snapshot(), list(ItemEntity.objects.order_by("pk").values())
+        rows = action_controls(self.char1, index, 100)
+        self.assertNotIn([reference_json(references[0])], [row["action"]["roles"]["provider"] for row in rows])
+        live = next(row["action"] for row in rows
+                    if row["action"]["roles"]["provider"] == [reference_json(references[1])])
+        with patch("world.interactable_services.supplycache", wraps=interactable_services.supplycache) as effect:
+            result = execute(self.char1, self.session, from_web({**old, "request_id": "missing-provider"}, index), index)
+            self.assertEqual(result.status, ResultStatus.REFUSED)
+            effect.assert_not_called()
+            self.assertEqual((self.char1.profile_snapshot(), list(ItemEntity.objects.order_by("pk").values())), before)
+            self.assertEqual(list(SelectionNumber.objects.order_by("pk").values()), numbers)
+            self.assertEqual(list(NumberScope.objects.order_by("pk").values()), scopes)
+            result = execute(self.char1, self.session, from_web({**live, "request_id": "live-provider"}, index), index)
+            self.assertEqual(result.status, ResultStatus.SUCCESS)
+            self.assertEqual(effect.call_count, 1)
+            self.assertEqual(effect.call_args.args[0], boxes[1])
+
 
 @override_settings(ACTION_CONTENT_PACKAGES=("world.actions.validation_content",))
 class Phase3NumericNameTests(NativeItemTest):

@@ -263,7 +263,9 @@ def keyword_guide(recipient, npc, active, *, force=False):
              if key in present and row["location_id"] == getattr(recipient.location, "id", None)
              and 0 <= now - row["at"] < CONTEXT_TTL}
     words = tuple(dict.fromkeys(item.keyword for item in active if item.intent_id != "greeting"))
-    target = labels(nearby(recipient)).get(npc.id, npc.key)
+    target = labels(nearby(recipient)).get(npc.id)
+    if target is None:
+        words = ()
     previous = store.get(npc.id)
     if force or not previous or previous["keywords"] != words or previous["target"] != target:
         if words:
@@ -434,6 +436,8 @@ def select_keyword(caller, token, session):
 def discovery(npc, caller):
     from world.targets import labels
 
-    target = labels(nearby(caller)).get(npc.id, npc.key)
+    target = labels(nearby(caller)).get(npc.id)
+    if target is None:
+        return "선택 번호를 확인할 수 없어 말 걸기 안내를 제공하지 않습니다."
     topics = " · ".join(item.keyword for item in intents_for(type_name(npc)) if not item.mutates_state)
     return f"말 걸기: '{target}에게 안녕 · {target}에게 안녕 말 / 화제: {topics}"
