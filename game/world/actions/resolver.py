@@ -69,12 +69,12 @@ def role_records(caller, role, bindings=None, *, cache=None):
                 root = entity.root()
                 if root.location_kind in ("inventory", "equipment") and root.owner_object_id == caller.pk:
                     scopes.add(f"inside:{entity.pk}")
-    key = ("scope", frozenset(scopes))
+    key = ("scope", frozenset(scopes), frozenset(role.kinds))
     if cache is None:
-        records = records_for(caller, scope_ids=scopes)
+        records = records_for(caller, scope_ids=scopes, kinds=role.kinds)
     else:
         if key not in cache:
-            cache[key] = records_for(caller, scope_ids=scopes)
+            cache[key] = records_for(caller, scope_ids=scopes, kinds=role.kinds)
         records = cache[key]
     records = tuple(record for record in records if record.reference.kind in role.kinds)
     if role.scope == TargetScope.SOURCE:
@@ -223,7 +223,12 @@ def provided(caller, index):
     from world.actions.schema import RoleDefinition
 
     # 내부 ItemEntity는 대상으로 조회할 수 있어도 독립 Provider가 되지 않는다.
-    role = RoleDefinition("provider", tuple(ReferenceKind), required=False)
+    kinds = {kind for binding in index.bindings.values()
+             for action in (index.actions[binding.action_id],) if action.public
+             for role in action.roles if role.name == "provider" for kind in role.kinds}
+    if not kinds:
+        return ()
+    role = RoleDefinition("provider", tuple(sorted(kinds)), required=False)
     pairs = []
     for record in role_records(caller, role):
         try:

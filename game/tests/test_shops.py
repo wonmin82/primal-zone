@@ -86,7 +86,7 @@ class ShopTests(WorldCommandTest):
             self.assertIn("상인", self.command(raw))
             self.assertEqual(self.char1.profile(), before)
         self.assertEqual([obj["name"] for obj in multiplayer_state(self.char1)["interactables"]], ["윤대장"])
-        self.assertEqual(render(context_for(self.char1)), "'윤대장에게 안녕")
+        self.assertEqual(render(context_for(self.char1)), "'윤대장 1에게 안녕")
 
     def test_multiple_sellers_filter_by_item_and_use_common_number_selector(self):
         seller = self.sellers["supply"]

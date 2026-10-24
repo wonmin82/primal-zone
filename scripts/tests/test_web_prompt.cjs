@@ -438,3 +438,39 @@ test("전리품 버튼은 Source와 Entry 안정 참조를 보존하고 문자�
   assert.equal(c.socket.sent.at(-1)[1][0].roles.subject[0].identity,"original-ground-entry");
   assert.equal(c.socket.sent.at(-1)[1][0].arguments.snapshot,"server-signed-original-ground-entry");
 });
+
+test("전체 회수가 차단되어도 유효한 개별 전리품을 빈 전리품으로 표시하지 않는다", () => {
+  const c = client();
+  const action = {action_id:"loot.take",variant:"take",roles:{
+    provider:[{kind:"object",identity:"corpse-original",scope_id:"room:7"}],
+    source:[{kind:"object",identity:"corpse-original",scope_id:"room:7"}],
+    subject:[{kind:"loot",identity:"entry-original",scope_id:"source:corpse-original"}]},
+    arguments:{quantity:0,snapshot:"server-signed-original"}};
+  const entry = {display_label:"회수부품 2 ×1",protected:false,can_take:true,action};
+  const render = (loot, loot_obscured = false) => c.receive("pz_state",partyState(null,{corpses:[{
+    id:"corpse-original",label:"시체 2",name:"사체",look_command:"시체 2 봐",
+    loot,take_action:null,loot_obscured}]}));
+  const context = c.byId("context-actions");
+  render([entry]);
+  assert.ok(!context.textContent.includes("회수 가능한 전리품 없음"));
+  assert.ok(!context.textContent.includes("전리품을 식별하기 어려움"));
+  assert.ok(!context.textContent.includes("시체 2 전리품 회수"));
+  const buttons = context.children.filter(row => row.dataset?.actionInvocation);
+  assert.equal(buttons.length,1);
+  assert.equal(buttons[0].disabled,false);
+  c.document.fire("click",{target:buttons[0]});
+  const [kind,args] = c.socket.sent.at(-1);
+  assert.equal(kind,"pz_action");
+  assert.deepEqual(args[0].roles,action.roles);
+  assert.deepEqual(args[0].arguments,action.arguments);
+  assert.equal(c.socket.sent.filter(frame => frame[0] === "text").length,0);
+
+  render([]);
+  assert.ok(context.textContent.includes("회수 가능한 전리품 없음"));
+  render([],true);
+  assert.ok(context.textContent.includes("전리품을 식별하기 어려움"));
+  render([{...entry,action:null,can_take:false}]);
+  assert.ok(context.textContent.includes("회수 가능한 전리품 없음"));
+  assert.equal(JSON.parse(context.lastElementChild.dataset.actionInvocation),null);
+  assert.equal(context.lastElementChild.disabled,true);
+});

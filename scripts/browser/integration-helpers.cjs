@@ -60,5 +60,6 @@ async function control(operation) {
   const response = JSON.parse(fs.readFileSync(path.join(root, 'response.json')));
   expect(response.ready).toBe(true);
   if (operation !== 'restart') expect(response.boundary).toBe(operation);
+  return response;
 }
 module.exports = { snapshot, timingSnapshot: () => snapshot(true), command, travel, itemCount, party, restart: () => control('restart'), control };

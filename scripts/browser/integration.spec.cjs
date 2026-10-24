@@ -286,6 +286,24 @@ test('TEST-E2E-11 마지막 Puppet 해제·즉시 승계·재접속', async ({ a
 
 test('TEST-E2E-12 정상 Portal/Server 재시작·같은 DB·재인증', async ({ actors }) => {
   const a = await actors.create(0), b = await actors.create(1);
+  const outsider = await actors.create(2), protectedDb = snapshot();
+  const protectedItem = protectedDb.items.find(row => row.location_kind === 'corpse_loot' && row.definition_id === 'bandage');
+  expect(protectedItem).toBeTruthy();
+  const protectedSource = protectedItem.owner_object_id;
+  const visibleSource = player => player.state.corpses.find(row => row.id === protectedSource);
+  expect(visibleSource(a).label).toBe(visibleSource(outsider).label);
+  const detailBefore = await outsider.page.locator('#log').textContent();
+  await command(outsider, '시체 모두 봐');
+  const privateView = JSON.stringify({ corpses: outsider.state.corpses, actions: outsider.state.loot_actions });
+  expect(privateView).not.toContain(protectedItem.id);
+  expect(privateView).not.toContain('붕대');
+  const detail = (await outsider.page.locator('#log').textContent()).slice(detailBefore.length);
+  expect(detail).not.toContain(protectedItem.id);
+  expect(detail).not.toContain('붕대');
+  const protectedCurrency = protectedDb.currency.find(row => row.owner_object_id === protectedSource);
+  expect(protectedCurrency).toBeTruthy();
+  expect(privateView).not.toContain('"kind":"currency"');
+  await actors.close(outsider);
   await party(a, b); await command(a, b.name + ' 일행방어');
   await command(a, '영속조회 점수 줄임말'); await command(a, '관리실 열쇠함 조사');
   await travel(a, 'hq_concourse');
@@ -293,7 +311,10 @@ test('TEST-E2E-12 정상 Portal/Server 재시작·같은 DB·재인증', async (
   await actors.close(a); await actors.close(b);
   const before = snapshot();
   exitIntegrity(before);
-  await restart();
+  const restored = await control('restore-restart');
+  expect(restored.backup_integrity).toBe('ok');
+  expect(restored.restore_integrity).toBe('ok');
+  expect(restored.restored_sha256).toMatch(/^[a-f0-9]{64}$/);
   const stopped = snapshot();
   preservedExits(before, stopped);
   expect(stopped.items).toEqual(before.items);
@@ -313,6 +334,23 @@ test('TEST-E2E-12 정상 Portal/Server 재시작·같은 DB·재인증', async (
   expect(stopped.installations).toEqual(before.installations);
   expect(stopped.claims).toEqual(before.claims); expect(stopped.currency).toEqual(before.currency); expect(stopped.shares).toEqual(before.shares);
   expect(stopped.legacy_loot).toEqual(before.legacy_loot);
+  // NumberScope와 SelectionNumber를 직접 비교한다. Item UUID/quantity는 위
+  // items assertion, Corpse/Ground Item·Currency·Door·Enemy는 typed row로 검증.
+  expect(stopped.number_scopes).toEqual(before.number_scopes);
+  expect(stopped.selection_numbers).toEqual(before.selection_numbers);
+  expect(stopped.phase3_race).toEqual(before.phase3_race);
+  const race = stopped.phase3_race;
+  expect(Array.isArray(race.survivors)).toBe(true);
+  expect(race.survivors).toHaveLength(2);
+  expect(stopped.number_scopes.find(row => row.id === race.scope).next_number).toBe(4);
+  expect(stopped.selection_numbers.filter(row => row.scope_id === race.scope).map(row => row.number).sort()).toEqual([2, 3]);
+  for (const identity of race.survivors) expect(stopped.selection_numbers.some(row => row.kind === 'corpse' && row.identity === identity)).toBe(true);
+  expect(stopped.selection_numbers.some(row => row.kind === 'corpse' && row.identity === race.removed)).toBe(false);
+  for (const kind of ['item', 'loot', 'currency', 'corpse', 'door', 'enemy']) {
+    expect(before.selection_numbers.some(row => row.kind === kind)).toBe(true);
+  }
+  expect(before.number_scopes.some(row => row.scope_id.startsWith('inside:'))).toBe(true);
+  expect(before.number_scopes.some(row => row.scope_id.startsWith('ground:'))).toBe(true);
   for (const name of [a.name, b.name]) {
     for (const field of ['command_shortcuts', 'quests', 'credits', 'xp']) expect(stopped.players[name].profile[field]).toEqual(before.players[name].profile[field]);
     expect(stopped.players[name].id).toBe(before.players[name].id);
@@ -327,6 +365,31 @@ test('TEST-E2E-12 정상 Portal/Server 재시작·같은 DB·재인증', async (
   expect(again.state.party.id).toBe(member.state.party.id);
   expect(snapshot().parties[again.state.party.id].tactics).toEqual(before.parties[again.state.party.id].tactics);
   preservedExits(before, snapshot());
+  // 복원 후에도 저장 Counter 다음 번호를 발급한다. 새 fixture를 주입하지
+  // 않고 기존 공개 버려 명령으로 실제 Item의 Scope를 이동한다.
+  const groundScope = stopped.number_scopes.find(row => row.scope_id === `ground:${stopped.rooms.hq_concourse}` && row.group_id === 'item:bandage');
+  expect(groundScope).toBeTruthy();
+  const parentIds = new Set(stopped.items.filter(row => row.location_kind === 'inside').map(row => row.parent_item_id));
+  const parent = stopped.items.find(row => parentIds.has(row.id) && row.owner_object_id === stopped.players[a.name].id);
+  expect(parent).toBeTruthy();
+  // 재인증의 기본 위치는 대기실/라운지다. Counter가 있는 실제 목적지로
+  // 공개 Exit를 통해 이동한 뒤 동일 Ground Scope의 다음 발급을 검증한다.
+  await travel(again, 'hq_concourse');
+  const selected = stopped.selection_numbers.find(row => row.kind === 'item' && row.identity === parent.id);
+  expect(selected).toBeTruthy();
+  // 버려는 승인된 비전환 명령이므로 기존 sequence 기반 선택을 따른다.
+  // 여기서는 선택 정책이 아니라 목적지의 영속 Counter 발급을 검증한다.
+  const legacyIndex = stopped.items.filter(row => row.owner_object_id === parent.owner_object_id && row.location_kind === 'inventory' && row.definition_id === parent.definition_id).findIndex(row => row.id === parent.id) + 1;
+  expect(legacyIndex).toBeGreaterThan(0);
+  await command(again, `붕대 ${legacyIndex} 버려`, '바닥에 내려놓았다');
+  const moved = snapshot();
+  const allocated = moved.selection_numbers.find(row => row.kind === 'loot' && row.identity === parent.id);
+  expect(allocated).toBeTruthy();
+  expect(allocated.scope_id).toBe(groundScope.id);
+  expect(allocated.number).toBe(groundScope.next_number);
+  expect(moved.number_scopes.find(row => row.id === groundScope.id).next_number).toBe(groundScope.next_number + 1);
+  expect(moved.items.find(row => row.id === parent.id).quantity).toBe(parent.quantity);
+  expect(moved.items.filter(row => row.parent_item_id === parent.id)).toEqual(stopped.items.filter(row => row.parent_item_id === parent.id));
 });
 
 test('TEST-E2E-13 실제 Native A/B 지급 뒤 상위 Rollback·성공 알림 없음', async ({ actors }) => {

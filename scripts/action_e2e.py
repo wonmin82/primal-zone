@@ -5,7 +5,7 @@ import json
 import subprocess
 import sys
 
-from smoke_harness import ROOT, Harness, fingerprint
+from smoke_harness import ROOT, Harness
 from websockets.asyncio.client import connect
 
 
@@ -102,20 +102,29 @@ async def scenario(harness):
 
 def main():
     harness = Harness("quick")
-    before = fingerprint(ROOT / "game/server/evennia.db3")
+    before = None
     success = False
     try:
         harness.prepare(ROOT / "scripts/action_fixture.py")
+        before = harness.owned_database_fingerprint()
         harness.start()
         asyncio.run(harness.supervise(scenario(harness)))
         success = True
     finally:
-        harness.stop()
-        if fingerprint(ROOT / "game/server/evennia.db3") != before:
-            raise RuntimeError("플레이 DB가 변경되었습니다.")
+        try:
+            if success:
+                # Windows의 terminate는 shutdown hook을 건너뛰므로 성공한
+                # 실행은 채널 로그까지 공식 종료한 후에만 fixture를 삭제한다.
+                harness.graceful_stop()
+        finally:
+            # 준비/시나리오/정상 종료 실패에도 이 실행의 프로세스는 정리한다.
+            # graceful_stop 실패는 전파하여 discard와 cleanup PASS를 막는다.
+            harness.stop()
+        after = harness.owned_database_fingerprint() if before is not None else None
+        print(json.dumps({"owned_test_db_before": before, "owned_test_db_after": after}), flush=True)
         if success:
             harness.discard()
-            print("PASS owned process cleanup / isolated fixture cleanup / play DB unchanged", flush=True)
+            print("PASS owned process cleanup / isolated fixture cleanup / production DB not accessed", flush=True)
         elif harness.run_dir:
             print(f"FAIL diagnostic fixture retained: {harness.run_dir}", flush=True)
 

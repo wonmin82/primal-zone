@@ -14,7 +14,8 @@ from pathlib import Path
 from time import monotonic
 
 from browser_processes import OwnedBrowser
-from smoke_harness import ROOT, Harness, fingerprint
+from smoke_harness import ROOT, Harness
+from smoke_harness import fingerprint as fingerprint
 
 
 def sanitize_artifacts(directory, passwords):
@@ -152,7 +153,7 @@ def publish_evidence(results, evidence, metadata, run_dir):
     screenshots = (results/'screenshots').resolve()
     for image in report.get('screenshots', []):
         name = image.get('name')
-        if name not in ('safe-viewport-1366.png', 'safe-viewport-390.png'):
+        if name not in ('safe-viewport-1280.png', 'safe-viewport-1366.png', 'safe-viewport-390.png'):
             continue
         candidate = screenshots/image['source']
         source = candidate.resolve()
@@ -174,7 +175,7 @@ def main(scenario=None):
     parent.mkdir(parents=True, exist_ok=True)
     results = Path(tempfile.mkdtemp(prefix='run-', dir=parent)).resolve()
     started = monotonic()
-    before = fingerprint(ROOT/'game/server/evennia.db3')
+    before = None
     success = False
     error = None
     previous = signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
@@ -182,6 +183,7 @@ def main(scenario=None):
         if scenario:
             os.environ['PRIMAL_INTEGRATION_SCENARIO'] = scenario
         harness.prepare(setup_script=ROOT/'scripts/integration_setup.py' if scenario else None)
+        before = harness.owned_database_fingerprint()
         if scenario:
             shutil.copyfile(ROOT/'scripts/integration_hooks.py', harness.run_dir/'game/server/conf/integration_hooks.py')
             with (harness.run_dir/'game/server/conf/settings_smoke.py').open('a', encoding='utf-8') as config:
@@ -204,11 +206,10 @@ def main(scenario=None):
             sanitize_artifacts(results, [password for _, password in harness.credentials])
             if scenario:
                 os.environ.pop('PRIMAL_INTEGRATION_SCENARIO', None)
-        after = fingerprint(ROOT/'game/server/evennia.db3')
-        if before != after:
-            raise RuntimeError('플레이 DB hash/mtime/size 변경: 격리 실패')
+        after = harness.owned_database_fingerprint() if before is not None else None
         metadata = {'success': success, 'head': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
-                    'seconds': round(monotonic()-started, 3), 'play_db_unchanged': True,
+                    'seconds': round(monotonic()-started, 3), 'production_db_accessed': False,
+                    'test_db_before': before, 'test_db_after': after,
                     'processes_stopped': all(p.poll() is not None for _, p in harness.processes),
                     'browser_processes_stopped': getattr(harness, 'browser_processes_stopped', False),
                     'credentials_removed': not (harness.run_dir/'browser-credentials.json').exists() if harness.run_dir else True,

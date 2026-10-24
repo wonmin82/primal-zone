@@ -1,5 +1,6 @@
 """공통 선언의 순수 Help/웹 표현. 번호 할당·게임 효과·확정 토큰 발급을 하지 않는다."""
 
+from world.actions.presentation_context import presentation_scope, profile_snapshot
 from world.actions.resolver import provided
 from world.selection_numbers.api import descriptor, label, number_for, resolve_reference
 
@@ -36,6 +37,12 @@ def help_metadata(index):
 
 
 def action_controls(caller, index, observed_at=None, *, provider_reference=None, verb_key=None):
+    with presentation_scope(caller):
+        return _action_controls(caller, index, observed_at,
+                                provider_reference=provider_reference, verb_key=verb_key)
+
+
+def _action_controls(caller, index, observed_at, *, provider_reference, verb_key):
     from dataclasses import replace
 
     pairs = provided(caller, index)
@@ -58,7 +65,7 @@ def action_controls(caller, index, observed_at=None, *, provider_reference=None,
             from world.rules import RuleError, require_peace
 
             try:
-                require_peace(caller.profile_snapshot())
+                require_peace(profile_snapshot(caller))
             except RuleError:
                 continue
         if service.presenter is not None:

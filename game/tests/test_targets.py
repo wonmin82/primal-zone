@@ -97,8 +97,9 @@ class TargetIntegrationTests(WorldCommandTest):
     def duplicate_enemies(self):
         enemy = room_enemies(self.char1.location)[0]
         for _ in range(2):
-            obj = create_object(Enemy, key=enemy.key, location=enemy.location)
-            obj.db.enemy_id = enemy.db.enemy_id
+            # identity를 생성 경계에 선언하여 실물과 B-1 번호를 함께 확정한다.
+            obj = create_object(Enemy, key=enemy.key, location=enemy.location,
+                                attributes=[("enemy_id", enemy.db.enemy_id)])
             obj.db.max_hp = obj.db.hp = enemy.db.max_hp
         return room_enemies(self.char1.location)
 
@@ -206,7 +207,7 @@ class TargetIntegrationTests(WorldCommandTest):
         enemies[1].locks.add("view:false()")
         state = multiplayer_state(self.char1, 100)
         self.assertEqual([e["id"] for e in state["enemies"]], [enemies[0].id, enemies[2].id])
-        self.assertEqual(state["enemies"][1]["label"], enemies[2].key + " 2")
+        self.assertEqual(state["enemies"][1]["label"], enemies[2].key + " 3")
 
     def test_action_object_default_index_all_cardinality_and_no_reward_skip(self):
         objects = [

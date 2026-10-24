@@ -133,7 +133,7 @@ class Container(ActionObject):
                     " · 아이템 뒤에 모두를 붙이면 스택 전부를 옮긴다.",
                 )
             )
-        return ft.compact(ft.token("object", label), *lines)
+        return ft.compact(ft.token("object", label if label is not None else self.key), *lines)
 
 
 class PersonalLocker(Container):

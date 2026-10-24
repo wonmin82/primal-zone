@@ -8,11 +8,11 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT/'scripts'))
-from integration_e2e import SCENARIOS, wait_browser  # noqa: E402
+from integration_e2e import SCENARIOS, restore_restart, wait_browser  # noqa: E402
 from integration_probe import snapshot  # noqa: E402
 from issue50_contracts import records  # noqa: E402
 from release_guard import validate  # noqa: E402
@@ -141,6 +141,89 @@ class IntegrationContractManifestTests(unittest.TestCase):
 
 
 class IntegrationControlTests(unittest.IsolatedAsyncioTestCase):
+    def owned_restore_fixture(self, run):
+        import sqlite3
+        from contextlib import closing
+
+        (run/'.primal-smoke').touch()
+        database = run/'evennia-smoke.sqlite3'
+        with closing(sqlite3.connect(database)) as connection, connection:
+            connection.execute('CREATE TABLE retained (identity TEXT, number INTEGER, quantity INTEGER)')
+            connection.execute("INSERT INTO retained VALUES ('same-uuid',3,7)")
+        return SimpleNamespace(run_dir=run, env={'PRIMAL_SMOKE_RUN_DIR': str(run),
+                               'DJANGO_SETTINGS_MODULE': 'server.conf.settings_smoke'},
+                               processes=[], handles=[], graceful_stop=Mock(), start=Mock(), ready=AsyncMock())
+
+    async def test_backup_restores_owned_sqlite_and_retains_stopped_original(self):
+        import sqlite3
+        from contextlib import closing
+
+        parent = ROOT/'work/smoke'
+        parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=parent) as directory:
+            run = Path(directory).resolve()
+            harness = self.owned_restore_fixture(run)
+            result = await restore_restart(harness)
+            harness.graceful_stop.assert_called_once()
+            harness.start.assert_called_once()
+            harness.ready.assert_awaited_once()
+            self.assertEqual(result['restore_integrity'], 'ok')
+            self.assertTrue((run/'persistence-stopped.sqlite3').is_file())
+            self.assertTrue((run/'persistence-backup.sqlite3').is_file())
+            with closing(sqlite3.connect(run/'evennia-smoke.sqlite3')) as connection:
+                self.assertEqual(connection.execute('PRAGMA integrity_check').fetchone(), ('ok',))
+                self.assertEqual(connection.execute('SELECT * FROM retained').fetchall(), [('same-uuid', 3, 7)])
+            self.assertFalse(harness.restarting)
+
+    async def test_restore_rejects_foreign_run_missing_marker_and_symlink_before_read(self):
+        parent = ROOT/'work/smoke'
+        parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=parent) as directory:
+            run = Path(directory).resolve()
+            harness = self.owned_restore_fixture(run)
+            for condition in ('marker', 'symlink', 'foreign', 'environment'):
+                with self.subTest(condition=condition):
+                    marker = run/'.primal-smoke'
+                    if condition == 'marker':
+                        marker.unlink()
+                    harness.env['PRIMAL_SMOKE_RUN_DIR'] = 'foreign' if condition == 'environment' else str(run)
+                    harness.run_dir = run.parent if condition == 'foreign' else run
+                    with patch('integration_e2e.sqlite3.connect') as connect, patch.object(Path, 'is_symlink', return_value=condition == 'symlink'):
+                        with self.assertRaisesRegex(RuntimeError, '불일치'):
+                            await restore_restart(harness)
+                        connect.assert_not_called()
+                    if condition == 'marker':
+                        marker.touch()
+                    harness.graceful_stop.assert_not_called()
+
+    async def test_live_process_after_stop_blocks_restore_and_start(self):
+        parent = ROOT/'work/smoke'
+        parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=parent) as directory:
+            run = Path(directory).resolve()
+            harness = self.owned_restore_fixture(run)
+            harness.processes = [('server', SimpleNamespace(poll=lambda: None))]
+            with self.assertRaisesRegex(RuntimeError, '정상 종료'):
+                await restore_restart(harness)
+            harness.start.assert_not_called()
+            self.assertFalse((run/'persistence-restored.sqlite3').exists())
+            self.assertFalse((run/'persistence-stopped.sqlite3').exists())
+            self.assertFalse(harness.restarting)
+
+    async def test_dangling_artifact_symlinks_are_rejected_before_database_read(self):
+        parent = ROOT/'work/smoke'
+        parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=parent) as directory:
+            run = Path(directory).resolve()
+            harness = self.owned_restore_fixture(run)
+            for name in ('persistence-backup.sqlite3', 'persistence-restored.sqlite3', 'persistence-stopped.sqlite3'):
+                with self.subTest(name=name):
+                    with patch.object(Path, 'is_symlink', autospec=True, side_effect=lambda path: path.name == name), patch('integration_e2e.sqlite3.connect') as connect:
+                        with self.assertRaisesRegex(RuntimeError, '덮어쓸'):
+                            await restore_restart(harness)
+                        connect.assert_not_called()
+                        harness.graceful_stop.assert_not_called()
+
     async def test_unknown_control_cannot_mutate_or_skip_owned_cleanup(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

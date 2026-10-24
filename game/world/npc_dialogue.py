@@ -16,8 +16,8 @@ from world.targets import (
     matching,
     names,
     parse_selector,
+    resolve,
     room_objects,
-    strict_single,
 )
 
 CONTEXT_TTL = 180
@@ -105,12 +105,13 @@ def explicit_target(caller, original):
         base = prefix.rsplit(None, 1)
         numbered = len(base) == 2 and (base[-1].lstrip("+-").isdecimal() or base[-1] == "모두")
         base_name = base[0] if numbered else prefix
-        if not matching(pool, TargetSelector(base_name)):
+        literal = matching(pool, TargetSelector(prefix))
+        if not literal and not matching(pool, TargetSelector(base_name)):
             return None, original
-        if numbered and base[-1].startswith(("-", "+")):
+        if not literal and numbered and base[-1].startswith(("-", "+")):
             raise rules.RuleError("대상 번호는 1 이상의 정수로 지정하세요.")
         selector = parse_selector(prefix, known)
-        npc = strict_single(matching(pool, selector), selector, "말")
+        npc = resolve(pool, selector, caller, "말")[0]
         body = " ".join(words[position + 1:])
         if not body:
             raise rules.RuleError("NPC에게 할 말을 입력하세요.")
@@ -262,7 +263,9 @@ def keyword_guide(recipient, npc, active, *, force=False):
              if key in present and row["location_id"] == getattr(recipient.location, "id", None)
              and 0 <= now - row["at"] < CONTEXT_TTL}
     words = tuple(dict.fromkeys(item.keyword for item in active if item.intent_id != "greeting"))
-    target = labels(nearby(recipient)).get(npc.id, npc.key)
+    target = labels(nearby(recipient)).get(npc.id)
+    if target is None:
+        words = ()
     previous = store.get(npc.id)
     if force or not previous or previous["keywords"] != words or previous["target"] != target:
         if words:
@@ -433,6 +436,8 @@ def select_keyword(caller, token, session):
 def discovery(npc, caller):
     from world.targets import labels
 
-    target = labels(nearby(caller)).get(npc.id, npc.key)
+    target = labels(nearby(caller)).get(npc.id)
+    if target is None:
+        return "선택 번호를 확인할 수 없어 말 걸기 안내를 제공하지 않습니다."
     topics = " · ".join(item.keyword for item in intents_for(type_name(npc)) if not item.mutates_state)
     return f"말 걸기: '{target}에게 안녕 · {target}에게 안녕 말 / 화제: {topics}"

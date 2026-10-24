@@ -367,3 +367,244 @@ class LootActionTests(NativeLootTest):
         self.assertNotIn("회수:", str(appearance))
         self.assertEqual(deserialize(legacy.db.entries), before)
         self.assertEqual(ItemEntity.objects.count(), counts)
+
+    def missing_number_state(self):
+        from world.selection_numbers.models import NumberScope, SelectionNumber
+
+        return (self.all_state(), list(SelectionNumber.objects.order_by("pk").values()),
+                list(NumberScope.objects.order_by("pk").values()))
+
+    def remove_number(self, entity):
+        from world.selection_numbers.models import SelectionNumber
+
+        reference = descriptor(entity).reference
+        SelectionNumber.objects.filter(kind=reference.kind, identity=reference.identity).delete()
+        self.assertIsNone(number_for(reference))
+        return reference
+
+    def test_missing_corpse_number_has_no_take_look_or_payload_and_valid_two_survives(self):
+        from world.actions.gateway import from_web
+        from world.actions.loot_presentation import all_controls, payload, source_controls
+        from world.selection_numbers.api import verify
+        from world.state import multiplayer_state
+
+        first_item = self.loot_item(quantity=2)
+        second = self.corpse()
+        api.create_item("ammo_9", quantity=3, location_kind="corpse_loot", owner_object=second)
+        missing = self.remove_number(self.source)
+        before = self.missing_number_state()
+        for _ in range(2):
+            controls = source_controls(self.char1, 100)
+            unavailable = controls[self.source.pk]
+            self.assertEqual(unavailable["take_command"], "")
+            self.assertIsNone(unavailable["take_action"])
+            self.assertIn("선택", unavailable["label"])
+            self.assertIsNone(payload(self.char1, [(self.source, self.entry(first_item))], now=100))
+            self.assertIsNone(all_controls(self.char1, 100)["corpses"])
+            rows = multiplayer_state(self.char1, 100)["corpses"]
+            self.assertEqual([(row["id"], row["label"], row["look_command"])
+                              for row in rows], [(second.pk, "시체 2", "시체 2 봐")])
+            self.assertEqual(controls[second.pk]["take_command"], "시체 2에서 모두 가져")
+            self.assertIn((missing.kind, missing.identity, "missing"), verify())
+        self.assertEqual(self.missing_number_state(), before)
+        result = execute(self.char1, self.session,
+                         from_web({**controls[second.pk]["take_action"], "request_id": "valid-corpse-two"}, self.index),
+                         self.index)
+        self.assertEqual(result.status, ResultStatus.SUCCESS)
+        self.assertEqual(ItemEntity.objects.get(owner_object=self.char1, definition_id="ammo_9").quantity, 3)
+        first_item.refresh_from_db()
+        self.assertEqual((first_item.owner_object_id, first_item.quantity), (self.source.pk, 2))
+        self.assertEqual(number_for(descriptor(second).reference), 2)
+
+    def test_missing_item_and_currency_numbers_hide_only_bad_entry_and_disable_aggregate(self):
+        from world.actions.loot_presentation import payload, source_controls, visible_entries
+
+        for kind in ("item", "currency"):
+            with self.subTest(kind=kind):
+                source = self.corpse()
+                if kind == "item":
+                    first, second = [api.create_item("ammo_9", quantity=quantity, location_kind="corpse_loot",
+                                                     owner_object=source) for quantity in (2, 3)]
+                else:
+                    first, second = [loot_service.create_currency(source, quantity) for quantity in (2, 3)]
+                self.assertEqual([number_for(descriptor(obj).reference) for obj in (first, second)], [1, 2])
+                self.remove_number(first)
+                before = self.missing_number_state()
+                rows = visible_entries(source, self.char1, 100)
+                self.assertEqual([row["quantity"] for row in rows], [3])
+                self.assertTrue(rows[0]["take_target"].endswith(" 2"))
+                self.assertTrue(rows[0]["take_command"])
+                self.assertIsNotNone(rows[0]["action"])
+                control = source_controls(self.char1, 100)[source.pk]
+                self.assertIsNone(control["take_action"])
+                self.assertEqual(control["take_command"], "")
+                selected = next(entry for entry in loot_service.loot_snapshot(source).entries
+                                if entry.item_id == first.pk or entry.currency_id == first.pk)
+                self.assertIsNone(payload(self.char1, [(source, selected)], now=100))
+                self.assertEqual(self.missing_number_state(), before)
+                self.assertEqual(number_for(descriptor(second).reference), 2)
+                source_number = number_for(descriptor(source).reference)
+                subject = "9mm 권총탄" if kind == "item" else "보급칩"
+                with patch("world.loot_service.pickup", wraps=loot_service.pickup) as pickup:
+                    completed = []
+                    self.char1.execute_cmd(f"시체 {source_number}에서 {subject} 1 가져",
+                                           session=self.session).addCallback(lambda _: completed.append(True))
+                    self.assertEqual(completed, [True])
+                    pickup.assert_not_called()
+                    self.assertEqual(self.missing_number_state(), before)
+                    credits = self.char1.profile()["credits"]
+                    result = self.run_take(f"시체 {source_number}에서 {subject} 2")
+                    self.assertEqual(result.status, ResultStatus.SUCCESS)
+                    self.assertEqual(pickup.call_count, 1)
+                first.refresh_from_db()
+                second.refresh_from_db()
+                self.assertEqual((first.quantity, second.quantity), (2, 2))
+                self.assertEqual(number_for(descriptor(second).reference), 2)
+                if kind == "currency":
+                    self.assertEqual(self.char1.profile()["credits"], credits + 1)
+                else:
+                    self.assertEqual(ItemEntity.objects.get(owner_object=self.char1, definition_id="ammo_9").quantity, 1)
+
+    def test_mixed_all_controls_never_silently_sign_a_valid_subset(self):
+        from world.actions.loot_presentation import all_controls, payload, source_controls
+
+        self.loot_item(quantity=2)
+        second = self.corpse()
+        good = api.create_item("ammo_9", quantity=3, location_kind="corpse_loot", owner_object=second)
+        bad = api.create_item("bandage", quantity=4, location_kind="corpse_loot", owner_object=second)
+        self.remove_number(bad)
+        before = self.missing_number_state()
+        selected = [(source, entry) for source in (self.source, second)
+                    for entry in loot_service.loot_snapshot(source).entries]
+        self.assertIsNone(payload(self.char1, selected, now=100))
+        self.assertIsNone(all_controls(self.char1, 100)["corpses"])
+        controls = source_controls(self.char1, 100)
+        self.assertIsNotNone(controls[self.source.pk]["take_action"])
+        self.assertEqual(controls[self.source.pk]["take_command"], "시체 1에서 모두 가져")
+        self.assertIsNone(controls[second.pk]["take_action"])
+        self.assertEqual([row["quantity"] for row in controls[second.pk]["loot"]], [good.quantity])
+        self.assertEqual(self.run_take("모든 시체에서 모두").status, ResultStatus.REFUSED)
+        self.assertEqual(self.missing_number_state(), before)
+
+    def test_ground_keeps_existing_label_and_all_syntax_but_missing_entry_blocks_aggregate(self):
+        from world.actions.gateway import from_web
+        from world.actions.loot_presentation import all_controls, source_controls
+
+        ground = create_object(DroppedLoot, key="바닥 묶음", location=self.char1.location)
+        loot_service.populate_source(ground, [{"kind": "item", "id": "bandage", "quantity": 2},
+                                              {"kind": "currency", "id": "credits", "quantity": 7}])
+        before_control = source_controls(self.char1, 100)[ground.pk]
+        self.assertEqual((before_control["label"], before_control["take_command"]), ("바닥 전리품", "모두 가져"))
+        self.assertIsNotNone(before_control["take_action"])
+        currency = next(entry for entry in loot_service.loot_snapshot(ground).entries if entry.kind == "currency")
+        from world.loot_entities.models import CurrencyLoot
+        self.remove_number(CurrencyLoot.objects.get(pk=currency.currency_id))
+        before = self.missing_number_state()
+        control = source_controls(self.char1, 100)[ground.pk]
+        self.assertEqual(control["label"], "바닥 전리품")
+        self.assertEqual(control["take_command"], "")
+        self.assertIsNone(control["take_action"])
+        self.assertIsNone(all_controls(self.char1, 100)["ground"])
+        self.assertEqual([row["kind"] for row in control["loot"]], ["item"])
+        self.assertEqual(self.missing_number_state(), before)
+        result = execute(self.char1, self.session,
+                         from_web({**control["loot"][0]["action"], "request_id": "valid-ground-item"}, self.index),
+                         self.index)
+        self.assertEqual(result.status, ResultStatus.SUCCESS)
+        self.assertEqual(ItemEntity.objects.get(owner_object=self.char1, definition_id="bandage").quantity, 1)
+
+    def test_missing_number_stale_web_is_already_refused_without_domain_effect(self):
+        from world.actions.gateway import from_web
+        from world.actions.loot_presentation import payload
+
+        for kind in ("source", "item", "currency", "ground_source"):
+            with self.subTest(kind=kind):
+                if kind == "ground_source":
+                    source = create_object(DroppedLoot, key="바닥 묶음", location=self.char1.location)
+                    loot_service.populate_source(source, [])
+                else:
+                    source = self.corpse()
+                item = api.create_item("ammo_9", quantity=2,
+                                       location_kind="world_loot" if kind == "ground_source" else "corpse_loot",
+                                       owner_object=source)
+                row = loot_service.create_currency(source, 7, shares={self.char1: 7}, reserved_player=self.char1,
+                                                   protection_until=300)
+                selected = next(entry for entry in loot_service.loot_snapshot(source).entries
+                                if entry.currency_id == row.pk) if kind == "currency" else next(
+                                    entry for entry in loot_service.loot_snapshot(source).entries if entry.item_id == item.pk)
+                old = payload(self.char1, [(source, selected)], quantity=1, now=100)
+                self.assertIsNotNone(old)
+                self.remove_number(source if kind in ("source", "ground_source") else row if kind == "currency" else item)
+                before = self.missing_number_state()
+                with patch("world.loot_service.pickup", wraps=loot_service.pickup) as pickup, patch(
+                        "world.loot_service.notify_pickup", wraps=loot_service.notify_pickup) as notify:
+                    result = execute(self.char1, self.session,
+                                     from_web({**old, "request_id": "missing-number-" + kind}, self.index), self.index)
+                self.assertEqual(result.status, ResultStatus.REFUSED)
+                pickup.assert_not_called()
+                notify.assert_not_called()
+                self.assertNotIn("SelectionNumber", str(result.messages))
+                self.assertNotIn(str(item.pk), str(result.messages))
+                self.assertEqual(self.missing_number_state(), before)
+
+    def test_missing_corpse_overview_and_legacy_remain_readonly_without_fake_ordinal(self):
+        from world.actions.loot_presentation import all_controls, payload, source_controls
+        from world.target_presentation import corpse_overview
+
+        self.loot_item(quantity=2)
+        second = self.corpse()
+        self.remove_number(self.source)
+        legacy = create_object(Corpse, key="과거 저장 시체", location=self.char1.location)
+        legacy.db.decay_at = 200
+        legacy.db.entries = [{"item": "bandage", "quantity": 2}]
+        before = self.missing_number_state()
+        overview = str(corpse_overview([self.source, second], self.char1, 100))
+        self.assertNotIn("None", overview)
+        self.assertNotIn("첫 번째", overview)
+        self.assertIn("두 번째", overview)
+        self.assertIn("선택", overview)
+        control = source_controls(self.char1, 100)[legacy.pk]
+        self.assertEqual(control["take_command"], "")
+        self.assertIsNone(control["take_action"])
+        self.assertTrue(all(row["action"] is None and not row["take_command"] for row in control["loot"]))
+        legacy_entry = loot_service.loot_snapshot(legacy).entries[0]
+        self.assertIsNone(payload(self.char1, [(legacy, legacy_entry)], now=100))
+        self.assertIn("붕대 ×2", str(legacy.return_appearance(self.char1, observed_at=100)))
+        self.assertIsNone(all_controls(self.char1, 100)["corpses"])
+        self.assertEqual(self.missing_number_state(), before)
+
+    def test_missing_protected_entry_does_not_change_other_players_visible_rights(self):
+        from world.actions.loot_presentation import source_controls, visible_entries
+
+        hidden = self.loot_item(quantity=17)
+        visible = self.loot_item(quantity=2, assigned=self.char2)
+        before_rows = visible_entries(self.source, self.char2, 100)
+        self.assertEqual([row["quantity"] for row in before_rows], [2])
+        self.remove_number(hidden)
+        before = self.missing_number_state()
+        after_rows = visible_entries(self.source, self.char2, 100)
+        self.assertEqual([(row["label"], row["quantity"], row["protected"], row["assigned_name"])
+                          for row in after_rows],
+                         [(row["label"], row["quantity"], row["protected"], row["assigned_name"])
+                          for row in before_rows])
+        control = source_controls(self.char2, 100)[self.source.pk]
+        self.assertIsNotNone(control["take_action"])
+        self.assertEqual(len(control["take_action"]["roles"]["subject"]), 1)
+        self.assertEqual(control["take_action"]["roles"]["subject"][0]["identity"], str(visible.pk))
+        public_fields = [{key: row[key] for key in ("name", "label", "take_target", "display_label",
+                                                   "amount_label", "assigned_name")} for row in after_rows]
+        self.assertNotIn("17", str(public_fields))
+        self.assertEqual(self.missing_number_state(), before)
+
+    def test_direct_container_controls_with_missing_number_do_not_fall_back_to_raw_name(self):
+        from typeclasses.interactables import Container
+
+        containers = [create_object(Container, key="동명 보관상자", location=self.char1.location) for _ in range(2)]
+        self.assertEqual(containers[0].web_actions(self.char1, "unused", 100),
+                         [{"label": "봐", "command": "동명 보관상자 봐"}])
+        self.remove_number(containers[0])
+        before = self.missing_number_state()
+        self.assertEqual(containers[0].web_actions(self.char1, "unused", 100), [])
+        self.assertEqual(containers[1].web_actions(self.char1, "unused", 100),
+                         [{"label": "봐", "command": "동명 보관상자 봐"}])
+        self.assertEqual(self.missing_number_state(), before)

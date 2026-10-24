@@ -72,8 +72,8 @@ class ItemInteractionTests(ItemInteractionFixture):
     def test_attack_alias_default_index_and_all_cardinality(self):
         self.char1.location = self.rooms["trail"]
         enemy = room_enemies(self.char1.location)[0]
-        duplicate = create_object(Enemy, key=enemy.key, location=enemy.location)
-        duplicate.db.enemy_id = enemy.db.enemy_id
+        duplicate = create_object(Enemy, key=enemy.key, location=enemy.location,
+                                  attributes=[("enemy_id", enemy.db.enemy_id)])
         duplicate.db.hp = duplicate.db.max_hp = enemy.db.max_hp
         for action in ("공격", "때려"):
             self.command(enemy.key + " " + action)

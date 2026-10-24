@@ -214,7 +214,7 @@
       if (corpse.loot.length && corpse.take_action) {
         const all = actionButton(corpse.label + " 전리품 회수", corpse.take_action);
         all.disabled = !corpse.loot.some((item) => item.can_take); actions.push(all);
-      } else { const empty = document.createElement("small"); empty.textContent = corpse.loot_obscured ? "전리품을 식별하기 어려움" : "회수 가능한 전리품 없음"; actions.push(empty); }
+      } else if (!corpse.loot.some((item) => item.action)) { const empty = document.createElement("small"); empty.textContent = corpse.loot_obscured ? "전리품을 식별하기 어려움" : "회수 가능한 전리품 없음"; actions.push(empty); }
       for (const item of corpse.loot) {
         const el = actionButton(item.display_label + " → " + (item.protected ? item.assigned_name : "자유 획득"), item.action);
         el.replaceChildren(semantic(item.kind === "currency" ? "reward" : "item", item.display_label), " → ", semantic(item.protected ? "player" : "muted", item.protected ? item.assigned_name : "자유 획득"));

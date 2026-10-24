@@ -29,7 +29,7 @@ class SafeReporter {
         catch { entry.errors++; }
       }
       if (attachment.name === 'chromium-version' && attachment.body && /^\d+(\.\d+){3}$/.test(attachment.body.toString())) entry.chromium = attachment.body.toString();
-      if (id === 'TEST-50A-06' && /^safe-viewport-(1366|390)$/.test(attachment.name) && attachment.path) {
+      if (id === 'TEST-50A-06' && /^safe-viewport-(1366|1280|390)$/.test(attachment.name) && attachment.path) {
         const root = path.resolve(process.env.PRIMAL_BROWSER_RESULTS, 'screenshots');
         const relative = path.relative(root, attachment.path);
         if (!relative.startsWith('..') && !path.isAbsolute(relative)) this.screenshots.push({ source: relative, name: attachment.name + '.png' });

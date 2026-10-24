@@ -76,6 +76,7 @@ def snapshot(*, timing=False):
     evennia._init()
     from django.db.models import Q
     from evennia.objects.models import ObjectDB
+    from evennia.utils.dbserialize import deserialize
     from typeclasses.explorers import Explorer
     from typeclasses.loot import Corpse
     from typeclasses.parties import Party
@@ -83,6 +84,7 @@ def snapshot(*, timing=False):
     from world.door_entities.models import Door, DoorInstallation
     from world.item_entities.models import ItemEntity
     from world.loot_entities.models import CurrencyLoot, CurrencyLootShare, LootClaim
+    from world.selection_numbers.models import NumberScope, SelectionNumber
     players = {}
     for player in Explorer.objects.all():
         if player.key == "admin":
@@ -102,7 +104,9 @@ def snapshot(*, timing=False):
                       "installation_ids": sorted(j["door_id"] for j in journals if any(e["exit_pk"] == obj.pk for e in j["endpoints"]))})
     rooms = {tag: obj.pk for obj in ObjectDB.objects.filter(db_tags__db_category="primal_zone_room").distinct()
              for tag in obj.tags.get(category="primal_zone_room", return_list=True)}
+    race_room = ObjectDB.objects.filter(db_key="Phase3 경합 방").first()
     return {"players": players, "parties": {str(p.pk): p.state() for p in Party.objects.all()},
+            "phase3_race": deserialize(race_room.db.phase3_race) if race_room else None,
             "exits": exits, "rooms": rooms,
             "doors": list(Door.objects.order_by("door_id").values()),
             "installations": journals,
@@ -110,6 +114,8 @@ def snapshot(*, timing=False):
             "claims": list(LootClaim.objects.order_by("pk").values()),
             "currency": list(CurrencyLoot.objects.order_by("pk").values()),
             "shares": list(CurrencyLootShare.objects.order_by("pk").values()),
+            "number_scopes": list(NumberScope.objects.order_by("pk").values()),
+            "selection_numbers": list(SelectionNumber.objects.order_by("pk").values()),
             "legacy_loot": {str(c.pk): list(c.db.entries or []) for c in Corpse.objects.all()},
             "routes": {key: data["exits"] for key, data in ROOMS.items()}}
 

@@ -45,3 +45,6 @@ for _key, _value in smoke_timings(PRIMAL_SMOKE_MODE).items():
 import sys  # noqa: E402
 
 require_smoke(sys.modules[__name__])
+
+# 운영 hook을 위임하고 Full에만 실제 death 생성 관측을 설치한다.
+AT_SERVER_STARTSTOP_MODULE = "server.conf.smoke_startstop"
