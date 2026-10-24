@@ -685,3 +685,26 @@ $p2Labels = @($p2Names | ForEach-Object { "tests.test_loot_actions.LootActionTes
 `implementer_mossvale`는 지정 Python5파일과 후속 JS/계약2파일만 작성했고, 최종7파일 해시를 동결하고 소유권을 반환했다. `reviewer_silverfern`은 실제 소스·직접 소비자·Assertion·원로그와 마지막 JS delta를 독립 확인해 **A/잔여P0/P1/P2/P3 0/0/0/0**으로 판정했다. 모델을 대체하지 않고 일시 용량/사용량 제한 뒤 같은 컨텍스트를 복원했으며, 완료된 Python141개를 Node 변경 때문에 반복하지 않았다. 원격 CI·Git·PR/문서 통합은 root 담당이다. 번호/지급 도메인 변경이 없어 Auditor를 형식적으로 추가하지 않았고, Done과 실제 Close/슬롯 해제 미확인을 구분한다.
 
 최종 로컬 실행 기준은 `8291c4a + 동결 Python5파일`, Node는 그 코드에 렌더/계약2파일을 추가한 Diff다. 확정 Commit에서 실행한 것으로 바꾸어 기록하지 않는다. Source SHA·새 CI Run/4개 결과·병합 전 최종 판정은 [PR #75 Validation](https://github.com/wonmin82/primal-zone/pull/75)에서 추적하며, 새 CI 성공 전에는 이전 Source 성공으로 대신하지 않는다. CI 성공도 사용자 병합 승인이나 Final Closeout 완료가 아니다.
+
+## 13. 최종 Container P3와 승인 후 Closeout 절차
+
+시작 Source는 `f6095f5a354a13cdae848c7f7c9fc1b8590e2978`, main은 `ea4072c0e01f14dad268591fda1096e1f413ef2b`다. 위 §12의 정확한 Source [CI40083848758](https://github.com/wonmin82/primal-zone/actions/runs/40083848758)는 필수4/4 SUCCESS, 규칙255/통합1118 PASS, Chromium 기본 및 통합14개 PASS였으며 이번 새 Source의 성공으로 대신하지 않는다. 사용자는 이번 요청에서 최소 P3 수정, 조건 충족 후 Draft 해제·Merge Commit 병합·main CI·#67/#44 종료·소스 브랜치 삭제를 명시 승인했다. 과거 절의 승인 대기는 당시 기록이며 이번 승인으로 갱신한다. 실제 병합·main CI·Closeout은 실행 전까지 완료로 기재하지 않는다.
+
+직접 Container `controls_for()`는 번호 누락을 차단하면서도 정상 객체에는 raw key의 `동명 보관상자 봐`를 반환했다. 실제 descriptor와 `number_for()`의 저장 번호를 `label(replace(record, number=number))`에 전달해 정상 단독1·동명1/2가 각각 `동명 보관상자 1/2 봐`를 안내하도록 최소 수정했다. 번호가 없으면 기존 `[]`다. Parser/Resolver·Gateway·번호 발급/Scope/Counter·ItemEntity·지급/권리·경제/전투·타이머·JS는 변경하지 않는다.
+
+기존 `LootActionTests.test_direct_container_controls_with_missing_number_do_not_fall_back_to_raw_name`을 확장했다. 수정 전 **1 FAIL8.463초(전체24.795초)**는 첫 단독1 표시 Assertion에서 종료됐으며 동명2개의 실제 실행까지 실패를 재현한 것으로 확대하지 않는다. 수정 후 동일 테스트는 **1 PASS6.611초(전체17.188초)**다. 실제 Evennia `execute_cmd()`와 원래 `at_look`의 wraps 관측으로 1/2 명령이 각각 원래 실물만 선택함을 확인했다. 1번 SelectionNumber만 제거하면 A의 실행 안내 없음·B의2 유지·명시1의 다른 대상 호출0·명시2 정상 선택, 반복 직접 조회와 실제 보기 뒤 SelectionNumber/NumberScope 및 관련 상태 불변을 검사한다. 실제 실행을 Mock으로 대체하거나 번호를 임의 발급하지 않았다.
+
+```powershell
+.\.venv\Scripts\python.exe scripts/dev.py test tests.test_loot_actions.LootActionTests.test_direct_container_controls_with_missing_number_do_not_fall_back_to_raw_name --parallel 1
+.\.venv\Scripts\python.exe scripts/dev.py test tests.test_targets tests.test_web_state tests.test_room_npc_actions --parallel 1
+.\.venv\Scripts\python.exe scripts/dev.py check
+.\.venv\Scripts\python.exe scripts/dev.py smoke
+```
+
+직접 영향3모듈은 **46 PASS78.766초(전체89.283초)**다. 실행 기준은 `f6095f5 + 동결 제품/회귀2파일 Diff`, settings_test 메모리 SQLite와 정상 정리를 확인했다. `before.log`/`after.log`/`impact.log` 및 동결 해시는 ignored `work/issue67/container-p3-juniper/`에 보존하며 Commit에 포함하지 않는다. 최종 형상의 root Quick 결과는 아래 후속 기록과 PR Validation에 별도로 기재한다. check/diff-check는 PASS다.
+
+root의 Push 전 최종 코드 형상 `f6095f5 + 동결2파일 Diff`에서 `scripts/dev.py smoke`는 **quick-arcxbtmx PASS176.626초/exit0**다. 실제 인증·Prompt·대화·일행·공동 전투·부분 화폐·Ground/리스폰/보호·상점·회복·재로그인·진행 보존을 확인하고 소유 Portal/Server 종료와 임시 자원 정리를 완료했다. 소유 marker·전용 포트/환경과 테스트 DB 전후 fingerprint를 확인했다. 운영 DB를 읽거나 해시하지 않았다. 단축10/12/20초 Quick을 production30/45/120초 성공으로 확대하지 않는다. 이후 변경은 증거 문서뿐이며 새 Source의 원격 CI와 구분한다. 원콘솔은 위 경로 `quick.log`다.
+
+Implementer `implementer_juniper`는 할당2파일만 수정하고 소유권을 반환했다. Reviewer `reviewer_wisteria`는 실제 Diff·공개 Look→Resolver·소비자·Assertion·원로그를 독립 확인해 코드 기준 A/새 P0/P1/P2/P3 0/0/0/0으로 판정했다. 최종 Quick/문서/Source CI의 적용성은 같은 회차의 좁은 후속 대조로 확인한다. 기존 고위험 도메인을 변경하지 않아 Auditor·Full·실제 Timing·재시작·OS IME를 형식적으로 반복하지 않는다. 기존 Full/실제60·600·30·45·120초/E2E-12·USER-ATTESTED IME는 변경 없는 해당 범위로 재사용한다. 공식 지원은 SQLite+단일 Evennia Server이며 운영 DB 접근·조회·복사·해시·Migration/Seed/Reset/Restore/Backfill은 수행하지 않는다.
+
+병합 전 CSV는 공식38행·110Case와 **108 PASS/2 NOT RUN, 규범36 PASS/2 NOT RUN**을 보존한다. R30-C02/R38-C02의 사용자 승인 부분만 확보됐으며 실제 Merge Commit·main push CI·최종 Closeout은 아직 미완료다. 최종 Source 및 main SHA/각 CI 링크·T08 네 Case와110/110·38/38의 실제 최종 판정은 승인 후 [Issue #67 Final Closeout](https://github.com/wonmin82/primal-zone/issues/67)에 기록한다. 저장소의 이 병합 전 스냅샷을 조기 PASS로 Commit하거나 종료된 PR 이력을 재작성하지 않는다. Epic #44의 동결 원문·결정/역사·Native 관계는 보존하며 현재 관리 상태만 실제 결과에 맞춰 갱신한다.

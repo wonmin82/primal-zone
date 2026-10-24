@@ -599,12 +599,42 @@ class LootActionTests(NativeLootTest):
     def test_direct_container_controls_with_missing_number_do_not_fall_back_to_raw_name(self):
         from typeclasses.interactables import Container
 
-        containers = [create_object(Container, key="동명 보관상자", location=self.char1.location) for _ in range(2)]
-        self.assertEqual(containers[0].web_actions(self.char1, "unused", 100),
-                         [{"label": "봐", "command": "동명 보관상자 봐"}])
+        first = create_object(Container, key="동명 보관상자", location=self.char1.location)
+        self.assertEqual(first.web_actions(self.char1, "unused", 100),
+                         [{"label": "봐", "command": "동명 보관상자 1 봐"}])
+        second = create_object(Container, key="동명 보관상자", location=self.char1.location)
+        containers = (first, second)
+        self.assertEqual([number_for(descriptor(obj).reference) for obj in containers], [1, 2])
+        before = self.missing_number_state()
+        with patch("commands.character.time", return_value=100), patch.object(
+                self.char1, "at_look", wraps=self.char1.at_look) as looked:
+            for number, container in enumerate(containers, 1):
+                command = container.web_actions(self.char1, "unused", 100)[0]["command"]
+                self.assertEqual(command, f"동명 보관상자 {number} 봐")
+                looked.reset_mock()
+                completed = []
+                self.char1.execute_cmd(command, session=self.session).addCallback(lambda _: completed.append(True))
+                self.assertEqual(completed, [True])
+                self.assertEqual([call.args[0] for call in looked.call_args_list], [container])
+                self.assertIn(f"동명 보관상자 {number}", str(self.output.call_args_list))
+        self.assertEqual(self.missing_number_state(), before)
         self.remove_number(containers[0])
         before = self.missing_number_state()
-        self.assertEqual(containers[0].web_actions(self.char1, "unused", 100), [])
-        self.assertEqual(containers[1].web_actions(self.char1, "unused", 100),
-                         [{"label": "봐", "command": "동명 보관상자 봐"}])
+        for _ in range(3):
+            self.assertEqual(first.web_actions(self.char1, "unused", 100), [])
+            self.assertEqual(second.web_actions(self.char1, "unused", 100),
+                             [{"label": "봐", "command": "동명 보관상자 2 봐"}])
+        self.assertIsNone(number_for(descriptor(first).reference))
+        self.assertEqual(number_for(descriptor(second).reference), 2)
+        with patch("commands.character.time", return_value=100), patch.object(
+                self.char1, "at_look", wraps=self.char1.at_look) as looked:
+            self.output.reset_mock()
+            completed = []
+            self.char1.execute_cmd("동명 보관상자 1 봐", session=self.session).addCallback(lambda _: completed.append(True))
+            self.assertEqual(completed, [True])
+            looked.assert_not_called()
+            self.assertTrue(self.output.called)
+            self.assertNotIn("탐사자들이 함께 쓰는 보관상자다", str(self.output.call_args_list))
+            self.char1.execute_cmd("동명 보관상자 2 봐", session=self.session)
+            self.assertEqual([call.args[0] for call in looked.call_args_list], [second])
         self.assertEqual(self.missing_number_state(), before)

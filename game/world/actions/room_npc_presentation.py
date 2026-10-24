@@ -128,16 +128,19 @@ def sort_controls(provider, rows):
 
 
 def controls_for(caller, provider, observed_at=None):
+    from dataclasses import replace
+
     from typeclasses.interactables import Container
     from world.actions.manifest import get_index
     from world.actions.presentation import action_controls
-    from world.selection_numbers.api import descriptor, number_for
+    from world.selection_numbers.api import descriptor, label, number_for
 
     if isinstance(provider, Container):
         record = descriptor(provider)
-        if record is None or number_for(record.reference) is None:
+        number = number_for(record.reference) if record is not None else None
+        if number is None:
             return []
-        return [{"label": "봐", "command": provider.key + " 봐"}]
+        return [{"label": "봐", "command": label(replace(record, number=number)) + " 봐"}]
     record = descriptor(provider)
     if not record:
         return []
