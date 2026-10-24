@@ -99,14 +99,14 @@ test('TEST-50A-05 실제 종료·재연결·재인증·세션 중복 없음', as
 });
 
 test('TEST-50A-06 Desktop/Narrow 구조·입력·버튼 이름·스크린샷 증거', async ({ actors }, testInfo) => {
-  for (const viewport of [{ width: 1366, height: 768 }, { width: 390, height: 844 }]) {
+  for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
     const a = await actors.create(0, viewport);
     await expect(a.page.locator('#command')).toBeVisible();
     await a.page.locator('#command').scrollIntoViewIfNeeded();
     expect(await a.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await expect(a.page.getByRole('button', { name: '실행 ↵', exact: true })).toBeVisible();
     await expect(a.page.getByRole('button', { name: '강타', exact: true })).toBeVisible();
-    if (viewport.width === 1366) await expect(a.page.getByRole('button', { name: '주변 살펴보기 ↗', exact: true })).toBeVisible();
+    if (viewport.width === 1280) await expect(a.page.getByRole('button', { name: '주변 살펴보기 ↗', exact: true })).toBeVisible();
     for (const button of await a.page.getByRole('button').all()) await expect(button).toHaveAccessibleName(/\S/);
     await a.command('점수');
     await expect(a.page.locator('#log .sheet').last()).toContainText('점수');
@@ -224,20 +224,53 @@ test('TEST-66B-01 아이템 행의 안정 UUID Action과 장비 해제·재장�
   expect(a.state.inventory.find(item => item.identity === weapon.identity).equipped).toBe(true);
   await click('unwield');
   expect(a.state.inventory.find(item => item.identity === weapon.identity).equipped).toBe(false);
+  await a.page.evaluate(() => {
+    const send = WebSocket.prototype.send;
+    window.itemScopeReplay = { send };
+    WebSocket.prototype.send = function(frame) {
+      const value = JSON.parse(frame);
+      if (value[0] === 'pz_action' && value[1][0].action_id.endsWith('.wield')) {
+        window.itemScopeReplay.socket = this;
+        window.itemScopeReplay.frame = frame;
+        WebSocket.prototype.send = send;
+      }
+      return send.call(this, frame);
+    };
+  });
   await click('wield');
   expect(a.state.inventory.find(item => item.identity === weapon.identity).equipped).toBe(true);
+  await click('unwield');
+  await a.command(`${weapon.name} 버려`);
+  expect(a.state.inventory.some(item => item.identity === weapon.identity)).toBe(false);
+  expect(a.state.ground_loot.flatMap(source => source.loot).some(entry =>
+    entry.action?.roles.subject[0].identity === weapon.identity)).toBe(true);
+  const inventory = a.state.inventory.map(({ identity, count, equipped }) => ({ identity, count, equipped }));
+  const credits = a.state.credits;
+  await a.page.evaluate(() => {
+    const replay = window.itemScopeReplay;
+    const value = JSON.parse(replay.frame);
+    value[1][0].request_id = 'phase3-stale-root-item';
+    replay.send.call(replay.socket, JSON.stringify(value));
+  });
+  await a.command('봐');
+  expect(a.state.inventory.map(({ identity, count, equipped }) => ({ identity, count, equipped }))).toEqual(inventory);
+  expect(a.state.credits).toBe(credits);
+  expect(a.state.ground_loot.flatMap(source => source.loot).some(entry =>
+    entry.action?.roles.subject[0].identity === weapon.identity)).toBe(true);
   expect(a.errors).toEqual([]);
 });
 
 
 test('TEST-66C-01 바닥 전리품 안정 UUID·중복 및 오래된 요청 거절·텍스트 동등 지급', async ({ actors }) => {
-  const a = await actors.create(0);
+  const a = await actors.create(0, { width: 1280, height: 900 });
   const count = () => a.state.inventory.filter(item => item.id === 'scrap').reduce((sum, item) => sum + item.count, 0);
+  const initialIdentities = a.state.inventory.filter(item => item.id === 'scrap').map(item => item.identity).sort();
   const initial = count();
   expect(initial).toBeGreaterThan(1);
   await a.command('회수부품 버려');
   expect(count()).toBe(initial - 1);
   const entry = a.state.ground_loot.flatMap(source => source.loot).find(item => item.id === 'scrap');
+  expect(entry.label).toBe('회수부품 1');
   expect(entry?.action.action_id).toBe('loot.take');
   const original = entry.action;
   expect(original.roles.source[0].identity).toBeTruthy();
@@ -263,6 +296,11 @@ test('TEST-66C-01 바닥 전리품 안정 UUID·중복 및 오래된 요청 거�
   });
   await buttons.nth(index).click();
   await expect.poll(count).toBe(initial);
+  // 회수된 분할 Entry는 기존 스택으로 병합된다. 이후 stale 요청은 소멸한
+  // UUID를 보유한 실제 버튼 프레임이며 생존 스택에 다시 적용되면 안 된다.
+  expect(a.state.inventory.filter(item => item.id === 'scrap').map(item => item.identity).sort()).toEqual(initialIdentities);
+  expect(initialIdentities).not.toContain(original.roles.subject[0].identity);
+  expect(a.state.ground_loot.flatMap(source => source.loot).filter(item => item.id === 'scrap')).toEqual([]);
   async function replay(sameRequest) {
     await a.page.evaluate(sameRequest => {
       const replay = window.lootReplay;
@@ -275,8 +313,18 @@ test('TEST-66C-01 바닥 전리품 안정 UUID·중복 및 오래된 요청 거�
   }
   await replay(true);
   expect(count()).toBe(initial);
+  // 같은 실제 Typed 요청/서버 상태를 좁은 화면에서도 유지한다.
+  await a.page.setViewportSize({ width: 390, height: 844 });
+  await a.page.locator('#command').scrollIntoViewIfNeeded();
+  expect(await a.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await expect(a.page.locator('#command')).toBeEnabled();
   await a.command('회수부품 버려');
   const replacement = a.state.ground_loot.flatMap(source => source.loot).find(item => item.id === 'scrap');
+  // 실물이 모두 사라진 동일 Ground 그룹이 번호 1을 다시 받더라도
+  // 원래 UUID의 요청은 새 실물에 적용되지 않아야 한다.
+  expect(replacement.label).toBe(entry.label);
+  expect(replacement.action.roles.subject[0].identity).not.toBe(original.roles.subject[0].identity);
+  expect(replacement.action.roles.subject[0].scope_id).toBe(original.roles.subject[0].scope_id);
   expect(replacement?.action.roles.source).not.toEqual(original.roles.source);
   await replay(false);
   expect(count()).toBe(initial - 1);

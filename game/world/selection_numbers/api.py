@@ -199,7 +199,7 @@ def current_scopes(caller, kind=None):
     return scopes
 
 
-def records_for(caller, kind=None, scope_id=None, *, scope_ids=None):
+def records_for(caller, kind=None, scope_id=None, *, scope_ids=None, kinds=None):
     """이미 발급된 번호만 관찰한다. 권한으로 재번호하지 않는다."""
     scopes = set(scope_ids) if scope_ids is not None else current_scopes(caller, kind)
     if scope_id is not None:
@@ -207,8 +207,11 @@ def records_for(caller, kind=None, scope_id=None, *, scope_ids=None):
     query = SelectionNumber.objects.filter(scope__scope_id__in=scopes).select_related("scope").order_by("scope__scope_id", "scope__group_id", "number")
     if kind is not None:
         query = query.filter(kind=ReferenceKind(kind))
+    requested = None if kinds is None else frozenset(ReferenceKind(value) for value in kinds)
+    if requested is not None:
+        query = query.filter(kind__in=requested)
     result = []
-    if kind in (None, ReferenceKind.ROOM) and caller.location:
+    if kind in (None, ReferenceKind.ROOM) and (requested is None or ReferenceKind.ROOM in requested) and caller.location:
         room = descriptor(caller.location)
         if room and room.scope_id in scopes:
             result.append(room)

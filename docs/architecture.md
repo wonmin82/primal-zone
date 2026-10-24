@@ -2,7 +2,7 @@
 
 ## Action Phase 1 기반
 
-명시 ContentPackage·불변 Registry·Role Resolver·동적 CmdSet·공통 Gateway와 B-1 영속 번호의 구현 계약은 [Action 아키텍처](action-architecture.md)에 있다. Issue #66 PR A/B/C는 명시 Manifest의 room_npc·item_equipment·storage·firearm_lighting·loot 패키지로 방·문·시설·NPC 서비스·아이템·Storage·총기·광원·전리품을 전환했다. 전역 `봐`·`말`·`도움`과 `pz_dialogue`는 유지하며 M06에서 객체별 표현·Help·Web의 정합성을 통합한다. [기능별 전환표](action-migration.md)에 현재와 역사적 경로를 구분한다.
+명시 ContentPackage·불변 Registry·Role Resolver·동적 CmdSet·공통 Gateway와 B-1 영속 번호의 구현 계약은 [Action 아키텍처](action-architecture.md)에 있다. Issue #66 PR A/B/C는 명시 Manifest의 room_npc·item_equipment·storage·firearm_lighting·loot 패키지로 방·문·시설·NPC 서비스·아이템·Storage·총기·광원·전리품을 전환했다. PR D #74의 M06은 전역 `봐`·`말`·`도움`과 `pz_dialogue`를 유지하면서 객체별 표현·Help·Web의 정합성을 통합했고 Phase 2는 완료됐다. [기능별 전환표](action-migration.md)에 현재와 역사적 경로를 구분하며, Phase 3의 별도 검증 범위와 실제 증거는 [통합 실행 기록](phase3-execution-plan.md)과 [회귀 매트릭스](phase3-regression-matrix.csv)에서 관리한다.
 
 ## 현재 runtime contract와 명시적 변환
 

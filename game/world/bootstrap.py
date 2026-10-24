@@ -94,7 +94,8 @@ def _build_world(quarantined_exits=()):
             enemy = next(iter(search_tag(spawn_id, category="primal_spawn")), None)
             if not enemy:
                 enemy = create_object(
-                    "typeclasses.enemies.Enemy", key=definition["name"], location=room
+                    "typeclasses.enemies.Enemy", key=definition["name"], location=room,
+                    attributes=[("enemy_id", enemy_id)],
                 )
                 enemy.tags.add(spawn_id, category="primal_spawn")
                 enemy.db.spawn_id = spawn_id

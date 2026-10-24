@@ -33,7 +33,7 @@ def render(context):
                     continue
                 intent = next((item for item in intents_for(INTERACTABLES[identity]["typeclass"])
                                if item.intent_id == hint["intent"]), None)
-                if intent and obj.id in dialogue_labels:
+                if intent and dialogue_labels.get(obj.id) is not None:
                     rendered.append(f"'{dialogue_labels[obj.id]}에게 {intent.keyword}")
             continue
         action = hint["action"]

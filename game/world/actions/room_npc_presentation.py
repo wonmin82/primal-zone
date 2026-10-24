@@ -1,6 +1,7 @@
 """M01/M02 서비스의 순수 화면. 실행 문장을 만들지 않고 안정 참조를 전달한다."""
 
 from world.actions.presentation import reference_json
+from world.actions.presentation_context import available, profile_snapshot
 
 
 def render(caller, index, reference, binding, observed_at=None):
@@ -12,9 +13,9 @@ def render(caller, index, reference, binding, observed_at=None):
     action = index.actions[binding.action_id]
     provider = resolve_reference(reference)
     config = dict(binding.config)
-    if hasattr(provider, "available") and not provider.available(caller, observed_at):
+    if not available(provider, caller, observed_at):
         return []
-    if caller.profile_snapshot().get("combat_target"):
+    if profile_snapshot(caller).get("combat_target"):
         return []
     if reference.kind == "door":
         from world import doors
@@ -23,10 +24,10 @@ def render(caller, index, reference, binding, observed_at=None):
             return []
     defaults = {arg.name: arg.default for arg in action.arguments if arg.default is not None}
     if binding.provider_definition.startswith("skill."):
-        if not rules.skill_state(caller.profile_snapshot(), defaults["value"])["can_learn"]:
+        if not rules.skill_state(profile_snapshot(caller), defaults["value"])["can_learn"]:
             return []
     if binding.provider_definition.startswith("attribute."):
-        profile = caller.profile_snapshot()
+        profile = profile_snapshot(caller)
         if rules.point_pools(profile)["attribute_points"] < 1 or rules.allocated(profile, defaults["value"]) >= 20:
             return []
     if config.get("effect") == "doctor":
@@ -127,13 +128,19 @@ def sort_controls(provider, rows):
 
 
 def controls_for(caller, provider, observed_at=None):
+    from dataclasses import replace
+
     from typeclasses.interactables import Container
     from world.actions.manifest import get_index
     from world.actions.presentation import action_controls
-    from world.selection_numbers.api import descriptor
+    from world.selection_numbers.api import descriptor, label, number_for
 
     if isinstance(provider, Container):
-        return [{"label": "봐", "command": provider.key + " 봐"}]
+        record = descriptor(provider)
+        number = number_for(record.reference) if record is not None else None
+        if number is None:
+            return []
+        return [{"label": "봐", "command": label(replace(record, number=number)) + " 봐"}]
     record = descriptor(provider)
     if not record:
         return []

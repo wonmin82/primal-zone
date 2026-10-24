@@ -1,4 +1,4 @@
-"""공통 선택 문법과 안정적인 정렬. 번호는 저장하지 않는 표시용 인덱스다."""
+"""공통 선택 문법. B-1 대상은 영속 번호, 그 밖의 목록은 기존 인덱스를 쓴다."""
 
 from dataclasses import dataclass
 from enum import StrEnum
@@ -216,7 +216,9 @@ def strict_single(candidates, selector, action):
 
 
 def resolve(objects, selector, caller, action=None, supports=None, *, observed_at=None):
+    from world.actions.schema import ReferenceKind
     from world.observation import can_perceive, context_for
+    from world.selection_numbers.api import descriptor, number_for
 
     if action:
         require_single(selector, action)
@@ -224,10 +226,34 @@ def resolve(objects, selector, caller, action=None, supports=None, *, observed_a
     if any(not obj.destination for obj in candidates):
         context = context_for(caller, observed_at=observed_at)
         candidates = [obj for obj in candidates if can_perceive(obj, context)]
+    records = [descriptor(obj) for obj in candidates]
+    if any(record and record.reference.kind == ReferenceKind.ENEMY for record in records):
+        # 실제 이름이 먼저다. 특히 숫자 접미 실명을 다른 실물의 별칭이나
+        # INDEX로 바꿔 해석하지 않는다(§4.14).
+        exact = [(obj, record) for obj, record in zip(candidates, records)
+                 if normalized(obj.key) == normalized(selector.name)]
+        if exact:
+            candidates, records = map(list, zip(*exact))
+            if selector.mode == Mode.DEFAULT and selector.name[-1:].isdecimal() and len(exact) > 1:
+                raise RuleError("숫자로 끝나는 실제 이름이 여러 대상과 일치합니다. 다른 고유 이름을 지정하세요.")
     if supports and selector.mode == Mode.DEFAULT:
         candidates = [obj for obj in candidates if supports(obj)]
-    if candidates and all(not obj.destination
-                          and getattr(obj, "action_provider_definition", None) for obj in candidates):
+        records = [descriptor(obj) for obj in candidates]
+    if any(record and record.reference.kind == ReferenceKind.ENEMY for record in records):
+        # Enemy는 Action Provider가 아니어도 B-1 대상이다. 생존/시야로 줄어든
+        # 후보 순서를 명시 번호로 재해석하지 않는다. DEFAULT/ALL과 이름·별칭은
+        # 기존 전투 선택 정책을 유지하고, 영속 번호 조회만 SSOT를 사용한다.
+        if not all(record for record in records) or len({(record.scope_id, record.group_id, record.reference.kind)
+                                                        for record in records}) != 1:
+            raise RuleError("서로 다른 선택 그룹의 별칭이 겹칩니다. 실제 이름을 지정하세요.")
+        if selector.mode == Mode.INDEX:
+            candidates = [obj for obj, record in zip(candidates, records)
+                          if number_for(record.reference) == selector.index]
+            selected = select(candidates, TargetSelector(selector.name))
+        else:
+            selected = select(candidates, selector)
+    elif records and all(record and record.reference.kind != ReferenceKind.ROOM and not obj.destination
+                         for obj, record in zip(candidates, records)):
         from world.actions.resolver import select_role
         from world.actions.schema import DefaultTargetPolicy, RoleDefinition
         from world.selection_numbers.api import descriptor, resolve_reference
@@ -250,20 +276,21 @@ def resolve(objects, selector, caller, action=None, supports=None, *, observed_a
 
 
 def labels(objects, name_values=lambda obj: obj.key):
-    """동일 표시 이름끼리만 번호를 붙인다. 입력 후보와 동일한 순서를 사용한다."""
+    """B-1 실물은 저장 번호만 쓴다. 번호가 누락된 실물의 값은 None이다."""
+    from world.actions.schema import ReferenceKind
+    from world.selection_numbers.api import descriptor, label, number_for
+
     pool = ordered(objects)
     result = {}
     for obj in pool:
         name = name_values(obj)
-        if getattr(obj, "action_provider_definition", None):
-            from world.selection_numbers.api import descriptor, label, number_for
+        record = descriptor(obj)
+        if record and record.reference.kind != ReferenceKind.ROOM:
+            from dataclasses import replace
 
-            record = descriptor(obj)
-            if record:
-                from dataclasses import replace
-
-                result[obj.id] = label(replace(record, number=number_for(record.reference)))
-                continue
+            number = number_for(record.reference)
+            result[obj.id] = None if number is None else label(replace(record, number=number))
+            continue
         peers = [other for other in pool if normalized(name_values(other)) == normalized(name)]
         result[obj.id] = f"{name} {peers.index(obj) + 1}" if len(peers) > 1 else name
     return result
