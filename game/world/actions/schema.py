@@ -2,10 +2,12 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from enum import StrEnum
 
 
 class ReferenceKind(StrEnum):
+    ACTOR = "actor"
     OBJECT = "object"
     ROOM = "room"
     ENEMY = "enemy"
@@ -30,6 +32,41 @@ class TargetScope(StrEnum):
     SOURCE = "source"
     INSIDE = "inside"
     CARRIED_AND_INSIDE = "carried_and_inside"
+
+
+class ScopeRoot(StrEnum):
+    CALLER = "caller"
+    CURRENT_ROOM = "current_room"
+    ROLE = "role"
+    PROVIDER = "provider"
+
+
+class ExecutionPolicy(StrEnum):
+    READ_ONLY = "read_only"
+    STATE_CHANGE = "state_change"
+
+
+class Completion(StrEnum):
+    COMPLETED = "completed"
+    ACCEPTED = "accepted"
+
+
+@dataclass(frozen=True)
+class EffectDefinition:
+    name: str
+    policy: ExecutionPolicy
+
+
+@dataclass(frozen=True)
+class GlobalSource:
+    root: ScopeRoot
+    role: str | None = None
+
+
+@dataclass(frozen=True)
+class EntitySource:
+    provider_definition: str
+    _compatibility: bool = dataclass_field(default=False, repr=False, compare=False)
 
 
 def freeze(value):
@@ -67,6 +104,8 @@ class RoleDefinition:
     scope_from: str = "provider"
     definition_ids: tuple[str, ...] = ()
     location_kinds: tuple[str, ...] = ()
+    scope_root: ScopeRoot = ScopeRoot.PROVIDER
+    root_role: str | None = None
 
     def __post_init__(self):
         object.__setattr__(self, "kinds", tuple(self.kinds))
@@ -151,10 +190,13 @@ class ServiceDefinition:
     presenter: Callable | None = None
     locker: Callable | None = None
     prepare: Callable | None = None
+    policy: ExecutionPolicy = ExecutionPolicy.STATE_CHANGE
+    effects: tuple[EffectDefinition, ...] = ()
 
     def __post_init__(self):
         object.__setattr__(self, "role_kinds", tuple(self.role_kinds))
         object.__setattr__(self, "config_schema", tuple(self.config_schema))
+        object.__setattr__(self, "effects", tuple(self.effects))
 
 
 @dataclass(frozen=True)
@@ -164,9 +206,14 @@ class ActionBinding:
     action_id: str
     service_id: str
     config: tuple[tuple[str, object], ...] = ()
+    source: GlobalSource | EntitySource | None = None
+    capability_id: str | None = None
 
     def __post_init__(self):
         object.__setattr__(self, "config", freeze(self.config))
+        # 기존 positional 선언은 Entity Source의 호환 표기다. None은 Global을 뜻하지 않는다.
+        if self.source is None:
+            object.__setattr__(self, "source", EntitySource(self.provider_definition, _compatibility=True))
 
 
 @dataclass(frozen=True)

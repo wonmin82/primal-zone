@@ -1,5 +1,13 @@
 # Action 아키텍처 Phase 1
 
+## 통합 Actor v1.6 Foundation 확장
+
+[Actor 설계](actor-unification-design-v1.md)의 PR-A는 기존 단일 Registry와 동기 완료 계약을 유지하며 Global/Entity Source와 효과 경계를 확장한다. 기존 positional ActionBinding은 EntitySource의 호환 표기이고 Global은 `GlobalSource(ScopeRoot.CALLER/CURRENT_ROOM/ROLE)`로 명시한다. Global 역할은 Provider를 암묵적으로 참조하지 않고 Root와 역할 의존성을 선언한다. 명시 EntitySource는 실제 ProviderDefinition 등록을 요구한다. 기존 운영 Manifest와 게임 경로는 PR-B 전환까지 유지한다.
+
+ServiceDefinition의 `policy`는 READ_ONLY/STATE_CHANGE이며 기존 선언은 STATE_CHANGE다. READ_ONLY는 영속 SQL 쓰기를 거절한다. 복합 Service는 사전 선언한 EffectDefinition을 `run_effect()`로 호출하고 각 효과의 재검증·원자성·독립 결과를 보존한다. 도메인 코드가 순서·의존성을 소유하며 별도 Workflow 엔진을 두지 않는다. ActionResult의 Completion(COMPLETED/ACCEPTED)은 SUCCESS/REFUSED/ERROR/CONFIRMATION과 독립이고, 상위 SUCCESS를 모든 하위 효과 성공으로 해석하지 않는다. 영속 효과의 재실행 방지는 도메인의 완료 근거가 소유하며 메모리 요청 캐시만으로 대체하지 않는다.
+
+이 확장은 기존 B-1 Scope·번호·모호성·Session·Rollback·동기 Handler 검증을 약화하지 않는다. Actor 참조는 ACTOR kind의 Object PK와 안정 Scope를 사용하며 기존 ENEMY/OBJECT 요청을 다른 Actor로 재해석하지 않는다. PR-A의 Actor 등록·실행은 격리 Fixture이며 운영 전면 이전이나 Duel 구현 완료를 뜻하지 않는다. 실제 검증과 미실행 항목은 [Phase 1 기록](actor-phase1-validation.md)에 있다.
+
 규범은 [#44 v4.3 Design Freeze](https://github.com/wonmin82/primal-zone/issues/44), 구현 범위는 [#65](https://github.com/wonmin82/primal-zone/issues/65)다. D01~D17, B-1, ItemEntity D안, R1/R2/R3 정책을 변경하지 않는다. 기존 실제 게임 동사의 전환은 #66, 전 기능 교차 검증은 #67의 책임이다.
 
 ## 구성과 기술 선택

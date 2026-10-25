@@ -1,19 +1,26 @@
 """선택 이후 단일 동기 실행 경계. 웹 label/번호/확정 flag는 권한이 아니다."""
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from hashlib import sha256
 from secrets import token_urlsafe
 from time import time
 from types import CoroutineType, MappingProxyType
+from uuid import uuid4
 
 from evennia.objects.models import ObjectDB
 from world import rules
 from world import text as ft
 from world.actions.registry import RegistryError
 from world.actions.resolver import ActionInvocation, argument_values, provided
-from world.actions.schema import DefaultTargetPolicy, ReferenceKind, TargetReference
+from world.actions.schema import (
+    Completion,
+    DefaultTargetPolicy,
+    ExecutionPolicy,
+    ReferenceKind,
+    TargetReference,
+)
 from world.actions.synchronous import validate_handler
 from world.multiplayer import after_change, world_change
 
@@ -33,9 +40,14 @@ class ActionResult:
     confirm_variant: str | None = None
     confirmation_token: str | None = None
     duplicate: bool = False
+    completion: Completion = Completion.COMPLETED
+    effects: tuple = ()
 
     def __post_init__(self):
         object.__setattr__(self, "messages", tuple(self.messages))
+        object.__setattr__(self, "effects", tuple(self.effects))
+        if not isinstance(self.completion, Completion):
+            raise ValueError("행동 완료 의미를 확인하세요.")
 
 
 @dataclass(frozen=True)
@@ -47,6 +59,15 @@ class ExecutionContext:
     roles: object
     arguments: object
     config: object
+    domain: object = None
+    index: object = field(default=None, repr=False, compare=False)
+    effect_results: list = field(default_factory=list, repr=False, compare=False)
+
+    def effect(self, name, handler):
+        """도메인 Service가 사전 선언한 효과 경계를 명시적으로 실행한다."""
+        from world.actions.effects import run_effect
+
+        return run_effect(self, name, handler)
 
 
 class ResultAbort(Exception):
@@ -190,6 +211,24 @@ def _lock_roles(caller, invocation):
             api.lock_items(items)
 
 
+def revalidate_context(context):
+    """각 독립 효과 직전에 사용자 제어권·실물 Scope·Capability를 다시 확인한다."""
+    require_session(context.caller, context.session)
+    require_input_mode(context.caller)
+    action = context.index.actions[context.invocation.action_id]
+    current = _roles(context.caller, action, context.invocation)
+    provider_refs = dict(context.invocation.roles).get("provider", ())
+    offers = [(ref, binding) for ref, binding in provided(context.caller, context.index)
+              if binding.id == context.binding.id]
+    expected = set(provider_refs) if provider_refs else {None}
+    if {ref for ref, _ in offers} != expected:
+        raise rules.RuleError("행동 제공 상태나 권한이 바뀌었습니다.")
+    if any(hasattr(provider, "access") and not provider.access(context.caller, context.config.get("access", "call"))
+           for provider in current.get("provider", ())):
+        raise rules.RuleError("이 행동을 실행할 권한이 없습니다.")
+    return current
+
+
 def execute(caller, session, invocation, index):
     """모든 경로가 같은 검증·transaction·Service를 통과한다. 출력은 호출 어댑터가 한 번만 한다."""
     try:
@@ -211,22 +250,30 @@ def execute(caller, session, invocation, index):
             raise rules.RuleError("행동 잠금 계약을 확정할 수 없습니다.")
         prepare = next(iter(preparations))
         if prepare is not None:
-            synchronous(prepare)
-            prepare(caller, invocation)
+            from world.actions.effects import invoke_hook
+
+            with world_change():
+                invoke_hook(prepare, caller, invocation,
+                            readonly=any(service.policy == ExecutionPolicy.READ_ONLY or service.effects
+                                         for service in services))
         with world_change():
             # Lifecycle 확정 후 owner→item→claim→currency→share를 한 번에 잠근다.
             locker = next(iter(lockers))
             if locker is None:
                 _lock_roles(caller, invocation)
             else:
-                synchronous(locker)
-                locker(caller, invocation)
+                from world.actions.effects import invoke_hook
+
+                invoke_hook(locker, caller, invocation,
+                            readonly=any(service.policy == ExecutionPolicy.READ_ONLY or service.effects
+                                         for service in services))
             require_session(caller, session)
             entities = _roles(caller, action, invocation)
             provider_refs = dict(invocation.roles).get("provider", ())
             offered = [(ref, binding) for ref, binding in provided(caller, index)
-                       if binding.action_id == action.id and ref in provider_refs]
-            if {ref for ref, _ in offered} != set(provider_refs):
+                       if binding.action_id == action.id and
+                       (ref in provider_refs or ref is None and not provider_refs)]
+            if {ref for ref, _ in offered} != (set(provider_refs) if provider_refs else {None}):
                 raise rules.RuleError("행동 제공자를 확정할 수 없습니다.")
             candidates = tuple(dict.fromkeys(binding for _, binding in offered))
             if len(candidates) != 1:
@@ -239,7 +286,7 @@ def execute(caller, session, invocation, index):
             if config.get("peaceful"):
                 rules.require_peace(caller.profile_snapshot())
             if any(hasattr(provider, "access") and not provider.access(caller, config.get("access", "call"))
-                   for provider in entities["provider"]):
+                   for provider in entities.get("provider", ())):
                 raise rules.RuleError("이 행동을 실행할 권한이 없습니다.")
             quantity = dict(arguments).get("quantity")
             for name, values in entities.items():
@@ -260,20 +307,32 @@ def execute(caller, session, invocation, index):
                             raise rules.RuleError("원래 전리품을 회수할 권한이 없습니다.")
                     if hasattr(entity, "quantity") and quantity is not None and quantity > entity.quantity:
                         raise rules.RuleError("원래 대상의 수량이 부족합니다.")
-            synchronous(service.handler)
-            result = service.handler(ExecutionContext(caller, session, invocation, binding,
-                                                      MappingProxyType(entities), MappingProxyType(dict(arguments)),
-                                                      MappingProxyType(config)))
+            from world.actions.effects import invoke_service
+            from world.domain_context import for_player
+
+            domain = for_player(caller, session,
+                                operation_id=invocation.request_id or uuid4().hex,
+                                domain_scope=f"room:{caller.location.pk}" if caller.location else f"character:{caller.pk}")
+            context = ExecutionContext(caller, session, invocation, binding,
+                                       MappingProxyType(entities), MappingProxyType(dict(arguments)),
+                                       MappingProxyType(config), domain=domain, index=index)
+            # 복합 Service는 이 검증 transaction 밖에서 효과별로 확정한다.
+            # Speech 성공 뒤 Quest 거부가 Speech를 되돌리지 않아야 한다.
+            result = None if service.effects else invoke_service(service, context)
             if isinstance(result, CoroutineType):
                 result.close()
-            if not isinstance(result, ActionResult):
+            if not service.effects and not isinstance(result, ActionResult):
                 raise rules.RuleError("행동의 동기 완료 결과를 확인할 수 없습니다.")
-            if result.status != ResultStatus.SUCCESS:
+            if result is not None and result.status != ResultStatus.SUCCESS:
                 raise ResultAbort(result)
-            if result.changed:
+            if result is not None and result.changed:
                 from typeclasses.explorers import Explorer
 
                 after_change(lambda: [player.push_state() for player in Explorer.objects.all() if player.sessions.count()])
+        if service.effects:
+            from world.actions.effects import invoke_composite
+
+            result = invoke_composite(service, context)
         if variant.confirmation_required and invocation.confirmation_token:
             tokens = dict(caller.ndb.action_confirmations or {})
             tokens.pop(invocation.confirmation_token, None)

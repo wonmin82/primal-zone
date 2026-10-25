@@ -15,7 +15,16 @@ from .regex_overlap import (
     explicit_argument_extension,
     literal_role_prefix,
 )
-from .schema import DefaultTargetPolicy, ReferenceKind, TargetScope
+from .schema import (
+    DefaultTargetPolicy,
+    EffectDefinition,
+    EntitySource,
+    ExecutionPolicy,
+    GlobalSource,
+    ReferenceKind,
+    ScopeRoot,
+    TargetScope,
+)
 from .synchronous import validate_handler
 
 
@@ -63,12 +72,19 @@ def _roles(roles):
                  "아이템 위치 제약 오류")
         if ReferenceKind.INVENTORY in role.kinds:
             _require(role.kinds == (ReferenceKind.INVENTORY,) and role.name != "provider"
-                     and role.scope == TargetScope.CURRENT, "Inventory는 현재 소지품 Source 전용 참조입니다.")
+                     and role.scope == TargetScope.CURRENT
+                     and role.scope_root in (ScopeRoot.CALLER, ScopeRoot.PROVIDER),
+                     "Inventory는 현재 소지품 Source 전용 참조입니다.")
         _require(isinstance(role.default, DefaultTargetPolicy) and type(role.required) is bool
                  and type(role.allow_all) is bool,
                  "역할 기본 선택 정책 오류")
         _require(isinstance(role.scope, TargetScope) and type(role.scope_from) is str
                  and role.scope_from.isidentifier(), "역할 Scope 선언 오류")
+        _require(isinstance(role.scope_root, ScopeRoot), "역할 Scope Root 선언 오류")
+        _require((role.scope_root == ScopeRoot.ROLE and type(role.root_role) is str
+                  and role.root_role.isidentifier())
+                 or (role.scope_root != ScopeRoot.ROLE and role.root_role is None),
+                 "역할 Scope Root 참조 오류")
         if role.scope == TargetScope.CARRIED_AND_INSIDE:
             _require(role.kinds == (ReferenceKind.ITEM,), "소지품과 내부 결합 Scope는 아이템 역할 전용입니다.")
         _require(all(type(identity) is str and identity for identity in role.definition_ids)
@@ -143,9 +159,9 @@ def normal_all_guards(action, normal_variant):
 def _check_pair(a, va, b, vb, provider):
     if a.verb_id != b.verb_id or va.suffix.casefold() != vb.suffix.casefold():
         return
-    provider_a = next(role for role in a.roles if role.name == "provider")
-    provider_b = next(role for role in b.roles if role.name == "provider")
-    if not set(provider_a.kinds) & set(provider_b.kinds):
+    provider_a = next((role for role in a.roles if role.name == "provider"), None)
+    provider_b = next((role for role in b.roles if role.name == "provider"), None)
+    if provider_a and provider_b and not set(provider_a.kinds) & set(provider_b.kinds):
         return
     relation = compare_patterns(va.pattern, vb.pattern)
     if relation == Relation.DISJOINT:
@@ -217,19 +233,22 @@ def compile_manifest(manifest, protected_names=()):
     for action in tables["actions"].values():
         reference(action.id, "verbs", action.verb_id)
         role_names = _roles(action.roles)
-        _require("provider" in role_names, "Action Provider 역할 누락")
         roles = {role.name: role for role in action.roles}
         for role in action.roles:
-            if role.scope == TargetScope.CURRENT:
-                continue
-            _require(role.scope_from in role_names and role.scope_from != role.name,
-                     "역할 Scope 출처가 다른 기존 역할을 참조해야 합니다.")
-            visited, current = {role.name}, role
-            while current.scope != TargetScope.CURRENT:
-                _require(current.scope_from in roles and current.scope_from not in visited,
-                         "역할 Scope 출처 순환/누락")
-                visited.add(current.scope_from)
-                current = roles[current.scope_from]
+            def root_dependencies(current):
+                roots = []
+                if current.scope != TargetScope.CURRENT:
+                    roots.append(current.scope_from)
+                if current.scope_root == ScopeRoot.ROLE:
+                    roots.append(current.root_role)
+                return roots
+
+            def visit(current, trail):
+                for name in root_dependencies(current):
+                    _require(name in roles and name not in trail, "역할 Scope 출처 순환/누락")
+                    visit(roles[name], trail | {name})
+
+            visit(role, {role.name})
         argument_names = _arguments(action.arguments)
         _require(not role_names & argument_names, "역할/인자 capture 중복")
         _require(action.provider_from is None or action.provider_from in role_names, "미존재 Provider 역할")
@@ -296,15 +315,39 @@ def compile_manifest(manifest, protected_names=()):
             raise RegistryError(str(error)) from error
         _roles(service.role_kinds)
         _arguments(service.config_schema)
+        _require(isinstance(service.policy, ExecutionPolicy), "Service 실행 정책 오류")
+        _require(all(isinstance(effect, EffectDefinition) and type(effect.name) is str
+                     and effect.name.isidentifier() and isinstance(effect.policy, ExecutionPolicy)
+                     for effect in service.effects), "효과 실행 계약 오류")
+        _require(len({effect.name for effect in service.effects}) == len(service.effects), "효과 이름 중복")
 
     provider_bindings = {}
     for binding in tables["bindings"].values():
-        _logical_id(binding.provider_definition)
-        if tables["providers"]:
-            reference(binding.id, "providers", binding.provider_definition)
         action = reference(binding.id, "actions", binding.action_id)
         service = reference(binding.id, "services", binding.service_id)
         roles = {role.name: role for role in action.roles}
+        if isinstance(binding.source, GlobalSource):
+            _require(not binding.provider_definition and "provider" not in roles and action.provider_from is None,
+                     "Global Binding은 실물 Provider를 선언하지 않습니다.")
+            _require(isinstance(binding.source.root, ScopeRoot)
+                     and binding.source.root in (ScopeRoot.CALLER, ScopeRoot.CURRENT_ROOM, ScopeRoot.ROLE),
+                     "Global Scope Root 오류")
+            _require((binding.source.root == ScopeRoot.ROLE and binding.source.role in roles)
+                     or (binding.source.root != ScopeRoot.ROLE and binding.source.role is None),
+                     "Global Scope Root 역할 누락")
+            _require(all(role.scope_root != ScopeRoot.PROVIDER for role in action.roles),
+                     "Global Action은 역할 Scope Root를 명시해야 합니다.")
+            _require(binding.capability_id is None, "Global Action은 Entity Capability를 소유하지 않습니다.")
+        else:
+            _require(isinstance(binding.source, EntitySource)
+                     and binding.source.provider_definition == binding.provider_definition,
+                     "Entity Binding Source 불일치")
+            _logical_id(binding.provider_definition)
+            _require("provider" in roles, "Entity Action Provider 역할 누락")
+            if tables["providers"] or not binding.source._compatibility:
+                reference(binding.id, "providers", binding.provider_definition)
+            _require(binding.capability_id is None or
+                     (type(binding.capability_id) is str and bool(binding.capability_id)), "Capability 참조 오류")
         for expected in service.role_kinds:
             _require(expected.name in roles, "Service 미존재 역할")
             _require(set(roles[expected.name].kinds) <= set(expected.kinds), "Service 역할 타입 불일치")
@@ -313,6 +356,10 @@ def compile_manifest(manifest, protected_names=()):
                 actual = roles[expected.name]
                 _require((actual.scope, actual.scope_from) == (expected.scope, expected.scope_from),
                          "Service 역할 Scope 불일치")
+            if expected.scope_root != ScopeRoot.PROVIDER:
+                actual = roles[expected.name]
+                _require((actual.scope_root, actual.root_role) == (expected.scope_root, expected.root_role),
+                         "Service 역할 Scope Root 불일치")
         try:
             config = dict(binding.config)
         except (TypeError, ValueError) as error:
@@ -324,7 +371,8 @@ def compile_manifest(manifest, protected_names=()):
             _require(name in config or not arg.required or arg.default is not None, "필수 Service 설정 누락")
             if name in config:
                 validate_argument(arg, config[name])
-        provider_bindings.setdefault(binding.provider_definition, []).append(binding)
+        if isinstance(binding.source, EntitySource):
+            provider_bindings.setdefault(binding.provider_definition, []).append(binding)
 
     for action in tables["actions"].values():
         providers = sorted({binding.provider_definition for binding in tables["bindings"].values()
@@ -338,6 +386,15 @@ def compile_manifest(manifest, protected_names=()):
             for va in a.variants:
                 for vb in b.variants:
                     _check_pair(a, va, b, vb, left.provider_definition)
+
+    # Global과 Entity는 같은 입력 Scope에서 공존할 수 있다. 등록 순서로 선택하지 않는다.
+    for left, right in combinations(tuple(tables["bindings"].values()), 2):
+        if not (isinstance(left.source, GlobalSource) or isinstance(right.source, GlobalSource)):
+            continue
+        a, b = tables["actions"][left.action_id], tables["actions"][right.action_id]
+        for va in a.variants:
+            for vb in b.variants:
+                _check_pair(a, va, b, vb, "global/entity")
 
     scope_names = {}
     for provider in tables["providers"].values():
