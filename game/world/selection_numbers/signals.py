@@ -8,7 +8,7 @@ from .mode import enabled
 
 def attribute_saving(sender, instance, **kwargs):
     """외부 Attribute UPDATE도 불변 그룹 검사를 DB 저장 이전에 수행한다."""
-    if not enabled() or not instance.pk or instance.db_key not in ("selection_group_id", "selection_definition_id", "action_provider_id", "enemy_id"):
+    if not enabled() or not instance.pk or instance.db_key not in ("selection_group_id", "selection_definition_id", "action_provider_id", "enemy_id", "actor_id"):
         return
     from evennia.objects.models import ObjectDB
     from evennia.typeclasses.models import Attribute
@@ -20,14 +20,20 @@ def attribute_saving(sender, instance, **kwargs):
 
     old_value = Attribute.objects.filter(pk=instance.pk).values_list("db_value", flat=True).first()
     for owner in ObjectDB.objects.filter(db_attributes=instance):
-        row = SelectionNumber.objects.filter(identity=str(owner.pk), kind__in=("object", "enemy", "corpse", "door")).select_related("scope").first()
+        row = SelectionNumber.objects.filter(identity=str(owner.pk), kind__in=("object", "enemy", "actor", "corpse", "door")).select_related("scope").first()
         if not row:
             continue
         values = {key: deserialize(value) for key, value in owner.db_attributes.values_list("db_key", "db_value")}
         values[instance.db_key] = deserialize(instance.db_value)
+        if row.kind == "actor" and instance.db_key == "actor_id" and deserialize(instance.db_value) != deserialize(old_value):
+            instance.db_value = old_value
+            owner.attributes.reset_cache()
+            raise ValidationError("Actor 정체성 변경에는 명시적인 변환이 필요합니다.")
         group = values.get("selection_group_id")
         if not group:
-            if isinstance(owner, Enemy):
+            if owner.is_typeclass("typeclasses.actors.Actor", exact=True):
+                group = "actor:" + str(values.get("actor_id"))
+            elif isinstance(owner, Enemy):
                 group = "enemy:" + str(values.get("enemy_id"))
             elif isinstance(owner, Corpse):
                 group = "world:corpse"
@@ -52,9 +58,9 @@ def protect_removal(owner, keys):
     from .models import SelectionNumber
 
     if owner.ndb.selection_deleting or not SelectionNumber.objects.filter(identity=str(owner.pk),
-            kind__in=("object", "enemy", "corpse", "door")).exists():
+            kind__in=("object", "enemy", "actor", "corpse", "door")).exists():
         return
-    changes_group = ("selection_group_id" in keys or "enemy_id" in keys
+    changes_group = ("selection_group_id" in keys or "enemy_id" in keys or "actor_id" in keys
                      or not owner.db.selection_group_id and ("selection_definition_id" in keys
                      or not owner.db.selection_definition_id and "action_provider_id" in keys))
     if changes_group:
@@ -66,7 +72,7 @@ def attribute_removing(sender, instance, **kwargs):
     if not enabled():
         instance._b1_owners = ()
         return
-    if instance.db_key not in ("selection_group_id", "selection_definition_id", "action_provider_id", "enemy_id",
+    if instance.db_key not in ("selection_group_id", "selection_definition_id", "action_provider_id", "enemy_id", "actor_id",
                                "selection_unique_names", "legacy_singleton_suffix_1"):
         instance._b1_owners = ()
         return
@@ -125,7 +131,7 @@ def metadata_changed(sender, instance, action, reverse, pk_set, **kwargs):
             attributes = attributes.filter(pk__in=pk_set)
         protect_removal(instance, set(attributes.values_list("db_key", flat=True)))
     if action in ("post_add", "post_remove", "post_clear") and not reverse and isinstance(instance, ObjectDB):
-        keys = ("selection_group_id", "selection_definition_id", "action_provider_id", "enemy_id",
+        keys = ("selection_group_id", "selection_definition_id", "action_provider_id", "enemy_id", "actor_id",
                 "selection_unique_names", "legacy_singleton_suffix_1")
         if action != "post_add" or Attribute.objects.filter(pk__in=pk_set, db_key__in=keys).exists():
             changed(ObjectDB, instance)

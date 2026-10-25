@@ -4,7 +4,14 @@ import re
 from dataclasses import dataclass
 
 from world.actions.registry import RegistryError, normal_all_guards, validate_argument
-from world.actions.schema import DefaultTargetPolicy, ReferenceKind, TargetReference, TargetScope
+from world.actions.schema import (
+    DefaultTargetPolicy,
+    GlobalSource,
+    ReferenceKind,
+    ScopeRoot,
+    TargetReference,
+    TargetScope,
+)
 from world.rules import RuleError
 from world.targets import Mode, normalized, parse_selector
 
@@ -44,6 +51,11 @@ def role_records(caller, role, bindings=None, *, cache=None):
     if role.scope == TargetScope.CURRENT:
         kind = None if {ReferenceKind.LOOT, ReferenceKind.CURRENCY}.intersection(role.kinds) else ReferenceKind.ITEM
         scopes = current_scopes(caller, kind)
+        if role.scope_root == ScopeRoot.CURRENT_ROOM:
+            scopes = {scope for scope in scopes if not scope.startswith("character:")}
+        elif role.scope_root == ScopeRoot.ROLE:
+            scopes = {ref.scope_id for ref in (bindings or {}).get(role.root_role, ())
+                      if resolve_reference(ref) is not None}
     else:
         from typeclasses.interactables import Container
         from world.item_entities.models import ItemEntity
@@ -217,6 +229,33 @@ def unshadowed(caller, index, pairs):
     return tuple((ref, binding) for ref, binding in pairs if index.actions[binding.action_id].verb_id not in blocked)
 
 
+def _root_records(caller, action, name):
+    """제공 여부의 후보 존재만 확인한다. 실제 선택은 요청의 역할 Query로 별도 확정한다."""
+    roles = {role.name: role for role in action.roles}
+    bindings, visiting = {}, set()
+
+    def candidates(role_name):
+        if role_name in bindings:
+            return bindings[role_name]
+        if role_name not in roles or role_name in visiting:
+            return ()
+        visiting.add(role_name)
+        role = roles[role_name]
+        dependencies = []
+        if role.scope != TargetScope.CURRENT:
+            dependencies.append(role.scope_from)
+        if role.scope_root == ScopeRoot.ROLE:
+            dependencies.append(role.root_role)
+        for dependency in dependencies:
+            candidates(dependency)
+        records = role_records(caller, role, bindings)
+        bindings[role_name] = tuple(record.reference for record in records)
+        visiting.remove(role_name)
+        return bindings[role_name]
+
+    return candidates(name)
+
+
 def provided(caller, index):
     if not index.bindings:
         return ()
@@ -226,11 +265,21 @@ def provided(caller, index):
     kinds = {kind for binding in index.bindings.values()
              for action in (index.actions[binding.action_id],) if action.public
              for role in action.roles if role.name == "provider" for kind in role.kinds}
-    if not kinds:
-        return ()
-    role = RoleDefinition("provider", tuple(sorted(kinds)), required=False)
     pairs = []
-    for record in role_records(caller, role):
+    for binding in index.bindings.values():
+        if not isinstance(binding.source, GlobalSource):
+            continue
+        action = index.actions[binding.action_id]
+        if not action.public or not caller.pk:
+            continue
+        if binding.source.root == ScopeRoot.CURRENT_ROOM and not caller.location:
+            continue
+        if binding.source.root == ScopeRoot.ROLE:
+            if not _root_records(caller, action, binding.source.role):
+                continue
+        pairs.append((None, binding))
+    role = RoleDefinition("provider", tuple(sorted(kinds)), required=False)
+    for record in role_records(caller, role) if kinds else ():
         try:
             definition = provider_definition(record.reference)
             if record.reference.kind == ReferenceKind.ITEM:
@@ -250,6 +299,16 @@ def provided(caller, index):
         for binding in index.bindings_for_provider.get(definition, ()):
             action = index.actions[binding.action_id]
             provider = next((role for role in action.roles if role.name == "provider"), None)
+            from world.selection_numbers.api import resolve_reference
+
+            entity = resolve_reference(record.reference)
+            capabilities = getattr(entity, "capability_binding_ids", None)
+            if callable(capabilities) and binding.id not in capabilities():
+                continue
+            if binding.capability_id:
+                active = getattr(entity, "capability_active", None)
+                if not callable(active) or not active(binding.capability_id):
+                    continue
             if action.public and provider and record.reference.kind in provider.kinds:
                 pairs.append((record.reference, binding))
     return unshadowed(caller, index, pairs)
@@ -290,7 +349,7 @@ def dispatch_text(caller, index, verb_id, args, command_name):
             if any(fields.get(role) is not None and fields[role].startswith(prefix)
                    for role, prefix in normal_all_guards(action, variant)):
                 continue
-            roles = {"provider": (reference,)}
+            roles = {} if isinstance(binding.source, GlobalSource) else {"provider": (reference,)}
             try:
                 arguments = argument_values(action, {arg.name: fields[arg.name] for arg in action.arguments
                                                     if fields.get(arg.name) is not None}, text=True)
@@ -300,9 +359,11 @@ def dispatch_text(caller, index, verb_id, args, command_name):
                 # 현재 Scope 역할을 먼저, 그 안정 참조를 사용하는 내부/보관 역할은 뒤에 선택한다.
                 pending = [role for role in action.roles if role.name != "provider"]
                 ordered = []
-                known = {"provider"}
+                known = set(roles)
                 while pending:
-                    ready = next(role for role in pending if role.scope == TargetScope.CURRENT or role.scope_from in known)
+                    ready = next(role for role in pending
+                                 if (role.scope == TargetScope.CURRENT or role.scope_from in known)
+                                 and (role.scope_root != ScopeRoot.ROLE or role.root_role in known))
                     pending.remove(ready)
                     ordered.append(ready)
                     known.add(ready.name)
@@ -328,7 +389,7 @@ def dispatch_text(caller, index, verb_id, args, command_name):
                     if reference not in selected:
                         continue
                     roles["provider"] = (reference,)
-                else:
+                elif reference is not None:
                     roles["provider"] = (reference,)
             except RuleError:
                 continue
