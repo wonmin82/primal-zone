@@ -1,5 +1,11 @@
 # 원시구역 구조와 설계 결정
 
+## 문서 역할과 공통 원칙
+
+[프로젝트 공통 아키텍처 원칙](architecture-principles.md)은 전역 설계 판단 기준의 유일한 규범 원문이다. 이 문서는 현재 실제 아키텍처와 도메인별 설계 결정을 설명하고, [Action 아키텍처](action-architecture.md)는 Action 시스템의 구체적 계약을 설명한다. 개별 Issue는 범위가 정해진 설계 변경과 승인·구현·검증 이력을 관리한다. 공통 원칙의 도입만으로 기존 Design Freeze가 변경되지는 않는다.
+
+아래의 Phase별 설명과 과거 경로는 해당 시점의 기록이다. 현재 상태는 각 절의 명시적 전환·완료 기록과 [Action 전환표](action-migration.md)를 함께 확인하며, 역사적 설명을 현행 구현으로 해석하지 않는다.
+
 ## Action Phase 1 기반
 
 명시 ContentPackage·불변 Registry·Role Resolver·동적 CmdSet·공통 Gateway와 B-1 영속 번호의 구현 계약은 [Action 아키텍처](action-architecture.md)에 있다. Issue #66 PR A/B/C는 명시 Manifest의 room_npc·item_equipment·storage·firearm_lighting·loot 패키지로 방·문·시설·NPC 서비스·아이템·Storage·총기·광원·전리품을 전환했다. PR D #74의 M06은 전역 `봐`·`말`·`도움`과 `pz_dialogue`를 유지하면서 객체별 표현·Help·Web의 정합성을 통합했고 Phase 2는 완료됐다. [기능별 전환표](action-migration.md)에 현재와 역사적 경로를 구분하며, Phase 3의 별도 검증 범위와 실제 증거는 [통합 실행 기록](phase3-execution-plan.md)과 [회귀 매트릭스](phase3-regression-matrix.csv)에서 관리한다.

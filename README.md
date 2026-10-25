@@ -217,6 +217,7 @@ Neo둥근모 Code v1.601을 **SIL Open Font License 1.1**로 자체 제공한다
 | [최종 콘텐츠](docs/final-content.md) | 장비·상점·적·가격·드롭·획득처 |
 | [성장과 전투](docs/progression.md) | 레벨·특성·기술·재훈련·호환 정책 |
 | [구조와 설계 결정](docs/architecture.md) | 저장·전투·입력·환경·UI의 기술 계약 |
+| [프로젝트 공통 아키텍처 원칙](docs/architecture-principles.md) | 전역 설계 원칙·불변식·설계 변경과 예외 판단 기준 |
 | [테스트 안내](docs/playtest.md) | 자동 검사·격리 서버·수동 시나리오·실행 이력 |
 | [개발 작업 및 검증 이력](docs/CODEX_TASK_STATE.md) | 현재 마감 상태와 과거 개발·검증 기록 |
 
