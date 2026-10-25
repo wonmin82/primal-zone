@@ -114,6 +114,10 @@ def status(root, job_id):
                         raise ValueError("성공 결과의 실제 Run 근거 누락")
             return {**result, "notification": watch.read_json(directory / "notification.json"),
                     "result_path": str(result_path)}
+        if child is not None and child.poll() is not None:
+            return {"job_id": job_id, "status": "INTERRUPTED", "ready": False,
+                    "exit_code": child.returncode, "cleanup_verified": False,
+                    "error": "Worker가 READY/최종 결과 기록 전에 종료했습니다."}
         state = watch.read_json(directory / "state.json")
         if state.get("job_id") != job_id or state.get("nonce") != request.get("nonce") or state.get("status") not in watch.STATES or not isinstance(state.get("ready"), bool):
             raise ValueError("상태 형식/소유 정보 오류")
@@ -124,9 +128,13 @@ def status(root, job_id):
             raise ValueError("Worker 실행 식별 정보 누락")
         if state.get("worker_pid"):
             alive = watch.identity_alive(state["worker_pid"], state.get("worker_identity"))
+        elif (directory / "launch.json").exists():
+            launch = watch.read_json(directory / "launch.json")
+            if launch.get("nonce") != request["nonce"]:
+                raise ValueError("Worker 시작 소유 정보 오류")
+            alive = watch.identity_alive(launch.get("pid"), launch.get("identity"))
         else:
-            alive = (time.time() < request["ready_deadline"] and
-                     watch.identity_alive(request["parent_pid"], request.get("parent_identity")))
+            alive = watch.identity_alive(request["parent_pid"], request.get("parent_identity"))
         if not alive:
             return {"job_id": job_id, "status": "INTERRUPTED", "result_missing": True,
                     "cleanup_verified": False, "error": "Worker 최종 결과가 없습니다. 프로세스 생존을 추정하지 않습니다."}
@@ -164,6 +172,14 @@ def spawn_worker(request, registration):
         watch.atomic_json(directory / "result.json", result)
         registration.unlink()
         return result
+    child = _workers[job_id]
+    try:
+        watch.atomic_json(directory / "launch.json", {"pid": child.pid,
+                          "identity": watch.process_identity(child.pid), "nonce": request["nonce"]})
+    except OSError:
+        # 프로세스 생성 이후의 관측 기록 실패는 이미 실행 중인 Worker의 결과나
+        # 등록을 지우지 않는다. 이 부모는 Popen handle로 계속 READY를 확인한다.
+        pass
     return request
 
 
@@ -172,22 +188,22 @@ def await_ready(request, duplicate):
     directory = watch.job_directory(root, job_id)
     while time.time() < request["ready_deadline"]:
         value = status(root, job_id)
-        if value.get("ready") or value["status"] in watch.TERMINAL - {"INTERRUPTED"}:
+        if value.get("ready") or value["status"] in watch.TERMINAL:
             return {"job_id": job_id, "status": value["status"], "ready": value.get("ready", False), "duplicate": duplicate}
         time.sleep(0.01)
     value = status(root, job_id)
-    if value.get("ready") or value["status"] in watch.TERMINAL - {"INTERRUPTED"}:
+    if value.get("ready") or value["status"] in watch.TERMINAL:
         return {"job_id": job_id, "status": value["status"], "ready": value.get("ready", False), "duplicate": duplicate}
     if duplicate:
         return {"job_id": job_id, "status": "TIMED_OUT", "ready": False, "duplicate": True,
                 "error": "원래 Worker의 READY를 확인하지 못했습니다. 원 작업 결과는 덮어쓰지 않습니다."}
     # 늦게 뜬 Worker는 deadline/cancel을 확인하고 검사 실행 전에 종료한다.
     (directory / "cancel").touch()
-    result = {"job_id": job_id, "nonce": request["nonce"], "status": "TIMED_OUT", "ready": False,
-              "exit_code": None, "elapsed_seconds": request["ready_timeout"], "phase": "READY"}
-    watch.atomic_json(directory / "result.json", result)
-    watch.atomic_json(directory / "state.json", result)
-    watch.release_registration(root, request)
+    # 최종 결과의 단일 작성자는 Worker다. 부모의 READY 제한과 Worker 완료가
+    # 경합해도 이미 저장된 성공/오류 결과를 Timeout으로 덮어쓰지 않는다.
+    value = status(root, job_id)
+    if value.get("ready") or value["status"] in watch.TERMINAL:
+        return {"job_id": job_id, "status": value["status"], "ready": value.get("ready", False), "duplicate": duplicate}
     return {"job_id": job_id, "status": "TIMED_OUT", "ready": False,
             "error": "READY 제한시간 초과. status로 Worker의 최종 정리를 확인하세요."}
 

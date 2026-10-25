@@ -397,6 +397,181 @@ class PosixTree:
         return False
 
 
+def group_processes():
+    """macOS 공통 ps의 PID/PPID/PGID만 사용하고 Session은 getsid로 확인한다."""
+    value = subprocess.check_output(["ps", "-axo", "pid=,ppid=,pgid=,stat="], text=True, timeout=2)
+    return [(int(pid), int(parent), int(group), state)
+            for pid, parent, group, state in (line.split() for line in value.splitlines() if line.strip())]
+
+
+def boundary_from_environment(environment=None):
+    """환경변수뿐 아니라 살아 있는 anchor와 현재 Session/Group이 일치해야 상속한다."""
+    environment = os.environ if environment is None else environment
+    if sys.platform != "darwin" or not environment.get("PRIMAL_CODEX_WATCH_BOUNDARY"):
+        return None
+    path = Path(environment["PRIMAL_CODEX_WATCH_BOUNDARY"])
+    if (not path.is_absolute() or len(path.parents) < 5 or path.name != "boundary.json"
+            or not re.fullmatch(r"execution-[0-9a-f]{32}", path.parent.name)
+            or not JOB_PATTERN.fullmatch(path.parents[1].name)
+            or path.parents[2].name != "codex-watch" or path.parents[3].name != "work"
+            or path.resolve() != path
+            or any(item.is_symlink() or item.is_junction() for item in [path, *path.parents])):
+        raise RuntimeError("감시기 Smoke 경계 파일 경로 오류")
+    value = read_json(path)
+    nonce = value.get("nonce")
+    environment_nonce = environment.get("PRIMAL_CODEX_WATCH_NONCE")
+    if (Path(value["repository"]).resolve() != path.parents[4]
+            or value.get("job_id") != path.parents[1].name or value.get("execution_id") != path.parent.name
+            or not isinstance(nonce, str) or not JOB_PATTERN.fullmatch(nonce)
+            or not isinstance(environment_nonce, str) or not JOB_PATTERN.fullmatch(environment_nonce)
+            or nonce != environment_nonce
+            or value.get("pgid") != value.get("anchor_pid")
+            or value.get("sid") != value.get("anchor_pid")
+            or os.getpgid(0) != value["pgid"] or os.getsid(0) != value["sid"]
+            or not identity_alive(value["anchor_pid"], value.get("anchor_identity"))
+            or not identity_alive(value["worker_pid"], value.get("worker_identity"))):
+        raise RuntimeError("감시기 Smoke Session/Process Group 소유 경계 불일치")
+    return value
+
+
+def clean_anchored_group(anchor, owned):
+    """anchor가 살아 있는 동안만 그룹에 TERM, 나머지는 검증한 PID별 강제 종료한다."""
+    if not owned():
+        return False
+    os.killpg(anchor, signal.SIGTERM)  # anchor는 TERM handler로 생존한다.
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline:
+        if not owned():
+            return False
+        members = [(pid, process_identity(pid)) for pid, _, pgid, state in group_processes()
+                   if pgid == anchor and pid != anchor and "Z" not in state]
+        if not members:
+            return True
+        for pid, identity in members:
+            if identity is None:
+                continue  # 조회 사이에 종료한 멤버는 살아 있다고 추정하지 않는다.
+            try:
+                if (not owned() or not identity_alive(pid, identity)
+                        or os.getpgid(pid) != anchor or os.getsid(pid) != anchor):
+                    return False
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        time.sleep(0.01)
+    return False
+
+
+def run_supervisor(path):
+    """명령이 먼저 끝나도 그룹 리더를 유지하는 일회성 macOS 실행 경계."""
+    path = Path(path)
+    config = read_json(path / "command.json")
+    anchor = os.getpid()
+    if os.getpgid(0) != anchor or os.getsid(0) != anchor:
+        raise RuntimeError("Supervisor의 새 Session/Group 생성 실패")
+    signal.signal(signal.SIGTERM, lambda *_: None)
+    boundary = {**config["boundary"], "anchor_pid": anchor, "anchor_identity": process_identity(anchor),
+                "pgid": anchor, "sid": anchor}
+    if not boundary["anchor_identity"]:
+        raise RuntimeError("Supervisor 시작 identity 확인 실패")
+    atomic_json(path / "boundary.json", boundary)
+    environment = {**os.environ, "PYTHONUTF8": "1",
+                   "PRIMAL_CODEX_WATCH_BOUNDARY": str(path / "boundary.json"),
+                   "PRIMAL_CODEX_WATCH_NONCE": boundary["nonce"]}
+    try:
+        process = subprocess.Popen(config["args"], cwd=config["repository"], env=environment,
+                                   stdin=subprocess.DEVNULL)
+    except OSError:
+        atomic_json(path / "exit.json", {"nonce": boundary["nonce"], "error": "검사 실행 파일 시작 실패"})
+        process = None
+    reported = process is None
+    while True:
+        if not reported and process.poll() is not None:
+            atomic_json(path / "exit.json", {"nonce": boundary["nonce"], "exit_code": process.returncode})
+            reported = True
+        if (path / "release").exists():
+            return
+        # 살아 있는 직접 부모의 PID는 재사용되지 않는다. 그룹 TERM과 경합하는
+        # 외부 ps 자식의 실패를 Worker 사망으로 오인하지 않도록 getppid를 쓴다.
+        if os.getppid() != boundary["worker_pid"]:
+            # Worker가 사라져도 자신의 살아 있는 그룹만 정리한다.
+            if not clean_anchored_group(anchor, lambda: os.getpgid(0) == anchor and os.getsid(0) == anchor):
+                raise RuntimeError("Supervisor의 소유 그룹 정리 미확인")
+            return
+        time.sleep(0.02)
+
+
+class MacGroup:
+    """살아 있는 Supervisor를 reap 전까지 유지하여 PGID 재사용을 차단한다."""
+
+    def __init__(self, directory, request, args, stdout, stderr):
+        self.path = directory / ("execution-" + uuid.uuid4().hex)
+        self.path.mkdir()
+        self.boundary = {"repository": request["repository"], "job_id": request["job_id"],
+                         "execution_id": self.path.name, "nonce": uuid.uuid4().hex,
+                         "worker_pid": os.getpid(), "worker_identity": process_identity(os.getpid())}
+        atomic_json(self.path / "command.json", {"repository": request["repository"], "args": args,
+                                                 "boundary": self.boundary})
+        self.process = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--supervisor", str(self.path)],
+                                        cwd=request["repository"], start_new_session=True,
+                                        stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr)
+        self.identity = process_identity(self.process.pid)
+        self.escaped = False
+
+    def owned(self):
+        try:
+            return (self.process.poll() is None and identity_alive(self.process.pid, self.identity)
+                    and os.getpgid(self.process.pid) == self.process.pid
+                    and os.getsid(self.process.pid) == self.process.pid)
+        except ProcessLookupError:
+            return False
+
+    def observe(self):
+        if not self.owned():
+            raise RuntimeError("Supervisor 소유권/생존 확인 실패")
+        entries = group_processes()
+        parents = {self.process.pid}
+        while True:
+            found = {pid for pid, parent, _, state in entries if parent in parents and "Z" not in state}
+            if found <= parents:
+                break
+            parents |= found
+        for pid, _, pgid, state in entries:
+            if pid in parents and "Z" not in state:
+                try:
+                    if pgid != self.process.pid or os.getsid(pid) != self.process.pid:
+                        self.escaped = True
+                        raise RuntimeError("소유 검사 자손의 예상하지 못한 Session/Group 이탈")
+                except ProcessLookupError:
+                    pass
+
+    def result(self):
+        path = self.path / "exit.json"
+        if not path.exists():
+            return None
+        value = read_json(path)
+        if value.get("nonce") != self.boundary["nonce"]:
+            raise RuntimeError("Supervisor 종료 결과 소유 정보 불일치")
+        if "error" in value:
+            raise RuntimeError(value["error"])
+        if not isinstance(value.get("exit_code"), int):
+            raise RuntimeError("검사 종료 코드 누락")
+        return value["exit_code"]
+
+    def cleanup(self):
+        if not clean_anchored_group(self.process.pid, self.owned):
+            return False
+        # 그룹의 나머지 프로세스가 없음을 확인한 후에만 anchor를 종료/reap한다.
+        (self.path / "release").touch()
+        try:
+            self.process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            if not self.owned():
+                return False
+            self.process.kill()
+            self.process.wait(timeout=3)
+        return not self.escaped and self.process.returncode in {0, -signal.SIGKILL}
+
+
 class Execution:
     def __init__(self, directory, request, windows_job=None, *, honour_cancel=True):
         self.directory, self.request, self.windows_job = directory, request, windows_job
@@ -407,6 +582,7 @@ class Execution:
         self.tree = PosixTree() if os.name != "nt" else None
         self.last_exit_code = None
         self.honour_cancel = honour_cancel
+        self.mac_group = None
 
     def check(self):
         if self.honour_cancel and (self.directory / "cancel").exists():
@@ -415,7 +591,10 @@ class Execution:
             raise StopRequested("TIMED_OUT")
 
     def cleanup(self):
-        if self.windows_job:
+        if self.mac_group is not None:
+            self.cleanup_verified = self.mac_group.cleanup()
+            self.mac_group = None
+        elif self.windows_job:
             self.cleanup_verified = self.windows_job.cleanup()
         elif self.process_group is not None:
             self.tree.observe()
@@ -439,6 +618,8 @@ class Execution:
 
     def run(self, args, *, capture=False):
         self.check()
+        if sys.platform == "darwin":
+            return self.run_mac(args, capture=capture)
         with (self.directory / "output.log").open("ab") as output:
             options = {"start_new_session": True} if os.name != "nt" else {}
             self.process = subprocess.Popen(args, cwd=self.request["repository"], stdin=subprocess.DEVNULL,
@@ -466,6 +647,26 @@ class Execution:
             if not self.cleanup():
                 raise RuntimeError("소유 자식 프로세스 정리를 확인하지 못했습니다.")
             return code, stdout or b"", stderr or b""
+
+    def run_mac(self, args, *, capture=False):
+        # Supervisor는 명령 종료 뒤에도 pipe를 보유하므로 capture는 소유 파일로 읽는다.
+        token = uuid.uuid4().hex
+        stdout_path, stderr_path = self.directory / (token + ".stdout"), self.directory / (token + ".stderr")
+        with (stdout_path if capture else self.directory / "output.log").open("ab") as output, stderr_path.open("ab") as error:
+            self.mac_group = MacGroup(self.directory, self.request, args, output, error if capture else subprocess.STDOUT)
+            try:
+                while True:
+                    self.check()
+                    self.mac_group.observe()
+                    code = self.mac_group.result()
+                    if code is not None:
+                        self.last_exit_code = code
+                        break
+                    time.sleep(0.02)
+            finally:
+                if not self.cleanup():
+                    raise RuntimeError("macOS 소유 Process Group 정리 미확인")
+        return code, stdout_path.read_bytes() if capture else b"", stderr_path.read_bytes() if capture else b""
 
 
 def gh_json(execution, args):
@@ -524,9 +725,6 @@ def notify(directory, request, result, *, execution=None):
         return
     notification = {"status": "FAILED", "attempted": True, "session_resumed": "UNVERIFIED"}
     atomic_json(path, notification)
-    if sys.platform == "darwin":
-        atomic_json(path, {**notification, "status": "UNSUPPORTED", "reason": "macOS 프로세스 소유 경계 미확인"})
-        return
     if execution is None:
         atomic_json(path, {**notification, "status": "UNSUPPORTED", "reason": "프로세스 소유 경계 초기화 미완료"})
         return
@@ -581,12 +779,13 @@ def finish(directory, request, result, started, *, execution=None):
     result = {**result, "job_id": request["job_id"], "nonce": request["nonce"],
               "kind": request["kind"], "elapsed_seconds": round(time.monotonic() - started, 3),
               "finished_at": time.time(), "baseline": request.get("baseline"),
-              "worker_pid": os.getpid(), "worker_identity": process_identity(os.getpid()) if sys.platform != "darwin" else None,
+              "worker_pid": os.getpid(), "worker_identity": process_identity(os.getpid()),
               "target": {name: request.get(name) for name in target_fields}}
     atomic_json(directory / "result.json", result)
     atomic_json(directory / "state.json", {"status": result["status"], "ready": result.get("ready", False),
                                            "job_id": request["job_id"], "nonce": request["nonce"]})
-    release_registration(request["repository"], request)
+    if result.get("cleanup_verified") is True:
+        release_registration(request["repository"], request)
     notify(directory, request, result, execution=execution)
 
 
@@ -600,13 +799,6 @@ def run_worker(root, job_id):
     ready = False
     try:
         validate_saved_request(request)
-        if sys.platform == "darwin":
-            result = {"status": "ERROR", "exit_code": None, "phase": "platform_initialization",
-                      "platform": "darwin", "test_status": "NOT_STARTED", "cleanup_verified": False,
-                      "error": "macOS의 별도 session 자손 소유권을 확인할 수 없어 검사 실행 전에 중단합니다."}
-            result["ready"] = False
-            finish(directory, request, result, started)
-            return
         if time.time() >= request["ready_deadline"] or (directory / "cancel").exists():
             raise StopRequested("TIMED_OUT")
         job = WindowsJob() if os.name == "nt" else None
@@ -664,6 +856,9 @@ def run_worker(root, job_id):
 
 
 if __name__ == "__main__":
+    if len(sys.argv) == 3 and sys.argv[1] == "--supervisor":
+        run_supervisor(sys.argv[2])
+        raise SystemExit(0)
     if len(sys.argv) != 3:
         raise SystemExit("Worker는 codex_wait.py에서 시작합니다.")
     run_worker(Path(sys.argv[1]), sys.argv[2])
