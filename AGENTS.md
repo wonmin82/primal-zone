@@ -10,6 +10,7 @@
 - 주요 임무와 보스는 혼자 진행할 수 있어야 한다. 이용자 간 상호작용은 선택적으로 제공한다.
 - 현재 기반은 Python 3.13, Evennia, SQLite와 HTML·CSS·JavaScript다. 정확한 의존성 버전은 `pyproject.toml`과 `uv.lock`을 기준으로 한다.
 - 새로운 기능의 범위를 판단할 때 [README](README.md), [구조와 설계 결정](docs/architecture.md), [테스트 안내](docs/playtest.md)를 참고한다.
+- 새 기능과 구조 변경에는 [프로젝트 공통 아키텍처 원칙](docs/architecture-principles.md)을 적용하고 도메인별 기존 확정 정책도 함께 확인한다. 영향받는 원칙과 불변식만 검토하며, 사소한 변경마다 형식적인 전체 체크리스트를 요구하지 않는다.
 
 ## 2. 작업 시작과 변경 범위
 
