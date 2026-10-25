@@ -79,3 +79,5 @@ jobs:
       - run: npm run test:contracts
       - run: uv sync --locked --python 3.13
       - run: uv run python scripts/issue50_contracts.py
+      - name: Codex 감시기 회귀 (T01~T06)
+        run: uv run python -m unittest discover -s scripts/tests -p test_codex_wait.py

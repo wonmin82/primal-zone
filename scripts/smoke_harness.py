@@ -16,6 +16,7 @@ from pathlib import Path
 from time import monotonic
 from urllib.request import urlopen
 
+from codex_watch import boundary_from_environment, identity_alive, process_identity
 from websockets.asyncio.client import connect
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -53,6 +54,7 @@ class Harness:
         self.ports = {}
         self.reservations = []
         self.restarting = False
+        self.inherited = {}
         self.credentials = [(name, secrets.token_urlsafe(24))
                             for name in ("검증가", "검증나", "검증다")]
 
@@ -103,8 +105,9 @@ class Harness:
         for name, module in (("portal", "server/portal/portal.py"), ("server", "server/server.py")):
             log = (self.run_dir / f"{name}.log").open("a", encoding="utf-8")
             self.handles.append(log)
+            boundary = boundary_from_environment(self.env)
             flags = {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {
-                "start_new_session": True}
+                "start_new_session": boundary is None}
             args = [sys.executable, "-c", "from twisted.scripts.twistd import run; run()",
                     "--nodaemon", "--logfile=-", f"--python={library / module}"]
             if os.name != "nt":
@@ -113,6 +116,12 @@ class Harness:
                                        stdin=subprocess.DEVNULL, stdout=log,
                                        stderr=subprocess.STDOUT, **flags)
             self.processes.append((name, process))
+            if boundary is not None:
+                identity = process_identity(process.pid)
+                self.inherited[process.pid] = (identity, boundary)
+                if (not identity or os.getpgid(process.pid) != boundary["pgid"]
+                        or os.getsid(process.pid) != boundary["sid"]):
+                    raise RuntimeError("Smoke 자식의 감시기 소유 Session/Group 상속 실패")
 
     def check_alive(self):
         for name, process in self.processes:
@@ -168,6 +177,7 @@ class Harness:
             await asyncio.to_thread(self.graceful_stop)
             self.processes.clear()
             self.handles.clear()
+            self.inherited.clear()
             # 실행 중 checkpoint와 종료 사이에도 정상 전투 라운드가 진행될 수 있다.
             # 실제 프로세스 종료 시점의 DB를 재시작 보존 검사의 기준으로 삼는다.
             stopped = await asyncio.to_thread(self.checkpoint)
@@ -206,6 +216,8 @@ class Harness:
                 if process.poll() is None:
                     if os.name == "nt":
                         process.terminate()
+                    elif process.pid in self.inherited:
+                        self._stop_inherited(process, force=False)
                     else:
                         os.killpg(process.pid, signal.SIGTERM)
                     try:
@@ -213,12 +225,14 @@ class Harness:
                     except subprocess.TimeoutExpired:
                         if os.name == "nt":
                             process.kill()
+                        elif process.pid in self.inherited:
+                            self._stop_inherited(process, force=True)
                         else:
                             os.killpg(process.pid, signal.SIGKILL)
                         process.wait(timeout=SHUTDOWN_TIMEOUT)
                 if process.poll() is None:
                     failures.append(name)
-            except (OSError, subprocess.TimeoutExpired) as error:
+            except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
                 failures.append(f"{name}: {error}")
         for handle in self.handles:
             handle.close()
@@ -226,6 +240,16 @@ class Harness:
             reservation.close()
         if failures:
             raise RuntimeError("smoke process cleanup 실패: " + ", ".join(failures))
+
+    def _stop_inherited(self, process, *, force):
+        """공유 그룹 전체가 아니라 소유한 foreground Popen 하나만 종료한다."""
+        identity, boundary = self.inherited[process.pid]
+        if (not identity_alive(process.pid, identity)
+                or boundary_from_environment(self.env) != boundary
+                or os.getpgid(process.pid) != boundary["pgid"]
+                or os.getsid(process.pid) != boundary["sid"]):
+            raise RuntimeError("Smoke 종료 대상 PID/시작정보/그룹 소유권 불일치")
+        (process.kill if force else process.terminate)()
 
     def discard(self):
         # 생성한 정확한 경로만 제거한다. 외부 경로·상위 디렉터리 삭제는 차단한다.
