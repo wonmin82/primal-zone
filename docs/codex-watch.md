@@ -99,4 +99,6 @@ Windows에서 macOS의 Supervisor 소유권·Session/PGID·marker·Smoke 상속/
 
 보완 회차의 독립 Auditor는 실제 동결 Diff·Assertion·원로그를 확인하고 위 P2 해결 후 A — Ready for Review, 잔여 P0/P1/P2 0건으로 판정했다. 별도 Linux/macOS 실환경 검증이나 최신 PR CI를 수행한 판정으로 확대하지 않으며, PR 최신 Source의 자동 CI 결과는 별도로 확인한다.
 
+첫 보완 Source `8ea3d6b`의 [Run40144967343](https://github.com/wonmin82/primal-zone/actions/runs/40144967343)에서는 새 `contracts` Step이 실패했다. Git 자동 maintenance가 임시 template의 `.git/objects/maintenance.lock`을 제거하는 동안 복사해 T01 setUp에서 ENOENT가 발생했고 다른 다섯 군은 통과했다. T01 본문과 그 POSIX 하위 사례는 이 실패 실행에서 검증되지 않았다. 테스트 전용 template 저장소에만 commit 전 `maintenance.auto=false`, `gc.auto=0`을 설정하고 복사 후에도 그 설정을 검증하도록 고쳤다. Windows T01 재검증은 PASS(4.692초)였으며 lock 파일 무시·재시도·Sleep·사용자 글로벌 Git 설정 변경은 하지 않았다. 실패 원로그를 보존하고 다음 Source의 자동 CI를 별도 근거로 확인한다.
+
 프로세스 API 근거는 [Python3.13 subprocess](https://docs.python.org/3.13/library/subprocess.html), [Python3.13 os](https://docs.python.org/3.13/library/os.html), [Windows Job Objects](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects)를 따른다. Session/Process Group과 Job Object의 정리 결과를 프로세스 생성 성공만으로 추정하지 않고 소유 경계와 회귀로 확인한다.

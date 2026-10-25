@@ -61,7 +61,11 @@ class WatchTests(unittest.TestCase):
         (cls.template / "scripts" / "dev.py").write_text(FAKE_DEV, encoding="utf-8")
         (cls.template / "source.py").write_text("original = True\n")
         (cls.template / ".gitignore").write_text("work/\n")
-        for args in (["init", "-q"], ["add", "."], ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+        # 복사 중 .git/objects/maintenance.lock이 사라지는 background 경합을
+        # 테스트 전용 저장소에서만 차단한다. 사용자/프로젝트 설정은 바꾸지 않는다.
+        for args in (["init", "-q"], ["config", "--local", "maintenance.auto", "false"],
+                     ["config", "--local", "gc.auto", "0"], ["add", "."],
+                     ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
                                                        "commit", "-qm", "fixture"]):
             subprocess.run(["git", "-C", str(cls.template), *args], capture_output=True, check=True)
 
@@ -112,6 +116,8 @@ class WatchTests(unittest.TestCase):
         return directory, request
 
     def test_t01_local_success_ready_independent_and_result(self):
+        self.assertEqual(worker.git(self.root, "config", "--local", "--get", "maintenance.auto").strip(), b"false")
+        self.assertEqual(worker.git(self.root, "config", "--local", "--get", "gc.auto").strip(), b"0")
         with patch.dict(os.environ, WATCH_TEST_ACTION="handshake", PYTHONUTF8="1"):
             parent = subprocess.run([sys.executable, str(ROOT / "scripts" / "codex_wait.py"),
                                      "local", "--parallel", "2", "tests.selected"],
