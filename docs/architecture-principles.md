@@ -47,10 +47,11 @@
 
 - **목적:** 실패·재전송·동시 실행에도 게임 상태와 자산의 의미를 보존한다.
 - **필수 규범:** 하나의 도메인 변경은 일부만 반영되지 않도록 원자성을 보장한다. 멱등성은 별도 요구로, 같은 요청·서버 이벤트의 재실행이 효과·보상을 중복시키지 않게 한다. 실패 시 DB뿐 아니라 Evennia Cache와 예약 작업의 일관성도 복구한다. DB Commit과 네트워크 전달을 같은 원자적 작업으로 간주하지 않는다.
+- **지연 작업의 확정 경계:** 게임 상태의 정확성에 필수적인 지연 작업은 재시작 후 실행 필요·완료 여부를 판정할 영속 근거를 도메인 상태 변경과 일관되게 확정해야 한다. 실행 예정 시각·상태 전이·안정적인 작업 또는 Encounter 식별자·완료 상태 등을 활용할 수 있으며 실제 저장 모델은 해당 도메인이 소유한다. `after_change()` 같은 메모리 콜백은 실행을 촉발할 수 있지만 재시작 복구가 필요한 작업의 유일한 상태 저장소가 되어서는 안 된다. DB Commit 성공 후 타이머 등록 콜백 실행 전에 서버가 종료되어도 확정된 도메인 상태로 후속 작업을 안전하게 복구할 수 있어야 한다.
 - **권장 방향:** 도메인 변경 경계와 이벤트 정체성·완료 조건을 명시하고 외부 메시지·타이머 예약은 성공 Commit 뒤로 분리한다. 중첩 실패와 Commit 이후 전달 실패를 각각 검토한다.
 - **예외와 범위:** 읽기 전용 계산마다 DB 트랜잭션을 요구하지 않는다. 의도한 다단계 작업은 각 단계의 확정·재시도·보상 또는 복구 경계를 별도로 정의한다.
-- **오해 방지:** 트랜잭션 하나로 묶었다고 재요청 중복 지급이 방지되지는 않는다. 출력 실패를 이유로 이미 Commit된 보상을 재지급하지 않는다.
-- **리뷰 질문:** 중간 실패 시 DB·Cache·예약이 함께 복구되는가? 동일 요청이나 종료 이벤트를 두 번 처리하면 어떤 상태가 남는가?
+- **오해 방지:** 트랜잭션 하나로 묶었다고 재요청 중복 지급이 방지되지는 않는다. 출력 실패를 이유로 이미 Commit된 보상을 재지급하지 않는다. 영속 작업의 실행 보장과 네트워크 메시지의 Exactly-Once Delivery는 별개이며, 복구·중복 호출에도 게임 효과·보상·전투 종료가 중복 확정되지 않아야 한다.
+- **리뷰 질문:** 중간 실패 시 DB·Cache·예약이 함께 복구되는가? 동일 요청이나 종료 이벤트를 두 번 처리하면 어떤 상태가 남는가? Commit 직후 콜백이 누락되면 어떤 영속 근거로 후속 실행을 복구하는가?
 - **관련 규범:** [Action 아키텍처](action-architecture.md)의 B-1 원자성·Rollback, [world_change()](../game/world/multiplayer.py), [전리품 권리](loot-claims.md).
 
 <a id="p-04"></a>
@@ -143,10 +144,11 @@
 
 - **목적:** 장애·재시작 뒤 안전하게 복구하고 원인을 진단할 수 있게 한다.
 - **필수 규범:** 새 빈 DB, 중단된 초기화, 지원하지 않는 과거 DB, 손상된 기존 DB, 불완전한 상태를 구별한다. 복구 불가능한 상태를 정상으로 간주하지 않는다. 운영 데이터의 무단 삭제·암묵적 변환을 금지하고 원인 진단이 가능한 오류를 제공한다.
+- **재시작 정합화:** 서버 시작 또는 도메인 재활성화 시 P-03의 영속 근거를 이용해 실행이 필요한 미완료 작업, 이미 완료된 작업, 실행 예정 시각이 지난 작업, 중복 등록·호출된 작업, 현재 상태에서 무효화된 작업을 구별해야 한다. 복구·재예약·실행·생략은 기존 게임 규칙과 도메인 정책을 따르고 동일 작업의 중복 호출에도 효과·보상·종료를 한 번만 확정한다. Commit 이후 메모리 콜백이 누락된 경우도 이 판정으로 복구하며 완료된 작업을 다시 확정하지 않는다.
 - **권장 방향:** 반복 가능한 초기화·검증·재시작 reconciliation, 명시적 백업·변환·복원 절차를 마련한다. 오류는 필요한 진단 맥락을 보존하되 비밀·인증정보를 노출하지 않는다.
-- **예외와 범위:** 승인된 maintenance 변환·복원은 가능하다. 현재 Fresh 설치 정책은 과거 DB 자동 변환이나 손상 DB를 빈 DB로 재해석할 권한이 아니다.
+- **예외와 범위:** 승인된 maintenance 변환·복원은 가능하다. Fresh 설치 정책은 과거 DB 자동 변환이나 손상 DB를 빈 DB로 재해석할 권한이 아니다. Combat·Respawn·Recovery 등 기존 도메인의 영속 상태와 실행 계약을 활용할 수 있으며 범용 Scheduler·Event Bus·Message Queue·새 영속 작업 테이블을 요구하지 않는다. 이 규범은 개별 도메인의 복구 구현이 이미 완료되었다는 선언이 아니다.
 - **오해 방지:** marker가 없다는 이유만으로 진행 기록을 초기화하거나, 실패를 숨겨 성공으로 시작하지 않는다.
-- **리뷰 질문:** 어느 상태에서 재시작·재시도가 안전한가? 운영자 승인 없이 바뀌는 데이터가 있는가? 실패 원인과 복구 경로를 구별할 수 있는가?
+- **리뷰 질문:** 어느 상태에서 재시작·재시도가 안전한가? 예정 시각 경과·완료·중복·무효화 작업을 어떻게 판정하는가? 운영자 승인 없이 바뀌는 데이터가 있는가? 실패 원인과 복구 경로를 구별할 수 있는가?
 - **관련 규범:** [설치와 legacy upgrade](installation.md#fresh-installation과-legacy-upgrade), [아이템 migration](item-migration.md), [Door 복구 경계](doors-and-keys.md).
 
 <a id="p-12"></a>
@@ -199,7 +201,7 @@
 
 ## 8. 기존 규범과 도메인 문서의 관계
 
-| 자료 | 소유하는 범위와 이번 대조 결과 |
+| 자료 | 소유하는 범위 |
 | --- | --- |
 | [AGENTS.md](../AGENTS.md) | 게임 방향·솔로 진행, 작업·검증·Git·승인·멀티 에이전트 운영. P-01/P-12와 연결하며 상세 절차를 복제하지 않는다. |
 | [architecture.md](architecture.md) | 현재 실제 아키텍처와 도메인별 결정, 역사적 기록. 이 문서의 전역 판단 기준과 구별한다. |
@@ -209,7 +211,7 @@
 | [Issue #44 v4.3](https://github.com/wonmin82/primal-zone/issues/44) | D01~D17·B-1·Native ItemEntity D안·R1/R2/R3의 Design Freeze 원문. 완료 여부와 역사적 설계 시점의 미구현 표시는 구별한다. |
 | [Issue #81](https://github.com/wonmin82/primal-zone/issues/81) | 이 공통 원칙 도입의 변경 범위·Acceptance Criteria·승인/구현/검증 이력. |
 
-교차 검토에서 다음 해석·범위 경계를 확인했다. 아래는 새 도메인 정책이 아니라 기존 계약을 보존하는 적용 설명이다.
+다음은 기존 계약을 보존하기 위한 해석·범위 경계다. 개별 검토의 기준 SHA·감사 결론·구현 상태 평가는 해당 PR의 검증 기록에서 관리한다.
 
 | 분류 | 오해 가능 지점 | 적용과 보존 근거 |
 | --- | --- | --- |
@@ -220,27 +222,27 @@
 | B | 안정 ID를 모든 객체의 B-1 적용으로 확대 | P-10은 §4.2 Scope와 기존 Player/Party·전투 참가자 번호 제외를 보존한다. 번호 SSOT는 world/selection_numbers다. |
 | B | 최소 상태·Fresh 설치를 손상 DB 재초기화로 해석 | P-09/P-11은 필수 복구 상태와 기존 DB의 명시적 maintenance·백업·검증을 보존한다. |
 
-이번 대조에서 기존 계약을 바꿔야 하는 C 충돌은 확인하지 않았다. 단일 Actor Typeclass·ActionBinding 개수·READ_ONLY/STATE_CHANGE·Combatant/Encounter 저장 전략·SQLite 단일 서버·Fresh-only·B-1 세부 번호·PR/Phase 수·대련 timeout은 각 도메인 또는 제품·기술 결정이며 전역 원칙으로 승격하지 않는다.
+단일 Actor Typeclass·ActionBinding 개수·READ_ONLY/STATE_CHANGE·Combatant/Encounter 저장 전략·SQLite 단일 서버·Fresh-only·B-1 세부 번호·PR/Phase 수·대련 timeout은 각 도메인 또는 제품·기술 결정이며 전역 원칙으로 승격하지 않는다.
 
 ## 9. 설계 판단 사례
 
-아래의 현행 설명은 도입 기준 main `3f070365a7ef4e570671a6d512407e078a3c6334`의 문서·관련 소스 대조다. 사례 검토는 실제 게임 테스트 성공을 뜻하지 않는다. 미래 적용 예시는 새 구현이나 승인된 세부 설계로 간주하지 않는다. Actor 통합 v1.5는 이 문서 작업의 구현 대상이 아니며 이미 main에 구현되었다고 전제하지 않는다.
+각 사례의 **일반 판단**은 프로젝트에 적용할 기준이고, **구현 참고**는 관련 도메인 문서·소스가 소유하는 비규범적 설명이다. 구체적 구현 상태와 확인 기준은 해당 변경 PR의 검증 기록을 확인한다. **향후 예시**는 구현 완료나 승인된 세부 설계를 뜻하지 않는다. 사례 검토 자체도 실제 게임 테스트 성공을 뜻하지 않는다.
 
 ### ItemEntity와 Inventory Cache
 
-**현행:** [architecture.md](architecture.md)의 native runtime과 [item_inventory.py](../game/world/item_inventory.py)는 ItemEntity를 원본으로 하고 EquipmentProfile의 inventory를 일시적 수량 계산 context로 사용한다. **판단:** P-04/P-05/P-09에 따라 파생 Cache는 허용하되 실물 변경은 원본 API에서 검증·반영하고 무효화·Rollback을 보장한다. Cache를 없애기 위해 순수 규칙을 DB에 결합하거나 Cache를 독립 원장으로 저장하는 선택은 피한다.
+**일반 판단:** P-04/P-05/P-09에 따라 ItemEntity SSOT를 유지하며 파생 Inventory Cache는 허용하되 실물 변경은 원본 API에서 검증·반영하고 무효화·Rollback을 보장한다. Cache를 없애기 위해 순수 규칙을 DB에 결합하거나 Cache를 독립 원장으로 저장하는 선택은 피한다. **구현 참고:** Native ItemEntity와 EquipmentProfile의 일시적 수량 계산 context는 [architecture.md](architecture.md)와 [item_inventory.py](../game/world/item_inventory.py)를 참조한다.
 
 ### 사용자 Action Gateway와 서버 Combat Timer
 
-**현행:** [Action 계약](action-architecture.md)은 텍스트·구조화 웹 Action의 공통 Gateway를 사용한다. 전투 Timer와 적·탐사자 실행은 별도 서버 경로이며 [enemies.py](../game/typeclasses/enemies.py)·[explorers.py](../game/typeclasses/explorers.py)가 규칙·도메인 API와 서버 시간 경계를 사용한다. 모든 전투가 Action Gateway로 통합된 상태라는 뜻은 아니다. **판단:** P-02/P-03/P-06에 따라 진입점은 달라도 같은 효과의 규칙·비용·보상·완료 계약을 공유해야 한다. 향후 공통 Combat Domain Service로 조정할 경우에도 Timer를 사용자 Session 요청으로 위장할 필요는 없다.
+**일반 판단:** P-02/P-03/P-06에 따라 사용자 Action Gateway와 서버 Timer의 진입점은 달라도 같은 효과의 규칙·비용·보상·완료 계약을 공유해야 한다. **구현 참고:** 사용자 공통 Gateway 계약은 [Action 문서](action-architecture.md), 전투 실행·시간 경계는 [enemies.py](../game/typeclasses/enemies.py)·[explorers.py](../game/typeclasses/explorers.py)를 참조한다. **향후 예시:** 공통 Combat Domain Service로 조정하더라도 Timer를 사용자 Session 요청으로 위장할 필요는 없다. 이 예시는 모든 전투의 Gateway 통합 완료를 주장하지 않는다.
 
 ### Shared Encounter와 Exclusive Duel
 
-**현행과 제안 구별:** 공유 적의 HP·점유·참여 보상은 기존 [공유 전투](architecture.md) 계약이다. 여기서 Exclusive Duel과 Encounter 저장 모델 비교는 **향후 설계 판단 예시**이며 Actor 통합·대련 구현 완료 주장이 아니다. **판단:** P-03/P-06/P-09/P-11에 따라 종료 전이·중복 종료 방지·보상 1회 계약은 공통으로 지킨다. 참여·복구 요구가 다르면 저장 모델을 구별할 수 있다. 모든 모드에 같은 영속 Snapshot을 강제하거나, 최소 저장을 이유로 식별·완료·재시작 복구에 필요한 상태를 없애지 않는다. 구체적 모델은 별도 설계·승인·검증 대상이다.
+**일반 판단:** P-03/P-06/P-09/P-11에 따라 종료 전이·중복 종료 방지·보상 1회 계약은 공통으로 지킨다. 참여·복구 요구가 다르면 저장 모델을 구별할 수 있다. 모든 모드에 같은 영속 Snapshot을 강제하거나, 최소 저장을 이유로 식별·완료·재시작 복구에 필요한 상태를 없애지 않는다. **구현 참고:** 공유 적의 HP·점유·참여 보상은 [공유 전투 문서](architecture.md)를 참조한다. **향후 예시:** Exclusive Duel과 Shared Encounter의 저장 모델 비교는 Actor 통합·대련 구현 완료 주장이 아니며 구체적 모델은 별도 설계·승인·검증 대상이다.
 
 ### Fresh DB 초기화와 손상된 기존 DB
 
-**현행:** [설치 안내](installation.md)와 [item_runtime.initialize_fresh()](../game/world/item_runtime.py)는 실제 빈 world의 native 초기화와 기존 데이터의 명시적 migration 경계를 구별한다. 이 함수 하나가 모든 DB 손상·초기화 중단을 진단한다고 주장하지 않는다. **판단:** P-03/P-09/P-10/P-11에 따라 최소 marker를 쓰더라도 marker 누락만으로 기존 DB를 Fresh로 판정하지 않는다. 기존 데이터·불완전한 관계·손상을 확인하면 안전하게 실패하고 진단·백업·승인된 복구로 연결한다. 이 문서가 새 자동 복구 기능을 추가하지는 않는다.
+**일반 판단:** P-03/P-09/P-10/P-11에 따라 최소 marker를 쓰더라도 marker 누락만으로 기존 DB를 Fresh로 판정하지 않는다. 기존 데이터·불완전한 관계·손상을 확인하면 안전하게 실패하고 진단·백업·승인된 복구로 연결한다. **구현 참고:** 빈 world의 native 초기화와 기존 데이터 migration 경계는 [설치 안내](installation.md)·[item_runtime.initialize_fresh()](../game/world/item_runtime.py)를 참조한다. 이 참조는 함수 하나가 모든 DB 손상·초기화 중단을 진단한다는 보장이나 새 자동 복구 기능의 구현 완료 선언이 아니다.
 
 ## 10. 원칙 자체의 변경 관리
 
