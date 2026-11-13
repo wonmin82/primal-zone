@@ -107,6 +107,27 @@ def rewarded_delivery(context):
     return ActionResult()
 
 
+def reward_with_policy_violation(context):
+    from world.multiplayer import world_change
+
+    with world_change():
+        result = grant_once(context)
+        deliver_after_commit(Delivery("reward:1", "event", (context.caller,), ("검증 전달",)))
+        after_change(lambda: context.caller.msg("후속 전달", kind="event"))
+    return result
+
+
+def reward_then_rollback(context):
+    reward_with_policy_violation(context)
+    raise RuntimeError("확정 전 오류")
+
+
+def composite_policy_violation(context):
+    context.effect("speech", read)
+    context.effect("quest", reward_with_policy_violation)
+    return ActionResult()
+
+
 def rewarded_then_error(context):
     rewarded_dialogue(context)
     raise RuntimeError("내부 비밀")
@@ -259,6 +280,61 @@ class ActorActionFoundationTests(GameCommandTest):
         self.assertEqual(self.char1.db.foundation_value, 1)
         msg.assert_any_call("보상 지급", kind="event")
         self.assertEqual(log.call_count, 2)
+
+    def test_state_change_delivers_after_success_and_discards_delivery_on_rollback(self):
+        with patch.object(self.char1, "msg") as msg:
+            result = self.invoke(package(reward_then_rollback, policy=ExecutionPolicy.STATE_CHANGE))
+            self.assertEqual(result.status, ResultStatus.ERROR)
+            self.assertIsNone(self.char1.db.foundation_value)
+            self.char1.attributes.reset_cache()
+            self.assertIsNone(self.char1.db.foundation_value)
+            msg.assert_not_called()
+
+            result = self.invoke(package(reward_with_policy_violation, policy=ExecutionPolicy.STATE_CHANGE))
+        self.assertEqual(result.status, ResultStatus.SUCCESS)
+        self.assertTrue(result.changed)
+        self.assertEqual(self.char1.db.foundation_value, 1)
+        msg.assert_any_call("검증 전달", kind="event")
+        msg.assert_any_call("후속 전달", kind="event")
+
+    def test_postcommit_policy_violation_preserves_single_and_composite_rewards(self):
+        for composite in (False, True):
+            with self.subTest(composite=composite):
+                self.char1.db.foundation_value = 0
+                self.char1.db.foundation_done = False
+                delivered = []
+
+                def receive(text=None, **kwargs):
+                    if text is not None:
+                        delivered.append(text)
+                    if text == "검증 전달":
+                        self.assertEqual(self.char1.db.foundation_value, 1)
+                        self.char1.db.foundation_value = 999
+                    return True
+
+                effects = (EffectDefinition("speech", ExecutionPolicy.READ_ONLY),
+                           EffectDefinition("quest", ExecutionPolicy.STATE_CHANGE)) if composite else ()
+                declaration = package(composite_policy_violation if composite else reward_with_policy_violation,
+                                      policy=ExecutionPolicy.STATE_CHANGE, effects=effects)
+                with (patch.object(self.char1, "at_msg_receive", side_effect=receive),
+                      patch("world.multiplayer.logger.log_err") as log):
+                    result = self.invoke(declaration)
+                    self.assertEqual(result.status, ResultStatus.SUCCESS)
+                    self.assertTrue(result.changed)
+                    self.assertEqual(self.char1.db.foundation_value, 1)
+                    self.char1.attributes.reset_cache()
+                    self.assertEqual(self.char1.db.foundation_value, 1)
+                    self.assertEqual(delivered, ["검증 전달", "후속 전달"])
+                    log.assert_called_once()
+                    retry = self.invoke(declaration)
+                if composite:
+                    self.assertEqual([effect.name for effect in result.effects], ["speech", "quest"])
+                reward = result.effects[-1] if composite else result
+                self.assertEqual(reward.status, ResultStatus.SUCCESS)
+                self.assertTrue(reward.changed)
+                self.assertEqual(reward.completion, Completion.ACCEPTED)
+                self.assertTrue((retry.effects[-1] if composite else retry).duplicate)
+                self.assertEqual(self.char1.db.foundation_value, 1)
 
     def test_failed_effects_and_undeclared_effect_preserve_prior_commit(self):
         effects = (EffectDefinition("speech", ExecutionPolicy.READ_ONLY),

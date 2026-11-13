@@ -69,6 +69,8 @@ def _guarded(stack, *, composite=False):
 
         def on_commit(callback, robust=False, *, register=original):
             guard.reject_deferred()
+            if not callable(callback):
+                return register(callback, robust=robust)
             return register(lambda: _run_post_commit(callback), robust=robust)
 
         if "on_commit" in vars(connection):
@@ -178,7 +180,7 @@ def run_effect(context, name, handler):
     active = _effect.set(name)
     try:
         try:
-            with world_change(isolate_callbacks=True):
+            with world_change(isolate_callbacks=True) as delivery_errors:
                 if declaration.policy == ExecutionPolicy.STATE_CHANGE:
                     if service.locker is None:
                         _lock_roles(context.caller, context.invocation)
@@ -206,6 +208,8 @@ def run_effect(context, name, handler):
 
                     after_change(lambda: [player.push_state() for player in Explorer.objects.all()
                                           if player.sessions.count()])
+            if declaration.policy == ExecutionPolicy.READ_ONLY and delivery_errors:
+                raise delivery_errors[0]
         except ResultAbort as abort:
             result = abort.result
         except RuleError as error:

@@ -252,11 +252,12 @@ def execute(caller, session, invocation, index):
         if prepare is not None:
             from world.actions.effects import invoke_hook
 
-            with world_change():
-                invoke_hook(prepare, caller, invocation,
-                            readonly=any(service.policy == ExecutionPolicy.READ_ONLY or service.effects
-                                         for service in services))
-        with world_change(isolate_callbacks=True):
+            readonly = any(service.policy == ExecutionPolicy.READ_ONLY or service.effects for service in services)
+            with world_change(isolate_callbacks=True) as delivery_errors:
+                invoke_hook(prepare, caller, invocation, readonly=readonly)
+            if readonly and delivery_errors:
+                raise delivery_errors[0]
+        with world_change(isolate_callbacks=True) as delivery_errors:
             # Lifecycle 확정 후 owner→item→claim→currency→share를 한 번에 잠근다.
             locker = next(iter(lockers))
             if locker is None:
@@ -329,6 +330,8 @@ def execute(caller, session, invocation, index):
                 from typeclasses.explorers import Explorer
 
                 after_change(lambda: [player.push_state() for player in Explorer.objects.all() if player.sessions.count()])
+        if not service.effects and service.policy == ExecutionPolicy.READ_ONLY and delivery_errors:
+            raise delivery_errors[0]
         if service.effects:
             from world.actions.effects import invoke_composite
 

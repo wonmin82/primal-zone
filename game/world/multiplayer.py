@@ -1,11 +1,11 @@
 """공유 상태 변경은 단일 Evennia 서버에서 직렬 실행하고 DB에 원자적으로 저장한다."""
 
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from contextvars import ContextVar
 from threading import RLock, local
 
 from django.conf import settings
-from django.db import transaction
+from django.db import connections, transaction
 from evennia.objects.models import ObjectDB
 from evennia.scripts.models import ScriptDB
 from evennia.utils import logger
@@ -63,7 +63,30 @@ def pending_commit(key):
 
 
 @contextmanager
+def _isolate_commit_hooks():
+    """기본 DB의 Django 후처리 실패도 실제 commit 결과와 분리한다."""
+    connection = connections["default"]
+    original = connection.on_commit
+    had_override = "on_commit" in vars(connection)
+
+    def register(callback, robust=False):
+        if not callable(callback):
+            return original(callback, robust=robust)
+        return original(lambda: _run_post_commit(callback), robust=robust)
+
+    connection.on_commit = register
+    try:
+        yield
+    finally:
+        if had_override:
+            connection.on_commit = original
+        else:
+            del connection.on_commit
+
+
+@contextmanager
 def world_change(*, isolate_callbacks=False):
+    """격리 모드에서 조회 전달의 정책 오류를 확정 후 진단으로 반환한다."""
     # 명령과 타이머는 같은 서버 프로세스에서 실행되며 이 구간에서는 yield하지 않는다.
     with _lock:
         outer = not getattr(_context, "depth", 0)
@@ -74,9 +97,11 @@ def world_change(*, isolate_callbacks=False):
         mark = len(_context.callbacks)
         finalizers = dict(_context.finalizers)
         cached = [(obj, obj.pk) for obj in ObjectDB.get_all_cached_instances()]
+        delivery_errors = []
         try:
-            with transaction.atomic():
-                yield
+            hooks = _isolate_commit_hooks() if isolate_callbacks else nullcontext()
+            with hooks, transaction.atomic():
+                yield delivery_errors
                 if outer:
                     for finalizer in tuple(_context.finalizers.values()):
                         finalizer()
@@ -129,7 +154,7 @@ def world_change(*, isolate_callbacks=False):
             for callback in callbacks:
                 try:
                     if isolate_callbacks:
-                        _run_post_commit(callback)
+                        _run_post_commit(callback, delivery_errors=delivery_errors)
                     else:
                         callback()
                 except PostCommitPolicyError as error:
@@ -138,11 +163,13 @@ def world_change(*, isolate_callbacks=False):
                 raise policy_error
 
 
-def _run_post_commit(callback):
+def _run_post_commit(callback, *, delivery_errors=None):
     try:
         callback()
-    except PostCommitPolicyError:
-        raise
+    except PostCommitPolicyError as error:
+        logger.log_err("월드 변경 확정 후 전달에서 읽기 전용 정책을 위반했습니다.")
+        if delivery_errors is not None:
+            delivery_errors.append(error)
     except Exception:
         logger.log_err("월드 변경 확정 후 작업을 실행하지 못했습니다.")
 

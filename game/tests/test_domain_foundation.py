@@ -3,7 +3,8 @@
 from dataclasses import replace
 from unittest.mock import Mock, patch
 
-from django.test import TestCase
+from django.db import connection, transaction
+from django.test import TestCase, TransactionTestCase
 from evennia import create_object
 from evennia.objects.objects import DefaultObject
 from evennia.scripts.models import ScriptDB
@@ -213,6 +214,39 @@ class DomainFoundationTests(GameCommandTest):
                 deliver_after_commit(Delivery("result:2", "combat", (receiver,), ("잘못된 성공",)))
                 raise RuntimeError("rollback")
         self.assertEqual(received, ["공격", "보상"])
+
+
+class ActionCommitBoundaryTests(TransactionTestCase):
+    def test_django_and_world_callbacks_run_after_real_commit_and_continue_after_failure(self):
+        from world.actions.effects import deliver_read_only
+        from world.multiplayer import after_change
+
+        actor = create_object(DefaultObject, key="확정 검증")
+        actor.db.foundation_value = 0
+        calls = []
+
+        def forbidden_write():
+            calls.append(("위반", connection.in_atomic_block))
+            actor.db.foundation_value = 999
+
+        def broken():
+            raise RuntimeError("후처리 오류")
+
+        with patch("world.multiplayer.logger.log_err") as log:
+            with world_change(isolate_callbacks=True) as errors:
+                with world_change():
+                    actor.db.foundation_value = 1
+                    transaction.on_commit(lambda: deliver_read_only(forbidden_write))
+                    transaction.on_commit(broken)
+                    transaction.on_commit(lambda: calls.append(("Django", actor.db.foundation_value)))
+                    after_change(lambda: calls.append(("월드", connection.in_atomic_block)))
+                self.assertEqual(calls, [])
+        self.assertEqual(calls, [("위반", True), ("Django", 1), ("월드", False)])
+        self.assertEqual(errors, [])
+        self.assertEqual(log.call_count, 2)
+        self.assertEqual(actor.db.foundation_value, 1)
+        actor.attributes.reset_cache()
+        self.assertEqual(actor.db.foundation_value, 1)
 
 
 class NativeCombatantFoundationTests(NativeItemTest):
