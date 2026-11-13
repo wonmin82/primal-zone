@@ -1,15 +1,21 @@
 """Service가 명시 호출하는 효과 경계. 순서·의존성과 도메인 멱등성은 Service가 소유한다."""
 
+from contextlib import ExitStack
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from types import CoroutineType, MappingProxyType
 
 from django.db import connections
 from world.actions.schema import Completion, ExecutionPolicy
-from world.multiplayer import after_change, world_change
+from world.multiplayer import (
+    PostCommitPolicyError,
+    _deferred_guard,
+    _run_post_commit,
+    after_change,
+    world_change,
+)
 from world.rules import RuleError
 
-_state_change = ContextVar("action_effect_state_change", default=False)
 _effect = ContextVar("action_effect_name", default=None)
 
 
@@ -23,7 +29,7 @@ class EffectResult:
     duplicate: bool = False
 
 
-class ReadOnlyViolation(RuleError):
+class ReadOnlyViolation(RuleError, PostCommitPolicyError):
     """조회 효과가 영속 쓰기를 시도했다. 정상 효과로 조용히 승격하지 않는다."""
 
 
@@ -38,11 +44,48 @@ class _WriteGuard:
         self.composite = composite
         self.violated = False
 
+    def delegates_to_effect(self):
+        return self.composite and _effect.get() is not None
+
+    def reject_deferred(self):
+        if not self.delegates_to_effect():
+            self.violated = True
+            raise ReadOnlyViolation("READ_ONLY 효과에서는 임의의 후속 작업을 예약할 수 없습니다.")
+
     def __call__(self, execute, sql, params, many, context):
-        if not _read_query(sql) and not (self.composite and _state_change.get()):
+        if not _read_query(sql) and not self.delegates_to_effect():
             self.violated = True
             raise ReadOnlyViolation("READ_ONLY 효과에서는 영속 게임 상태를 변경할 수 없습니다.")
         return execute(sql, params, many, context)
+
+
+def _guarded(stack, *, composite=False):
+    guard = _WriteGuard(composite=composite)
+    token = _deferred_guard.set(guard)
+    stack.callback(_deferred_guard.reset, token)
+    for connection in connections.all():
+        stack.enter_context(connection.execute_wrapper(guard))
+        original = connection.on_commit
+
+        def on_commit(callback, robust=False, *, register=original):
+            guard.reject_deferred()
+            return register(lambda: _run_post_commit(callback), robust=robust)
+
+        if "on_commit" in vars(connection):
+            stack.callback(setattr, connection, "on_commit", original)
+        else:
+            stack.callback(delattr, connection, "on_commit")
+        connection.on_commit = on_commit
+    return guard
+
+
+def deliver_read_only(send):
+    """수신자 Hook의 쓰기·예약까지 검사하고, 위반 시 전달 효과를 실패 처리한다."""
+    with world_change(), ExitStack() as stack:
+        guard = _guarded(stack)
+        send()
+        if guard.violated:
+            raise ReadOnlyViolation("조회 메시지 전달 중 상태 변경을 시도했습니다.")
 
 
 def _call(handler, context):
@@ -58,12 +101,8 @@ def _call(handler, context):
 
 
 def _guarded_call(handler, context, *, composite=False):
-    from contextlib import ExitStack
-
-    guard = _WriteGuard(composite=composite)
     with ExitStack() as stack:
-        for connection in connections.all():
-            stack.enter_context(connection.execute_wrapper(guard))
+        guard = _guarded(stack, composite=composite)
         result = _call(handler, context)
         # Handler가 DB 오류를 잡고 성공을 반환해도 금지된 쓰기를 성공으로 보고하지 않는다.
         if guard.violated or not composite and result.changed:
@@ -80,17 +119,13 @@ def invoke_service(service, context):
 
 def invoke_hook(handler, *args, readonly=False):
     """준비/잠금 Hook도 읽기 전용 또는 복합 효과의 쓰기 경계를 우회하지 않는다."""
-    from contextlib import ExitStack
-
     from world.actions.gateway import synchronous
 
     synchronous(handler)
     if not readonly:
         return handler(*args)
-    guard = _WriteGuard()
     with ExitStack() as stack:
-        for connection in connections.all():
-            stack.enter_context(connection.execute_wrapper(guard))
+        guard = _guarded(stack)
         result = handler(*args)
         if guard.violated:
             raise ReadOnlyViolation("READ_ONLY Hook에서 상태 변경을 시도했습니다.")
@@ -99,20 +134,24 @@ def invoke_hook(handler, *args, readonly=False):
 
 def invoke_composite(service, context):
     """효과 순서를 실행하는 엔진이 아니라 도메인 Service의 명시 호출을 검증한다."""
+    from world.actions.gateway import ActionResult, ResultStatus
+
     try:
         result = _guarded_call(service.handler, context, composite=True)
+        if result.effects and result.effects != tuple(context.effect_results):
+            raise RuleError("실행한 효과와 복합 결과가 일치하지 않습니다.")
     except Exception:
-        # 효과 밖 금지된 쓰기가 Evennia 메모리 값을 먼저 바꿨을 수 있다.
-        # 이미 확정한 독립 효과를 되돌리지 않고 현재 DB 기준 캐시 복구 계약을 사용한다.
+        # 이미 확정한 독립 효과는 유지하고 DB 기준으로 Evennia 캐시를 복원한다.
         try:
             with world_change():
                 raise ReadOnlyViolation("복합 Service의 선언된 효과 경계를 확인하세요.")
         except ReadOnlyViolation:
             pass
-        raise
+        successful = any(effect.status == ResultStatus.SUCCESS for effect in context.effect_results)
+        message = ("성공한 효과는 반영되었습니다. 후속 처리 중 오류가 발생했습니다."
+                   if successful else "행동 처리 중 오류가 발생했습니다.")
+        result = ActionResult(ResultStatus.ERROR, (message,))
     actual = tuple(context.effect_results)
-    if result.effects and result.effects != actual:
-        raise RuleError("실행한 효과와 복합 결과가 일치하지 않습니다.")
     return replace(result, effects=actual, changed=any(effect.changed for effect in actual))
 
 
@@ -137,19 +176,27 @@ def run_effect(context, name, handler):
     if previous is not None:
         return replace(previous, duplicate=True)
     active = _effect.set(name)
-    state = _state_change.set(declaration.policy == ExecutionPolicy.STATE_CHANGE)
     try:
         try:
-            with world_change():
+            with world_change(isolate_callbacks=True):
                 if declaration.policy == ExecutionPolicy.STATE_CHANGE:
                     if service.locker is None:
                         _lock_roles(context.caller, context.invocation)
                     else:
                         service.locker(context.caller, context.invocation)
-                current = revalidate_context(context)
-                current_context = replace(context, roles=MappingProxyType(current))
-                result = (_guarded_call(handler, current_context)
-                          if declaration.policy == ExecutionPolicy.READ_ONLY else _call(handler, current_context))
+                def invoke_current():
+                    current = revalidate_context(context)
+                    current_context = replace(context, roles=MappingProxyType(current))
+                    return _call(handler, current_context)
+
+                if declaration.policy == ExecutionPolicy.READ_ONLY:
+                    with ExitStack() as stack:
+                        guard = _guarded(stack)
+                        result = invoke_current()
+                        if guard.violated or result.changed:
+                            raise ReadOnlyViolation("READ_ONLY 효과에서 상태 변경을 시도했습니다.")
+                else:
+                    result = invoke_current()
                 if result.effects:
                     raise RuleError("단일 효과는 복합 결과를 반환할 수 없습니다.")
                 if result.status != ResultStatus.SUCCESS:
@@ -166,7 +213,6 @@ def run_effect(context, name, handler):
         except Exception:
             result = ActionResult(ResultStatus.ERROR, ("효과 처리 중 오류가 발생했습니다.",))
     finally:
-        _state_change.reset(state)
         _effect.reset(active)
     output = EffectResult(name, result.status, result.completion, result.messages,
                           result.changed if result.status == ResultStatus.SUCCESS else False, result.duplicate)

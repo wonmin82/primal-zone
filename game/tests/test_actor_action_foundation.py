@@ -3,10 +3,11 @@
 from dataclasses import replace
 from unittest.mock import patch
 
+from django.db import transaction
 from evennia import create_object
 from typeclasses.actors import Actor
 from world.actions.effects import run_effect
-from world.actions.gateway import ActionResult, ResultStatus, execute, from_web
+from world.actions.gateway import ActionResult, ResultStatus, emit, execute, from_web
 from world.actions.registry import RegistryError, compile_manifest
 from world.actions.resolver import ActionInvocation, dispatch_text, provided
 from world.actions.schema import (
@@ -27,7 +28,9 @@ from world.actions.schema import (
     VerbDefinition,
 )
 from world.actors.schema import ActorDefinition, ActorPresentation, Classification
+from world.delivery import Delivery, deliver_after_commit
 from world.item_entities import api as item_api
+from world.multiplayer import after_change
 from world.selection_numbers.api import descriptor
 
 from tests.base import GameCommandTest
@@ -70,6 +73,50 @@ def rewarded_dialogue(context):
     run_effect(context, "speech", read)
     run_effect(context, "quest", grant_once)
     return ActionResult()
+
+
+def deferred_write(context):
+    after_change(lambda: setattr(context.caller.db, "foundation_value", 100))
+    return ActionResult()
+
+
+def speech_delivery(context):
+    deliver_after_commit(Delivery("speech:1", "event", (context.caller,), ("공개 발언",)))
+    return ActionResult(messages=("발언 확인",))
+
+
+def on_commit_write(context):
+    transaction.on_commit(lambda: setattr(context.caller.db, "foundation_value", 100))
+    return ActionResult()
+
+
+def reward_with_failed_delivery(context):
+    result = grant_once(context)
+
+    def broken():
+        raise RuntimeError("내부 전달 오류")
+
+    transaction.on_commit(broken)
+    after_change(broken)
+    after_change(lambda: context.caller.msg("보상 지급", kind="event"))
+    return result
+
+
+def rewarded_delivery(context):
+    context.effect("quest", reward_with_failed_delivery)
+    return ActionResult()
+
+
+def rewarded_then_error(context):
+    rewarded_dialogue(context)
+    raise RuntimeError("내부 비밀")
+
+
+def rewarded_then_failed_effect(context):
+    run_effect(context, "quest", grant_once)
+    run_effect(context, "followup", failing_write)
+    run_effect(context, "speech", deferred_write)
+    run_effect(context, "undeclared", read)
 
 
 def package(handler=read, *, policy=ExecutionPolicy.READ_ONLY, effects=()):
@@ -136,6 +183,94 @@ class ActorActionFoundationTests(GameCommandTest):
         self.assertEqual(self.char1.db.foundation_value, 1)
         self.assertEqual(first.effects[1].completion, Completion.ACCEPTED)
         self.assertTrue(second.effects[1].duplicate)
+
+    def test_read_only_rejects_both_deferred_write_registrations(self):
+        self.char1.db.foundation_value = 5
+        for handler in (deferred_write, on_commit_write):
+            with self.subTest(handler=handler.__name__), self.captureOnCommitCallbacks(execute=True):
+                result = self.invoke(package(handler))
+                self.assertEqual(result.status, ResultStatus.REFUSED)
+            self.assertEqual(self.char1.db.foundation_value, 5)
+            self.char1.attributes.reset_cache()
+            self.assertEqual(self.char1.db.foundation_value, 5)
+
+    def test_read_only_delivers_explicit_messages(self):
+        with patch.object(self.char1, "msg") as msg:
+            result = self.invoke(package(speech_delivery))
+        self.assertEqual(result.status, ResultStatus.SUCCESS)
+        self.assertEqual(result.messages, ("발언 확인",))
+        msg.assert_any_call("공개 발언", kind="event")
+
+    def test_read_only_delivery_hook_cannot_write_or_leave_stale_cache(self):
+        self.char1.db.foundation_value = 5
+
+        def write_on_receive(*args, **kwargs):
+            self.char1.db.foundation_value = 100
+
+        with patch.object(self.char1, "at_msg_receive", side_effect=write_on_receive):
+            result = self.invoke(package(speech_delivery))
+        self.assertEqual(result.status, ResultStatus.REFUSED)
+        self.assertEqual(self.char1.db.foundation_value, 5)
+        self.char1.attributes.reset_cache()
+        self.assertEqual(self.char1.db.foundation_value, 5)
+
+    def test_gateway_result_message_cannot_write_through_receive_hook(self):
+        self.char1.db.foundation_value = 5
+
+        def write_on_receive(*args, **kwargs):
+            self.char1.db.foundation_value = 100
+
+        result = self.invoke(package())
+        with (patch.object(self.char1, "at_msg_receive", side_effect=write_on_receive),
+              patch("evennia.utils.logger.log_err") as log):
+            emit(self.char1, self.session, None, result)
+        log.assert_called_once()
+        self.assertEqual(self.char1.db.foundation_value, 5)
+        self.char1.attributes.reset_cache()
+        self.assertEqual(self.char1.db.foundation_value, 5)
+
+    def test_composite_exception_preserves_order_and_committed_reward_on_retry(self):
+        effects = (EffectDefinition("speech", ExecutionPolicy.READ_ONLY),
+                   EffectDefinition("quest", ExecutionPolicy.STATE_CHANGE))
+        declaration = package(rewarded_then_error, effects=effects)
+        result = self.invoke(declaration)
+        self.assertEqual(result.status, ResultStatus.ERROR)
+        self.assertTrue(result.changed)
+        self.assertEqual([effect.name for effect in result.effects], ["speech", "quest"])
+        self.assertEqual(result.effects[1].completion, Completion.ACCEPTED)
+        self.assertTrue(result.effects[1].changed)
+        self.assertNotIn("내부 비밀", " ".join(result.messages))
+        with patch.object(self.char1, "msg") as msg:
+            emit(self.char1, self.session, None, result)
+        msg.assert_any_call("조회", session=self.session, kind="event")
+        retry = self.invoke(declaration)
+        self.assertTrue(retry.effects[1].duplicate)
+        self.assertFalse(retry.changed)
+        self.assertEqual(self.char1.db.foundation_value, 1)
+
+    def test_after_commit_delivery_failure_preserves_effect_and_next_delivery(self):
+        effects = (EffectDefinition("quest", ExecutionPolicy.STATE_CHANGE),)
+        with (patch.object(self.char1, "msg") as msg, patch("world.multiplayer.logger.log_err") as log,
+              self.captureOnCommitCallbacks(execute=True)):
+            result = self.invoke(package(rewarded_delivery, effects=effects))
+        self.assertEqual(result.status, ResultStatus.SUCCESS)
+        self.assertTrue(result.effects[0].changed)
+        self.assertEqual(result.effects[0].completion, Completion.ACCEPTED)
+        self.assertEqual(self.char1.db.foundation_value, 1)
+        msg.assert_any_call("보상 지급", kind="event")
+        self.assertEqual(log.call_count, 2)
+
+    def test_failed_effects_and_undeclared_effect_preserve_prior_commit(self):
+        effects = (EffectDefinition("speech", ExecutionPolicy.READ_ONLY),
+                   EffectDefinition("quest", ExecutionPolicy.STATE_CHANGE),
+                   EffectDefinition("followup", ExecutionPolicy.STATE_CHANGE))
+        result = self.invoke(package(rewarded_then_failed_effect, effects=effects))
+        self.assertEqual(result.status, ResultStatus.ERROR)
+        self.assertTrue(result.changed)
+        self.assertEqual([effect.name for effect in result.effects], ["quest", "followup", "speech"])
+        self.assertEqual([effect.status for effect in result.effects],
+                         [ResultStatus.SUCCESS, ResultStatus.REFUSED, ResultStatus.REFUSED])
+        self.assertEqual(self.char1.db.foundation_value, 1)
 
     def test_invalid_source_roots_provider_and_duplicate_definitions_fail_registration(self):
         original = package()

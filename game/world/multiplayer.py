@@ -1,12 +1,14 @@
 """공유 상태 변경은 단일 Evennia 서버에서 직렬 실행하고 DB에 원자적으로 저장한다."""
 
 from contextlib import contextmanager
+from contextvars import ContextVar
 from threading import RLock, local
 
 from django.conf import settings
 from django.db import transaction
 from evennia.objects.models import ObjectDB
 from evennia.scripts.models import ScriptDB
+from evennia.utils import logger
 
 from world.timing import configured_timings
 
@@ -24,10 +26,22 @@ ENEMY_RESET_SECONDS = ENEMY_RECOVERY_DELAY_SECONDS  # 기존 import만 지원하
 
 _lock = RLock()
 _context = local()
+_deferred_guard = ContextVar("world_deferred_guard", default=None)
+
+
+class PostCommitPolicyError(Exception):
+    """조회 후 전달의 정책 위반을 확정된 변경 실패와 구별한다."""
 
 
 def after_change(callback):
     """화면 전송과 runtime 작업은 가장 바깥의 변경이 성공한 뒤 실행한다."""
+    guard = _deferred_guard.get()
+    if guard is not None:
+        guard.reject_deferred()
+    _enqueue_after_change(callback)
+
+
+def _enqueue_after_change(callback):
     if getattr(_context, "depth", 0):
         _context.callbacks.append(callback)
     else:
@@ -36,6 +50,9 @@ def after_change(callback):
 
 def before_commit(key, callback):
     """최종 실물 집합으로 변경을 확정한다. 독립 DB 커밋이나 on_commit 쓰기는 금지한다."""
+    guard = _deferred_guard.get()
+    if guard is not None:
+        guard.reject_deferred()
     if not getattr(_context, "depth", 0):
         raise RuntimeError("최종 변경 예약은 world_change 안에서만 가능합니다.")
     _context.finalizers[key] = callback
@@ -46,7 +63,7 @@ def pending_commit(key):
 
 
 @contextmanager
-def world_change():
+def world_change(*, isolate_callbacks=False):
     # 명령과 타이머는 같은 서버 프로세스에서 실행되며 이 구간에서는 yield하지 않는다.
     with _lock:
         outer = not getattr(_context, "depth", 0)
@@ -108,8 +125,26 @@ def world_change():
         if outer:
             _context.finalizers = {}
             callbacks, _context.callbacks = _context.callbacks, []
+            policy_error = None
             for callback in callbacks:
-                callback()
+                try:
+                    if isolate_callbacks:
+                        _run_post_commit(callback)
+                    else:
+                        callback()
+                except PostCommitPolicyError as error:
+                    policy_error = error
+            if policy_error is not None:
+                raise policy_error
+
+
+def _run_post_commit(callback):
+    try:
+        callback()
+    except PostCommitPolicyError:
+        raise
+    except Exception:
+        logger.log_err("월드 변경 확정 후 작업을 실행하지 못했습니다.")
 
 
 def object_by_id(identity):

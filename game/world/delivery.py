@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from world.multiplayer import after_change
+from world.multiplayer import _deferred_guard, _enqueue_after_change, after_change
 
 
 @dataclass(frozen=True)
@@ -35,4 +35,14 @@ def deliver_after_commit(delivery, *, permitted=None, on_error=None):
                     except Exception:
                         pass
 
-    after_change(send)
+    guard = _deferred_guard.get()
+    if guard is None or guard.delegates_to_effect():
+        after_change(send)
+        return
+
+    # 조회 효과는 명시적 메시지만 넘길 수 있다. 임의 후속 Hook은 등록 단계에서 검증한다.
+    if permitted is not None or on_error is not None:
+        guard.reject_deferred()
+    from world.actions.effects import deliver_read_only
+
+    _enqueue_after_change(lambda: deliver_read_only(send))

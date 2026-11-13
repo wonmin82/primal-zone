@@ -256,7 +256,7 @@ def execute(caller, session, invocation, index):
                 invoke_hook(prepare, caller, invocation,
                             readonly=any(service.policy == ExecutionPolicy.READ_ONLY or service.effects
                                          for service in services))
-        with world_change():
+        with world_change(isolate_callbacks=True):
             # Lifecycle 확정 후 owner→item→claim→currency→share를 한 번에 잠근다.
             locker = next(iter(lockers))
             if locker is None:
@@ -358,9 +358,24 @@ def execute(caller, session, invocation, index):
 
 
 def emit(caller, session, invocation, result):
-    for message in result.messages:
-        caller.msg(ft.text(ft.token("error", message)) if result.status in (ResultStatus.REFUSED, ResultStatus.ERROR)
-                   else message, session=session, kind="error" if result.status in (ResultStatus.REFUSED, ResultStatus.ERROR) else "event")
+    from world.actions.effects import ReadOnlyViolation, deliver_read_only
+
+    try:
+        deliver_read_only(lambda: _emit_result(caller, session, invocation, result))
+    except ReadOnlyViolation:
+        # 출력 Hook의 위반은 이미 확정된 행동 결과에 영향을 주지 않는다.
+        from evennia.utils import logger
+
+        logger.log_err("행동 결과 전달 중 읽기 전용 정책을 위반했습니다.")
+
+
+def _emit_result(caller, session, invocation, result):
+    messages = ((message, effect.status) for effect in result.effects for message in effect.messages)
+    effect_messages = tuple(messages) if result.status == ResultStatus.ERROR else ()
+    for message, status in (*effect_messages, *((message, result.status) for message in result.messages)):
+        error = status in (ResultStatus.REFUSED, ResultStatus.ERROR)
+        caller.msg(ft.text(ft.token("error", message)) if error else message,
+                   session=session, kind="error" if error else "event")
     if result.confirmation_token:
         from world.actions.presentation import reference_json
 
