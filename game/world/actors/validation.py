@@ -85,7 +85,8 @@ def validate_definitions(definitions, capabilities, spawns=(), *, index=None, ro
                 "Actor Profile과 초기 상태는 Mapping이어야 합니다.")
         require(len(set(actor.capabilities)) == len(actor.capabilities)
                 and set(actor.capabilities) <= descriptors.keys(), "Capability 중복/미존재 참조")
-        require(not {"actor_id", "spawn_id", "definition_id", "action_provider_id", "selection_group_id"}
+        require(not {"actor_id", "spawn_id", "definition_id", "action_provider_id",
+                     "selection_definition_id", "selection_group_id"}
                 .intersection(actor.defaults), "초기 상태가 영속 정체성을 덮어쓸 수 없습니다.")
         profiles = set()
         bindings = []
@@ -114,6 +115,13 @@ def validate_definitions(definitions, capabilities, spawns=(), *, index=None, ro
                     declared = getattr(binding, "capability_id", None)
                     require(declared in (None, capability_id), "Binding Capability 참조 불일치")
                     bindings.append(binding)
+        require("hp" not in actor.defaults, "Actor HP는 combat_state에만 저장합니다.")
+        if "combat" in actor.capabilities:
+            combat_state = actor.defaults.get("combat_state")
+            hp = combat_state.get("hp") if isinstance(combat_state, Mapping) else None
+            require(type(hp) is int and hp >= 0, "전투 Actor의 초기 HP가 필요합니다.")
+        else:
+            require("combat_state" not in actor.defaults, "전투 상태에는 Combat Capability가 필요합니다.")
         require(set(actor.profiles) <= profiles, "보유 Capability가 소유하지 않는 Profile")
         require(len({binding.id for binding in bindings}) == len(bindings), "Capability의 Binding 중복 제공")
         for left, right in combinations(bindings, 2):

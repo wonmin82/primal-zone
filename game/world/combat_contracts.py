@@ -27,6 +27,8 @@ class Combatant:
         return deepcopy(dict(self.entity.db.combat_state or {}))
 
     def validate_participation(self, other, permission):
+        self.snapshot()
+        other.snapshot()
         identity(self.entity)
         identity(other.entity)
         if self.entity.location != other.entity.location or not permission(self, other):
@@ -86,10 +88,14 @@ def begin_encounter(owner, participants, *, policy=EncounterPolicy.SHARED):
     """Shared의 최소 영속 근거. Duel/미지원 정책 실행은 후속 구현 전 거절한다."""
     if policy != EncounterPolicy.SHARED:
         raise RuleError("아직 실행을 지원하지 않는 Encounter 정책입니다.")
+    participants = tuple(participants)
     participant_ids = tuple(identity(entity) for entity in participants)
     if not participant_ids or len(participant_ids) != len(set(participant_ids)):
         raise RuleError("전투 참가자가 비었거나 중복되었습니다.")
     with world_change():
+        for entity in (*participants, owner):
+            if callable(getattr(entity, "capability_active", None)):
+                Combatant(entity).snapshot()
         previous = dict(owner.db.encounter_state or {})
         if previous.get("state") == "active":
             raise RuleError("이미 진행 중인 전투가 있습니다.")
@@ -135,8 +141,11 @@ def plan_tick(encounter, *, operation_id, due_at, trigger):
             raise RuleError("종료된 전투에는 공격을 예약할 수 없습니다.")
         if operation_id in state.get("completed_operations", ()):
             return False
-        if state.get("pending") and state["pending"]["operation_id"] == operation_id:
-            return False
+        pending = state.get("pending")
+        if pending and not pending["completed"]:
+            if pending["operation_id"] == operation_id:
+                return False
+            raise RuleError("아직 완료되지 않은 전투 Tick이 있습니다.")
         state["pending"] = {"operation_id": operation_id, "due_at": due_at, "completed": False}
         encounter.owner.db.encounter_state = state
         after_change(lambda: trigger(encounter, operation_id, due_at))
@@ -148,6 +157,8 @@ def pending_state(encounter, context):
     if state.get("generation") != encounter.generation or context.generation != encounter.generation:
         return PendingState.STALE
     if state.get("state") == "finished" and state.get("settled"):
+        return PendingState.COMPLETED
+    if context.operation_id in state.get("completed_operations", ()):
         return PendingState.COMPLETED
     pending = state.get("pending")
     if state.get("state") != "active" or not pending or pending["operation_id"] != context.operation_id:
@@ -165,6 +176,9 @@ def apply_tick(encounter, context, apply):
                          permission=lambda current: pending_state(encounter, current) == PendingState.DUE)
         state = encounter.current()
         apply(state)
+        current = encounter.current()
+        if current["state"] == "finished" and current["settled"]:
+            return True
         state["pending"]["completed"] = True
         state["completed_operations"] = (*state.get("completed_operations", ()), context.operation_id)
         encounter.owner.db.encounter_state = state

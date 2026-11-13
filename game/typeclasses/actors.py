@@ -45,6 +45,11 @@ class Actor(NumberedObjectMixin, DistantPresenceMixin, DefaultObject):
     def classification(self):
         return self.definition.classification
 
+    @property
+    def hp(self):
+        state = self.db.combat_state
+        return state["hp"] if state is not None else None
+
     def at_object_creation(self):
         self.locks.add("get:false();puppet:false()")
 
@@ -84,4 +89,9 @@ class Actor(NumberedObjectMixin, DistantPresenceMixin, DefaultObject):
 
     def return_appearance(self, looker, **kwargs):
         presentation = self.definition.presentation
-        return ft.sheet(ft.token(presentation.semantic_role, self.key), presentation.description)
+        lines = [presentation.description]
+        if self.capability_active("combat"):
+            state = self.db.combat_state
+            maximum = state.get("max_hp", self.definition.profiles.get("combat", {}).get("max_hp"))
+            lines.append(f"체력 {self.hp}/{maximum}" if maximum is not None else f"체력 {self.hp}")
+        return ft.sheet(ft.token(presentation.semantic_role, self.key), *lines)

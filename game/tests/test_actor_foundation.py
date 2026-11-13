@@ -34,7 +34,10 @@ from world.actors.schema import (
 )
 from world.actors.spawn import ensure_spawn
 from world.actors.validation import ActorDefinitionError, validate_definitions
+from world.bootstrap import CATEGORY
+from world.combat_contracts import Combatant, begin_encounter, settle_encounter
 from world.multiplayer import world_change
+from world.rules import RuleError
 
 from tests.base import GameCommandTest
 
@@ -56,7 +59,7 @@ def fixture():
     definition = ActorDefinition("composite", "복합 검증자", Classification.HUMAN, presentation,
                                  capabilities=("dialogue", "combat"),
                                  profiles={"dialogue": {"topic": "검증"}, "combat": {"max_hp": 40}},
-                                 defaults={"state": "alive", "hp": 40},
+                                 defaults={"state": "alive", "combat_state": {"hp": 40}},
                                  action_provider_id="fixture.actor")
     return definition, descriptors
 
@@ -93,6 +96,8 @@ class ActorCompositionTests(TestCase):
         definition, capabilities = fixture()
         invalid = (
             replace(definition, profiles={"dialogue": {"topic": "검증"}}),
+            replace(definition, defaults={**definition.defaults, "selection_definition_id": "other"}),
+            replace(definition, defaults={**definition.defaults, "hp": 40}),
             replace(definition, profiles={**definition.profiles, "combat": {"max_hp": True}}),
             replace(definition, profiles={**definition.profiles, "combat": {"max_hp": 0}}),
             replace(definition, profiles={**definition.profiles, "extra": {}}),
@@ -144,6 +149,8 @@ class ActorRuntimeTests(GameCommandTest):
         self.enterContext(patch.object(content, "ACTORS", MappingProxyType({self.definition.id: self.definition})))
         self.enterContext(patch.object(content, "CAPABILITIES", MappingProxyType(self.capabilities)))
         self.spawn = ActorSpawn("fixture_spawn", self.definition.id, "fixture_room")
+        self.room1.db.zone_id = self.spawn.room_id
+        self.room1.tags.add(self.spawn.room_id, category=CATEGORY)
 
     def test_composite_actor_runs_each_binding_through_actual_gateway(self):
         from world.actions.gateway import ResultStatus, execute
@@ -166,17 +173,57 @@ class ActorRuntimeTests(GameCommandTest):
 
     def test_repeat_spawn_preserves_real_identity_current_state_and_location(self):
         actor = ensure_spawn(self.spawn, self.room1, index=action_index())
-        actor.db.hp = 7
+        with world_change():
+            Combatant(actor).apply(lambda state: state.update(hp=7))
         actor.db.encounter_generation = 4
         actor.location = self.room2
         same = ensure_spawn(self.spawn, self.room1, index=action_index())
         self.assertIsInstance(same, Actor)
         self.assertEqual((same.pk, same.actor_id, same.spawn_id),
                          (actor.pk, "composite", "fixture_spawn"))
-        self.assertEqual((same.db.hp, same.db.encounter_generation, same.location),
+        self.assertEqual((same.hp, same.db.encounter_generation, same.location),
                          (7, 4, self.room2))
         self.assertEqual(same.level, 1)
         self.assertEqual(same.classification, Classification.HUMAN)
+
+    def test_spawn_requires_matching_room_identity(self):
+        with self.assertRaises(ActorDefinitionError):
+            ensure_spawn(self.spawn, self.room2)
+        self.room2.db.zone_id = "another_room"
+        self.room2.tags.add("another_room", category=CATEGORY)
+        with self.assertRaises(ActorDefinitionError):
+            ensure_spawn(self.spawn, self.room2)
+        self.room2.db.zone_id = self.spawn.room_id
+        with self.assertRaises(ActorDefinitionError):
+            ensure_spawn(self.spawn, self.room2)
+        self.room2.tags.add(self.spawn.room_id, category=CATEGORY)
+        with self.assertRaises(ActorDefinitionError):
+            ensure_spawn(self.spawn, self.room1)
+
+    def test_combat_hp_is_shared_by_snapshot_presentation_and_settlement(self):
+        actor = ensure_spawn(self.spawn, self.room1)
+        combatant = Combatant(actor)
+        self.assertEqual(actor.hp, combatant.snapshot()["hp"])
+        self.assertFalse(actor.attributes.has("hp"))
+        self.assertIn("40/40", actor.return_appearance(self.char1))
+        with world_change():
+            combatant.apply(lambda state: state.update(hp=12))
+        with self.assertRaises(RuntimeError), world_change():
+            combatant.apply(lambda state: state.update(hp=0))
+            raise RuntimeError("rollback")
+        self.assertEqual(actor.hp, combatant.snapshot()["hp"])
+        self.assertIn("12/40", actor.return_appearance(self.char1))
+        encounter = begin_encounter(actor, (self.char1, actor))
+        with world_change():
+            combatant.apply(lambda state: state.update(hp=0))
+            if combatant.snapshot()["hp"] == 0:
+                settle_encounter(encounter, {"kind": "death"}, lambda _: None)
+        self.assertEqual(actor.hp, 0)
+        self.assertIn("0/40", actor.return_appearance(self.char1))
+        self.assertTrue(encounter.current()["settled"])
+        actor.set_capability_active("combat", False)
+        with self.assertRaises(RuleError):
+            begin_encounter(actor, (self.char1, actor))
 
     def test_capabilities_have_independent_current_activation(self):
         actor = ensure_spawn(self.spawn, self.room1)
@@ -198,6 +245,7 @@ class ActorRuntimeTests(GameCommandTest):
         with patch.object(content, "ACTORS", {definition.id: definition}):
             actor = ensure_spawn(self.spawn, self.room1)
             self.assertFalse(actor.attributes.has("hp"))
+            self.assertFalse(actor.attributes.has("combat_state"))
             self.assertFalse(actor.attributes.has("next_attack_at"))
             self.assertFalse(actor.attributes.has("combatants"))
 

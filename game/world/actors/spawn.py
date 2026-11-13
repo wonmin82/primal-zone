@@ -25,13 +25,18 @@ def ensure_spawn(spawn, room, *, index=None):
     """기존 Spawn은 재사용하고 정체성 충돌은 변경 전에 거절한다."""
     from typeclasses.actors import Actor
 
+    from world.bootstrap import CATEGORY
+
     if not isinstance(spawn, ActorSpawn) or not isinstance(room, DefaultRoom) or not room.pk:
         raise ActorDefinitionError("Spawn과 실제 Room이 필요합니다.")
-    if room.db.zone_id and room.db.zone_id != spawn.room_id:
-        raise ActorDefinitionError("Spawn의 Room 정체성이 일치하지 않습니다.")
     validate_definitions(content.ACTORS, content.CAPABILITIES, (spawn,), index=index)
     definition = content.ACTORS[spawn.actor_id]
     with world_change():
+        room_ids = ObjectDB.objects.filter(db_tags__db_key=spawn.room_id, db_tags__db_category=CATEGORY)
+        if (room.db.zone_id != spawn.room_id
+                or room.tags.get(category=CATEGORY, return_list=True) != [spawn.room_id]
+                or list(room_ids.values_list("pk", flat=True).distinct()) != [room.pk]):
+            raise ActorDefinitionError("Spawn의 Room 정체성이 일치하지 않습니다.")
         existing = list(ObjectDB.objects.filter(db_tags__db_key=spawn.id,
                                               db_tags__db_category="primal_actor_spawn").distinct())
         if len(existing) > 1:

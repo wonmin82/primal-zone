@@ -109,6 +109,53 @@ class DomainFoundationTests(GameCommandTest):
         plan_tick(restored, operation_id="tick:2", due_at=103, trigger=trigger)
         self.assertFalse(plan_tick(restored, operation_id="tick:1", due_at=104, trigger=trigger))
 
+    def test_pending_tick_cannot_be_replaced_and_rollback_preserves_reservation(self):
+        encounter = self.encounter()
+        trigger = Mock()
+        self.assertTrue(plan_tick(encounter, operation_id="tick:1", due_at=100, trigger=trigger))
+        self.assertFalse(plan_tick(encounter, operation_id="tick:1", due_at=200, trigger=trigger))
+        with self.assertRaises(RuleError):
+            plan_tick(encounter, operation_id="tick:2", due_at=90, trigger=trigger)
+        with self.assertRaises(RuntimeError), world_change():
+            settle_encounter(encounter, {"kind": "death"}, lambda _: None)
+            raise RuntimeError("정산 확정 실패")
+        self.assertEqual(encounter.current()["pending"]["due_at"], 100)
+        self.assertEqual(encounter.current()["pending"]["operation_id"], "tick:1")
+        trigger.assert_called_once_with(encounter, "tick:1", 100)
+        self.assertTrue(settle_encounter(encounter, {"kind": "death"}, lambda _: None))
+        self.assertIsNone(encounter.current()["pending"])
+        with self.assertRaises(RuleError):
+            plan_tick(encounter, operation_id="tick:2", due_at=90, trigger=trigger)
+
+    def test_tick_reservation_rollback_keeps_previous_completion(self):
+        encounter = self.encounter()
+        plan_tick(encounter, operation_id="tick:1", due_at=100, trigger=Mock())
+        apply_tick(encounter, self.context(encounter), Mock())
+        before = encounter.current()
+        trigger = Mock()
+        with self.assertRaises(RuntimeError), world_change():
+            plan_tick(encounter, operation_id="tick:2", due_at=101, trigger=trigger)
+            raise RuntimeError("예약 확정 실패")
+        self.assertEqual(encounter.current(), before)
+        trigger.assert_not_called()
+        self.assertTrue(plan_tick(encounter, operation_id="tick:2", due_at=101, trigger=trigger))
+
+    def test_lethal_tick_keeps_settlement_and_does_not_repeat_reward(self):
+        encounter = self.encounter()
+        plan_tick(encounter, operation_id="tick:1", due_at=100, trigger=Mock())
+        reward = Mock()
+
+        def finish(_):
+            settle_encounter(encounter, {"kind": "death"}, reward)
+
+        context = self.context(encounter)
+        self.assertTrue(apply_tick(encounter, context, finish))
+        self.assertTrue(encounter.current()["settled"])
+        self.assertIsNone(encounter.current()["pending"])
+        with self.assertRaises(RuleError):
+            apply_tick(encounter, context, finish)
+        reward.assert_called_once()
+
     def test_old_generation_and_invalidated_operation_are_refused(self):
         first = self.encounter()
         plan_tick(first, operation_id="tick:1", due_at=100, trigger=lambda *args: None)
