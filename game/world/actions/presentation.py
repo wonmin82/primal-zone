@@ -51,10 +51,10 @@ def _action_controls(caller, index, observed_at, *, provider_reference, verb_key
     if verb_key is not None:
         pairs = tuple((reference, binding) for reference, binding in pairs
                       if index.verbs[index.actions[binding.action_id].verb_id].key == verb_key)
-    records = {ref: descriptor(resolve_reference(ref)) for ref, _ in pairs}
+    records = {ref: descriptor(resolve_reference(ref)) for ref, _ in pairs if ref is not None}
     controls = []
     for reference, binding in pairs:
-        provider = resolve_reference(reference)
+        provider = resolve_reference(reference) if reference is not None else None
         service = index.services[binding.service_id]
         config = {argument.name: argument.default for argument in service.config_schema if argument.default is not None}
         config.update(binding.config)
@@ -72,7 +72,7 @@ def _action_controls(caller, index, observed_at, *, provider_reference, verb_key
             controls.extend(service.presenter(caller, index, reference, binding, observed_at))
             continue
         action = index.actions[binding.action_id]
-        roles = {"provider": [reference_json(reference)]}
+        roles = {"provider": [reference_json(reference)]} if reference is not None else {}
         if action.provider_from:
             roles[action.provider_from] = [reference_json(reference)]
         if any(role.required and role.name not in roles for role in action.roles):
@@ -80,13 +80,13 @@ def _action_controls(caller, index, observed_at, *, provider_reference, verb_key
         arguments = {arg.name: arg.default for arg in action.arguments if arg.default is not None}
         if any(arg.required and arg.name not in arguments for arg in action.arguments):
             continue
-        record = records[reference]
-        target = label(replace(record, number=number_for(reference))) if record else "대상"
+        record = records.get(reference)
+        target = label(replace(record, number=number_for(reference))) if record else ""
         for variant in action.variants:
             # 확인은 먼저 서버의 정상 요청이 발급한 토큰으로만 한다.
             if variant.confirmation_required or not variant.show_control:
                 continue
-            controls.append({"label": target + " " + index.verbs[action.verb_id].key,
+            controls.append({"label": (target + " " + index.verbs[action.verb_id].key).strip(),
                              "description": action.help,
                              "action": {"action_id": action.id, "variant": variant.id,
                                         "roles": roles, "arguments": arguments}})

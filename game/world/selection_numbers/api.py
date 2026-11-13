@@ -92,7 +92,11 @@ def descriptor(value):
     scope = f"room:{value.db_location_id}"
     aliases = tuple(value.aliases.all())
     unique_names = tuple(value.db.selection_unique_names or ())
-    if isinstance(value, Enemy):
+    if value.is_typeclass("typeclasses.actors.Actor", exact=True):
+        if not value.db.actor_id:
+            return None
+        kind, group, name = ReferenceKind.ACTOR, f"actor:{value.db.actor_id}", value.key
+    elif isinstance(value, Enemy):
         if not value.db.enemy_id:
             return None
         kind, group, name = ReferenceKind.ENEMY, f"enemy:{value.db.enemy_id}", value.key
@@ -284,7 +288,7 @@ def schedule_object(identity):
     entity = ObjectDB.objects.filter(pk=identity).first()
     record = descriptor(entity) if entity else None
     kinds = set(SelectionNumber.objects.filter(identity=str(identity), kind__in=(
-        ReferenceKind.OBJECT, ReferenceKind.ENEMY, ReferenceKind.CORPSE, ReferenceKind.DOOR)).values_list("kind", flat=True))
+        ReferenceKind.OBJECT, ReferenceKind.ENEMY, ReferenceKind.ACTOR, ReferenceKind.CORPSE, ReferenceKind.DOOR)).values_list("kind", flat=True))
     if record and record.reference.kind != ReferenceKind.ROOM:
         kinds.add(record.reference.kind)
     for kind in kinds:
