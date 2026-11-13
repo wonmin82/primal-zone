@@ -3,7 +3,7 @@
 ## 기준선과 실행 범위
 
 - 기준 main: `4288e0556aa6cd8cca8ab4bb3c4023d33d9608dc` (2026-10-25 확인).
-- [설계 원문](actor-unification-design-v1.md)과 [확정 계획](https://github.com/wonmin82/primal-zone/issues/83#issuecomment-6396602387)을 적용한다. 이번 실행은 PR-A → PR-B Stacked PR의 병합 전 리뷰까지이며 PR-C·병합·Issue 종료·소스 브랜치 삭제는 수행하지 않는다.
+- [설계 원문](actor-unification-design-v1.md)과 [확정 실행 계획 v1.0](actor-unification-implementation-plan-v1.md)을 적용한다. 이번 실행은 PR-A → PR-B Stacked PR의 병합 전 리뷰까지이며 PR-C·병합·Issue 종료·소스 브랜치 삭제는 수행하지 않는다.
 - 변경 전 [main CI 40182627829 Attempt 1](https://github.com/wonmin82/primal-zone/actions/runs/40182627829)은 정확한 기준 SHA에서 test·smoke·contracts·browser-e2e 4/4 SUCCESS였다. 이전 작업에서 확인한 실행 결과이며 이번 구현에서 새로 실행한 결과가 아니다. 기존 게임 소스와 테스트가 이 SHA에서 동일하므로 변경 전 기능 기준선으로 재사용한다. 이후 PR HEAD의 검사·CI를 대신하지 않는다.
 - 기존 수치·고정 RNG·출력·Spawn·임무 기대값은 아래 테스트의 실제 assertion을 기준선으로 사용한다. 새로운 Level은 기존 HP·공격·방어·드롭·보상 수치를 다시 계산하는 입력이 아니다.
 
@@ -63,6 +63,14 @@ Actor/WorldObject·불변 Definition·Sparse Capability·Spawn, 기존 단일 Re
 리뷰에서 Native EquipmentProfile metadata 유실, 완료 Operation 재예약, Global ROLE Root 의존 계산, 명시 Provider 누락 검증 및 수직 Fixture 공백을 발견해 수정했다. Native 장비·선택 UUID 소비, 동일 회차/Operation 멱등성, 복합 Actor 실제 Gateway, Global Actor/Item 이동·가시성·소유권·오래된 참조, World Format의 잘못된 버전을 검증한다. 실패 로그는 각 ignored 감시 Job에 보존한다.
 
 최종 코드 검사 이후 문서 안내와 실행 기록만 갱신하므로 동일 Python 전체 검사는 반복하지 않는다. 로컬 실브라우저·OS IME·운영 DB 복구·실제 운영 Seed는 PR-A에서 미실행이다. 새 Foundation Fixture와 기존 운영 경로 보존 검증을 실제 Actor Cutover 완료로 표현하지 않는다. 최신 PR HEAD의 필수 CI와 G1 최종 상태는 PR Validation에 별도 기록하며, PR-B/G2는 아직 미착수다.
+
+## PR-A 리뷰 보완
+
+- Actor의 현재 HP는 `combat_state.hp`를 사용한다. Spawn defaults, Combatant, 표시와 종료 Fixture가 같은 값을 읽는다. Spawn Room은 Bootstrap 관리 태그의 유일한 소유권과 `zone_id`를 함께 확인한다.
+- 미완료 Tick은 세대·작업 ID·시각을 유지한다. 정산은 종료와 함께 예약을 해제하며 정상 Tick 완료 뒤 다음 Tick을 예약할 수 있다.
+- READ_ONLY는 SQL과 임의 후속 작업 등록을 차단한다. 명시 메시지 전달의 수신자 Hook도 읽기 전용으로 실행한다. 복합 오류는 확정 효과와 그 메시지를 유지한다.
+- 보완 기준 HEAD `457e960`의 변경 전 실패를 재현했다. 최종 보완 소스에서 `scripts/dev.py check`와 Actor·Action·Domain·참조·Door 직접 검사 52개가 통과했다. macOS 감시기는 READY 이전에 중단되어 격리 테스트를 직접 실행했다.
+- PR-A 보완은 PR-B 전환 전에 적용한다. PR-B의 Actor 정의와 Bootstrap은 위 상태 및 Room 계약을 사용한다.
 
 ## 변경 전 순수 규칙 표본
 
