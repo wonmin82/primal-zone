@@ -114,13 +114,13 @@ def names(obj):
     values = [obj.key, *obj.aliases.all()]
     if isinstance(obj, Corpse):
         values.append("시체")
-    if obj.db.enemy_id:
-        values.append(obj.db.enemy_id)
+    combat_id = getattr(obj, "combat_definition_id", None)
+    if combat_id and getattr(obj, "supports_shared_combat", False):
+        values.append(combat_id)
     return values
 
 
 def room_objects(caller, room=None, observed_at=None):
-    from typeclasses.enemies import Enemy
 
     from world.observation import can_perceive, context_for
 
@@ -130,7 +130,7 @@ def room_objects(caller, room=None, observed_at=None):
         ordered(
             obj
             for obj in room.contents
-            if can_perceive(obj, context) and (not isinstance(obj, Enemy) or obj.db.state == "alive")
+            if can_perceive(obj, context) and (not getattr(obj, "supports_shared_combat", False) or obj.db.state == "alive")
         )
         if room
         else []
@@ -227,7 +227,7 @@ def resolve(objects, selector, caller, action=None, supports=None, *, observed_a
         context = context_for(caller, observed_at=observed_at)
         candidates = [obj for obj in candidates if can_perceive(obj, context)]
     records = [descriptor(obj) for obj in candidates]
-    if any(record and record.reference.kind == ReferenceKind.ENEMY for record in records):
+    if any(getattr(obj, "supports_shared_combat", False) for obj in candidates):
         # 실제 이름이 먼저다. 특히 숫자 접미 실명을 다른 실물의 별칭이나
         # INDEX로 바꿔 해석하지 않는다(§4.14).
         exact = [(obj, record) for obj, record in zip(candidates, records)
@@ -239,7 +239,7 @@ def resolve(objects, selector, caller, action=None, supports=None, *, observed_a
     if supports and selector.mode == Mode.DEFAULT:
         candidates = [obj for obj in candidates if supports(obj)]
         records = [descriptor(obj) for obj in candidates]
-    if any(record and record.reference.kind == ReferenceKind.ENEMY for record in records):
+    if any(getattr(obj, "supports_shared_combat", False) for obj in candidates):
         # Enemy는 Action Provider가 아니어도 B-1 대상이다. 생존/시야로 줄어든
         # 후보 순서를 명시 번호로 재해석하지 않는다. DEFAULT/ALL과 이름·별칭은
         # 기존 전투 선택 정책을 유지하고, 영속 번호 조회만 SSOT를 사용한다.

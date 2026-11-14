@@ -1,10 +1,10 @@
 import json
 from unittest.mock import Mock, patch
 
-from typeclasses.enemies import room_enemies
 from typeclasses.explorers import Explorer
 from typeclasses.loot import Corpse
 from typeclasses.parties import invite, respond
+from world.shared_combat import room_enemies
 from world.state import multiplayer_state
 
 from tests.base import WorldCommandTest
@@ -22,13 +22,13 @@ class WebStateTests(WorldCommandTest):
             player.push_state = Mock()
             self.connect_character(player)
         for module in ("enemies", "explorers", "loot"):
-            self.enterContext(patch(f"typeclasses.{module}.delay"))
+            self.enterContext(patch("world.shared_combat.delay" if module == "enemies" else f"typeclasses.{module}.delay"))
 
     def test_actual_hp_claim_and_party_invitation(self):
         party = invite(self.char1, self.char2, now=100)
         enemy = room_enemies(self.rooms["grass"])[0]
         enemy.engage(self.char1, now=100)
-        enemy.db.hp = 17
+        enemy.hp = 17
         outside = multiplayer_state(self.char2, now=101)
         self.assertFalse(outside["enemies"][0]["can_attack"])
         self.assertEqual(outside["invitation"]["party_id"], party.id)
@@ -39,6 +39,28 @@ class WebStateTests(WorldCommandTest):
         self.assertFalse(inside["party"]["is_leader"])
         self.assertIsNone(inside["invitation"])
         json.dumps(inside)
+
+    def test_typed_attack_rejects_old_room_and_encounter_generation(self):
+        from world.actions.gateway import ResultStatus, execute, from_web
+        from world.actions.manifest import get_index
+
+        room = self.char1.location
+        enemy = room_enemies(room)[0]
+        action = multiplayer_state(self.char1, now=100)["enemies"][0]["attack_action"]
+        self.assertEqual(action["roles"]["subject"], [
+            {"kind": "actor", "identity": str(enemy.pk), "scope_id": f"room:{room.pk}"},
+        ])
+        index = get_index()
+        invocation = from_web({**action, "request_id": "attack-stale"}, index)
+        self.char1.location = self.rooms["wreck"]
+        self.assertEqual(execute(self.char1, self.session, invocation, index).status, ResultStatus.REFUSED)
+        self.assertIsNone(self.char1.combat_target())
+        self.char1.location = room
+        with patch("world.shared_combat.time", return_value=100), patch("world.lifecycle.time", return_value=100):
+            self.assertEqual(execute(self.char1, self.session, invocation, index).status, ResultStatus.SUCCESS)
+            self.char1.leave_combat(now=100)
+            self.assertEqual(execute(self.char1, self.session, invocation, index).status, ResultStatus.REFUSED)
+        self.assertIsNone(self.char1.combat_target())
 
     def test_rt45_tactics_succession_requests_and_confirm_snapshot(self):
         from evennia import create_object

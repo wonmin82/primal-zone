@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 from commands.help_pages import help_page, with_action_help
 from commands.registry import COMMANDS
 from evennia import create_object
-from typeclasses.interactables import ActionObject, Doctor, Incinerator, SupplyCache
+from typeclasses.interactables import ActionObject, Incinerator, SupplyCache
 from world.actions.manifest import get_index
 from world.actions.presentation import action_controls, help_metadata, provider_controls
 from world.item_entities.models import ItemEntity
@@ -24,7 +24,7 @@ class ActionCutoverTests(NativeItemTest, WorldCommandTest):
         self.char1.location = self.rooms["infirmary"]
         self.connect_character(self.char1)
         self.index = get_index()
-        self.doctor = next(obj for obj in self.char1.location.contents if isinstance(obj, Doctor))
+        self.doctor = next(obj for obj in self.char1.location.contents if getattr(obj, "actor_id", None) == "doctor")
         self.char1.change(lambda profile: profile.update(hp=1, credits=1000))
 
     def raw(self, command):
@@ -43,7 +43,7 @@ class ActionCutoverTests(NativeItemTest, WorldCommandTest):
     def test_global_commands_remain_and_migrated_verbs_have_one_registered_entry(self):
         keys = {command.key for command in COMMANDS}
         self.assertTrue({"봐", "말", "도움", "버려", "줘"} <= keys)
-        migrated = {verb.key for verb in self.index.verbs.values()}
+        migrated = {verb.key for verb in self.index.verbs.values() if not verb.adapter_only}
         self.assertFalse(keys & migrated)
         entries = with_action_help(COMMANDS)
         self.assertEqual(len([entry.key for entry in entries]), len({entry.key for entry in entries}))
@@ -100,7 +100,8 @@ class ActionCutoverTests(NativeItemTest, WorldCommandTest):
             self.assertNotIn("가능한 행동 : 조사", self.raw(cache.key + " 봐"))
 
     def test_view_call_unavailable_and_combat_hide_controls_without_execution(self):
-        self.assertIn("회복", self.doctor.current_actions(self.char1))
+        self.assertTrue(any(row["action"]["action_id"] == "medical.treat"
+                            for row in provider_controls(self.char1, self.doctor)))
         self.doctor.locks.add("call:false()")
         self.assertEqual(provider_controls(self.char1, self.doctor), [])
         self.assertNotIn("회복 · 20 회복", self.raw("의무관 봐"))
@@ -151,12 +152,11 @@ class ActionCutoverTests(NativeItemTest, WorldCommandTest):
                              for row in state["action_controls"]))
 
     def test_room_hint_only_checks_its_verb_and_keeps_current_provider_guards(self):
-        from typeclasses.interactables import Shopkeeper
         from world.observation import context_for
         from world.room_hints import render
 
         self.char1.location = self.rooms["weapon_shop"]
-        shop = next(obj for obj in self.char1.location.contents if isinstance(obj, Shopkeeper))
+        shop = next(obj for obj in self.char1.location.contents if getattr(obj, "actor_id", None) == "weapon_shopkeeper")
         service = self.index.services["room_npc.buy"]
         unrelated = Mock(wraps=service.presenter)
         index = replace(self.index, services={**self.index.services,

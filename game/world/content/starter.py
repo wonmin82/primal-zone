@@ -1,59 +1,8 @@
 """탐사대 전초구역의 기존 stable Room/Enemy 정의."""
 
-ENEMIES = {
-    "scavenger": {
-        "name": "어린청소룡",
-        "description": "작은 몸집의 육식 공룡이다. 날카로운 이빨을 드러내며 주변을 경계한다.",
-        "presence": "풀 사이를 빠르게 오가며 주변을 살피고 있다.",
-        "distant_presence": "멀리 풀 사이를 오가고 있다.",
-        "combat_mode": "claimed",
-        "hp": 24,
-        "attack": 5,
-        "defense": 0,
-        "xp": 22,
-        "currency": 8,
-    },
-    "hunter": {
-        "name": "갈퀴사냥룡",
-        "description": "굽은 발톱을 가진 사냥룡이다. 낮게 엎드린 자세로 먹잇감의 움직임을 살핀다.",
-        "presence": "몸을 낮춘 채 사냥감을 찾아 주변을 맴돌고 있다.",
-        "distant_presence": "멀리 움직이고 있다.",
-        "combat_mode": "claimed",
-        "hp": 45,
-        "attack": 9,
-        "defense": 2,
-        "xp": 38,
-        "currency": 14,
-    },
-    "sentinel": {
-        "name": "고장난경비기",
-        "description": "외장이 부서진 경비 기계다. 감지기가 움직일 때마다 금속 마찰음이 들린다.",
-        "presence": "금속 마찰음을 내며 감지기를 돌리고 있다.",
-        "distant_presence": "멀리 감지기를 돌리고 있다.",
-        "combat_mode": "claimed",
-        "hp": 65,
-        "attack": 11,
-        "defense": 5,
-        "xp": 55,
-        "currency": 20,
-    },
-    "alpha": {
-        "name": "능선의우두머리",
-        "detectability": "conspicuous",
-        "description": "능선을 차지한 거대한 포식자다. 돌진하기 전 몸을 낮추는 습성이 있다.",
-        "presence": "덩굴 사이를 묵직하게 오가며 능선을 지키고 있다.",
-        "distant_presence": "멀리 덩굴 사이를 오가고 있다.",
-        "combat_mode": "public",
-        "hp": 170,
-        "attack": 17,
-        "defense": 6,
-        "xp": 130,
-        "currency": 50,
-        "boss": True,
-        "boss_quest": "radio_tower",
-        "special_period": 3,
-    },
-}
+from world.actors.hostile_content import enemy_view
+
+ENEMIES = enemy_view(('scavenger', 'hunter', 'sentinel', 'alpha'))
 
 ROOMS = {
     "dock": {

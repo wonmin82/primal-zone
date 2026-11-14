@@ -4,7 +4,7 @@ from contextlib import nullcontext
 from copy import deepcopy
 from unittest.mock import Mock, patch
 
-from typeclasses.interactables import TrainingManager
+from typeclasses.actors import Actor
 from world.actions.manifest import get_index
 from world.actions.presentation import action_controls
 from world.actions.presentation_context import available, presentation_scope, profile_snapshot
@@ -25,7 +25,7 @@ class ActionPresentationCacheTests(NativeItemTest, WorldCommandTest):
         self.char2.location = self.char1.location
         self.index = get_index()
         self.manager = next(obj for obj in self.char1.location.contents
-                            if isinstance(obj, TrainingManager))
+                            if isinstance(obj, Actor) and obj.actor_id == "instructor")
 
     def state(self):
         return (self.atomic_state(), list(NumberScope.objects.order_by("pk").values()),

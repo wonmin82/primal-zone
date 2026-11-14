@@ -41,7 +41,11 @@ def validate_message(value):
 
 
 def type_name(npc):
-    return npc.typeclass_path.rsplit(".", 1)[-1]
+    from typeclasses.actors import Actor
+
+    if isinstance(npc, Actor):
+        return npc.definition.profiles["dialogue"].get("role", "") if npc.capability_active("dialogue") else ""
+    return ""
 
 
 def supports(npc):
@@ -211,6 +215,12 @@ def issue_token(caller, npc, intent, *, session=None):
     return token
 
 
+def description(npc):
+    from typeclasses.actors import Actor
+
+    return npc.definition.presentation.description if isinstance(npc, Actor) else npc.description
+
+
 def response(caller, npc, intent):
     """원문을 한 번 확정한다. 수신자별 상태로 대사를 다시 생성하지 않는다."""
     kind = type_name(npc)
@@ -220,7 +230,7 @@ def response(caller, npc, intent):
         if kind == "Pathfinder":
             return "밀림의 탐사로를 살펴 주세요. 〈임무〉와 〈지역〉을 안내하겠습니다."
         topic = intents_for(kind)[1]
-        return (npc.db.dialogue or npc.description) + f" 〈{topic.keyword}〉을 물어보세요."
+        return (npc.db.dialogue or description(npc)) + f" 〈{topic.keyword}〉을 물어보세요."
     if kind in QUEST_NPCS:
         quest_id, credential_id, _ = QUEST_NPCS[kind]
         from world.content import ITEMS
@@ -239,7 +249,7 @@ def response(caller, npc, intent):
             return f"최종 보고를 마치면 {ITEMS[credential_id]['name']}을 지급합니다. 분실·소각 후에는 무료 〈재발급〉이 가능합니다."
     if intent.handler == "training":
         offer, commands = npc.training_offer()
-        return (npc.db.dialogue or npc.description) + " " + offer + " 서비스 명령: " + " · ".join(commands)
+        return (npc.db.dialogue or description(npc)) + " " + offer + " 서비스 명령: " + " · ".join(commands)
     if intent.handler == "supply":
         from world.content import ITEMS, SHOP_CATALOGS
 
@@ -377,15 +387,14 @@ def execute(caller, npc, intent, *, selection=None, guide_requested=False):
                     personal += " " + ITEMS[credential_id]["name"] + "을 받았다."
                 if boss_granted:
                     personal += " " + ITEMS[BOSS_REWARDS[quest_id]]["name"] + "을 받았다."
-        after_change(lambda: deliver(caller, npc, intent, raw, personal, selection))
+        from world.actions.effects import deliver_read_only
+
+        after_change(lambda: deliver_read_only(
+            lambda: deliver(caller, npc, intent, raw, personal, selection),
+        ))
 
 
-def say(caller, value):
-    original = validate_message(value)
-    if not caller.location:
-        raise rules.RuleError("현재 방에서만 말할 수 있습니다.")
-    explicit, body = explicit_target(caller, original)
-    public_speech(caller, original)
+def react(caller, body, explicit, *, invoke):
     npc, intent = choose(caller, body, explicit)
     if not npc:
         return
@@ -410,15 +419,10 @@ def say(caller, value):
                     if topics else " 지금은 이곳에서 더 안내할 내용이 없습니다.")
         broadcast(caller, npc, opening + guidance, guide_requested=True)
         return
-    execute(caller, npc, intent, guide_requested=" ".join(body.split()) in GUIDE_REQUESTS)
+    invoke(caller, npc, intent, guide_requested=" ".join(body.split()) in GUIDE_REQUESTS)
 
 
-def select_keyword(caller, token, session):
-    """인증된 수신 캐릭터가 원래 NPC/Intent를 실행한다. fallback은 없다."""
-    from world.actions.gateway import require_input_mode, require_session
-
-    require_session(caller, session)
-    require_input_mode(caller)
+def resolve_keyword(caller, token, session):
     if not isinstance(token, str) or len(token) > 128:
         raise rules.RuleError("잘못된 대화 선택입니다.")
     row = token_store(caller).get(token)
@@ -429,8 +433,7 @@ def select_keyword(caller, token, session):
     intent = next((item for item in intents_for(type_name(npc)) if item.intent_id == row["intent_id"] and item.keyword == row["keyword"]), None) if npc else None
     if not npc or not intent or not available(caller, npc, intent):
         raise rules.RuleError("원래 NPC 또는 해당 키워드를 지금 사용할 수 없습니다.")
-    public_speech(caller, f"{npc.key}에게 {intent.keyword}")
-    execute(caller, npc, intent, selection=token if intent.mutates_state else None)
+    return npc, intent
 
 
 def discovery(npc, caller):

@@ -27,7 +27,7 @@ class CommandShortcutsTests(WorldCommandTest):
         self.enterContext(patch("typeclasses.explorers.time",
                                 return_value=self.char1.profile_snapshot()["recovery"]["updated_at"]))
         for module in ("enemies", "explorers", "loot"):
-            self.enterContext(patch(f"typeclasses.{module}.delay"))
+            self.enterContext(patch("world.shared_combat.delay" if module == "enemies" else f"typeclasses.{module}.delay"))
 
     def run_raw(self, raw, player=None):
         player = player or self.char1

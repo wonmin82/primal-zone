@@ -835,6 +835,7 @@ class ActionRuntimeTests(NativeItemTest):
         self.assertEqual(execute(self.char1, self.session, invocation, self.index).status, ResultStatus.SUCCESS)
         self.assertEqual(len(self.events()), 1)
 
+    @override_settings(ACTION_CONTENT_PACKAGES=("world.actions.validation_content", "world.actions.global_actions"))
     def test_personal_same_name_active_action_then_inactive_shortcut(self):
         obj = self.instrument()
         self.raw("검측 점수 줄임말")

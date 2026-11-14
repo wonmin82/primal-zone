@@ -6,7 +6,6 @@ from unittest.mock import Mock, patch
 
 from evennia import create_object, create_script
 from evennia.utils.dbserialize import deserialize
-from typeclasses.enemies import room_enemies
 from typeclasses.explorers import Explorer
 from typeclasses.interactables import INTERACTABLES, Container, EmergencyLightCache, MaintenanceLog
 from typeclasses.loot import Corpse, create_dropped_loot, take_loot
@@ -24,6 +23,7 @@ from world.item_transfers import transfer
 from world.multiplayer import world_change
 from world.observation import can_perceive, context_for
 from world.room_hints import render as room_hint
+from world.shared_combat import room_enemies
 from world.state import multiplayer_state
 from world.targets import TargetSelector, resolve, room_objects
 
@@ -35,10 +35,10 @@ class LightingTests(WorldCommandTest):
 
     def setUp(self):
         super().setUp()
-        for module in ("typeclasses.enemies", "typeclasses.explorers", "typeclasses.loot"):
+        for module in ("world.shared_combat", "typeclasses.explorers", "typeclasses.loot"):
             self.enterContext(patch(module + ".delay"))
         for module in ("world.observation", "commands.character", "typeclasses.explorers",
-                       "typeclasses.enemies", "world.item_transfers", "typeclasses.loot"):
+                       "world.shared_combat", "world.item_transfers", "typeclasses.loot"):
             self.enterContext(patch(module + ".time", return_value=100))
         self.enterContext(patch("world.lighting_service.time", return_value=100))
         self.rooms = self.world_rooms()
@@ -344,7 +344,7 @@ class LightingTests(WorldCommandTest):
         self.char1.location = self.rooms["dock"]
         context = context_for(self.char1, observed_at=100)
         self.assertEqual(room_hint(context), "'윤대장 1에게 안녕")
-        commander = next(obj for obj in context.room.contents if obj.tags.has("commander", category="primal_interactable"))
+        commander = next(obj for obj in context.room.contents if obj.tags.has("commander", category="primal_actor_spawn"))
         commander.locks.add("view:false()")
         self.assertEqual(room_hint(context), "")
         self.assertNotIn("윤대장", str(multiplayer_state(self.char1, 100)))

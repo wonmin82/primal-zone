@@ -8,20 +8,19 @@ from commands.inventory import Equipment
 from evennia import CmdSet, Command, create_object, search_tag
 from evennia.commands.cmdparser import cmdparser as default_parser
 from server.conf.cmdparser import cmdparser
-from typeclasses.enemies import room_enemies
+from typeclasses.actors import Actor
 from typeclasses.explorers import Explorer
 from typeclasses.interactables import (
     INTERACTABLES,
-    AttributeTrainer,
-    SkillTrainer,
-    TrainingManager,
     action_objects,
     growth_controls,
 )
 from typeclasses.parties import invite, respond
 from world import rules
 from world.bootstrap import build_world
+from world.content import ROOMS
 from world.progression import ATTRIBUTES, SKILLS
+from world.shared_combat import room_enemies
 
 from tests.base import WorldCommandTest
 
@@ -40,7 +39,7 @@ class GrowthIntegrationTests(WorldCommandTest):
             player.push_state = Mock()
             self.connect_character(player)
         for module in ('enemies', 'explorers', 'loot'):
-            self.enterContext(patch(f'typeclasses.{module}.delay'))
+            self.enterContext(patch('world.shared_combat.delay' if module == 'enemies' else f'typeclasses.{module}.delay'))
 
     def command(self, text, player=None):
         player = player or self.char1
@@ -51,15 +50,15 @@ class GrowthIntegrationTests(WorldCommandTest):
     def trainable(self, level=50):
         self.char1.change(lambda p: p.update(xp=rules.xp_threshold(level)))
 
-    def test_all_trainers_share_typeclasses_and_exact_data_ownership(self):
-        skill_trainers = [obj for room in self.rooms.values() for obj in action_objects(room) if isinstance(obj, SkillTrainer)]
-        attribute_trainers = [obj for room in self.rooms.values() for obj in action_objects(room) if isinstance(obj, AttributeTrainer)]
+    def test_all_trainers_share_actor_typeclass_and_exact_data_ownership(self):
+        skill_trainers = [obj for room in self.rooms.values() for obj in action_objects(room) if isinstance(obj, Actor) and obj.capability_active("training") and obj.db.skill_id]
+        attribute_trainers = [obj for room in self.rooms.values() for obj in action_objects(room) if isinstance(obj, Actor) and obj.capability_active("training") and obj.db.attribute_id]
         self.assertEqual(len(skill_trainers), 8)
         self.assertEqual({obj.db.skill_id for obj in skill_trainers}, set(SKILLS))
-        self.assertEqual({type(obj) for obj in skill_trainers}, {SkillTrainer})
+        self.assertEqual({type(obj) for obj in skill_trainers}, {Actor})
         self.assertEqual(len(attribute_trainers), 4)
         self.assertEqual({obj.db.attribute_id for obj in attribute_trainers}, set(ATTRIBUTES))
-        self.assertEqual({type(obj) for obj in attribute_trainers}, {AttributeTrainer})
+        self.assertEqual({type(obj) for obj in attribute_trainers}, {Actor})
         self.trainable()
         for obj in skill_trainers:
             self.char1.location = obj.location
@@ -87,8 +86,9 @@ class GrowthIntegrationTests(WorldCommandTest):
         self.assertIn('전투 중', self.command('강타 배워'))
         self.assertEqual(self.char1.profile(), before)
         self.char1.change(lambda p: p.update(combat_target=None))
-        extra = create_object(SkillTrainer, key='다른 타격교관', location=self.rooms['training_room'])
-        extra.db.skill_id = 'heavy'
+        from world.actors.spawn import create_actor
+
+        create_actor("trainer_heavy", self.rooms["training_room"], name="다른 타격교관")
         before = self.char1.profile()
         self.assertIn('명확하지', self.command('강타 배워'))
         self.assertEqual(self.char1.profile(), before)
@@ -105,8 +105,9 @@ class GrowthIntegrationTests(WorldCommandTest):
         self.command('강타 배워')
         self.char1.change(lambda p: p['skill_ready_at'].update(breathing=130))
         self.char1.location = self.rooms['training_office']
-        manager = search_tag('instructor', category='primal_interactable')[0]
-        self.assertIsInstance(manager, TrainingManager)
+        manager = search_tag('instructor', category='primal_actor_spawn')[0]
+        self.assertIsInstance(manager, Actor)
+        self.assertTrue(manager.capability_active('training'))
         self.assertIn('모든 기술을 R1로 초기화', self.command('훈련관리관에게 기술 재분배'))
         self.assertEqual(self.char1.profile()['skills']['heavy'], 1)
         self.assertEqual(self.char1.profile()['attributes']['strength']['allocated'], 3)
@@ -124,21 +125,26 @@ class GrowthIntegrationTests(WorldCommandTest):
         self.assertEqual(self.char1.profile()['credits'], 20)
         self.assertIn('교관이 없다', self.command('강타 배워'))
 
-    def test_bootstrap_preserves_objects_and_updates_legacy_instructor_typeclass(self):
+    def test_bootstrap_preserves_objects_and_rejects_invalid_instructor_identity(self):
         first = {obj.id for room in self.rooms.values() for obj in action_objects(room)}
-        self.assertEqual(len(first), len(INTERACTABLES))
+        from world.actors.content import ACTOR_SPAWNS
+
+        self.assertEqual(len(first), len(INTERACTABLES.keys() | ACTOR_SPAWNS.keys())
+                         - sum(len(room["enemies"]) for room in ROOMS.values()))
         self.command('힘 2 배분')
         before = self.char1.profile()
         for _ in range(2):
             build_world()
             self.assertEqual(first, {obj.id for room in self.rooms.values() for obj in action_objects(room)})
             self.assertEqual(self.char1.profile(), before)
-        manager = search_tag('instructor', category='primal_interactable')[0]
-        manager.db_typeclass_path = 'typeclasses.interactables.ActionObject'
-        manager.save(update_fields=['db_typeclass_path'])
-        build_world()
-        self.assertEqual(search_tag('instructor', category='primal_interactable')[0].id, manager.id)
-        self.assertEqual(manager.db_typeclass_path, 'typeclasses.interactables.TrainingManager')
+        manager = search_tag('instructor', category='primal_actor_spawn')[0]
+        manager.swap_typeclass('typeclasses.interactables.ActionObject', clean_attributes=False, run_start_hooks=None)
+        from world.actors.validation import ActorDefinitionError
+
+        with self.assertRaises(ActorDefinitionError):
+            build_world()
+        self.assertEqual(search_tag('instructor', category='primal_actor_spawn')[0].id, manager.id)
+        self.assertEqual(manager.db_typeclass_path, 'typeclasses.interactables.ActionObject')
 
     def test_migration_does_not_modify_shared_enemies_loot_or_party(self):
         from typeclasses.loot import Corpse, DroppedLoot
@@ -149,7 +155,7 @@ class GrowthIntegrationTests(WorldCommandTest):
         party = party_for(self.char1)
         party_state = deepcopy(party.state())
         enemy = room_enemies(self.rooms['grass'])[0]
-        enemy.db.hp = 13
+        enemy.hp = 13
         corpse = create_object(Corpse, key='보존 시체', location=enemy.location)
         corpse.db.loot = [{'item': 'scrap', 'quantity': 2}]
         dropped = create_object(DroppedLoot, key='보존 전리품', location=enemy.location)
@@ -162,7 +168,7 @@ class GrowthIntegrationTests(WorldCommandTest):
         self.char1.save_profile(migrated)
         self.assertEqual(self.char1.profile(), migrated)
         self.assertEqual(party_for(self.char1).state(), party_state)
-        self.assertEqual(enemy.db.hp, 13)
+        self.assertEqual(enemy.hp, 13)
         self.assertEqual(corpse.db.loot[0]['quantity'], 2)
         self.assertEqual(dropped.db.protection_until, 9876543210)
 
@@ -215,10 +221,10 @@ class GrowthIntegrationTests(WorldCommandTest):
         self.char1.change(lambda p: p.update(queued_action='insight'))
         enemy.receive_attack(self.char1, 102.5, Random(1))
         self.char2.change(lambda p: p.update(hp=40))
-        before_hp = enemy.db.hp
+        before_hp = enemy.hp
         self.command(self.char2.key + ' 치료')
         enemy.receive_attack(self.char1, 105, Random(1))
-        self.assertEqual(enemy.db.hp, before_hp)
+        self.assertEqual(enemy.hp, before_hp)
         self.assertGreater(self.char2.profile()['hp'], 40)
         self.assertIsNotNone(self.char1.profile()['insight'])
         self.assertEqual(self.char1.profile()['mental'], 22)
@@ -229,13 +235,13 @@ class GrowthIntegrationTests(WorldCommandTest):
         enemy = room_enemies(self.rooms['grass'])[0]
         self.char1.location = enemy.location
         enemy.engage(self.char1, now=100)
-        enemy.db.hp = 1
+        enemy.hp = 1
         before = self.char1.profile()
         with patch.object(enemy, 'finish_death', side_effect=RuntimeError('death failed')):
             with self.assertRaises(RuntimeError):
                 enemy.receive_attack(self.char1, now=102.5, rng=Random(1))
         self.assertEqual(self.char1.profile(), before)
-        self.assertEqual(enemy.db.hp, 1)
+        self.assertEqual(enemy.hp, 1)
 
     def test_insight_clears_on_enemy_movement_and_death(self):
         enemy = room_enemies(self.rooms['grass'])[0]
@@ -249,7 +255,7 @@ class GrowthIntegrationTests(WorldCommandTest):
         self.assertIsNone(self.char1.profile()['combat_target'])
         self.char1.location = enemy.location
         enemy.engage(self.char1, now=110)
-        enemy.db.hp = 1
+        enemy.hp = 1
         self.char1.change(lambda p: p.update(insight={'target': enemy.id, 'penetration': .25, 'bonus': .05}))
         enemy.receive_attack(self.char1, 112.5, Random(1))
         self.assertEqual(enemy.db.state, 'respawning')
@@ -265,13 +271,13 @@ class GrowthIntegrationTests(WorldCommandTest):
         self.command(self.char2.key + ' 치료')
         self.char2.location = self.rooms['dock']
         before = self.char1.profile()
-        enemy_hp = enemy.db.hp
+        enemy_hp = enemy.hp
         enemy.receive_attack(self.char1, 102.5, Random(1))
         after = self.char1.profile()
         self.assertEqual(after['mental'], before['mental'])
         self.assertEqual(after['skill_ready_at'], before['skill_ready_at'])
         self.assertEqual(after['player_round'], before['player_round'] + 1)
-        self.assertEqual(enemy.db.hp, enemy_hp)
+        self.assertEqual(enemy.hp, enemy_hp)
         self.assertEqual(self.char2.profile()['hp'], 40)
 
     def test_breathing_deadline_survives_reload_snapshot_and_reset(self):
@@ -339,7 +345,12 @@ class GrowthIntegrationTests(WorldCommandTest):
         ):
             with patch.object(self.char1, "msg") as message:
                 command.caller = self.char1
-                command.run()
+                command.session = self.connect_character(self.char1)
+                command.args = ""
+                if isinstance(command, Help):
+                    command.func()
+                else:
+                    command.run()
             output = message.call_args.args[0]
             self.assertEqual(output.kind, "sheet")
             self.assertIn(heading, output)
@@ -353,7 +364,7 @@ class GrowthIntegrationTests(WorldCommandTest):
         respond(self.char2, True)
         party = party_for(self.char1)
         enemy = room_enemies(self.rooms["grass"])[0]
-        enemy.db.hp = 13
+        enemy.hp = 13
         corpse = create_object(Corpse, key="보존 시체", location=self.rooms["grass"])
         dropped = create_object(DroppedLoot, key="보존 전리품", location=self.rooms["grass"])
         corpse.db.loot = [{"item": "scrap", "quantity": 2}]
@@ -371,6 +382,6 @@ class GrowthIntegrationTests(WorldCommandTest):
             self.char1.save_profile(migrated)
             self.assertEqual(self.char1.profile(), migrated)
             self.assertEqual(party_for(self.char1).state(), state)
-            self.assertEqual(enemy.db.hp, 13)
+            self.assertEqual(enemy.hp, 13)
             self.assertEqual(corpse.db.loot[0]["quantity"], 2)
             self.assertEqual(dropped.db.protection_until, 9876543210)

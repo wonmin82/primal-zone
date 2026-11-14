@@ -26,10 +26,10 @@ from world.targets import LootRequest, Mode, TargetSelector, ordered, select
 
 
 def build_entries(enemy, groups, now, rng=None):
-    definition = ENEMIES[enemy.db.enemy_id]
+    definition = ENEMIES[enemy.combat_definition_id]
     from world.loot_rules import roll_loot
 
-    items = roll_loot(enemy.db.enemy_id, rng or Random())
+    items = roll_loot(enemy.combat_definition_id, rng or Random())
     weights = {key: sum(members.values()) for key, members in groups.items()}
     total = sum(weights.values())
     entries = []
@@ -340,7 +340,7 @@ class Corpse(NumberedObjectMixin, DistantPresenceMixin, DefaultObject):
             raise rules.RuleError("알 수 없는 전리품 저장 방식입니다.")
         corpse = create_object(cls, key=f"{enemy.key}의 시체", location=enemy.location)
         corpse.db.source_spawn = enemy.db.spawn_id
-        corpse.db.source_enemy = enemy.db.enemy_id
+        corpse.db.source_enemy = enemy.combat_definition_id
         corpse.db.created_at = now
         corpse.db.decay_at = now + CORPSE_TTL_SECONDS
         if backend == "item_entities":

@@ -1,11 +1,11 @@
 from unittest.mock import Mock, patch
 
-from typeclasses.enemies import room_enemies
 from typeclasses.explorers import Explorer
 from typeclasses.loot import Corpse, DroppedLoot, room_loot, take_loot
 from typeclasses.parties import invitation_for, invite
 from world.lifecycle import reconcile_world
 from world.multiplayer import object_by_id
+from world.shared_combat import room_enemies
 
 from tests.base import WorldCommandTest
 
@@ -21,13 +21,13 @@ class LifecycleTests(WorldCommandTest):
             player.push_state = Mock()
             self.connect_character(player)
         for module in ("enemies", "explorers", "loot"):
-            self.enterContext(patch(f"typeclasses.{module}.delay"))
+            self.enterContext(patch("world.shared_combat.delay" if module == "enemies" else f"typeclasses.{module}.delay"))
 
     def test_restart_expired_corpse_respawn_invite_and_protection(self):
         invite(self.char1, self.char2, now=100)
         enemy = room_enemies(self.rooms["grass"])[0]
         enemy.engage(self.char1, now=100)
-        enemy.db.hp = 1
+        enemy.hp = 1
         rng = Mock()
         rng.randint.return_value = 1
         rng.random.return_value = 0
@@ -43,7 +43,7 @@ class LifecycleTests(WorldCommandTest):
         self.assertEqual(Corpse.objects.count(), 0)
         self.assertEqual(DroppedLoot.objects.count(), len(original))
         self.assertEqual(enemy.db.state, "alive")
-        self.assertEqual(enemy.db.hp, enemy.db.max_hp)
+        self.assertEqual(enemy.hp, enemy.max_hp)
         self.assertEqual(invitation_for(self.char2, now=170), (None, None))
         self.assertIsNone(self.char1.profile()["combat_target"])
         ground = room_loot(self.rooms["grass"], False)
@@ -58,9 +58,19 @@ class LifecycleTests(WorldCommandTest):
         enemy.engage(self.char1, now=100)
         self.char2.change(lambda profile: profile.update(combat_target=999999))
         enemy.db.combatants = [self.char1.id, self.char2.id, 999999]
+        old_generation = enemy.db.combat_generation
+        old_deadline = enemy.db.encounter_state["pending"]["due_at"]
         reconcile_world(now=120, restart=True)
+        self.assertEqual(enemy.db.encounter_state["final_result"], {"kind": "disengaged"})
+        self.assertIsNone(enemy.db.encounter_state["pending"])
         self.assertEqual(list(enemy.db.combatants), [])
         self.assertEqual(dict(enemy.db.threat), {})
         self.assertIsNone(enemy.db.claim)
         self.assertIsNone(self.char2.profile()["combat_target"])
         self.assertEqual(party.state()["leader"], self.char1.id)
+        enemy.engage(self.char1, now=123)
+        self.assertGreater(enemy.db.combat_generation, old_generation)
+        current = dict(enemy.db.encounter_state["pending"])
+        enemy.combat_tick(old_generation, old_deadline)
+        self.assertEqual(dict(enemy.db.encounter_state["pending"]), current)
+        self.assertEqual(enemy.db.enemy_round, 0)

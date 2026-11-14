@@ -84,6 +84,20 @@ def _isolate_commit_hooks():
             del connection.on_commit
 
 
+def in_world_change():
+    return bool(getattr(_context, "depth", 0))
+
+
+def has_external_transaction():
+    """Gateway의 확정 경계를 분리할 수 없는 외부 DB transaction을 확인한다."""
+    connection = connections["default"]
+    owned = getattr(_context, "atomic_blocks", ())
+    return not connection.get_autocommit() and (
+        not connection.atomic_blocks
+        or any(not block._from_testcase and block not in owned for block in connection.atomic_blocks)
+    )
+
+
 @contextmanager
 def world_change(*, isolate_callbacks=False):
     """격리 모드에서 조회 전달의 정책 오류를 확정 후 진단으로 반환한다."""
@@ -93,6 +107,7 @@ def world_change(*, isolate_callbacks=False):
         if outer:
             _context.callbacks = []
             _context.finalizers = {}
+            _context.atomic_blocks = []
         _context.depth = getattr(_context, "depth", 0) + 1
         mark = len(_context.callbacks)
         finalizers = dict(_context.finalizers)
@@ -100,11 +115,16 @@ def world_change(*, isolate_callbacks=False):
         delivery_errors = []
         try:
             hooks = _isolate_commit_hooks() if isolate_callbacks else nullcontext()
-            with hooks, transaction.atomic():
-                yield delivery_errors
-                if outer:
-                    for finalizer in tuple(_context.finalizers.values()):
-                        finalizer()
+            change = transaction.atomic()
+            with hooks, change:
+                _context.atomic_blocks.append(change)
+                try:
+                    yield delivery_errors
+                    if outer:
+                        for finalizer in tuple(_context.finalizers.values()):
+                            finalizer()
+                finally:
+                    _context.atomic_blocks.pop()
         except Exception:
             del _context.callbacks[mark:]
             _context.finalizers = finalizers
@@ -147,6 +167,8 @@ def world_change(*, isolate_callbacks=False):
             raise
         finally:
             _context.depth -= 1
+            if outer:
+                del _context.atomic_blocks
         if outer:
             _context.finalizers = {}
             callbacks, _context.callbacks = _context.callbacks, []

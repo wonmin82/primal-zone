@@ -53,11 +53,10 @@ def party_for(character):
 
 def in_combat(character):
     """오래된 profile target만으로 교전이라고 판정하지 않는다."""
-    from typeclasses.enemies import Enemy
 
     profile = character.profile()
     enemy = object_by_id(profile.get("combat_target"))
-    return bool(isinstance(enemy, Enemy) and enemy.db.state == "alive"
+    return bool(getattr(enemy, "supports_shared_combat", False) and enemy.db.state == "alive"
                 and online(character) and profile["hp"] > 0
                 and character.id in (enemy.db.combatants or []) and enemy.location == character.location)
 
@@ -416,10 +415,9 @@ class Party(DefaultObject):
     def attack(self, caller, enemy):
         from world.observation import can_perceive, context_for
 
-        from typeclasses.enemies import Enemy
         with world_change():
             self.require_leader(caller)
-            if (not isinstance(enemy, Enemy) or enemy.db.state != "alive"
+            if (not getattr(enemy, "supports_shared_combat", False) or enemy.db.state != "alive"
                     or not can_perceive(enemy, context_for(caller))):
                 raise RuleError("이곳에서 적법하게 식별할 수 있는 적을 지정하세요.")
             members = tuple(self.state()["members"])

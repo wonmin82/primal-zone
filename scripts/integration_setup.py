@@ -47,15 +47,12 @@ def prepare(credentials):
         p.update(hp=p["hp"] - 20, mental=1)
         players[0].save_profile(p)
     if scenario == "E2E-10":
-        from typeclasses.enemies import Enemy
-        from world.content import ENEMIES
+        from world.actors.spawn import create_actor
         from world.equipment_service import equip_item, unequip_item
-        for cls, key in [('Commander', '검증대장'), ('Doctor', '검증의무관')]:
-            create_object('typeclasses.interactables.'+cls, key=key, location=rooms['hq_concourse'])
-        enemy = create_object(Enemy, key='검증사냥룡', location=rooms['hq_concourse'])
-        enemy.db.enemy_id = 'hunter'
-        enemy.db.hp = enemy.db.max_hp = ENEMIES['hunter']['hp']
-        enemy.db.spawn_id = 'integration-combat-fixture'
+
+        create_actor("commander", rooms["hq_concourse"], name="검증대장")
+        create_actor("doctor", rooms["hq_concourse"], name="검증의무관")
+        create_actor("hunter", rooms["hq_concourse"], name="검증사냥룡")
         body = api.items_in_location('equipment', owner_object=players[0]).get(slot='body')
         unequip_item(players[0], body)
         armor = api.create_item('heavy_protective_suit', location_kind='inventory', owner_object=players[0])

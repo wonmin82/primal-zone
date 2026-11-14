@@ -6,6 +6,8 @@
 
 ServiceDefinition의 `policy`는 READ_ONLY/STATE_CHANGE이며 기존 선언은 STATE_CHANGE다. READ_ONLY는 영속 SQL 쓰기와 임의의 변경 전후 콜백 등록을 거절한다. 조회 메시지는 ActionResult 또는 명시 Delivery로 전달한다. 수신자 Hook에도 읽기 전용 정책을 적용하며, Gateway 출력 실패는 이미 확정한 결과에 영향을 주지 않는다. 커밋 후 전달 정책 위반은 로그로 남기고 후속 전달을 계속한다. READ_ONLY 효과는 자기 전달의 위반을 거절로 보고하며, 확정된 STATE_CHANGE는 성공 결과를 유지한다. 복합 Service는 사전 선언한 EffectDefinition을 `run_effect()`로 호출하고 각 효과의 재검증·원자성·독립 결과를 보존한다. 도메인 코드가 순서·의존성을 소유하며 별도 Workflow 엔진을 두지 않는다. ActionResult의 Completion(COMPLETED/ACCEPTED)은 SUCCESS/REFUSED/ERROR/CONFIRMATION과 독립이고, 상위 SUCCESS를 모든 하위 효과 성공으로 해석하지 않는다. 복합 처리 중 오류가 발생하면 상위 ERROR와 함께 이미 확정된 효과 결과와 변경 여부를 보존한다. 영속 효과의 재실행 방지는 도메인의 완료 근거가 소유하며 메모리 요청 캐시만으로 대체하지 않는다.
 
+공식 텍스트·웹 어댑터는 외부 DB 트랜잭션 없이 Gateway를 호출한다. 일반 외부 atomic 블록이나 수동 트랜잭션에서 들어온 요청은 서비스 실행 전에 거절한다. 기존 단일 효과는 월드 변경 경계에 합류할 수 있으며 성공 알림은 바깥 경계의 확정 뒤 전달한다. 복합 효과는 독립 커밋이 필요하므로 중첩 호출을 거절한다. 각 효과가 자체 커밋을 소유하므로 외부 롤백 전에 성공 전달이 발생하는 경로를 차단한다.
+
 이 확장은 기존 B-1 Scope·번호·모호성·Session·Rollback·동기 Handler 검증을 약화하지 않는다. Actor 참조는 ACTOR kind의 Object PK와 안정 Scope를 사용하며 기존 ENEMY/OBJECT 요청을 다른 Actor로 재해석하지 않는다. PR-A의 Actor 등록·실행은 격리 Fixture이며 운영 전면 이전이나 Duel 구현 완료를 뜻하지 않는다. 실제 검증과 미실행 항목은 [Phase 1 기록](actor-phase1-validation.md)에 있다.
 
 규범은 [#44 v4.3 Design Freeze](https://github.com/wonmin82/primal-zone/issues/44), 구현 범위는 [#65](https://github.com/wonmin82/primal-zone/issues/65)다. D01~D17, B-1, ItemEntity D안, R1/R2/R3 정책을 변경하지 않는다. 기존 실제 게임 동사의 전환은 #66, 전 기능 교차 검증은 #67의 책임이다.

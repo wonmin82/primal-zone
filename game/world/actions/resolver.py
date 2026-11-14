@@ -35,7 +35,7 @@ class ActionInvocation:
     request_id: str | None = None
 
 
-def role_records(caller, role, bindings=None, *, cache=None):
+def role_records(caller, role, bindings=None, *, cache=None, check_visibility=True):
     from world.selection_numbers.api import (
         SelectionRecord,
         current_scopes,
@@ -81,12 +81,12 @@ def role_records(caller, role, bindings=None, *, cache=None):
                 root = entity.root()
                 if root.location_kind in ("inventory", "equipment") and root.owner_object_id == caller.pk:
                     scopes.add(f"inside:{entity.pk}")
-    key = ("scope", frozenset(scopes), frozenset(role.kinds))
+    key = ("scope", frozenset(scopes), frozenset(role.kinds), check_visibility)
     if cache is None:
-        records = records_for(caller, scope_ids=scopes, kinds=role.kinds)
+        records = records_for(caller, scope_ids=scopes, kinds=role.kinds, check_visibility=check_visibility)
     else:
         if key not in cache:
-            cache[key] = records_for(caller, scope_ids=scopes, kinds=role.kinds)
+            cache[key] = records_for(caller, scope_ids=scopes, kinds=role.kinds, check_visibility=check_visibility)
         records = cache[key]
     records = tuple(record for record in records if record.reference.kind in role.kinds)
     if role.scope == TargetScope.SOURCE:
@@ -178,11 +178,11 @@ def argument_values(action, values, *, text=False):
     return tuple(output)
 
 
-def provider_definition(reference):
+def provider_definition(reference, *, entity=None):
     from world.content import ITEMS
     from world.selection_numbers.api import resolve_reference
 
-    entity = resolve_reference(reference)
+    entity = entity if entity is not None else resolve_reference(reference)
     if entity is None:
         raise RuleError("원래 대상이 없어졌거나 위치가 바뀌었습니다.")
     if reference.kind in (ReferenceKind.ITEM, ReferenceKind.LOOT):
@@ -219,8 +219,10 @@ def unshadowed(caller, index, pairs):
                 protected.update((obj.key, *obj.aliases.all()))
     protected = {name.casefold() for key in protected for name in (key, key.lstrip(settings.CMD_IGNORE_PREFIXES))}
     blocked = set()
-    for action_id in {binding.action_id for _, binding in pairs}:
-        action = index.actions[action_id]
+    offered_verbs = {index.actions[binding.action_id].verb_id for _, binding in pairs}
+    for action in index.actions.values():
+        if not action.public or action.verb_id not in offered_verbs:
+            continue
         verb = index.verbs[action.verb_id]
         names = {(key + (" " + suffix if suffix else "")).casefold()
                  for key in (verb.key, *verb.aliases) for suffix in ("", *(variant.suffix for variant in action.variants))}
@@ -256,21 +258,28 @@ def _root_records(caller, action, name):
     return candidates(name)
 
 
-def provided(caller, index):
-    if not index.bindings:
+def provided(caller, index, *, action_id=None, for_cmdset=False):
+    def included(binding):
+        action = index.actions[binding.action_id]
+        return (action.public and (action_id is None or action.id == action_id)
+                and (not for_cmdset or not index.verbs[action.verb_id].adapter_only))
+
+    bindings = tuple(binding for binding in index.bindings.values() if included(binding))
+    if not bindings:
         return ()
     from world.actions.schema import RoleDefinition
+    from world.selection_numbers.api import resolve_reference, visible_entity
 
     # 내부 ItemEntity는 대상으로 조회할 수 있어도 독립 Provider가 되지 않는다.
-    kinds = {kind for binding in index.bindings.values()
-             for action in (index.actions[binding.action_id],) if action.public
+    kinds = {kind for binding in bindings
+             for action in (index.actions[binding.action_id],)
              for role in action.roles if role.name == "provider" for kind in role.kinds}
     pairs = []
-    for binding in index.bindings.values():
+    for binding in bindings:
         if not isinstance(binding.source, GlobalSource):
             continue
         action = index.actions[binding.action_id]
-        if not action.public or not caller.pk:
+        if not caller.pk:
             continue
         if binding.source.root == ScopeRoot.CURRENT_ROOM and not caller.location:
             continue
@@ -279,38 +288,39 @@ def provided(caller, index):
                 continue
         pairs.append((None, binding))
     role = RoleDefinition("provider", tuple(sorted(kinds)), required=False)
-    for record in role_records(caller, role) if kinds else ():
+    for record in role_records(caller, role, check_visibility=False) if kinds else ():
+        reference = record.reference
+        entity = resolve_reference(reference)
+        if entity is None:
+            continue
         try:
-            definition = provider_definition(record.reference)
-            if record.reference.kind == ReferenceKind.ITEM:
-                from world.selection_numbers.api import resolve_reference
-
-                item = resolve_reference(record.reference)
-                if item.parent_item_id is not None or item.location_kind not in ("inventory", "equipment") or item.owner_object_id != caller.pk:
-                    continue
-            elif record.reference.kind not in (ReferenceKind.LOOT, ReferenceKind.CURRENCY):
-                from world.selection_numbers.api import resolve_reference
-
-                entity = resolve_reference(record.reference)
-                if entity.db.action_available is False:
-                    continue
+            definition = provider_definition(reference, entity=entity)
         except (RuleError, KeyError):
             continue
-        for binding in index.bindings_for_provider.get(definition, ()):
+        offers = tuple(binding for binding in index.bindings_for_provider.get(definition, ()) if included(binding))
+        if not offers:
+            continue
+        if reference.kind == ReferenceKind.ITEM:
+            if (entity.parent_item_id is not None or entity.location_kind not in ("inventory", "equipment")
+                    or entity.owner_object_id != caller.pk):
+                continue
+        elif reference.kind not in (ReferenceKind.LOOT, ReferenceKind.CURRENCY) and entity.db.action_available is False:
+            continue
+        if not for_cmdset and not visible_entity(caller, entity):
+            continue
+        capabilities = getattr(entity, "capability_binding_ids", None)
+        active_bindings = capabilities() if callable(capabilities) else None
+        for binding in offers:
             action = index.actions[binding.action_id]
             provider = next((role for role in action.roles if role.name == "provider"), None)
-            from world.selection_numbers.api import resolve_reference
-
-            entity = resolve_reference(record.reference)
-            capabilities = getattr(entity, "capability_binding_ids", None)
-            if callable(capabilities) and binding.id not in capabilities():
+            if active_bindings is not None and binding.id not in active_bindings:
                 continue
             if binding.capability_id:
                 active = getattr(entity, "capability_active", None)
                 if not callable(active) or not active(binding.capability_id):
                     continue
-            if action.public and provider and record.reference.kind in provider.kinds:
-                pairs.append((record.reference, binding))
+            if provider and reference.kind in provider.kinds:
+                pairs.append((reference, binding))
     return unshadowed(caller, index, pairs)
 
 

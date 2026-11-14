@@ -285,24 +285,10 @@ class PartyAttack(PartyCreate):
     usage = "어린청소룡 일공 · 일행공격"
     summary = "리더가 참가 가능한 구성원의 기존 자동 전투를 시작합니다."
 
-    def run(self):
-        from typeclasses.enemies import Enemy
-        from world.targets import Mode, normalized, room_objects
-        from world.targets import resolve as resolve_target
+    def func(self):
+        from world.actions.global_actions import invoke
 
-        party = required(self.caller)
-        party.require_leader(self.caller)
-        target = self.caller.combat_target()
-        if self.args.strip():
-            pool = [obj for obj in room_objects(self.caller) if isinstance(obj, Enemy)]
-            selector = parse_selector(self.args, [name for obj in pool for name in names(obj)])
-            # 일행공격의 무번호 복수 후보 거절은 일반 공격의 기본 첫 대상과 다르다.
-            if selector.mode == Mode.DEFAULT:
-                matches = matching(pool, selector)
-                exact = [obj for obj in matches if normalized(obj.key) == normalized(selector.name)]
-                strict_single(exact or matches, selector, self.key)
-            target = resolve_target(pool, selector, self.caller, self.key)[0]
-        party.attack(self.caller, target)
+        return invoke(self.caller, self.session, "party_attack", query=self.args)
 
 
 class PartyDefense(PartyCreate):
@@ -312,14 +298,11 @@ class PartyDefense(PartyCreate):
     usage = "철수 일행방어 · 일행방어 · 해제 일행방어"
     summary = "영속 방어 담당을 조회하거나 리더가 지정·해제합니다."
 
-    def run(self):
-        from world.multiplayer import object_by_id
-        party = required(self.caller)
-        if not self.args.strip():
-            defender = object_by_id(party.state()["tactics"].get("defender_id"))
-            self.caller.msg(ft.text("방어 담당: ", ft.token("player", defender.key) if defender else "없음"))
-        else:
-            party.set_defender(self.caller, None if self.args.strip() == "해제" else member(self.caller, self.args))
+    def func(self):
+        from world.actions.global_actions import invoke
+
+        return invoke(self.caller, self.session, "party_defense" if self.args.strip() else "party_defender",
+                      query=self.args)
 
 
 PartyCommand.aliases = ["무리", "그룹"]

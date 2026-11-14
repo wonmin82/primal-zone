@@ -8,7 +8,8 @@ from evennia import create_object, search_tag
 from evennia.objects.models import ObjectDB
 from evennia.utils.dbserialize import deserialize
 from typeclasses.explorers import Explorer
-from typeclasses.interactables import INTERACTABLES, Shopkeeper
+from typeclasses.interactables import INTERACTABLES
+from world.actors.content import ACTOR_SPAWNS
 from world.bootstrap import build_world, stale_definitions
 from world.content import ITEMS, SHOP_CATALOGS
 from world.content.integrity import errors
@@ -28,14 +29,14 @@ class ShopTests(WorldCommandTest):
         self.enterContext(patch("typeclasses.explorers.time", return_value=100))
         super().setUp()
         self.rooms = self.world_rooms()
-        self.sellers = {shop_id: search_tag(shop_id + "_shopkeeper", category="primal_interactable")[0]
+        self.sellers = {shop_id: search_tag(shop_id + "_shopkeeper", category="primal_actor_spawn")[0]
                         for shop_id in SHOP_CATALOGS}
         self.char1.location = self.rooms["supply_shop"]
         self.char1.home = self.rooms["dock"]
         self.char1.push_state = Mock()
         self.char1.change(lambda p: p.update(credits=2000, combat_target=None))
         for module in ("enemies", "explorers", "loot"):
-            self.enterContext(patch(f"typeclasses.{module}.delay"))
+            self.enterContext(patch("world.shared_combat.delay" if module == "enemies" else f"typeclasses.{module}.delay"))
 
     def command(self, raw):
         with patch.object(self.char1, "msg") as message:
@@ -94,8 +95,8 @@ class ShopTests(WorldCommandTest):
         weapon.location = seller.location
         self.assertIn("여러 명", self.command("목록"))
         self.assertIn("1개를 받아", self.command("붕대 사"))
-        extra = create_object(Shopkeeper, key=seller.key, location=seller.location,
-                              attributes=[("selection_group_id", descriptor(seller).group_id)])
+        extra = create_object(type(seller), key=seller.key, location=seller.location,
+                              attributes=[("actor_id", seller.actor_id), ("selection_group_id", descriptor(seller).group_id)])
         extra.db.shop_id = "supply"
         before = deepcopy(self.char1.profile())
         self.assertIn("여러 명", self.command("붕대 사"))
@@ -209,7 +210,7 @@ class ShopTests(WorldCommandTest):
         self.assertEqual(self.char1.home, self.rooms["dock"])
 
     def test_bootstrap_reuses_all_objects_normalizes_catalog_and_preserves_data(self):
-        ids = {key: search_tag(key, category="primal_interactable")[0].id for key in INTERACTABLES}
+        ids = {key: search_tag(key, category="primal_actor_spawn" if key in ACTOR_SPAWNS else "primal_interactable")[0].id for key in INTERACTABLES}
         box = search_tag("shared_container", category="primal_interactable")[0]
         box.db.items = {"scrap": 4}
         self.char1.change(lambda p: p["storage"].update(scrap=9))
@@ -224,9 +225,15 @@ class ShopTests(WorldCommandTest):
             build_world()
             self.assertEqual(ObjectDB.objects.count(), count)
             for key, identity in ids.items():
-                objects = search_tag(key, category="primal_interactable")
+                objects = search_tag(key, category="primal_actor_spawn" if key in ACTOR_SPAWNS else "primal_interactable")
                 self.assertEqual([obj.id for obj in objects], [identity])
-                self.assertEqual(objects[0].zone if hasattr(objects[0], "zone") else objects[0].location.db.zone_id, INTERACTABLES[key]["room"])
+                obj = objects[0]
+                if key in ACTOR_SPAWNS:
+                    self.assertEqual(obj.home.db.zone_id, ACTOR_SPAWNS[key].room_id)
+                    expected = self.rooms["dock"] if obj in self.sellers.values() else obj.home
+                    self.assertEqual(obj.location, expected)
+                else:
+                    self.assertEqual(obj.location.db.zone_id, INTERACTABLES[key]["room"])
             for shop_id, seller in self.sellers.items():
                 self.assertEqual(seller.db.shop_id, shop_id)
                 self.assertEqual(seller.aliases.all(), INTERACTABLES[shop_id + "_shopkeeper"]["aliases"])

@@ -24,7 +24,7 @@ class PartyCommandContractTests(GameCommandTest):
         from commands.vocabulary import V13_RUNTIME_NAMES, V14_PARTY_NAMES
         from world.actions.manifest import get_index
         # #49 문 명령은 v13 당시 CmdSet에 없었다. 역사적 SSOT 자체는 바꾸지 않는다.
-        migrated = {name for verb in get_index().verbs.values() if verb.key not in ("열어", "닫아", "잠궈", "풀어")
+        migrated = {name for verb in get_index().verbs.values() if not verb.adapter_only and verb.key not in ("열어", "닫아", "잠궈", "풀어")
                     for name in (verb.key, *verb.aliases)}
         migrated.update(verb.key + " " + variant.suffix for action in get_index().actions.values()
                         for verb in (get_index().verbs[action.verb_id],)
@@ -80,7 +80,7 @@ class PartyFixture(GameCommandTest):
     def setUp(self):
         super().setUp()
         self.enterContext(patch('typeclasses.explorers.delay'))
-        self.enterContext(patch('typeclasses.enemies.delay'))
+        self.enterContext(patch('world.shared_combat.delay'))
         self.sessions = {}
         self.people = [self.char1, self.char2] + [create_object(Explorer, key=f'구성원{i}', location=self.room1) for i in range(3)]
         for obj in self.people:
@@ -455,7 +455,7 @@ class PartyLegacyLootRightsTests(WorldCommandTest):
         self.enterContext(patch("typeclasses.loot.time", return_value=100))
         self.enterContext(patch("world.lifecycle.time", return_value=100))
         for module in ("explorers", "loot", "enemies"):
-            self.enterContext(patch(f"typeclasses.{module}.delay"))
+            self.enterContext(patch("world.shared_combat.delay" if module == "enemies" else f"typeclasses.{module}.delay"))
         for obj in (self.char1, self.char2):
             obj.location = self.world_rooms()["grass"]
             obj.push_state = Mock()
@@ -725,7 +725,7 @@ class PartyCombatFixture(WorldCommandTest):
     def setUp(self):
         super().setUp()
         self.enterContext(patch('world.lifecycle.time', return_value=100))
-        from typeclasses.enemies import room_enemies
+        from world.shared_combat import room_enemies
         self.rooms = self.world_rooms()
         self.people = [self.char1, self.char2] + [create_object(Explorer, key=f'전술탐사자{i}') for i in range(3)]
         for obj in self.people:
@@ -734,8 +734,8 @@ class PartyCombatFixture(WorldCommandTest):
             obj.push_state = Mock()
             obj.msg = Mock()
         for module in ('enemies', 'explorers', 'parties', 'loot'):
-            self.enterContext(patch(f'typeclasses.{module}.delay')) if module != 'parties' else None
-            self.enterContext(patch(f'typeclasses.{module}.time', return_value=100))
+            self.enterContext(patch('world.shared_combat.delay' if module == 'enemies' else f'typeclasses.{module}.delay')) if module != 'parties' else None
+            self.enterContext(patch('world.shared_combat.time' if module == 'enemies' else f'typeclasses.{module}.time', return_value=100))
         self.enemy = room_enemies(self.rooms['grass'])[0]
 
     def pair(self):
@@ -771,13 +771,13 @@ class PartyAttackTests(PartyCombatFixture):
         before = dict(self.char2.profile())
         self.char1.change(lambda p: p.update(combat_target=999999))
         self.people[3].location = self.rooms['dock']
-        enemy_hp = self.enemy.db.hp
+        enemy_hp = self.enemy.hp
         result = party.attack(self.char1, self.enemy)
         self.assertEqual(result['new'], [self.people[2].key])
         self.assertEqual(result['existing'], [self.char2.key])
         self.assertEqual(len(result['skipped']), 2)
         self.assertEqual(dict(self.char2.profile()), before)
-        self.assertEqual(self.enemy.db.hp, enemy_hp)
+        self.assertEqual(self.enemy.hp, enemy_hp)
         self.assertEqual(self.people[2].profile()['next_attack_at'], 102.5)
         self.assertEqual(self.people[2].profile()['queued_action'], 'attack')
         self.assertEqual(self.people[2].profile()['xp'], 0)

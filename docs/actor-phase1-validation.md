@@ -77,3 +77,36 @@ Actor/WorldObject·불변 Definition·Sparse Capability·Spawn, 기존 단일 Re
 2026-10-25 Windows Native / Python 3.13에서 기준 main의 rules.py·starter.py·deep_jungle.py·progression.py와 작업 트리 파일의 정규화된 원문 동일성을 대조한 뒤, Enemy 8종·Spawn 15개와 고정 RNG seed 84의 player_attack/enemy_attack 결과를 `work/actor-v16/baseline-rules.json`에 보존했다. DB·개발 서버는 사용하지 않았다.
 
 같은 프로세스에서 5회, 회당 Enemy별 400회 `new_profile`+기본 공격 계산의 실제 경과는 0.420650·0.429629·0.423189·0.378274·0.465905초였다. 이는 순수 규칙 계산 표본이며 Resolver SQL·world_change 잠금·실제 Combat Tick·Bootstrap·Delivery 성능 측정으로 확대 해석하지 않는다. PR-B 최종 상태에서 같은 조건의 후속 비교와 DB 경계 측정이 필요하다.
+
+## PR-B 실행 경계와 검증
+
+- 운영 Spawn은 `ACTOR_SPAWNS`에서 생성한다. 사냥감과 NPC의 현재 실물은 `Actor`이며 방·시설·Door는 각 도메인의 실물 정체성을 유지한다. 구형 Enemy Typeclass 이름은 과거 자료 식별에 남겨 두며 공유 전투의 대상 탐색에는 포함하지 않는다.
+- 전투 HP는 `combat_state.hp`에서 읽고 쓴다. 적은 Encounter의 영속 예약을 다시 읽어 반격을 예약한다. Explorer 콜백은 원래 대상·세대·예정 시각을 대조한다. 기존 재시작 시 교전 종료 정책과 리스폰·보호 만료 복구를 유지한다.
+- 대화는 Gateway의 공개 발화·조회·상태 변경 효과로 실행한다. 공용 입력에서 외부 Django 트랜잭션이나 Gateway가 관리하지 않는 savepoint가 있으면 실행을 거부한다. 기존 `world_change()` 안의 단일 효과 전달은 바깥 변경의 확정 이후에 실행한다.
+- 초회 Evennia 기본 실물과 게임 초기화를 Fresh SQLite의 한 트랜잭션으로 확정한다. 이후 기동은 World Format과 ItemRuntime, 관리 Room·Exit·시설·Spawn 관계를 확인한다. Door 설치 손상은 해당 출입구만 국소 격리한다. 과거 DB의 명시 유지보수 도구는 별도 계약으로 유지한다.
+- 웹의 대상 지정 사냥·일행 공격 버튼은 원래 Actor의 Scope·PK·Encounter 세대를 보낸다. 텍스트 공격은 기존 이름·선택 번호를 해석한다.
+
+### 대표 실행 비용
+
+macOS/Python 3.13.18, 메모리 SQLite 각각의 새 Schema에서 기준 `6de939b`와 PR-B 후보를 같은 프로세스 설정으로 별도 기동했다. 반복 항목은 준비 실행을 제외한 중앙값이다. 실행 시각 계측은 Python 호출 전체를 포함하며 전송 소켓은 모의 수신자를 사용했다.
+
+| 실제 호출 | 기준 시간 / SQL | PR-B 후보 시간 / SQL |
+| --- | ---: | ---: |
+| 환율 텍스트 Resolver | 8.521 ms / 63 | 5.905 ms / 41 |
+| 환율 Gateway 실행 | 14.914 ms / 108 | 7.156 ms / 47 |
+| 빈 `world_change()` 진입·종료 | 0.032 ms / 1 | 0.032 ms / 1 |
+| Gateway 결과 전달 | 0.070 ms / 1 | 0.037 ms / 1 |
+| 복수 Actor 훈련실 웹 상태 | 58.991 ms / 452 | 57.289 ms / 430 |
+| 반복 Bootstrap | 922.144 ms / 9,176 | 903.360 ms / 7,645 |
+| 체력을 고정한 공격 1회차, 고정 RNG·시계 | 9.379 ms / 119 | 9.864 ms / 120 |
+| 첫 세계 설치 | 1,844.840 ms | 2,158.029 ms |
+
+초회 설치에서 전체 READY 정합성까지 검사하는 후보는 이 단일 표본에서 약 0.31초 더 걸렸다. 빈 변경의 비교값은 무경합 고정 비용이며 운영 부하에서의 잠금 대기를 측정하지 않았다. 공격 표본에는 격리 HP 준비가 포함된다.
+
+### PR-B 로컬 회귀와 독립 리뷰
+
+- 기준 `6de939b` 및 PR-B 작업 트리 Fingerprint `6b23c308…`에서 순수 규칙 255개와 Evennia 통합 1,190개가 통과했다. 감시기 Job `8e615fac2e5041e78735e42e0994d0a8`, 원래 종료 코드 0, 실행 전후 기준과 소유 자원 정리 일치.
+- 같은 기준의 격리 Quick smoke는 새 SQLite에서 실제 로그인·대화·공유 전투·보상·리스폰·재접속을 확인했다. Job `fb2c621dceb14f8f92b7c35034dbd7b7`, 종료 코드 0.
+- 위 실행 이후 변경된 전투 전달 격리와 무표식 구형 실물 차단은 Actor·Domain·전투·Door 직접 검사 53개에서 확인했다. Job `eec3c558f7714882b7ec3ec22cc88eff`, Fingerprint `38e1d724…`, 종료 코드 0, 소유 자원 정리 확인.
+- 독립 Reviewer는 외부 savepoint, 영속 상태의 실제 커밋 이후 전달, 오래된 Actor 버튼·타이머, Door 국소 격리 및 레거시 공식 입력을 검토했다. 지적 보완과 직접 검사 근거 확인 뒤 재검토 범위에서 미해결 P0/P1을 보고하지 않았다.
+- JavaScript 구문과 계약 테스트 58개가 통과했다. macOS 로컬 Chromium 통합은 프로세스 소유 검증 실행기가 Windows/Linux만 지원해 브라우저 시작 전에 중단됐다. 브라우저의 데스크톱·좁은 화면 자동 검증은 PR HEAD의 GitHub Actions에서 확인한다. 실제 OS 한글 IME는 미실행이며, 버튼의 구조화 요청 전송만 변경한 이 PR에서 텍스트 조합 입력의 기본 Gate는 기존 정책을 따른다.

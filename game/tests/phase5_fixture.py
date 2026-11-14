@@ -9,7 +9,7 @@ from world import equipment_service, recovery, rules
 from world.item_entities import api
 from world.item_entities.models import ItemEntity, ItemSequence
 
-from tests.base import WorldCommandTest
+from tests.base import WorldCommandTest, managed_category
 
 
 class Phase5Test(WorldCommandTest):
@@ -22,7 +22,7 @@ class Phase5Test(WorldCommandTest):
         self.enterContext(patch("typeclasses.explorers.time", return_value=100))
         self.enterContext(patch("world.lighting_service.time", return_value=100))
         for module in ("explorers", "enemies", "loot"):
-            self.enterContext(patch(f"typeclasses.{module}.delay"))
+            self.enterContext(patch("world.shared_combat.delay" if module == "enemies" else f"typeclasses.{module}.delay"))
         for character in (self.char1, self.char2):
             character.location = self.rooms["salvage_office"]
             character.push_state = Mock()
@@ -35,7 +35,7 @@ class Phase5Test(WorldCommandTest):
                 equipment_service.use_item_entities(character)
 
     def obj(self, identity):
-        return search_tag(identity, category="primal_interactable")[0]
+        return search_tag(identity, category=managed_category(identity))[0]
 
     def create(self, identity, **kwargs):
         return api.create_item(identity, location_kind="inventory", owner_object=self.char1, **kwargs)

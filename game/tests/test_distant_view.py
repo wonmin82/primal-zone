@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 from evennia import create_object, search_tag
 from evennia.objects.objects import DefaultObject
 from evennia.utils.dbserialize import deserialize
-from typeclasses.enemies import Enemy, room_enemies
+from typeclasses.actors import Actor
 from typeclasses.exits import Exit
 from typeclasses.explorers import Explorer
 from typeclasses.interactables import Container, MaintenanceLog, PersonalLocker
@@ -16,6 +16,7 @@ from world import rules
 from world.content import ENEMIES, ROOMS
 from world.distant_presentation import DistantViewContext, direction_phrase
 from world.selection_numbers.api import descriptor
+from world.shared_combat import room_enemies
 
 from tests.base import WorldCommandTest
 
@@ -25,13 +26,13 @@ class DistantViewTests(WorldCommandTest):
 
     def setUp(self):
         super().setUp()
-        for module in ("typeclasses.enemies", "typeclasses.explorers", "typeclasses.loot"):
+        for module in ("world.shared_combat", "typeclasses.explorers", "typeclasses.loot"):
             self.enterContext(patch(module + ".delay"))
         # 관찰과 명령의 회복 경계를 같은 시각으로 고정해 실제 시계 경합을 배제한다.
         for module in (
             "commands.character", "typeclasses.zone_rooms", "world.lifecycle",
             "typeclasses.explorers",
-            "typeclasses.enemies",
+            "world.shared_combat",
             "typeclasses.loot",
             "world.distant_presentation",
         ):
@@ -50,9 +51,10 @@ class DistantViewTests(WorldCommandTest):
         return output[0] if isinstance(output, tuple) else output
 
     def enemy(self, room, identity="hunter"):
-        obj = create_object(Enemy, key=ENEMIES[identity]["name"], location=room,
-                            attributes=[("enemy_id", identity)])
-        obj.db.hp = obj.db.max_hp = ENEMIES[identity]["hp"]
+        obj = create_object(Actor, key=ENEMIES[identity]["name"], location=room,
+                            attributes=[("actor_id", identity), ("combat_state", {"hp": ENEMIES[identity]["hp"]})])
+        obj.initialize_shared_combat()
+        obj.hp = obj.max_hp = ENEMIES[identity]["hp"]
         return obj
 
     def corpse(self, room, decay=130):
@@ -433,11 +435,17 @@ class DistantViewTests(WorldCommandTest):
             "Generator",
             "SignalDevice",
         }
+        from world.actors.content import ACTOR_SPAWNS
+        from world.actors.spawn import create_actor
+
         for identity, definition in interactables.INTERACTABLES.items():
             cls = getattr(interactables, definition["typeclass"])
-            original = search_tag(identity, category="primal_interactable")[0]
-            obj = create_object(cls, key=definition["name"], location=room,
-                                attributes=[("selection_group_id", descriptor(original).group_id)])
+            if identity in ACTOR_SPAWNS:
+                obj = create_actor(identity, room)
+            else:
+                original = search_tag(identity, category="primal_interactable")[0]
+                obj = create_object(cls, key=definition["name"], location=room,
+                                    attributes=[("selection_group_id", descriptor(original).group_id)])
             self.assertEqual(
                 bool(obj.is_distant_visible(context)), cls.__name__ in visible, cls.__name__
             )
@@ -457,7 +465,7 @@ class DistantViewTests(WorldCommandTest):
         self.assertIn("옛 도로", ROOMS["jungle_road"]["desc"])
         self.assertNotIn("짐승이 천천히 움직인다", ROOMS["jungle_road"]["desc"])
         for enemy in enemies:
-            enemy.db.hp = 0
+            enemy.hp = 0
             enemy.db.state = "respawning"
             enemy.db.respawn_at = 200
         corpse = create_object(Corpse, key="철갑등짐승의 시체", location=room)

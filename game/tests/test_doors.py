@@ -170,8 +170,22 @@ class DoorTest(WorldCommandTest):
         self.assertEqual(self.char1.location, self.rooms["hq_concourse"])
 
     def test_p1_02_actual_server_start_keeps_damage_local(self):
-        from server.conf.at_server_startstop import at_server_start
+        from uuid import uuid4
 
+        from evennia import create_script
+        from server.conf.at_server_startstop import at_server_start
+        from world.item_entities.models import ItemRuntime
+        from world.item_runtime import VERSION
+        from world.world_format import FORMAT_VERSION, WorldFormat
+
+        ItemRuntime.objects.get_or_create(pk=1, defaults={"version": VERSION})
+        for player in (self.char1, self.char2):
+            player.db.equipment_backend = "item_entities"
+            player.db.item_runtime_version = VERSION
+        marker = create_script(WorldFormat)
+        marker.db.version = FORMAT_VERSION
+        marker.db.world_id = uuid4().hex
+        marker.db.status = "ready"
         door = self.opened(deadline=777)
         door.exit_a.swap_typeclass("evennia.objects.objects.DefaultExit", clean_attributes=False, run_start_hooks=None)
         records = list(Door.objects.order_by("pk").values())
@@ -484,6 +498,7 @@ class DoorTest(WorldCommandTest):
         self.assertEqual(self.char1.zone, "hq_admin_office")
         self.assertEqual(self.door().auto_close_at, 170)
         completed = []
+        self.connect_character(self.char2)
         with patch("world.doors.time", return_value=120):
             self.char2.execute_cmd("w").addCallback(lambda _: completed.append(True))
         self.assertEqual(completed, [True])

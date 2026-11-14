@@ -3,7 +3,8 @@
 from evennia import create_object, search_tag
 from evennia.typeclasses.tags import Tag
 
-from world.content import DIRECTION_ALIASES, DIRECTION_SHORTCUTS, ENEMIES, ROOMS, spawn_id_for
+from world.actors.content import ACTOR_SPAWNS
+from world.content import DIRECTION_ALIASES, DIRECTION_SHORTCUTS, ROOMS
 from world.multiplayer import world_change
 
 CATEGORY = "primal_zone_room"
@@ -15,16 +16,95 @@ def get_room(zone_id):
 
 
 def build_world():
+    from world.actors.spawn import audit_registered_spawns, legacy_spawn_issues
+    from world.actors.validation import ActorDefinitionError
     from world.doors import install_doors
     from world.item_runtime import initialize_fresh, maintenance
 
     with world_change():
+        issues = legacy_spawn_issues()
+        if issues:
+            raise ActorDefinitionError("\n".join(issues))
         quarantined = validate_managed_exits()
         if not maintenance.get():
             initialize_fresh()
         rooms = _build_world(quarantined)
         install_doors()
+        issues = audit_registered_spawns()
+        if issues:
+            raise ActorDefinitionError("\n".join(issues))
         return rooms
+
+
+def runtime_world_issues(*, installing=False):
+    """READY 월드의 방·Actor·Door 관계를 읽기만 한다."""
+    from evennia.objects.models import ObjectDB
+    from typeclasses.interactables import INTERACTABLES
+
+    from world.actors.spawn import audit_registered_spawns
+    from world.content.doors import DOORS
+    from world.doors import installation_errors, logger
+
+    issues = audit_registered_spawns()
+    rooms = ObjectDB.objects.filter(db_tags__db_category=CATEGORY).distinct()
+    rooms_by_id = {}
+    for room in rooms:
+        tags = room.tags.get(category=CATEGORY, return_list=True)
+        identity = room.db.zone_id
+        if (identity not in ROOMS or tags != [identity] or identity in rooms_by_id
+                or not room.is_typeclass("typeclasses.zone_rooms.ZoneRoom", exact=True)):
+            issues.append(f"Room 정체성 불일치: #{room.pk}")
+        else:
+            rooms_by_id[identity] = room.pk
+    issues.extend(f"Room 누락: {identity}" for identity in sorted(ROOMS.keys() - rooms_by_id.keys()))
+    door_endpoints = {f"{room}:{direction}" for definition in DOORS.values()
+                      for room, direction, _ in definition["endpoints"]}
+    exits = ObjectDB.objects.filter(db_tags__db_category=EXIT_CATEGORY).distinct()
+    exits_by_id = {}
+    for obj in exits:
+        for identity in obj.tags.get(category=EXIT_CATEGORY, return_list=True):
+            exits_by_id.setdefault(identity, []).append(obj)
+    for room, definition in ROOMS.items():
+        for direction, destination in definition["exits"].items():
+            identity = f"{room}:{direction}"
+            if identity in door_endpoints:
+                continue
+            matches = exits_by_id.get(identity, ())
+            if len(matches) != 1:
+                issues.append(f"Exit 정체성 누락 또는 중복: {identity}")
+                continue
+            obj = matches[0]
+            if (obj.tags.get(category=EXIT_CATEGORY, return_list=True) != [identity]
+                    or not obj.is_typeclass("typeclasses.exits.Exit", exact=True) or obj.key != direction
+                    or obj.db_location_id != rooms_by_id.get(room)
+                    or obj.db_destination_id != rooms_by_id.get(destination)):
+                issues.append(f"Exit 관계 불일치: {identity}")
+    facilities = ObjectDB.objects.filter(db_tags__db_category="primal_interactable").distinct()
+    facilities_by_id = {}
+    for obj in facilities:
+        for identity in obj.tags.get(category="primal_interactable", return_list=True):
+            facilities_by_id.setdefault(identity, []).append(obj)
+    for identity, definition in INTERACTABLES.items():
+        if identity in ACTOR_SPAWNS:
+            continue
+        matches = facilities_by_id.get(identity, ())
+        if len(matches) != 1:
+            issues.append(f"시설 정체성 누락 또는 중복: {identity}")
+            continue
+        obj = matches[0]
+        if (obj.tags.get(category="primal_interactable", return_list=True) != [identity]
+                or not obj.is_typeclass(f"typeclasses.interactables.{definition['typeclass']}", exact=True)
+                or obj.db_location_id != rooms_by_id.get(definition["room"])):
+            issues.append(f"시설 관계 불일치: {identity}")
+    for identity in DOORS:
+        door_issues = installation_errors(identity)
+        if not door_issues:
+            continue
+        if installing:
+            issues.extend(f"Door {identity}: {issue}" for issue in door_issues)
+        else:
+            logger.error("Door %s 국소 격리: %s", identity, door_issues)
+    return issues
 
 
 def validate_managed_exits():
@@ -88,35 +168,9 @@ def _build_world(quarantined_exits=()):
         room.db.zone_id = zone_id
         room.db.desc = data["desc"]
         rooms[zone_id] = room
-        for enemy_id in data["enemies"]:
-            spawn_id = spawn_id_for(zone_id, enemy_id)
-            definition = ENEMIES[enemy_id]
-            enemy = next(iter(search_tag(spawn_id, category="primal_spawn")), None)
-            if not enemy:
-                enemy = create_object(
-                    "typeclasses.enemies.Enemy", key=definition["name"], location=room,
-                    attributes=[("enemy_id", enemy_id)],
-                )
-                enemy.tags.add(spawn_id, category="primal_spawn")
-                enemy.db.spawn_id = spawn_id
-                enemy.db.enemy_id = enemy_id
-                enemy.db.max_hp = definition["hp"]
-                enemy.db.hp = definition["hp"]
-            else:
-                # 정의가 소유하는 값만 갱신하고 현재 피해·교전·재생성 상태는 보존한다.
-                enemy.key = definition["name"]
-                enemy.db.enemy_id = enemy_id
-                from world.loot_rules import boss_hp, updated_enemy_hp
+    from world.actors.spawn import ensure_registered_spawns
 
-                maximum = boss_hp(definition["hp"], enemy.db.scaling_participants or 1) if definition.get("boss") else definition["hp"]
-                enemy.db.hp = updated_enemy_hp(enemy.db.hp, enemy.db.max_hp, maximum,
-                                               enemy.db.state, bool(enemy.db.combatants))
-                enemy.db.max_hp = maximum
-                if not enemy.db.combatants and enemy.location != room:
-                    enemy.location = room
-            enemy.attributes.remove("suppression")
-            if enemy.db.suppressions is None or not enemy.db.combatants:
-                enemy.db.suppressions = {}
+    ensure_registered_spawns(rooms)
     # 폐지 복도는 archive로 남겨 FK·방문 기록을 보존한다. 일반 콘텐츠는 대체 공간으로 옮긴다.
     from world.content.headquarters import RETIRED_ROOMS
     from world.content.headquarters import ROOMS as HQ_ROOMS
@@ -170,6 +224,8 @@ def _build_world(quarantined_exits=()):
     from typeclasses.interactables import INTERACTABLES
 
     for identity, data in INTERACTABLES.items():
+        if identity in ACTOR_SPAWNS:
+            continue
         obj = next(iter(search_tag(identity, category="primal_interactable")), None)
         if not obj:
             obj = create_object(
@@ -201,8 +257,8 @@ def stale_definitions():
     expected = {
         CATEGORY: set(ROOMS),
         EXIT_CATEGORY: {f"{zone}:{direction}" for zone, data in ROOMS.items() for direction in data["exits"]},
-        "primal_spawn": {spawn_id_for(zone, enemy) for zone, data in ROOMS.items() for enemy in data["enemies"]},
-        "primal_interactable": set(INTERACTABLES),
+        "primal_actor_spawn": set(ACTOR_SPAWNS),
+        "primal_interactable": set(INTERACTABLES) - ACTOR_SPAWNS.keys(),
     }
     result = []
     for category, identities in expected.items():

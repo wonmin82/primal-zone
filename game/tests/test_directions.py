@@ -28,7 +28,7 @@ class DirectionIntegrationTests(WorldCommandTest):
         self.char1.home = self.rooms["dock"]
         self.char1.push_state = Mock()
         for module in ("enemies", "explorers", "loot"):
-            self.enterContext(patch(f"typeclasses.{module}.delay"))
+            self.enterContext(patch("world.shared_combat.delay" if module == "enemies" else f"typeclasses.{module}.delay"))
 
     def raw(self, command):
         with patch.object(self.char1, "msg") as output:

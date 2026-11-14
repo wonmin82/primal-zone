@@ -176,6 +176,39 @@ class ActorActionFoundationTests(GameCommandTest):
         invocation = ActionInvocation("foundation.inspect", "normal", ())
         self.assertEqual(execute(self.char1, self.session, invocation, index).status, ResultStatus.REFUSED)
 
+    def test_external_transaction_refuses_text_and_web_before_service_or_delivery(self):
+        declaration = package(reward_with_policy_violation, policy=ExecutionPolicy.STATE_CHANGE)
+        index = compile_manifest(PackageManifest((declaration,)))
+        text = dispatch_text(self.char1, index, "foundation.inspect_verb", "", "검조회")
+        web = from_web({"action_id": text.action_id, "variant": "normal", "roles": {},
+                        "request_id": "web:external-transaction"}, index)
+
+        for invocation in (text, web):
+            with self.subTest(origin=invocation.origin), patch.object(self.char1, "msg") as msg:
+                with self.captureOnCommitCallbacks(execute=True) as callbacks:
+                    with transaction.atomic():
+                        result = execute(self.char1, self.session, invocation, index)
+                        self.assertEqual(result.status, ResultStatus.REFUSED)
+                        self.assertFalse(result.changed)
+                        self.assertIsNone(self.char1.db.foundation_value)
+                        self.assertIsNone(self.char1.db.foundation_done)
+                self.assertEqual(callbacks, [])
+                msg.assert_not_called()
+
+    def test_raw_savepoint_inside_world_change_refuses_before_mutation(self):
+        from world.multiplayer import world_change
+
+        declaration = package(reward_with_policy_violation, policy=ExecutionPolicy.STATE_CHANGE)
+        index = compile_manifest(PackageManifest((declaration,)))
+        invocation = dispatch_text(self.char1, index, "foundation.inspect_verb", "", "검조회")
+        with patch.object(self.char1, "msg") as messages, world_change():
+            with self.assertRaises(RuntimeError), transaction.atomic():
+                result = execute(self.char1, self.session, invocation, index)
+                self.assertEqual(result.status, ResultStatus.REFUSED)
+                self.assertIsNone(self.char1.db.foundation_value)
+                raise RuntimeError("savepoint rollback")
+            messages.assert_not_called()
+
     def test_read_only_blocks_real_persistent_write_and_restores_cache(self):
         self.char1.db.foundation_value = 5
         result = self.invoke(package(forbidden_write))

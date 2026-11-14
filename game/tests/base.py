@@ -91,3 +91,9 @@ class WorldCommandTest(GameCommandTest):
         # ID만 공유한다. 각 테스트의 ORM/Attribute/NDb 객체는 공유하지 않는다.
         objects = ObjectDB.objects.in_bulk(self._world_room_ids.values())
         return {zone: objects[identity] for zone, identity in self._world_room_ids.items()}
+
+
+def managed_category(identity):
+    from world.actors.content import ACTOR_SPAWNS
+
+    return "primal_actor_spawn" if identity in ACTOR_SPAWNS else "primal_interactable"

@@ -9,7 +9,7 @@ from commands.registry import COMMANDS
 from evennia import create_object
 from world import private_messaging as messaging
 from world import rules
-from world.npc_dialogue import say
+from world.dialogue_actions import invoke
 
 from tests.item_entity_fixture import NativeItemTest
 
@@ -17,6 +17,7 @@ from tests.item_entity_fixture import NativeItemTest
 class PrivateMessagingTests(NativeItemTest):
     def setUp(self):
         super().setUp()
+        self.dialogue_session = self.connect_character(self.char1)
         self.char1.msg = Mock()
         self.char2.msg = Mock()
         self.enterContext(patch.object(self.char2.sessions, "count", return_value=1))
@@ -38,7 +39,7 @@ class PrivateMessagingTests(NativeItemTest):
         with patch.object(self.char1.sessions, "count", return_value=1):
             messaging.reply(self.char2, "알겠습니다")
         own = messaging.state(self.char1)
-        say(self.char1, "일반 채팅")
+        invoke(self.char1, self.dialogue_session, message="일반 채팅")
         self.assertEqual(own, messaging.state(self.char1))
         self.assertEqual(saved, dict(self.char1.db.profile))
 

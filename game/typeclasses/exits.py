@@ -7,7 +7,7 @@ for allowing Characters to traverse the exit to its destination.
 
 """
 
-from evennia.objects.objects import DefaultExit
+from evennia.objects.objects import DefaultExit, ExitCommand
 from world import text as ft
 from world.content import ROOMS
 from world.distant_presentation import DistantViewContext, direction_phrase
@@ -15,6 +15,13 @@ from world.navigation import blocked_exit_message, entry_block
 from world.selection_numbers.mixins import NumberedObjectMixin
 
 from .objects import ObjectParent
+
+
+class TraverseCommand(ExitCommand):
+    def func(self):
+        from world.actions.global_actions import invoke
+
+        return invoke(self.caller, self.session, "traverse", exit_id=self.obj.pk)
 
 
 class Exit(NumberedObjectMixin, ObjectParent, DefaultExit):
@@ -28,6 +35,7 @@ class Exit(NumberedObjectMixin, ObjectParent, DefaultExit):
 
     """
 
+    exit_command = TraverseCommand
     action_provider_definition = "world.door"
 
     blocks_distant_view = True

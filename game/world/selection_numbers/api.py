@@ -172,7 +172,7 @@ def label(record, unique_group_count=1):
     return f"{record.name} {record.number}"
 
 
-def _visible(caller, entity):
+def visible_entity(caller, entity):
     from world.item_entities.models import ItemEntity
     from world.loot_entities.models import CurrencyLoot
     from world.observation import can_inspect_loot, can_perceive, context_for
@@ -203,7 +203,7 @@ def current_scopes(caller, kind=None):
     return scopes
 
 
-def records_for(caller, kind=None, scope_id=None, *, scope_ids=None, kinds=None):
+def records_for(caller, kind=None, scope_id=None, *, scope_ids=None, kinds=None, check_visibility=True):
     """이미 발급된 번호만 관찰한다. 권한으로 재번호하지 않는다."""
     scopes = set(scope_ids) if scope_ids is not None else current_scopes(caller, kind)
     if scope_id is not None:
@@ -222,7 +222,7 @@ def records_for(caller, kind=None, scope_id=None, *, scope_ids=None, kinds=None)
     for row in query:
         ref = TargetReference(ReferenceKind(row.kind), row.identity, row.scope.scope_id)
         entity = resolve_reference(ref)
-        if entity is not None and _visible(caller, entity):
+        if entity is not None and (not check_visibility or visible_entity(caller, entity)):
             record = descriptor(entity)
             if record.group_id == row.scope.group_id:
                 result.append(replace(record, number=row.number))

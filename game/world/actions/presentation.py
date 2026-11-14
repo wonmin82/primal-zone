@@ -14,7 +14,7 @@ def help_entries(index, verb_id=None):
                   "aliases": index.verbs[action.verb_id].aliases,
                   "description": action.help, "examples": action.examples,
                   "variants": tuple(v.suffix for v in action.variants)}
-                 for action in index.actions.values() if action.public and
+                 for action in index.actions.values() if action.public and not index.verbs[action.verb_id].adapter_only and
                  (verb_id is None or action.verb_id == verb_id))
 
 
@@ -25,7 +25,7 @@ def help_metadata(index):
     public = {action.verb_id for action in index.actions.values() if action.public}
     entries = []
     for identity, verb in index.verbs.items():
-        if identity not in public:
+        if identity not in public or verb.adapter_only:
             continue
         suffixes = {variant.suffix for action in index.actions.values()
                     if action.public and action.verb_id == identity

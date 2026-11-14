@@ -24,11 +24,13 @@ class VocabularyTests(WorldCommandTest):
     def setUp(self):
         super().setUp()
         self.rooms = self.world_rooms()
+        if self._testMethodName != "test_real_new_puppet_and_live_session_reload_have_distinct_location_policy":
+            self.connect_character(self.char1)
         for player in (self.char1, self.char2):
             player.location = self.rooms["dock"]
             player.push_state = Mock()
         for module in ("enemies", "explorers", "loot"):
-            self.enterContext(patch(f"typeclasses.{module}.delay"))
+            self.enterContext(patch("world.shared_combat.delay" if module == "enemies" else f"typeclasses.{module}.delay"))
 
     def raw(self, command):
         with patch.object(self.char1, "msg") as output:
@@ -58,7 +60,6 @@ class VocabularyTests(WorldCommandTest):
 
         with migration_context():
             convert_explorer(self.char1, dict(self.char1.profile()), 100, False)
-        self.connect_character(self.char1)
         for command in ('치료', '힐', 'heal'):
             self.char1.change(lambda p: p.update(hp=20, mental=40, skill_ready_at={}))
             before = self.char1.profile_snapshot()

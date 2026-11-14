@@ -6,13 +6,13 @@ from unittest.mock import Mock, patch
 from evennia.objects.objects import DefaultCharacter
 from evennia.utils.ansi import strip_ansi
 from evennia.utils.dbserialize import deserialize
-from typeclasses.enemies import room_enemies
 from typeclasses.explorers import Explorer
 from world import recovery, rules
 from world import text as ft
 from world.content import ITEMS
 from world.lifecycle import reconcile_world
 from world.multiplayer import world_change
+from world.shared_combat import room_enemies
 
 from tests.base import WorldCommandTest
 
@@ -24,9 +24,9 @@ class RecoveryTests(WorldCommandTest):
         super().setUp()
         self.rooms = self.world_rooms()
         self.clock = self.enterContext(patch("typeclasses.explorers.time", return_value=100))
-        self.enterContext(patch("typeclasses.enemies.time", side_effect=lambda: self.clock.return_value))
+        self.enterContext(patch("world.shared_combat.time", side_effect=lambda: self.clock.return_value))
         self.tasks = self.enterContext(patch("typeclasses.explorers.delay"))
-        self.enterContext(patch("typeclasses.enemies.delay"))
+        self.enterContext(patch("world.shared_combat.delay"))
         for p in (self.char1, self.char2):
             p.location = self.rooms["infirmary"]
             p.push_state = Mock()
@@ -194,31 +194,31 @@ class RecoveryTests(WorldCommandTest):
 
     def test_enemy_delay_partial_reengage_dead_respawn_and_lazy(self):
         enemy = room_enemies(self.rooms["grass"])[0]
-        enemy.db.hp = 5
+        enemy.hp = 5
         enemy.db.last_activity = 100
         enemy.reconcile(114)
-        self.assertEqual(enemy.db.hp, 5)
+        self.assertEqual(enemy.hp, 5)
         enemy.reconcile(115)
-        self.assertEqual(enemy.db.hp, 5)
+        self.assertEqual(enemy.hp, 5)
         enemy.reconcile(130)
-        self.assertEqual(enemy.db.hp, 7)
+        self.assertEqual(enemy.hp, 7)
         self.char1.location = self.rooms["grass"]
         enemy.engage(self.char1, now=130)
-        self.assertEqual(enemy.db.hp, 7)
+        self.assertEqual(enemy.hp, 7)
         self.char1.leave_combat(now=130)
         enemy.reconcile(400)
-        self.assertEqual(enemy.db.hp, 24)
+        self.assertEqual(enemy.hp, 24)
         enemy.db.state = "respawning"
-        enemy.db.hp = 0
+        enemy.hp = 0
         enemy.db.respawn_at = 500
         enemy.reconcile(450)
-        self.assertEqual(enemy.db.hp, 0)
+        self.assertEqual(enemy.hp, 0)
         enemy.reconcile(500)
-        self.assertEqual(enemy.db.hp, 24)
+        self.assertEqual(enemy.hp, 24)
 
     def test_enemy_empty_room_no_timer_and_observed_single_timer(self):
         enemy = room_enemies(self.rooms["grass"])[0]
-        enemy.db.hp = 5
+        enemy.hp = 5
         enemy.db.last_activity = 100
         enemy.reconcile(100)
         self.assertIsNone(enemy.ndb.lifecycle_task)
@@ -231,7 +231,7 @@ class RecoveryTests(WorldCommandTest):
 
     def test_enemy_reengage_preserves_fraction_without_combat_recovery(self):
         enemy = room_enemies(self.rooms["grass"])[0]
-        enemy.db.hp = 5
+        enemy.hp = 5
         enemy.db.last_activity = 100
         enemy.reconcile(120)
         self.char1.location = enemy.location
@@ -239,7 +239,7 @@ class RecoveryTests(WorldCommandTest):
         self.char1.leave_combat(now=150)
         enemy.reconcile(170)
         # 115..120과 165..170의 비전투 회복 0.8+0.8만 합산, 교전 시간은 제외.
-        self.assertEqual(enemy.db.hp, 6)
+        self.assertEqual(enemy.hp, 6)
 
     def test_restart_online_reconcile_and_offline_remains_lazy(self):
         before = deepcopy(self.char2.profile_snapshot())

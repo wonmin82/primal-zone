@@ -314,8 +314,10 @@ class LootEntityTests(NativeLootTest):
         self.assertEqual(self.source.db.entries, [])
 
     def test_explicit_native_generation_reuses_round_robin_and_currency_allocation(self):
-        enemy = create_object("typeclasses.enemies.Enemy", key="시험 적", location=self.char1.location)
-        enemy.db.enemy_id = "scavenger"
+        enemy = create_object(
+            "typeclasses.actors.Actor", key="시험 적", location=self.char1.location,
+            attributes=(("actor_id", "scavenger"),),
+        )
         self.connect_character(self.char1)
         self.connect_character(self.char2)
         party = invite(self.char1, self.char2, now=100)

@@ -22,7 +22,7 @@ def initialize():
 
 def inspect():
     from evennia.utils.dbserialize import deserialize
-    from typeclasses.enemies import Enemy
+    from typeclasses.actors import Actor
     from typeclasses.explorers import Explorer
     from world.item_entities.models import ItemMigrationLedger, ItemRuntime, ItemSequence
     from world.item_migration.scan import json_state, raw_source, sources
@@ -41,7 +41,7 @@ def inspect():
                                "max_hp": obj.db.max_hp, "state": obj.db.state,
                                "participants": obj.db.scaling_participants,
                                "combatants": list(obj.db.combatants or []),
-                               "contribution": deserialize(obj.db.contribution)} for obj in Enemy.objects.all()},
+                               "contribution": deserialize(obj.db.contribution)} for obj in Actor.objects.all() if obj.supports_shared_combat},
     }
 
 
@@ -61,12 +61,10 @@ def prepare_live():
 
 
 def prepare_boss():
-    from evennia import create_object
-    from typeclasses.enemies import Enemy
     from typeclasses.explorers import Explorer
     from world import rules
+    from world.actors.spawn import create_actor
     from world.bootstrap import get_room
-    from world.content import ENEMIES
     from world.item_entities import api
     from world.item_entities.models import ItemEntity
 
@@ -88,9 +86,7 @@ def prepare_boss():
         profile["quests"]["radio_tower"].update(started=True, record_read=True, generator_fixed=True)
         player.save_profile(profile)
     for name in ("일인검증우두머리", "이인검증우두머리", "삼인검증우두머리", "사인검증우두머리"):
-        enemy = create_object(Enemy, key=name, location=room)
-        enemy.db.enemy_id = "alpha"
-        enemy.db.hp = enemy.db.max_hp = ENEMIES["alpha"]["hp"]
+        enemy = create_actor("alpha", room, name=name)
         enemy.db.scaling_participants = 1
     return {"label": "TEST / PHASE 7B", "prepared": "Lv7/T2 독립 4계정, V1 Boss 4개 (수치 불변)"}
 

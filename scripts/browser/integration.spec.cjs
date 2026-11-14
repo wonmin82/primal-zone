@@ -238,7 +238,7 @@ test('TEST-E2E-09 이동하는 개인 묶음·현재 CmdSet·잠긴 Exit', async
 
 test('TEST-E2E-10 실제 교전에서 Door·NPC·회복 거부', async ({ actors }) => {
   const a = await actors.create(0);
-  await command(a, '검증사냥룡 때려');
+  await a.page.getByRole('button', { name: /검증사냥룡 .*사냥/ }).click();
   await expect.poll(() => a.state.combat_target).toBeTruthy();
   const db = snapshot(), credits = db.players[a.name].profile.credits;
   expect(db.players[a.name].profile.combat_target).toBeTruthy();

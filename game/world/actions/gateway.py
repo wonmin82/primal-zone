@@ -22,7 +22,13 @@ from world.actions.schema import (
     TargetReference,
 )
 from world.actions.synchronous import validate_handler
-from world.multiplayer import after_change, world_change
+from world.multiplayer import (
+    _run_post_commit,
+    after_change,
+    has_external_transaction,
+    in_world_change,
+    world_change,
+)
 
 
 class ResultStatus(StrEnum):
@@ -160,7 +166,7 @@ def _roles(caller, action, invocation):
         refs = bindings.get(name, ())
         if (role.required and not refs) or (not role.allow_all and role.default != DefaultTargetPolicy.ALL and len(refs) > 1) or len(refs) != len(set(refs)):
             raise rules.RuleError("행동 대상 수를 확인하세요.")
-        current = {record.reference for record in role_records(caller, role, bindings)}
+        current = {record.reference for record in role_records(caller, role, bindings)} if refs else set()
         if any(ref.kind not in role.kinds or ref not in current for ref in refs):
             if (action.id == "loot.take" and name == "subject"
                     and all(ref.kind in role.kinds for ref in refs)):
@@ -218,7 +224,7 @@ def revalidate_context(context):
     action = context.index.actions[context.invocation.action_id]
     current = _roles(context.caller, action, context.invocation)
     provider_refs = dict(context.invocation.roles).get("provider", ())
-    offers = [(ref, binding) for ref, binding in provided(context.caller, context.index)
+    offers = [(ref, binding) for ref, binding in provided(context.caller, context.index, action_id=action.id)
               if binding.id == context.binding.id]
     expected = set(provider_refs) if provider_refs else {None}
     if {ref for ref, _ in offers} != expected:
@@ -230,7 +236,7 @@ def revalidate_context(context):
 
 
 def execute(caller, session, invocation, index):
-    """모든 경로가 같은 검증·transaction·Service를 통과한다. 출력은 호출 어댑터가 한 번만 한다."""
+    """Gateway가 효과별 Commit을 소유한다. 출력은 호출 어댑터가 한 번만 한다."""
     try:
         require_session(caller, session)
         require_input_mode(caller)
@@ -244,6 +250,8 @@ def execute(caller, session, invocation, index):
             _confirmation(caller, session, invocation, variant)
         services = {index.services[binding.service_id] for binding in index.bindings.values()
                     if binding.action_id == action.id}
+        if has_external_transaction() or in_world_change() and any(service.effects for service in services):
+            raise rules.RuleError("트랜잭션 밖에서 행동을 요청하세요.")
         lockers = {service.locker for service in services}
         preparations = {service.prepare for service in services}
         if len(lockers) != 1 or len(preparations) != 1:
@@ -271,9 +279,8 @@ def execute(caller, session, invocation, index):
             require_session(caller, session)
             entities = _roles(caller, action, invocation)
             provider_refs = dict(invocation.roles).get("provider", ())
-            offered = [(ref, binding) for ref, binding in provided(caller, index)
-                       if binding.action_id == action.id and
-                       (ref in provider_refs or ref is None and not provider_refs)]
+            offered = [(ref, binding) for ref, binding in provided(caller, index, action_id=action.id)
+                       if ref in provider_refs or ref is None and not provider_refs]
             if {ref for ref, _ in offered} != (set(provider_refs) if provider_refs else {None}):
                 raise rules.RuleError("행동 제공자를 확정할 수 없습니다.")
             candidates = tuple(dict.fromkeys(binding for _, binding in offered))
@@ -361,15 +368,12 @@ def execute(caller, session, invocation, index):
 
 
 def emit(caller, session, invocation, result):
-    from world.actions.effects import ReadOnlyViolation, deliver_read_only
+    from world.actions.effects import deliver_read_only
 
-    try:
-        deliver_read_only(lambda: _emit_result(caller, session, invocation, result))
-    except ReadOnlyViolation:
-        # 출력 Hook의 위반은 이미 확정된 행동 결과에 영향을 주지 않는다.
-        from evennia.utils import logger
+    def deliver():
+        _run_post_commit(lambda: deliver_read_only(lambda: _emit_result(caller, session, invocation, result)))
 
-        logger.log_err("행동 결과 전달 중 읽기 전용 정책을 위반했습니다.")
+    after_change(deliver)
 
 
 def _emit_result(caller, session, invocation, result):

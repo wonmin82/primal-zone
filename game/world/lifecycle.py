@@ -2,9 +2,11 @@
 
 from time import time
 
-from typeclasses.enemies import Enemy, room_enemies
+from typeclasses.actors import Actor
 from typeclasses.loot import Corpse, DroppedLoot, room_loot
 from typeclasses.parties import Party
+
+from world.shared_combat import room_enemies
 
 
 def reconcile_room(room, now=None):
@@ -39,12 +41,15 @@ def reconcile_world(now=None, restart=False):
         corpse.reconcile(now)
         if corpse.pk:
             corpse.schedule_lifecycle()
-    for enemy in Enemy.objects.all():
+    for enemy in Actor.objects.all():
+        if not enemy.supports_shared_combat:
+            continue
         # 빈 방의 살아 있는 적은 다음 입실/관찰까지 지연 계산한다.
         observed = enemy.location and any(getattr(obj, "push_state", None) and obj.sessions.count()
                                           for obj in enemy.location.contents)
         if enemy.db.state == "respawning" or enemy.db.combatants or observed:
             enemy.reconcile(now)
+        enemy.schedule_combat()
     for dropped in DroppedLoot.objects.all():
         dropped.reconcile(now)
     # legacy는 timestamp로 FFA, native의 expired claim은 출처 단위로 정리한다.

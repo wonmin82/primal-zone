@@ -15,7 +15,7 @@ from world.content.integrity import errors
 from world.observation import context_for
 from world.room_hints import render
 
-from tests.base import WorldCommandTest
+from tests.base import WorldCommandTest, managed_category
 
 
 class HeadquartersCloseoutTests(WorldCommandTest):
@@ -27,7 +27,7 @@ class HeadquartersCloseoutTests(WorldCommandTest):
         self.char1.push_state = Mock()
         self.char1.location = self.rooms["storage_room"]
         for module in ("enemies", "explorers", "loot"):
-            self.enterContext(patch(f"typeclasses.{module}.delay"))
+            self.enterContext(patch("world.shared_combat.delay" if module == "enemies" else f"typeclasses.{module}.delay"))
 
     def test_bootstrap_preserves_all_managed_identities_player_and_shared_state(self):
         box = search_tag("shared_container", category="primal_interactable")[0]
@@ -66,7 +66,7 @@ class HeadquartersCloseoutTests(WorldCommandTest):
 
     def test_same_service_policy_keeps_perception_safety_combat_and_hint_contracts(self):
         for identity in ("instructor", "doctor", "infirmary_bed", "salvage_officer", "supply_shopkeeper"):
-            service = search_tag(identity, category="primal_interactable")[0]
+            service = search_tag(identity, category=managed_category(identity))[0]
             self.char1.location = service.location
             self.assertTrue(service.available(self.char1))
             hint = render(context_for(self.char1))

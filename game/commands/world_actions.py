@@ -11,8 +11,7 @@ class Return(GameCommand):
     key = "귀환"
     aliases = ["home"]
 
-    def run(self):
-        from world.bootstrap import get_room
+    def func(self):
+        from world.actions.global_actions import invoke
 
-        self.peaceful()
-        self.caller.move_to(get_room("support_roof"), quiet=True)
+        return invoke(self.caller, self.session, "return")

@@ -45,8 +45,7 @@ uv run python scripts/dev.py start
 .\.venv\Scripts\python.exe scripts/dev.py start
 ```
 
-새 빈 DB는 아이템 시스템을 직접 초기화한다. 구버전 DB·백업은 자동 변환되지 않으므로 서버 시작 전에 [legacy migration 절차](docs/item-migration.md)를 따른다.
-**기존 DB를 삭제하거나 덮어쓰지 않는다.** `setup`은 아이템 데이터 migration을 수행하지 않는다.
+게임 서버는 새 빈 SQLite에서 최초 기동할 때 아이템 시스템과 Actor 월드를 함께 초기화한다. 이후 기동에는 유효한 World Format과 ItemRuntime이 필요하다. 구버전·부분 초기화·손상 DB는 보존하며 지원하지 않는 형식에서는 게임 시작을 중단한다. [아이템 유지보수 기록](docs/item-migration.md)은 이전 데이터의 명시적 감사·변환 도구를 설명한다.
 
 기본 접속 서비스는 IPv4 `0.0.0.0`에 열리므로 방화벽·NAT 설정에 따라 LAN이나 외부에 노출될 수 있다.
 Telnet 8700은 평문이며 웹 HTTP/WS도 TLS를 제공하지 않는다.

@@ -4,8 +4,8 @@ from evennia.objects.objects import DefaultRoom
 from world import text as ft
 from world.content import ROOMS
 from world.exit_presentation import exit_diagram, exit_entries
+from world.shared_combat import room_enemies
 
-from typeclasses.enemies import room_enemies
 from typeclasses.loot import room_loot
 
 
@@ -45,7 +45,8 @@ class ZoneRoom(DefaultRoom):
             exit_diagram(exit_entries(looker, self, observed_at)), "",
         ]
         pool = room_objects(looker, self, observed_at)
-        objects = [obj for obj in action_objects(self) if obj in pool]
+        features = set(action_objects(self))
+        objects = [obj for obj in pool if obj in features]
         for name in dict.fromkeys(obj.key for obj in objects):
             group = [obj for obj in objects if obj.key == name]
             lines.extend(

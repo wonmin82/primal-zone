@@ -78,7 +78,15 @@ from world.bootstrap import build_world
 from world.door_entities.models import Door, DoorInstallation
 from unittest.mock import patch
 with patch("world.doors.time", return_value=100):
-    build_world()
+    if os.environ.get("PZ_DOOR_RESTART_PROOF"):
+        from evennia.accounts.models import AccountDB
+        from server.conf.at_initial_setup import prepare_world
+
+        settings.ITEM_MIGRATION_AUDIT = False
+        AccountDB.objects.create_superuser("admin", "", None)
+        prepare_world()
+    else:
+        build_world()
 assert Door.objects.count() == DoorInstallation.objects.count() == 2
 if existing:
     assert [(obj.pk, obj.db_location_id, obj.db_destination_id)

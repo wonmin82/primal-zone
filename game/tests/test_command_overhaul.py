@@ -19,8 +19,8 @@ class CommandOverhaulSmoke(NativeItemTest):
         self.rooms = build_world()
         self.char1.location = self.rooms["supply_shop"]
         for module in ("enemies", "loot"):
-            self.enterContext(patch(f"typeclasses.{module}.delay"))
-            self.enterContext(patch(f"typeclasses.{module}.time", return_value=100))
+            self.enterContext(patch("world.shared_combat.delay" if module == "enemies" else f"typeclasses.{module}.delay"))
+            self.enterContext(patch("world.shared_combat.time" if module == "enemies" else f"typeclasses.{module}.time", return_value=100))
         self.enterContext(patch("commands.character.time", return_value=100))
 
     def raw(self, command):
@@ -53,10 +53,10 @@ class CommandOverhaulSmoke(NativeItemTest):
         equipment_service.equip_item(self.char1, gun, "weapon")
         self.raw("어린청소룡 쳐")
         enemy = self.char1.combat_target()
-        before = (enemy.db.hp, self.char1.profile_snapshot()["next_attack_at"], deepcopy(firearm_service.loaded_magazine_item(gun).state))
+        before = (enemy.hp, self.char1.profile_snapshot()["next_attack_at"], deepcopy(firearm_service.loaded_magazine_item(gun).state))
         self.raw("쏴")
         self.assertEqual(self.char1.profile_snapshot()["queued_action"], "shooting")
-        self.assertEqual(before, (enemy.db.hp, self.char1.profile_snapshot()["next_attack_at"], dict(firearm_service.loaded_magazine_item(gun).state)))
+        self.assertEqual(before, (enemy.hp, self.char1.profile_snapshot()["next_attack_at"], dict(firearm_service.loaded_magazine_item(gun).state)))
         self.assertIn("명령을 확인", self.raw("사격"))
         self.char1.leave_combat()
         self.char1.location = self.rooms["supply_shop"]

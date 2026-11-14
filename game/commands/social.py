@@ -34,9 +34,9 @@ class Say(GameCommand):
     )
 
     def run(self):
-        from world.npc_dialogue import say
+        from world.dialogue_actions import invoke
 
-        say(self.caller, self.args)
+        invoke(self.caller, self.session, message=self.args)
 
 
 class PrivateTalk(GameCommand):

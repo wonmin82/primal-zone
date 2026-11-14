@@ -8,10 +8,10 @@ from evennia import CmdSet, Command
 from evennia.commands import cmdhandler
 from evennia.objects.objects import DefaultCharacter
 from evennia.utils.ansi import strip_ansi
-from typeclasses.enemies import room_enemies
 from typeclasses.explorers import Explorer
 from world import recovery, rules
 from world import text as ft
+from world.shared_combat import room_enemies
 
 from tests.base import WorldCommandTest
 
@@ -24,9 +24,9 @@ class PromptTests(WorldCommandTest):
         self.rooms = self.world_rooms()
         self.char1.location = self.rooms["infirmary"]
         self.clock = self.enterContext(patch("typeclasses.explorers.time", return_value=100))
-        self.enterContext(patch("typeclasses.enemies.time", side_effect=lambda: self.clock.return_value))
+        self.enterContext(patch("world.shared_combat.time", side_effect=lambda: self.clock.return_value))
         for module in ("explorers", "enemies", "loot"):
-            self.enterContext(patch(f"typeclasses.{module}.delay"))
+            self.enterContext(patch("world.shared_combat.delay" if module == "enemies" else f"typeclasses.{module}.delay"))
         self.output = self.enterContext(patch.object(self.char1, "msg"))
         self.char1.push_state = Mock()
         self.char1.push_prompt = Mock(side_effect=lambda: self.char1.msg(

@@ -13,7 +13,7 @@ from world.bootstrap import build_world, stale_definitions
 from world.environment_state import snapshot_for
 from world.state import multiplayer_state
 
-from tests.base import GameCommandTest, WorldCommandTest
+from tests.base import GameCommandTest, WorldCommandTest, managed_category
 
 
 class ServiceRelocationTests(WorldCommandTest):
@@ -22,13 +22,13 @@ class ServiceRelocationTests(WorldCommandTest):
     def setUp(self):
         super().setUp()
         self.rooms = self.world_rooms()
-        self.services = {key: search_tag(key, category="primal_interactable")[0]
+        self.services = {key: search_tag(key, category=managed_category(key))[0]
                          for key in ("shared_container", "personal_locker", "instructor")}
         for player in (self.char1, self.char2):
             player.location = self.rooms["storage_room"]
             player.push_state = Mock()
         for module in ("enemies", "explorers", "loot"):
-            self.enterContext(patch(f"typeclasses.{module}.delay"))
+            self.enterContext(patch("world.shared_combat.delay" if module == "enemies" else f"typeclasses.{module}.delay"))
 
     def command(self, value):
         with patch.object(self.char1, "msg") as output:
@@ -120,7 +120,7 @@ class ServiceRelocationTests(WorldCommandTest):
         # 훈련 권한 실패의 불변성을 실제 10초 자연회복 경계와 분리한다.
         self.enterContext(patch("typeclasses.explorers.time", return_value=100))
         self.char1.reconcile_recovery(emit_prompt=False)
-        instructor = search_tag('trainer_heavy', category='primal_interactable')[0]
+        instructor = search_tag('trainer_heavy', category='primal_actor_spawn')[0]
         self.char1.change(lambda p: p.update(xp=rules.xp_threshold(2)))
         self.char1.location = instructor.location
         self.assertTrue(instructor.available(self.char1))
@@ -152,7 +152,7 @@ class ServiceRelocationTests(WorldCommandTest):
     def test_training_visibility_agrees_with_commands_and_web(self):
         # 시야/권한 실패의 전체 profile 불변 검사를 자연회복 시각과 분리한다.
         self.enterContext(patch("typeclasses.explorers.time", return_value=100))
-        instructor = search_tag('trainer_heavy', category='primal_interactable')[0]
+        instructor = search_tag('trainer_heavy', category='primal_actor_spawn')[0]
         self.char1.location = self.rooms['support_roof']
         instructor.location = self.char1.location
         self.char1.reconcile_recovery(emit_prompt=False)
@@ -181,9 +181,13 @@ class ServiceMigrationTests(GameCommandTest):
 
     def test_bootstrap_moves_existing_objects_and_preserves_every_owner(self):
         keys = ("shared_container", "personal_locker", "instructor")
-        with patch.dict(INTERACTABLES, {key: {**INTERACTABLES[key], "room": "dock"} for key in keys}):
+        from world.actors import content
+
+        spawn = content.ACTOR_SPAWNS["instructor"]
+        with (patch.dict(INTERACTABLES, {key: {**INTERACTABLES[key], "room": "dock"} for key in keys}),
+              patch.object(content, "ACTOR_SPAWNS", {**content.ACTOR_SPAWNS, "instructor": replace(spawn, room_id="dock")})):
             rooms = build_world()
-        objects = {key: search_tag(key, category="primal_interactable")[0] for key in keys}
+        objects = {key: search_tag(key, category=managed_category(key))[0] for key in keys}
         self.assertTrue(all(obj.location == rooms["dock"] for obj in objects.values()))
         objects["shared_container"].db.items = {"bandage": 4, "field_ration": 2}
         self.char1.change(lambda p: p["storage"].update(bandage=2))
@@ -199,7 +203,7 @@ class ServiceMigrationTests(GameCommandTest):
             self.assertEqual({zone: room.id for zone, room in rebuilt.items()}, room_ids)
             self.assertEqual(ObjectDB.objects.count(), count)
             for key, obj in objects.items():
-                tagged = search_tag(key, category="primal_interactable")
+                tagged = search_tag(key, category=managed_category(key))
                 self.assertEqual([entry.id for entry in tagged], [ids[key]])
                 self.assertEqual(obj.location, rooms[INTERACTABLES[key]["room"]])
                 self.assertEqual(set(obj.aliases.all()), set(INTERACTABLES[key]["aliases"]))

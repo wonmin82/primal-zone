@@ -3,12 +3,12 @@ from random import Random
 from unittest.mock import Mock, patch
 
 from evennia import create_object
-from typeclasses.enemies import room_enemies
 from typeclasses.explorers import Explorer
 from typeclasses.loot import Corpse, DroppedLoot, room_loot, take_loot
 from typeclasses.parties import invite, respond
 from world.multiplayer import object_by_id, world_change
 from world.rules import RuleError
+from world.shared_combat import room_enemies
 
 from tests.base import WorldCommandTest
 
@@ -24,7 +24,7 @@ class LootTests(WorldCommandTest):
             player.push_state = Mock()
             self.connect_character(player)
         for module in ("enemies", "explorers", "loot"):
-            self.enterContext(patch(f"typeclasses.{module}.delay"))
+            self.enterContext(patch("world.shared_combat.delay" if module == "enemies" else f"typeclasses.{module}.delay"))
         self.enemy = room_enemies(self.rooms["grass"])[0]
 
     def kill(self, party=False):
@@ -36,7 +36,7 @@ class LootTests(WorldCommandTest):
         else:
             group = None
         self.enemy.engage(self.char1, now=100)
-        self.enemy.db.hp = 1
+        self.enemy.hp = 1
         rng = Mock()
         rng.randint.return_value = 1
         rng.random.return_value = 0
@@ -118,12 +118,12 @@ class LootTests(WorldCommandTest):
 
     def test_death_failure_rolls_back_hp_rewards_and_corpse(self):
         self.enemy.engage(self.char1, now=100)
-        self.enemy.db.hp = 1
+        self.enemy.hp = 1
         with patch("typeclasses.loot.build_entries", side_effect=RuntimeError("injected")):
             with self.assertRaises(RuntimeError):
                 self.enemy.receive_attack(self.char1, now=102.5, rng=Random(1))
         self.assertEqual(object_by_id(self.enemy.id).db.state, "alive")
-        self.assertEqual(self.enemy.db.hp, 1)
+        self.assertEqual(self.enemy.hp, 1)
         self.assertEqual(self.char1.profile()["xp"], 0)
         self.assertEqual(Corpse.objects.count(), 0)
         self.enemy.receive_attack(self.char1, now=102.5, rng=Random(1))
@@ -139,7 +139,7 @@ class LootTests(WorldCommandTest):
             player.id: {"damage": 10, "last_action_at": 102, "group": f"player:{player.id}"}
             for player in (self.char1, self.char2)
         }
-        boss.db.hp = 0
+        boss.hp = 0
         boss.finish_death(self.char1, now=102, rng=Random(1))
         corpse = room_loot(self.rooms["ridge"])[0]
         self.assertEqual(
@@ -199,7 +199,7 @@ class LootNotificationTests(WorldCommandTest):
         for path in ("typeclasses.explorers.time", "typeclasses.loot.time", "world.lifecycle.time"):
             self.enterContext(patch(path, return_value=100))
         for module in ("explorers", "loot", "enemies"):
-            self.enterContext(patch(f"typeclasses.{module}.delay"))
+            self.enterContext(patch("world.shared_combat.delay" if module == "enemies" else f"typeclasses.{module}.delay"))
         for player in (self.char1, self.char2):
             player.location = self.world_rooms()["grass"]
             self.connect_character(player)

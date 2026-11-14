@@ -167,15 +167,11 @@ class RoomNpcActionsTests(NativeItemTest, WorldCommandTest):
         self.assertEqual(self.char1.profile()["credits"], before + 40)
 
     def test_two_merchants_require_explicit_provider_and_do_not_fallback(self):
-        from evennia import create_object
-        from typeclasses.interactables import Shopkeeper
+        from world.actors.spawn import create_actor
 
         self.char1.location = self.rooms["supply_shop"]
         self.char1.change(lambda p: p.update(credits=1000))
-        second = create_object(Shopkeeper, key="두번째 보급관", location=self.char1.location)
-        original = next(obj for obj in self.char1.location.contents
-                        if isinstance(obj, Shopkeeper) and obj.pk != second.pk)
-        second.db.shop_id = original.db.shop_id
+        second = create_actor("supply_shopkeeper", self.char1.location, name="두번째 보급관")
         before = self.char1.profile_snapshot()
         self.assertIn("여러 명", self.raw("붕대 사"))
         self.assertEqual(self.char1.profile_snapshot(), before)

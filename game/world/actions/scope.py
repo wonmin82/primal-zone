@@ -11,7 +11,8 @@ def refresh(caller):
     from commands.action_command import DynamicActionCommand
 
     index = get_index()
-    offered = provided(caller, index)
+    # 명령 후보만 등록한다. 가시성과 권한은 실제 해석·실행에서 검사한다.
+    offered = provided(caller, index, for_cmdset=True)
     verbs = {index.actions[binding.action_id].verb_id for _, binding in offered}
     suffixes_by_verb = {identity: tuple(sorted({variant.suffix for _, binding in offered
                       if index.actions[binding.action_id].verb_id == identity

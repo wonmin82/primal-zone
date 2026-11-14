@@ -9,8 +9,8 @@ from django.contrib.auth.hashers import PBKDF2PasswordHasher, check_password, ma
 from django.test import SimpleTestCase, override_settings
 from evennia import create_object, search_tag
 from server.conf.test_runner import PrimalRemoteTestRunner
-from typeclasses.enemies import room_enemies
 from world.content import ENEMIES, ROOMS
+from world.shared_combat import room_enemies
 
 from tests.base import WorldCommandTest
 
@@ -67,7 +67,7 @@ class WorldFixtureIsolationTests(WorldCommandTest):
         self.assertEqual(room.key, ROOMS["grass"]["name"])
         self.assertEqual({obj.key for obj in room.exits}, set(ROOMS["grass"]["exits"]))
         enemy = room_enemies(room)[0]
-        self.assertEqual(enemy.db.hp, ENEMIES[enemy.db.enemy_id]["hp"])
+        self.assertEqual(enemy.hp, ENEMIES[enemy.combat_definition_id]["hp"])
         self.assertIsNone(enemy.ndb.fixture_marker)
         container = search_tag("shared_container", category="primal_interactable")[0]
         self.assertEqual(container.db.items, {})
@@ -77,7 +77,7 @@ class WorldFixtureIsolationTests(WorldCommandTest):
         room = self.rooms["grass"]
         room.key = "테스트에서 변경한 장소"
         enemy = room_enemies(room)[0]
-        enemy.db.hp = 1
+        enemy.hp = 1
         enemy.ndb.fixture_marker = "이전 테스트의 임시 상태"
         room.exits[0].delete()
         container = search_tag("shared_container", category="primal_interactable")[0]

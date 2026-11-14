@@ -4,12 +4,13 @@ from unittest.mock import Mock, patch
 
 from commands.character import Look
 from evennia import create_object
-from typeclasses.enemies import Enemy, room_enemies
+from typeclasses.actors import Actor
 from typeclasses.explorers import Explorer
 from typeclasses.interactables import SupplyCache
 from typeclasses.loot import Corpse, DroppedLoot, room_loot, take_loot
 from typeclasses.parties import invite, respond
 from world import loot_service, rules
+from world.shared_combat import room_enemies
 from world.state import multiplayer_state
 from world.targets import (
     Mode,
@@ -90,17 +91,18 @@ class TargetIntegrationTests(WorldCommandTest):
             player.push_state = Mock()
             self.connect_character(player)
         for module in ("enemies", "explorers", "loot"):
-            self.enterContext(patch(f"typeclasses.{module}.delay"))
-        for module in ("commands.character", "typeclasses.zone_rooms", "world.lifecycle", "typeclasses.loot", "typeclasses.enemies", "typeclasses.explorers"):
+            self.enterContext(patch("world.shared_combat.delay" if module == "enemies" else f"typeclasses.{module}.delay"))
+        for module in ("commands.character", "typeclasses.zone_rooms", "world.lifecycle", "typeclasses.loot", "world.shared_combat", "typeclasses.explorers"):
             self.enterContext(patch(f"{module}.time", return_value=100))
 
     def duplicate_enemies(self):
         enemy = room_enemies(self.char1.location)[0]
         for _ in range(2):
             # identity를 생성 경계에 선언하여 실물과 B-1 번호를 함께 확정한다.
-            obj = create_object(Enemy, key=enemy.key, location=enemy.location,
-                                attributes=[("enemy_id", enemy.db.enemy_id)])
-            obj.db.max_hp = obj.db.hp = enemy.db.max_hp
+            obj = create_object(Actor, key=enemy.key, location=enemy.location,
+                                attributes=[("actor_id", enemy.actor_id), ("combat_state", {"hp": enemy.max_hp})])
+            obj.initialize_shared_combat()
+            obj.max_hp = obj.hp = enemy.max_hp
         return room_enemies(self.char1.location)
 
     def entry(self, item="scrap", quantity=3, player=None, party=None):
@@ -160,7 +162,7 @@ class TargetIntegrationTests(WorldCommandTest):
 
     def look(self, args):
         command = Look()
-        command.caller, command.args = self.char1, args
+        command.caller, command.session, command.args = self.char1, self.session, args
         with patch.object(self.char1, "msg") as message:
             command.func()
         return message.call_args.args[0]
@@ -168,7 +170,7 @@ class TargetIntegrationTests(WorldCommandTest):
     def test_default_index_all_look_and_attack_ordering(self):
         enemies = self.duplicate_enemies()
         for index, enemy in enumerate(enemies, 1):
-            enemy.db.hp = index * 5
+            enemy.hp = index * 5
         self.assertIn("체력 5 /", self.look(enemies[0].key))
         self.assertNotIn("체력 10 /", self.look(enemies[0].key))
         self.assertIn("체력 10 /", self.look(enemies[0].key + " 2"))
