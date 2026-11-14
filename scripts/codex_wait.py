@@ -228,6 +228,21 @@ def start(request):
     return await_ready(request, duplicate)
 
 
+def wait_for_result(root, job_id, timeout):
+    """기존 Job의 결과를 제한 시간 동안 기다린다."""
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise ValueError("결과 대기 시간은 0보다 큰 유한한 초 단위 값이어야 합니다.")
+    deadline = time.monotonic() + timeout
+    while True:
+        value = status(root, job_id)
+        if value["status"] in watch.TERMINAL:
+            return value
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return {"job_id": job_id, "status": value["status"], "wait_expired": True}
+        time.sleep(min(1, remaining))
+
+
 def cancel(root, job_id):
     value = status(root, job_id)
     if value["status"] in {"STARTING", "RUNNING"}:
@@ -258,15 +273,22 @@ def main(argv=None):
         command.add_argument("--ready-timeout", type=float, default=5)
     for name in ("status", "cancel"):
         commands.add_parser(name).add_argument("job_id")
+    wait = commands.add_parser("wait", help="기존 Job의 최종 결과를 기다립니다.")
+    wait.add_argument("job_id")
+    wait.add_argument("--timeout", type=float, default=45, help="이번 결과 대기의 최대 초 (기본 45)")
     args = vars(parser.parse_args(argv))
     try:
         root = watch.repository_root(Path.cwd())
         kind = args.pop("kind")
         if kind in {"status", "cancel"}:
             result = (status if kind == "status" else cancel)(root, args["job_id"])
+        elif kind == "wait":
+            result = wait_for_result(root, args["job_id"], args["timeout"])
         else:
             result = start(validate_request(root, kind=kind, **args))
         print(json.dumps(result, ensure_ascii=False))
+        if kind == "wait":
+            return int(result["status"] != "PASSED")
         return 0 if result["status"] in {"STARTING", "RUNNING", "PASSED"} else 1
     except (OSError, ValueError, subprocess.SubprocessError) as error:
         print(json.dumps({"status": "ERROR", "error": str(error)}, ensure_ascii=False))

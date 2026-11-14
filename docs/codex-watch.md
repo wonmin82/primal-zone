@@ -12,13 +12,22 @@ uv run python scripts/codex_wait.py local --command test tests.test_targets --pa
 uv run python scripts/codex_wait.py local --command smoke --thread THREAD_ID
 uv run python scripts/codex_wait.py local --command smoke-full --timeout 2700
 uv run python scripts/codex_wait.py ci --thread THREAD_ID --repo wonmin82/primal-zone --run-id RUN_ID --sha FULL_SHA --attempt 1 --pr PR_NUMBER
+uv run python scripts/codex_wait.py wait JOB_ID
 uv run python scripts/codex_wait.py status JOB_ID
 uv run python scripts/codex_wait.py cancel JOB_ID
 ```
 
-`THREAD_ID`는 실제 세션 UUID 또는 정확한 세션 이름이다. 다른 사람의 세션을 지정하지 않는다. 알림이 필요 없으면 `--thread`를 생략하고 완료 후 `status`로 복구한다. 로컬 모드 기본 검사는 `test`이며 label·`--parallel`·`--reverse`는 기존 dev.py의 test 인자로만 전달한다. 임의 Shell 문자열이나 다른 dev.py 명령은 실행하지 않는다.
+`THREAD_ID`는 실제 세션 UUID 또는 정확한 세션 이름이다. 다른 사람의 세션을 지정하지 않는다. 알림이 필요 없으면 `--thread`를 생략하고 `wait`로 결과를 기다리거나 `status`로 즉시 확인한다. 로컬 모드 기본 검사는 `test`이며 label·`--parallel`·`--reverse`는 기존 dev.py의 test 인자로만 전달한다. 임의 Shell 문자열이나 다른 dev.py 명령은 실행하지 않는다.
 
 기본 제한은 test30분·smoke15분·smoke-full45분·CI45분이며 CI `--release`는 대기 제한만90분으로 정한다. Release Workflow를 실행하지 않는다. `--timeout`은 초 단위다. 부모는 기본5초(`--ready-timeout`) 안에 Worker의 실제 READY를 확인한 뒤 Job ID를 반환한다. 프로세스 생성만 성공한 상태를 READY로 간주하지 않는다. READY 뒤 검사 시작 실패는 별도 ERROR 결과다.
+
+## 같은 턴에서 결과 확인
+
+장기 검사의 결과 확인과 후속 작업을 함께 요청받았다면 Job ID와 상태를 진행 메시지로 공유한다. 독립적으로 진행할 수 있는 작업을 처리하고, 검사 결과가 필요해지면 `wait JOB_ID`를 호출한다. 도구가 실행 중인 프로세스 식별자를 반환하면 그 프로세스의 종료 출력을 확인한다.
+
+`wait`는 기존 Job을 최대 45초 동안 기다리며 `--timeout`으로 이번 대기 시간만 조절할 수 있다. 기존 상태 검증을 그대로 적용해 최종 결과를 출력한다. 최종 `PASSED`에서만 종료 코드 0을 반환한다. 대기 시간이 끝나면 현재 상태와 `wait_expired: true`를 출력하고 종료 코드 1을 반환한다. 원래 Job은 계속되므로 같은 ID로 대기를 이어간다. `status JOB_ID`는 현재 상태의 즉시 조회 및 복구에 사용한다.
+
+최종 결과에서 원래 종료 코드와 검증 기준을 확인한 뒤 요청에 포함된 실패 수정이나 다음 검증을 이어간다. 사용자가 요청한 완료 조건에 도달했거나 사용자 조치가 필요한 장애가 확인되면 최종 답변을 보낸다.
 
 ## 결과와 유효성
 
