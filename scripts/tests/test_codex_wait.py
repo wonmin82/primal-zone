@@ -181,6 +181,36 @@ class WatchTests(unittest.TestCase):
                         if group.process.poll() is None:
                             group.cleanup()
 
+    def test_wait_cli_recovers_original_job_without_notification(self):
+        script = ROOT / "scripts" / "codex_wait.py"
+        for action, expected, test_code in (("success", "PASSED", 0), ("failure", "FAILED", 7),
+                                            ("stale", "STALE", 0)):
+            with self.subTest(action=action):
+                job = self.launch(action=action, labels=[action])
+                waited = subprocess.run([sys.executable, str(script), "wait", job["job_id"], "--timeout", "5"],
+                                        cwd=self.root, capture_output=True, text=True, timeout=8)
+                self.assertEqual(waited.returncode, int(expected != "PASSED"), waited.stdout)
+                result = json.loads(waited.stdout)
+                self.assertEqual(result["job_id"], job["job_id"])
+                self.assertEqual(result["status"], expected)
+                self.assertEqual(result["exit_code"], test_code)
+                self.assertEqual(result["notification"]["status"], "NOT_REQUESTED")
+
+    def test_wait_limit_leaves_job_running_for_next_wait(self):
+        job = self.launch(action="handshake")
+        waited = subprocess.run([sys.executable, str(ROOT / "scripts" / "codex_wait.py"),
+                                 "wait", job["job_id"], "--timeout", "0.01"],
+                                cwd=self.root, capture_output=True, text=True, timeout=5)
+        self.assertEqual(waited.returncode, 1, waited.stderr)
+        self.assertEqual(json.loads(waited.stdout), {"job_id": job["job_id"], "status": "RUNNING",
+                                                     "wait_expired": True})
+        self.assertEqual(cli.status(self.root, job["job_id"])["status"], "RUNNING")
+        self.assertFalse((worker.job_directory(self.root, job["job_id"]) / "cancel").exists())
+        (self.root / "work" / "parent-exited").touch()
+        result = cli.wait_for_result(self.root, job["job_id"], 5)
+        self.assertEqual(result["status"], "PASSED")
+        self.assertEqual(result["exit_code"], 0)
+
     def test_t02_failure_and_worker_start_error_are_not_success(self):
         launched = self.launch("failure")
         final = self.completed(launched["job_id"])
