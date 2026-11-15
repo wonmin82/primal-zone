@@ -1,12 +1,17 @@
 """Issue #49 실제 영속 설치·권한·이동·관찰의 결정론적 회귀."""
 
+from contextlib import nullcontext
 from unittest.mock import Mock, patch
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from evennia import search_tag
+from evennia.objects.models import ObjectDB
+from evennia.server.signals import SIGNAL_EXIT_TRAVERSED
 from typeclasses.explorers import Explorer
 from world import doors, rules
+from world.actions.gateway import ResultStatus
+from world.actions.global_actions import invoke
 from world.bootstrap import build_world
 from world.door_entities.models import Door, DoorInstallation
 from world.door_keys import issue_key
@@ -488,6 +493,83 @@ class DoorTest(WorldCommandTest):
             self.assertTrue(door.exit_b.at_traverse(self.char1, self.rooms["hq_concourse"]))
         self.assertEqual(self.door().auto_close_at, 210)
         self.assertEqual(self.char1.present_destination.call_count, 2)
+
+    def test_gateway_exit_signal_after_committed_move_only(self):
+        origin = self.rooms["dock"]
+        destination = self.rooms["hq_concourse"]
+        exit_obj = next(obj for obj in origin.exits if obj.destination == destination)
+        self.char1.location = origin
+        self.char1.present_destination = Mock()
+        with patch.object(SIGNAL_EXIT_TRAVERSED, "send") as signal:
+            with world_change():
+                result = invoke(self.char1, self.session, "traverse", exit_id=exit_obj.pk)
+                self.assertEqual(result.status, ResultStatus.SUCCESS)
+                self.assertTrue(result.changed)
+                self.assertEqual(self.char1.location, destination)
+                signal.assert_not_called()
+            signal.assert_called_once_with(sender=exit_obj, traverser=self.char1)
+        self.assertEqual(ObjectDB.objects.values_list("db_location_id", flat=True).get(pk=self.char1.pk), destination.pk)
+
+    def test_gateway_failed_traversal_keeps_location_message_and_emits_no_signal(self):
+        origin = self.rooms["hq_concourse"]
+        ordinary = next(obj for obj in origin.exits if obj.destination == self.rooms["dock"])
+        ordinary.db.err_traverse = "이동 실패 안내"
+        cases = (
+            (self.door().exit_a, nullcontext(), nullcontext(), "문이 잠겨 있습니다. 먼저 풀어 주세요."),
+            (ordinary, patch("world.access.can_enter", return_value=False),
+             patch("world.access.entry_message", return_value="출입 조건을 충족하지 못했습니다."),
+             "출입 조건을 충족하지 못했습니다."),
+            (ordinary, patch.object(self.char1, "move_to", return_value=False), nullcontext(), "이동 실패 안내"),
+        )
+
+        for exit_obj, failure, message, expected in cases:
+            with self.subTest(exit=exit_obj.key, message=expected):
+                self.char1.msg.reset_mock()
+                with failure, message, patch.object(SIGNAL_EXIT_TRAVERSED, "send") as signal:
+                    result = invoke(self.char1, self.session, "traverse", exit_id=exit_obj.pk)
+                self.assertEqual(result.status, ResultStatus.REFUSED)
+                self.assertFalse(result.changed)
+                self.assertEqual(self.char1.location, origin)
+                self.assertIn(expected, "\n".join(str(call.args[0]) for call in self.char1.msg.call_args_list))
+                signal.assert_not_called()
+
+        ordinary.locks.add("traverse:false()")
+        ordinary.attributes.remove("err_traverse")
+        with patch.object(SIGNAL_EXIT_TRAVERSED, "send") as signal, patch.object(type(ordinary), "at_failed_traverse") as failed:
+            result = invoke(self.char1, self.session, "traverse", exit_id=ordinary.pk)
+        self.assertEqual(result.status, ResultStatus.REFUSED)
+        self.assertFalse(result.changed)
+        self.assertEqual(self.char1.location, origin)
+        failed.assert_called_once_with(self.char1)
+        signal.assert_not_called()
+
+    def test_gateway_door_signal_requires_outer_commit_and_extends_deadline_once(self):
+        door = self.opened()
+        origin = self.rooms["hq_concourse"]
+        destination = self.rooms["hq_admin_office"]
+        self.char1.present_destination = Mock()
+        before = self.char1.profile_snapshot()
+        with patch.object(SIGNAL_EXIT_TRAVERSED, "send") as signal:
+            with self.assertRaisesRegex(RuntimeError, "rollback"), world_change():
+                result = invoke(self.char1, self.session, "traverse", exit_id=door.exit_a.pk)
+                self.assertTrue(result.changed)
+                self.assertEqual(self.char1.location, destination)
+                signal.assert_not_called()
+                raise RuntimeError("rollback")
+            signal.assert_not_called()
+            self.assertEqual(self.char1.location, origin)
+            self.assertEqual(ObjectDB.objects.values_list("db_location_id", flat=True).get(pk=self.char1.pk), origin.pk)
+            self.assertIn(self.char1, origin.contents)
+            self.assertNotIn(self.char1, destination.contents)
+            self.assertEqual(self.char1.profile_snapshot(), before)
+            self.assertEqual(self.door().auto_close_at, 160)
+            self.char1.present_destination.assert_not_called()
+
+            with patch("world.doors.time", return_value=110):
+                self.raw("e")
+            self.assertEqual(self.char1.location, destination)
+            self.assertEqual(self.door().auto_close_at, 170)
+            signal.assert_called_once_with(sender=door.exit_a, traverser=self.char1)
 
     def test_multiple_players_direction_aliases_share_completion_timer(self):
         self.opened()

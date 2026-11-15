@@ -190,15 +190,20 @@ def traverse(context):
         raise rules.RuleError("출구를 이용할 수 없습니다.")
     if not selected.access(caller, "traverse"):
         if selected.db.err_traverse:
-            return ActionResult(messages=(selected.db.err_traverse,))
-        after_change(lambda: selected.at_failed_traverse(caller))
-        return ActionResult()
+            return ActionResult(ResultStatus.REFUSED, messages=(selected.db.err_traverse,))
+        selected.at_failed_traverse(caller)
+        return ActionResult(ResultStatus.REFUSED)
     origin = caller.location
-    selected.at_traverse(caller, selected.destination)
+    destination = selected.destination
+    traversed = selected.at_traverse(caller, destination)
+    # Evennia의 기본 at_traverse는 성공해도 값을 반환하지 않는다.
+    if traversed is False or caller.location == origin or caller.location != destination:
+        return ActionResult(ResultStatus.REFUSED)
+
     from evennia.server.signals import SIGNAL_EXIT_TRAVERSED
 
     after_change(lambda: SIGNAL_EXIT_TRAVERSED.send(sender=selected, traverser=caller))
-    return ActionResult(changed=caller.location != origin)
+    return ActionResult(changed=True)
 
 
 def web_combat_target(context):
