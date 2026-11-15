@@ -65,7 +65,7 @@ class BootstrapExitTests(WorldCommandTest):
         self.char1.location = retired
         self.char1.home = retired
         self.char1.db.prelogout_location = retired
-        npc = search_tag("instructor", category="primal_interactable")[0]
+        npc = search_tag("instructor", category="primal_actor_spawn")[0]
         npc.location = retired
         self.assert_conflict_preserves_database(rf"hq_concourse.*북.*#{custom.id}.*{self.rooms['dock'].key}")
         self.assertEqual(self.char1.location, retired)

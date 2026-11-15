@@ -22,125 +22,9 @@ class Look(CmdLook):
     aliases = ["본", "보", "`"]
 
     def func(self):
-        from typeclasses.exits import Exit
-        from typeclasses.loot import Corpse
-        from world.content import ITEMS
-        from world.lifecycle import reconcile_room
-        from world.target_presentation import corpse_overview
-        from world.targets import Mode, item_selector, names, parse_selector, resolve, room_objects
+        from world.actions.global_actions import invoke
 
-        name = self.args.strip()
-        observed_at = time()
-        from world.content.economy import CURRENCY
-        from world.currency import is_currency
-
-        if is_currency(name):
-            self.caller.msg(ft.compact(CURRENCY["name"], CURRENCY["description"]))
-            return
-        if name and self.caller.location:
-            from world.doors import look_door
-            try:
-                door_output = look_door(self.caller, name, observed_at)
-            except rules.RuleError as error:
-                self.caller.msg(ft.text(ft.token("error", str(error)), kind="error"))
-                return
-            if door_output is not None:
-                self.caller.msg(door_output)
-                return
-            from world.navigation import blocked_exit_message
-
-            message = blocked_exit_message(self.caller.zone, name)
-            if message:
-                self.caller.msg(ft.text(message))
-                return
-            # 실제 Exit도 같은 selector로 선택한다. 관찰만 할 때는 로컬 갱신/at_desc도 실행하지 않는다.
-            from world.targets import matching, ordered, visible
-
-            objects = ordered(obj for obj in self.caller.location.exits if visible(obj, self.caller))
-
-            try:
-                selector = parse_selector(name, [n for obj in objects for n in names(obj)])
-            except rules.RuleError:
-                selector = None  # 소지품의 실제 이름도 포함하는 기존 봐 경로에서 검증한다.
-            candidates = matching(objects, selector) if selector else []
-            if candidates and all(isinstance(obj, Exit) for obj in candidates):
-                try:
-                    selected = resolve(objects, selector, self.caller)
-                    self.caller.msg(
-                        ft.join(
-                            [obj.return_appearance(self.caller, observed_at=observed_at) for obj in selected],
-                            "\n\n",
-                        )
-                    )
-                except rules.RuleError as error:
-                    self.caller.msg(ft.token("error", str(error)))
-                return
-            reconcile_room(self.caller.location, observed_at)
-            objects = room_objects(self.caller, observed_at=observed_at)
-            profile = self.caller.profile_snapshot()
-            inventory = {
-                key: ITEMS[key]
-                for key, count in profile["inventory"].items()
-                if count > 0
-            }
-            try:
-                selector = parse_selector(
-                    name,
-                    [n for obj in objects for n in names(obj)]
-                    + [n for key, data in inventory.items() for n in (key, data["name"])],
-                )
-                if matching(objects, selector):
-                    selected = resolve(objects, selector, self.caller, observed_at=observed_at)
-                    if selector.mode == Mode.ALL and all(
-                        isinstance(obj, Corpse) for obj in selected
-                    ):
-                        output = corpse_overview(
-                            selected,
-                            self.caller,
-                            observed_at,
-                            pool=[obj for obj in objects if isinstance(obj, Corpse)],
-                        )
-                    else:
-                        output = ft.join(
-                            [self.caller.at_look(obj, observed_at=observed_at) for obj in selected],
-                            "\n\n",
-                        )
-                    self.caller.msg(output)
-                else:
-                    from world.equipment_service import (
-                        entity_runtime,
-                        resolve_item,
-                        selector_label,
-                        state_summary,
-                    )
-
-                    if entity_runtime(self.caller):
-                        from world.lighting_service import status as light_status
-
-                        item = resolve_item(self.caller, name, "봐")
-                        identity = item.definition_id
-                        detail = light_status(self.caller, item, observed_at) if ITEMS[identity].get("light_source") else state_summary(item)
-                        self.caller.msg(ft.compact(ft.token("item", selector_label(self.caller, item)),
-                                                   ITEMS[identity].get("description", "탐사 중 사용하는 물품이다."),
-                                                   detail, ITEMS[identity].get("firearm_family", "")))
-                        self.caller.push_state(observed_at=observed_at)
-                        return
-                    identity = item_selector(name, inventory, "봐")
-                    from world import lighting
-
-                    status = lighting.status(profile, identity, observed_at) if ITEMS[identity].get("light_source") else None
-                    self.caller.msg(view.item_appearance(identity, light_status=status))
-            except rules.RuleError as error:
-                self.caller.msg(ft.token("error", str(error)))
-                self.caller.push_state(observed_at=observed_at)
-                return
-            self.caller.push_state(observed_at=observed_at)
-            return
-        if self.caller.location:
-            self.caller.msg(self.caller.at_look(self.caller.location, observed_at=observed_at))
-        else:
-            super().func()
-        self.caller.push_state(observed_at=observed_at)
+        return invoke(self.caller, self.session, "look", query=self.args)
 
 
 class Exits(GameCommand):
@@ -204,17 +88,10 @@ class Help(GameCommand):
     key = "도움"
     aliases = ["도움말"]
 
-    def run(self):
-        from commands.account_commands import Who
-        from commands.help_pages import help_page, root_page
-        from commands.registry import COMMANDS
+    def func(self):
+        from world.actions.global_actions import invoke
 
-        commands = [cls for cls in [*COMMANDS, Who] if getattr(cls, "input_style", None)]
-        query = (getattr(self, "args", "") or "").strip()
-        page = help_page(query, commands) if query else root_page()
-        if page is None:
-            raise rules.RuleError("등록된 명령을 찾을 수 없습니다. '도움'에서 확인하세요.")
-        self.caller.msg(page)
+        return invoke(self.caller, self.session, "help", query=getattr(self, "args", "") or "")
 
 
 class Status(GameCommand):
@@ -225,9 +102,10 @@ class Status(GameCommand):
     key = "점수"
     aliases = ["상태", "상", "점"]
 
-    def run(self):
-        self.caller.msg(view.status(self.caller.key, self.caller.profile()))
-        self.caller.push_state()
+    def func(self):
+        from world.actions.global_actions import invoke
+
+        return invoke(self.caller, self.session, "status")
 
 
 class Quest(GameCommand):

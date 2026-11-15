@@ -5,7 +5,6 @@ from random import Random
 from unittest.mock import Mock, patch
 
 from evennia import create_object
-from typeclasses.enemies import room_enemies
 from typeclasses.explorers import Explorer
 from typeclasses.interactables import INTERACTABLES
 from typeclasses.loot import Corpse, room_loot
@@ -14,6 +13,7 @@ from world import rules
 from world.bootstrap import build_world, stale_definitions
 from world.content import ENEMIES, REGIONS, ROOM_REGION, ROOMS
 from world.content.integrity import errors
+from world.shared_combat import room_enemies
 
 from tests.base import WorldCommandTest
 
@@ -31,28 +31,37 @@ class RegionTests(WorldCommandTest):
             player.push_state = Mock()
             self.connect_character(player)
         for module in ("enemies", "explorers", "loot"):
-            self.enterContext(patch(f"typeclasses.{module}.delay"))
+            self.enterContext(patch("world.shared_combat.delay" if module == "enemies" else f"typeclasses.{module}.delay"))
+
+    def override_actor_hp(self, actor_id, hp):
+        from dataclasses import replace
+
+        from world.actors import content
+
+        actor = content.ACTORS[actor_id]
+        definition = replace(actor, profiles={"combat": {**actor.profiles["combat"], "hp": hp}})
+        return patch.object(content, "ACTORS", {**content.ACTORS, actor_id: definition})
 
     def test_bootstrap_definition_hp_keeps_full_idle_and_scaled_encounters(self):
-        enemy = next(obj for obj in room_enemies(self.rooms["ridge"]) if obj.db.enemy_id == "alpha")
-        current_id = enemy.db.enemy_id
+        enemy = next(obj for obj in room_enemies(self.rooms["ridge"]) if obj.combat_definition_id == "alpha")
+        current_id = enemy.combat_definition_id
         for hp, old_max, new_max, combat, expected in ((190, 190, 270, False, 270), (150, 190, 270, False, 150),
                                                        (270, 270, 190, False, 190), (150, 270, 190, False, 150),
                                                        (190, 190, 270, True, 190)):
             with self.subTest(hp=hp, old_max=old_max, new_max=new_max, combat=combat):
-                enemy.db.hp, enemy.db.max_hp = hp, old_max
+                enemy.hp, enemy.max_hp = hp, old_max
                 enemy.db.state = "alive"
                 enemy.db.combatants = [self.char1.pk] if combat else []
                 enemy.db.scaling_participants = 1
-                with patch.dict(ENEMIES[current_id], hp=new_max):
+                with self.override_actor_hp(current_id, new_max):
                     build_world()
-                self.assertEqual((enemy.db.hp, enemy.db.max_hp), (expected, new_max))
-        enemy.db.hp, enemy.db.max_hp = 200, 297
+                self.assertEqual((enemy.hp, enemy.max_hp), (expected, new_max))
+        enemy.hp, enemy.max_hp = 200, 297
         enemy.db.combatants = [self.char1.pk, self.char2.pk]
         enemy.db.scaling_participants = 2
-        with patch.dict(ENEMIES[current_id], hp=170):
+        with self.override_actor_hp(current_id, 170):
             build_world()
-        self.assertEqual((enemy.db.hp, enemy.db.max_hp, enemy.db.scaling_participants), (200, 297, 2))
+        self.assertEqual((enemy.hp, enemy.max_hp, enemy.db.scaling_participants), (200, 297, 2))
 
     def test_content_integrity_and_stable_first_region(self):
         self.assertEqual(errors(INTERACTABLES), [])
@@ -90,7 +99,7 @@ class RegionTests(WorldCommandTest):
     def test_bootstrap_updates_static_content_without_resetting_runtime(self):
         room = self.rooms["jungle_road"]
         enemy = room_enemies(room)[0]
-        enemy.db.hp = 7
+        enemy.hp = 7
         enemy.db.state = "respawning"
         enemy.db.respawn_at = 999999
         corpse = Corpse.from_enemy(
@@ -137,7 +146,7 @@ class RegionTests(WorldCommandTest):
             interactables,
         )
         self.assertEqual(
-            (enemy.id, enemy.db.hp, enemy.db.state, enemy.db.respawn_at),
+            (enemy.id, enemy.hp, enemy.db.state, enemy.db.respawn_at),
             (identity, 7, "respawning", 999999),
         )
         self.assertEqual(room_loot(room)[0].id, corpse.id)
@@ -146,20 +155,20 @@ class RegionTests(WorldCommandTest):
 
     def test_bootstrap_syncs_enemy_max_hp_without_healing(self):
         enemy = room_enemies(self.rooms["jungle_road"])[0]
-        self.assertEqual(enemy.db.max_hp, 105)
-        enemy.db.hp = 37
-        with patch.dict(ENEMIES["shellback"], {"hp": 100}):
+        self.assertEqual(enemy.max_hp, 105)
+        enemy.hp = 37
+        with self.override_actor_hp("shellback", 100):
             build_world()
-            self.assertEqual((enemy.db.max_hp, enemy.db.hp), (100, 37))
-        enemy.db.hp = 95
-        with patch.dict(ENEMIES["shellback"], {"hp": 80}):
+            self.assertEqual((enemy.max_hp, enemy.hp), (100, 37))
+        enemy.hp = 95
+        with self.override_actor_hp("shellback", 80):
             build_world()
-            self.assertEqual((enemy.db.max_hp, enemy.db.hp), (80, 80))
+            self.assertEqual((enemy.max_hp, enemy.hp), (80, 80))
 
     def test_bootstrap_syncs_respawning_and_engaged_enemy_without_reset(self):
         enemy = room_enemies(self.rooms["jungle_road"])[0]
         enemy.db.state = "respawning"
-        enemy.db.hp = 0
+        enemy.hp = 0
         enemy.db.respawn_at = 999999
         enemy.db.claim = "player:123"
         enemy.db.claim_last_activity = 100
@@ -170,17 +179,17 @@ class RegionTests(WorldCommandTest):
         enemy.db.next_attack_at = 102.5
         enemy.db.last_activity = 100
         before = (
-            enemy.db.state, enemy.db.hp, enemy.db.respawn_at, enemy.db.claim,
+            enemy.db.state, enemy.hp, enemy.db.respawn_at, enemy.db.claim,
             enemy.db.claim_last_activity, enemy.db.combatants, enemy.db.contribution,
             enemy.db.threat, enemy.db.enemy_round, enemy.db.next_attack_at,
             enemy.db.last_activity,
         )
-        with patch.dict(ENEMIES["shellback"], {"hp": 100}):
+        with self.override_actor_hp("shellback", 100):
             build_world()
-            self.assertEqual(enemy.db.max_hp, 100)
+            self.assertEqual(enemy.max_hp, 100)
             self.assertEqual(
                 (
-                    enemy.db.state, enemy.db.hp, enemy.db.respawn_at, enemy.db.claim,
+                    enemy.db.state, enemy.hp, enemy.db.respawn_at, enemy.db.claim,
                     enemy.db.claim_last_activity, enemy.db.combatants, enemy.db.contribution,
                     enemy.db.threat, enemy.db.enemy_round, enemy.db.next_attack_at,
                     enemy.db.last_activity,
@@ -188,10 +197,10 @@ class RegionTests(WorldCommandTest):
                 before,
             )
         enemy.db.state = "alive"
-        enemy.db.hp = 37
-        with patch.dict(ENEMIES["shellback"], {"hp": 110}):
+        enemy.hp = 37
+        with self.override_actor_hp("shellback", 110):
             build_world()
-            self.assertEqual((enemy.db.max_hp, enemy.db.hp), (110, 37))
+            self.assertEqual((enemy.max_hp, enemy.hp), (110, 37))
             self.assertEqual((enemy.db.combatants, enemy.db.claim), ([self.char1.id], "player:123"))
 
     def test_bootstrap_syncs_exit_and_interactable_and_audits_removed_exit(self):
@@ -215,25 +224,22 @@ class RegionTests(WorldCommandTest):
 
     def test_spawn_can_move_without_changing_its_persistent_identity(self):
         edge_enemy = room_enemies(self.rooms["jungle_edge"])[0]
-        edge_enemy.db.hp = 9
-        with (
-            patch.dict(ROOMS["jungle_edge"], {"enemies": []}),
-            patch.dict(
-                ROOMS["jungle_road"],
-                {
-                    "enemies": ["shellback", "dartclaw"],
-                    "spawn_ids": {"dartclaw": "jungle_edge:dartclaw"},
-                },
-            ),
-        ):
+        from dataclasses import replace
+
+        from world.actors import content
+
+        edge_enemy.hp = 9
+        spawn = content.ACTOR_SPAWNS[edge_enemy.spawn_id]
+        moved = replace(spawn, room_id="jungle_road")
+        with patch.object(content, "ACTOR_SPAWNS", {**content.ACTOR_SPAWNS, spawn.id: moved}):
             self.assertEqual(errors(INTERACTABLES), [])
             build_world()
             self.assertEqual(edge_enemy.location, self.rooms["jungle_road"])
-            self.assertEqual(edge_enemy.db.hp, 9)
+            self.assertEqual(edge_enemy.hp, 9)
             self.assertEqual(edge_enemy.db.spawn_id, "jungle_edge:dartclaw")
         build_world()
         self.assertEqual(edge_enemy.location, self.rooms["jungle_edge"])
-        self.assertEqual(edge_enemy.db.hp, 9)
+        self.assertEqual(edge_enemy.hp, 9)
 
     def test_region_gate_objectives_and_reconnect(self):
         self.char1.location = self.rooms["ridge"]
@@ -287,7 +293,7 @@ class RegionTests(WorldCommandTest):
         self.char1.execute_cmd("늪지 보급품 조사")
         self.assertEqual(self.char1.profile()["inventory"]["bandage"], 5)
         boss = room_enemies(self.rooms["jungle_nest"])[0]
-        self.assertEqual(boss.db.enemy_id, "jungle_apex")
+        self.assertEqual(boss.combat_definition_id, "jungle_apex")
         self.assertEqual(ENEMIES["jungle_apex"]["combat_mode"], "public")
         third = create_object(Explorer, key="세번째탐사자")
         third.push_state = Mock()
@@ -307,7 +313,7 @@ class RegionTests(WorldCommandTest):
             self.char2.id: {"damage": 10, "last_action_at": 105, "group": f"party:{party.id}"},
             third.id: {"damage": 10, "last_action_at": 105, "group": f"party:{party.id}"},
         }
-        boss.db.hp = 0
+        boss.hp = 0
         boss.finish_death(self.char1, now=105, rng=Random(1))
         self.assertEqual([p.profile()["xp"] for p in (self.char1, self.char2, third)], [93, 31, 31])
         self.assertEqual(
@@ -349,7 +355,7 @@ class RegionTests(WorldCommandTest):
         self.char1.location = self.rooms["jungle_edge"]
         enemy = room_enemies(self.rooms["jungle_edge"])[0]
         enemy.engage(self.char1, now=100)
-        enemy.db.hp = 1
+        enemy.hp = 1
         enemy.receive_attack(self.char1, now=102.5, rng=Random(3))
         self.assertEqual(self.char1.profile()["xp"], ENEMIES["dartclaw"]["xp"])
         self.assertEqual(len(room_loot(self.rooms["jungle_edge"])), 1)

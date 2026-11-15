@@ -9,7 +9,6 @@ from django.core.exceptions import ValidationError
 from django.test import override_settings
 from evennia import search_tag
 from evennia.utils.dbserialize import deserialize
-from typeclasses.enemies import room_enemies
 from typeclasses.explorers import Explorer
 from typeclasses.loot import Corpse
 from world import (
@@ -23,6 +22,7 @@ from world import (
 )
 from world.content import ENEMIES, ITEMS
 from world.content.item_mapping import BOSS_REWARDS
+from world.dialogue_actions import invoke
 from world.incinerator_service import incinerate
 from world.interactable_services import generator as repair_generator
 from world.interactable_services import supplycache
@@ -30,6 +30,7 @@ from world.item_entities import api
 from world.item_entities.models import ItemEntity, ItemSequence
 from world.loot_entities.models import CurrencyLoot
 from world.loot_service import loot_snapshot, pickup
+from world.shared_combat import room_enemies
 
 from tests.base import WorldCommandTest
 
@@ -40,9 +41,10 @@ class Phase6RuntimeTests(WorldCommandTest):
     def setUp(self):
         super().setUp()
         self.rooms = self.world_rooms()
+        self.dialogue_session = self.connect_character(self.char1)
         self.enterContext(patch("typeclasses.explorers.time", return_value=time()))
         for module in ("explorers", "enemies", "loot"):
-            self.enterContext(patch(f"typeclasses.{module}.delay"))
+            self.enterContext(patch("world.shared_combat.delay" if module == "enemies" else f"typeclasses.{module}.delay"))
         for player in (self.char1, self.char2):
             player.push_state = Mock()
             player.schedule_recovery = Mock()
@@ -60,7 +62,10 @@ class Phase6RuntimeTests(WorldCommandTest):
                 ItemSequence.objects.get(pk=1).last_value, self.char1.db.active_weapon_item_id, self.char1.db.active_light_item_id)
 
     def obj(self, identity):
-        return search_tag(identity, category="primal_interactable")[0]
+        from world.actors.content import ACTOR_SPAWNS
+
+        category = "primal_actor_spawn" if identity in ACTOR_SPAWNS else "primal_interactable"
+        return search_tag(identity, category=category)[0]
 
     def assert_archived_items(self):
         saved = deserialize(self.char1.db.profile)
@@ -269,16 +274,16 @@ class Phase6RuntimeTests(WorldCommandTest):
             player.location = boss.location
             boss.engage(player, now=100)
         boss.receive_attack(self.char1, now=102.5, rng=Random(1))
-        old_hp = boss.db.hp
-        self.assertEqual(boss.db.max_hp, 170)
+        old_hp = boss.hp
+        self.assertEqual(boss.max_hp, 170)
         boss.receive_attack(self.char2, now=102.5, rng=Random(1))
         damage = boss.db.contribution[self.char2.pk]["damage"]
-        self.assertEqual(boss.db.max_hp, int(170 * 1.75))
-        self.assertEqual(boss.db.hp, old_hp + int(170 * 1.75) - 170 - damage)
+        self.assertEqual(boss.max_hp, int(170 * 1.75))
+        self.assertEqual(boss.hp, old_hp + int(170 * 1.75) - 170 - damage)
         self.assertEqual(ENEMIES["alpha"]["attack"], 17)
         self.char2.leave_combat(now=103)
         boss.scale_boss(103)
-        self.assertEqual(boss.db.max_hp, int(170 * 1.75))
+        self.assertEqual(boss.max_hp, int(170 * 1.75))
 
 
     def test_owner_changing_transfer_rejects_unique_but_preserves_personal_storage(self):
@@ -364,8 +369,6 @@ class Phase6RuntimeTests(WorldCommandTest):
         self.assertEqual(scrap.quantity, 7)
 
     def test_final_report_messages_only_announce_actual_unique_grants(self):
-        from world.npc_dialogue import say
-
         for quest, npc_id, credential in (("radio_tower", "commander", "outpost_supply_pass"),
                                           ("deep_jungle", "pathfinder", "special_supply_pass")):
             npc = self.obj(npc_id)
@@ -373,17 +376,17 @@ class Phase6RuntimeTests(WorldCommandTest):
             self.char1.change(lambda p: p["quests"][quest].update(started=True, boss_defeated=True, **({"generator_fixed": True} if quest == "radio_tower" else {})))
             identity = BOSS_REWARDS[quest]
             with patch.object(self.char1, "msg") as output:
-                say(self.char1, npc.key + "에게 보고")
+                invoke(self.char1, self.dialogue_session, message=npc.key + "에게 보고")
                 message = str(output.call_args_list)
                 for token in (ITEMS[identity]["name"], ITEMS[credential]["name"], "경험치", "칩", "3개"):
                     self.assertIn(token, message)
                 output.reset_mock()
                 with self.assertRaises(rules.RuleError):
-                    say(self.char1, npc.key + "에게 보고")
+                    invoke(self.char1, self.dialogue_session, message=npc.key + "에게 보고")
                 self.assertNotIn(ITEMS[identity]["name"], str(output.call_args_list))
                 api.delete_item(api.items_owned_by(self.char1).get(definition_id=credential), operation="burn")
                 output.reset_mock()
-                say(self.char1, npc.key + "에게 재발급")
+                invoke(self.char1, self.dialogue_session, message=npc.key + "에게 재발급")
                 message = str(output.call_args_list)
                 self.assertIn("재발급", message)
                 self.assertNotIn(ITEMS[identity]["name"], message)
@@ -391,8 +394,6 @@ class Phase6RuntimeTests(WorldCommandTest):
 
 
     def test_existing_entitlements_do_not_repeat_cache_parts_or_report_credential(self):
-        from world.npc_dialogue import say
-
         cache = self.obj("supply_cache")
         self.char1.location = cache.location
         with patch.object(self.char1, "msg") as output:
@@ -405,7 +406,7 @@ class Phase6RuntimeTests(WorldCommandTest):
         commander = self.obj("commander")
         self.char1.location = commander.location
         with patch.object(self.char1, "msg") as output:
-            say(self.char1, commander.key + "에게 보고")
+            invoke(self.char1, self.dialogue_session, message=commander.key + "에게 보고")
             message = str(output.call_args_list)
             self.assertIn("능선포식자표식", message)
             self.assertNotIn("전초 보급구역 출입증", message)

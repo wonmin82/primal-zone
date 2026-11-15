@@ -7,7 +7,6 @@ from unittest.mock import Mock, patch
 from evennia import create_object, search_tag
 from evennia.objects.models import ObjectDB
 from evennia.objects.objects import DefaultCharacter
-from typeclasses.enemies import room_enemies
 from typeclasses.exits import Exit
 from typeclasses.explorers import Explorer
 from typeclasses.interactables import INTERACTABLES, action_objects, instructor_for
@@ -15,8 +14,9 @@ from world.bootstrap import CATEGORY, EXIT_CATEGORY, build_world, stale_definiti
 from world.content import ROOMS
 from world.content.directions import DIRECTION_ALIASES
 from world.content.headquarters import ROOMS as HQ_ROOMS
+from world.shared_combat import room_enemies
 
-from tests.base import GameCommandTest
+from tests.base import GameCommandTest, managed_category
 
 
 class HeadquartersTests(GameCommandTest):
@@ -32,7 +32,7 @@ class HeadquartersTests(GameCommandTest):
             player.push_state = Mock()
             self.connect_character(player)
         for module in ("enemies", "explorers", "loot"):
-            self.enterContext(patch(f"typeclasses.{module}.delay"))
+            self.enterContext(patch("world.shared_combat.delay" if module == "enemies" else f"typeclasses.{module}.delay"))
 
     def open_admin_door(self):
         # 이 검사는 이동 그래프/접속을 확인한다. 최초 LOCKED 정책을 우회하지 않고
@@ -113,7 +113,7 @@ class HeadquartersTests(GameCommandTest):
     def test_bootstrap_reuses_rooms_exits_services_and_preserves_player(self):
         rooms = {zone: room.id for zone, room in self.rooms.items()}
         exits = {(zone, exit_obj.key): exit_obj.id for zone, room in self.rooms.items() for exit_obj in room.exits}
-        services = {key: search_tag(key, category="primal_interactable")[0].id for key in INTERACTABLES}
+        services = {key: search_tag(key, category=managed_category(key))[0].id for key in INTERACTABLES}
         self.char1.location = self.rooms["storage_room"]
         before = deepcopy(self.char1.profile())
         count = ObjectDB.objects.count()
@@ -125,7 +125,7 @@ class HeadquartersTests(GameCommandTest):
         self.assertEqual(self.char1.location, self.rooms["storage_room"])
         self.assertEqual(self.char1.profile(), before)
         for key, identity in services.items():
-            obj = search_tag(key, category="primal_interactable")[0]
+            obj = search_tag(key, category=managed_category(key))[0]
             self.assertEqual(obj.id, identity)
             self.assertEqual(obj.location, self.rooms[INTERACTABLES[key]["room"]])
         self.assertEqual(stale_definitions(), [])
@@ -205,7 +205,7 @@ class HeadquartersTests(GameCommandTest):
         for zone, identities in expected.items():
             self.assertEqual({key for key, definition in INTERACTABLES.items() if definition["room"] == zone}, identities)
             for key in identities:
-                self.assertEqual(search_tag(key, category="primal_interactable")[0].location, self.rooms[zone])
+                self.assertEqual(search_tag(key, category="primal_actor_spawn")[0].location, self.rooms[zone])
         npcs = [obj for room in [self.rooms[z] for z in HQ_ROOMS] + [self.rooms["dock"]]
                 for obj in action_objects(room) if obj.semantic_role == "npc"]
         self.assertEqual(len(npcs), 21)
@@ -227,9 +227,9 @@ class HeadquartersTests(GameCommandTest):
 
     def test_dock_keeps_commander_without_support_services(self):
         self.char1.location = self.rooms["dock"]
-        self.assertEqual(search_tag("commander", category="primal_interactable")[0].location, self.rooms["dock"])
+        self.assertEqual(search_tag("commander", category="primal_actor_spawn")[0].location, self.rooms["dock"])
         for key in ("instructor", "personal_locker", "shared_container"):
-            self.assertNotEqual(search_tag(key, category="primal_interactable")[0].location, self.rooms["dock"])
+            self.assertNotEqual(search_tag(key, category=managed_category(key))[0].location, self.rooms["dock"])
         self.assertIsNone(instructor_for(self.char1))
         before = self.char1.profile()
         for raw in ("목록", "붕대 사", "절단마체테 사", "강화방호조끼 사"):

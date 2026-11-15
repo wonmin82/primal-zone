@@ -72,7 +72,7 @@ class AccessTests(Phase5Test):
                                             ("support_5f_e2", "outpost_weapon", "reserved_weapon")):
             self.assertEqual(ROOMS[corridor]["exits"]["북"], active)
             self.assertEqual(ROOMS[corridor]["exits"]["남"], reserved)
-            self.assertEqual(len(search_tag(active + "_shopkeeper", category="primal_interactable")), 1)
+            self.assertEqual(len(search_tag(active + "_shopkeeper", category="primal_actor_spawn")), 1)
             self.assertFalse(any(obj.is_typeclass("typeclasses.interactables.Shopkeeper")
                                  for obj in self.rooms[reserved].contents))
         self.assertEqual(self.obj("incinerator").location, self.rooms["salvage_office"])

@@ -33,12 +33,10 @@ def at_server_start():
     This is called every time the server starts up, regardless of
     how it was shut down.
     """
-    from world.bootstrap import build_world
-    from world.item_runtime import initialize_fresh, require_runtime
+    from world.bootstrap import runtime_world_issues
+    from world.world_format import require_ready
 
-    initialize_fresh()
-    require_runtime()
-    build_world()
+    require_ready(runtime_world_issues)
     from evennia import create_script
     from typeclasses.scripts import WorldLifecycle
     from world.lifecycle import reconcile_world

@@ -2,12 +2,11 @@
 
 from time import time
 
-from typeclasses.enemies import room_enemies
 from typeclasses.loot import room_loot
 from typeclasses.parties import invitation_for, online, party_for, request_for, sessions_ready
 
-from world.content import ENEMIES
 from world.multiplayer import object_by_id
+from world.shared_combat import room_enemies
 from world.targets import labels, room_objects
 
 
@@ -49,10 +48,19 @@ def multiplayer_state(player, now=None):
     loot = loot_controls(player, now, objects)
     from world.actions.loot_presentation import all_controls
     from world.actions.manifest import get_index
-    from world.actions.presentation import action_controls, provider_controls
+    from world.actions.presentation import action_controls, provider_controls, reference_json
+    from world.selection_numbers.api import descriptor
 
     action_rows = action_controls(player, get_index(), now)
     loot_actions = all_controls(player, now, objects)
+
+    def combat_action(enemy, action_id):
+        return {"action_id": action_id, "variant": "adapter",
+                "roles": {"subject": [reference_json(descriptor(enemy).reference)]},
+                "arguments": {
+                    "generation": enemy.db.combat_generation or 0,
+                    "lifecycle": enemy.db.combat_lifecycle or 0,
+                }}
 
     def object_actions(obj):
         from world.actions.room_npc_presentation import sort_controls
@@ -113,17 +121,19 @@ def multiplayer_state(player, now=None):
         "enemies": [
             {
                 "id": enemy.id,
-                "enemy_id": enemy.db.enemy_id,
+                "enemy_id": enemy.combat_definition_id,
                 "name": enemy.key,
                 "label": controls[enemy.id],
                 "attack_command": controls[enemy.id] + " 공격",
+                "attack_action": combat_action(enemy, "global.attack"),
+                "party_attack_action": combat_action(enemy, "global.party_attack"),
                 "look_command": controls[enemy.id] + " 봐",
-                "hp": enemy.db.hp,
-                "max_hp": enemy.db.max_hp,
+                "hp": enemy.hp,
+                "max_hp": enemy.max_hp,
                 "state": enemy.db.state,
                 "claim": enemy.db.claim,
                 "combatants": list(enemy.db.combatants),
-                "mode": ENEMIES[enemy.db.enemy_id]["combat_mode"],
+                "mode": enemy.combat_profile["combat_mode"],
                 "can_attack": enemy.can_attack(player),
             }
             for enemy in enemies if controls[enemy.id] is not None
@@ -153,7 +163,7 @@ def multiplayer_state(player, now=None):
                 "look_command": controls[obj.id] + " 봐",
             }
             for obj in objects
-            if isinstance(obj, ActionObject) and controls[obj.id] is not None
+            if (isinstance(obj, ActionObject) or dialogue_supports(obj)) and controls[obj.id] is not None
         ] + door_controls(player, now, action_rows=action_rows),
         "party": party_data,
         "invitation": {

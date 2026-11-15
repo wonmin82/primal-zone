@@ -213,19 +213,18 @@ class Phase3ItemDoorTests(NativeItemTest):
         """P3-R23: 상태를 대입하는 대용 대신 실제 사망·관찰·reconcile 경로."""
         from random import Random
 
-        from typeclasses.enemies import Enemy
+        from world.actors.spawn import create_actor
         from world.content import ENEMIES
         from world.lifecycle import reconcile_room
 
         identity = next(key for key, value in ENEMIES.items() if not value.get("boss"))
         self.connect_character(self.char1)
-        with patch("typeclasses.enemies.delay"), patch("typeclasses.loot.delay"), \
+        with patch("world.shared_combat.delay"), patch("typeclasses.loot.delay"), \
                 patch("world.lifecycle.time", return_value=100):
-            enemy = create_object(Enemy, key="회귀 적", location=self.char1.location,
-                                  attributes=[("enemy_id", identity)])
+            enemy = create_actor(identity, self.char1.location, name="회귀 적")
             ref = descriptor(enemy).reference
             self.assertEqual(number_for(ref), 1)
-            enemy.db.hp = 0
+            enemy.hp = 0
             enemy.finish_death(self.char1, now=100, rng=Random(1))
             self.assertEqual(enemy.db.state, "respawning")
             self.assertEqual(number_for(ref), 1)
@@ -243,7 +242,7 @@ class Phase3ItemDoorTests(NativeItemTest):
             deadline = enemy.db.respawn_at
             reconcile_room(self.char1.location, now=deadline)
             self.assertEqual(enemy.db.state, "alive")
-            self.assertEqual(enemy.db.hp, ENEMIES[identity]["hp"])
+            self.assertEqual(enemy.hp, ENEMIES[identity]["hp"])
             self.assertEqual(number_for(ref), 1)
             self.assertIsNone(number_for(corpse_ref))
             self.assertEqual(verify(), ())
@@ -252,19 +251,18 @@ class Phase3ItemDoorTests(NativeItemTest):
 class Phase3EnemySelectionTests(NativeItemTest):
     def setUp(self):
         super().setUp()
-        from typeclasses.enemies import Enemy
+        from world.actors.spawn import create_actor
         from world.content import ENEMIES
 
-        for module in ("commands.character", "world.lifecycle", "typeclasses.enemies", "world.observation"):
+        for module in ("commands.character", "world.lifecycle", "world.shared_combat", "world.observation"):
             self.enterContext(patch(module + ".time", return_value=100))
-        for module in ("typeclasses.enemies", "typeclasses.loot"):
+        for module in ("world.shared_combat", "typeclasses.loot"):
             self.enterContext(patch(module + ".delay"))
         self.connect_character(self.char1)
         identity = next(key for key, value in ENEMIES.items() if not value.get("boss"))
-        self.enemies = [create_object(Enemy, key="회귀 사냥감", location=self.char1.location,
-                                     attributes=[("enemy_id", identity)]) for _ in range(2)]
+        self.enemies = [create_actor(identity, self.char1.location, name="회귀 사냥감") for _ in range(2)]
         for enemy in self.enemies:
-            enemy.db.hp = enemy.db.max_hp = ENEMIES[identity]["hp"]
+            enemy.hp = enemy.max_hp = ENEMIES[identity]["hp"]
         self.refs = [descriptor(enemy).reference for enemy in self.enemies]
         self.assertEqual([number_for(ref) for ref in self.refs], [1, 2])
 
@@ -279,7 +277,7 @@ class Phase3EnemySelectionTests(NativeItemTest):
         from random import Random
 
         first, second = self.enemies
-        first.db.hp = 0
+        first.hp = 0
         first.finish_death(self.char1, now=100, rng=Random(1))
         self.assertEqual(first.db.state, "respawning")
         before = self.char1.profile_snapshot()
@@ -342,8 +340,8 @@ class Phase3EnemySelectionTests(NativeItemTest):
             start.assert_called_once_with(second)
 
     def test_fresh_bootstrap_enemy_is_numbered_before_observation_and_rebuild_keeps_id(self):
-        from typeclasses.enemies import room_enemies
         from world.bootstrap import build_world
+        from world.shared_combat import room_enemies
 
         rooms = build_world()
         enemy = room_enemies(rooms["grass"])[0]
@@ -356,14 +354,13 @@ class Phase3EnemySelectionTests(NativeItemTest):
         self.assertEqual(list(SelectionNumber.objects.order_by("pk").values()), before)
 
     def test_shared_alias_and_number_across_enemy_groups_refuses_public_attack(self):
-        from typeclasses.enemies import Enemy
+        from world.actors.spawn import create_actor
 
         first, second = self.enemies
         second.delete()
-        other = create_object(Enemy, key="다른 사냥감", location=first.location,
-                              attributes=[("enemy_id", first.db.enemy_id),
-                                          ("selection_group_id", "p3:other-enemies")])
-        other.db.hp = other.db.max_hp = first.db.max_hp
+        other = create_actor(first.combat_definition_id, first.location, name="다른 사냥감",
+                             selection_group="p3:other-enemies")
+        other.hp = other.max_hp = first.max_hp
         first.aliases.add("공유 사냥감")
         other.aliases.add("공유 사냥감")
         self.assertEqual([number_for(descriptor(obj).reference) for obj in (first, other)], [1, 1])
@@ -400,9 +397,9 @@ class Phase3EnemySelectionTests(NativeItemTest):
             attack.assert_called_once_with(self.char1, second)
 
     def test_public_say_deleted_npc_number_is_not_replaced_by_remaining_two(self):
-        from typeclasses.interactables import Commander
+        from world.actors.spawn import create_actor
 
-        npcs = [create_object(Commander, key="윤대장", location=self.char1.location) for _ in range(2)]
+        npcs = [create_actor("commander", self.char1.location) for _ in range(2)]
         self.assertEqual([number_for(descriptor(npc).reference) for npc in npcs], [1, 2])
         npcs[0].delete()
         with patch("world.npc_dialogue.execute") as execute:
@@ -434,9 +431,9 @@ class Phase3EnemySelectionTests(NativeItemTest):
             start.assert_not_called()
 
     def test_public_say_numeric_real_npc_name_is_not_broadcast_as_unknown_target(self):
-        from typeclasses.interactables import Commander
+        from world.actors.spawn import create_actor
 
-        npc = create_object(Commander, key="관측 책임자 1", location=self.char1.location)
+        npc = create_actor("commander", self.char1.location, name="관측 책임자 1")
         with patch("world.npc_dialogue.execute") as execute:
             self.command("관측 책임자 1에게 임무 말")
             self.assertEqual(execute.call_count, 1)
@@ -459,7 +456,7 @@ class Phase3EnemySelectionTests(NativeItemTest):
         index = get_index()
         with patch("world.observation.context_for", side_effect=AssertionError("불필요한 Enemy 관찰")), \
                 patch("world.actions.resolver.role_records", wraps=role_records) as discovered:
-            self.assertEqual(provided(self.char1, index), ())
+            self.assertTrue(all(reference is None for reference, _ in provided(self.char1, index)))
         kinds = set(discovered.call_args.args[1].kinds)
         self.assertNotIn(ReferenceKind.ENEMY, kinds)
         # 현재 공용 Binding 전체가 선언한 Provider kind를 빠짐없이 관찰한다.
@@ -484,10 +481,10 @@ class Phase3EnemySelectionTests(NativeItemTest):
         counters = list(NumberScope.objects.order_by("pk").values())
         cache = {}
         role_records(self.char1, RoleDefinition("provider", (ReferenceKind.OBJECT,)), cache=cache)
-        enemy_role = RoleDefinition("subject", (ReferenceKind.ENEMY,))
+        enemy_role = RoleDefinition("subject", (ReferenceKind.ACTOR,))
         self.assertEqual({record.reference for record in role_records(self.char1, enemy_role, cache=cache)}, set(self.refs))
-        self.assertEqual(records_for(self.char1, ReferenceKind.ENEMY),
-                         records_for(self.char1, kinds=(ReferenceKind.ENEMY,)))
+        self.assertEqual(records_for(self.char1, ReferenceKind.ACTOR),
+                         records_for(self.char1, kinds=(ReferenceKind.ACTOR,)))
         self.assertEqual(list(SelectionNumber.objects.order_by("pk").values()), before)
         self.assertEqual(list(NumberScope.objects.order_by("pk").values()), counters)
 
@@ -564,7 +561,6 @@ class Phase3EnemySelectionTests(NativeItemTest):
         self.assertEqual(labels([room]), {room.pk: room.key})
 
     def test_missing_npc_number_hides_command_guides_and_never_talks_to_other_npc(self):
-        from typeclasses.interactables import Commander
         from world.npc_dialogue import available_intents, discovery, keyword_guide
         from world.observation import context_for
         from world.room_hints import render
@@ -572,8 +568,11 @@ class Phase3EnemySelectionTests(NativeItemTest):
         from world.target_presentation import selector_hint
 
         self.char1.location.db.zone_id = "dock"
-        npcs = [create_object(Commander, key="윤대장", location=self.char1.location,
-                              tags=[("commander", "primal_interactable")]) for _ in range(2)]
+        from world.actors.spawn import create_actor
+
+        npcs = [create_actor("commander", self.char1.location) for _ in range(2)]
+        for npc in npcs:
+            npc.tags.add("commander", category="primal_actor_spawn")
         self.assertEqual(render(context_for(self.char1, observed_at=100)),
                          "'윤대장 1에게 안녕 · '윤대장 2에게 안녕")
         normal_hint = selector_hint(npcs, "npc")
@@ -707,22 +706,23 @@ class Phase3VisibilityTests(NativeItemTest, WorldCommandTest):
         from random import Random
 
         from evennia import create_script
-        from typeclasses.enemies import Enemy, room_enemies
         from typeclasses.scripts import WorldLifecycle
         from world import environment, lighting_service
+        from world.actors.spawn import create_actor
         from world.content import ENEMIES
         from world.environment_state import snapshot_for
+        from world.shared_combat import room_enemies
         from world.state import multiplayer_state
 
         for module in ("commands.character", "typeclasses.zone_rooms", "world.lifecycle",
-                       "typeclasses.enemies", "typeclasses.loot", "world.observation"):
+                       "world.shared_combat", "typeclasses.loot", "world.observation"):
             self.enterContext(patch(module + ".time", return_value=100))
-        for module in ("typeclasses.enemies", "typeclasses.loot"):
+        for module in ("world.shared_combat", "typeclasses.loot"):
             self.enterContext(patch(module + ".delay"))
         self.connect_character(self.char1)
         self.char1.location = self.world_rooms()["grass"]
         original = room_enemies(self.char1.location)[0]
-        identity, name = original.db.enemy_id, original.key
+        identity, name = original.combat_definition_id, original.key
         # 역사적 build_world fixture는 생성 뒤 enemy_id를 설정한다. 이 테스트의
         # 두 실물은 처음부터 identity를 선언해 native 번호 발급 경계를 거친다.
         for obj in list(room_enemies(self.char1.location)):
@@ -748,21 +748,20 @@ class Phase3VisibilityTests(NativeItemTest, WorldCommandTest):
         # 오류는 사용자 입력을 반향할 수 있으므로 서로 다른 이름의 문구를
         # 비교하지 않는다. 정확히 같은 입력의 실물 부재/어둠 속 존재를 비교한다.
         absent_diagnostics = {number: command(f"{name} {number} 봐") for number in (1, 2)}
-        objects = [create_object(Enemy, key=name, location=self.char1.location,
-                                 attributes=[("enemy_id", identity)]) for _ in range(2)]
+        objects = [create_actor(identity, self.char1.location, name=name) for _ in range(2)]
         for obj in objects:
-            obj.db.hp = obj.db.max_hp = ENEMIES[identity]["hp"]
+            obj.hp = obj.max_hp = ENEMIES[identity]["hp"]
         enemy, other = objects
         refs = [descriptor(obj).reference for obj in objects]
         numbers = [number_for(ref) for ref in refs]
         self.assertEqual(numbers, [1, 2])
-        saved_numbers = list(SelectionNumber.objects.filter(kind="enemy").order_by("pk").values())
-        saved_counters = list(NumberScope.objects.filter(group_id__startswith="enemy:").order_by("pk").values())
+        saved_numbers = list(SelectionNumber.objects.filter(kind="actor").order_by("pk").values())
+        saved_counters = list(NumberScope.objects.filter(group_id__startswith="actor:").order_by("pk").values())
         hidden_room = str(self.char1.location.return_appearance(self.char1, observed_at=100))
         hidden_look = command("봐")
         hidden_web = multiplayer_state(self.char1, now=100)
         self.assertEqual(hidden_web["enemies"], [])
-        self.assertEqual(records_for(self.char1, ReferenceKind.ENEMY), ())
+        self.assertEqual(records_for(self.char1, ReferenceKind.ACTOR), ())
         for output in (hidden_room, hidden_look, str(hidden_web)):
             self.assertNotIn(enemy.key, output)
             self.assertNotIn(f"{enemy.key} 2", output)
@@ -784,5 +783,5 @@ class Phase3VisibilityTests(NativeItemTest, WorldCommandTest):
             self.assertEqual(shown[str(obj.pk)]["label"], f"{enemy.key} {number}")
             self.assertIn(enemy.key, command(f"{enemy.key} {number} 봐"))
             self.assertEqual(number_for(ref), number)
-        self.assertEqual(list(SelectionNumber.objects.filter(kind="enemy").order_by("pk").values()), saved_numbers)
-        self.assertEqual(list(NumberScope.objects.filter(group_id__startswith="enemy:").order_by("pk").values()), saved_counters)
+        self.assertEqual(list(SelectionNumber.objects.filter(kind="actor").order_by("pk").values()), saved_numbers)
+        self.assertEqual(list(NumberScope.objects.filter(group_id__startswith="actor:").order_by("pk").values()), saved_counters)

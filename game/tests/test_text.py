@@ -5,16 +5,10 @@ import evennia
 from commands.character import Help, Look
 from evennia.objects.objects import DefaultCharacter
 from evennia.utils.ansi import parse_ansi, strip_raw_ansi
-from typeclasses.enemies import room_enemies
 from typeclasses.explorers import Explorer
 from typeclasses.interactables import (
-    AttributeTrainer,
     Container,
     Incinerator,
-    SettlementOfficer,
-    Shopkeeper,
-    SkillTrainer,
-    TrainingManager,
     action_objects,
 )
 from typeclasses.loot import room_loot, take_loot
@@ -25,6 +19,7 @@ from world import text as ft
 from world.content import ITEMS, ROOMS, SHOP_CATALOGS
 from world.interactable_services import generator as repair_generator
 from world.progression import ATTRIBUTES, SKILLS
+from world.shared_combat import room_enemies
 
 from tests.base import WorldCommandTest
 
@@ -45,7 +40,7 @@ class SemanticTextTests(WorldCommandTest):
             player.push_state = Mock()
             self.connect_character(player)
         for module in ("enemies", "explorers", "loot"):
-            self.enterContext(patch(f"typeclasses.{module}.delay"))
+            self.enterContext(patch("world.shared_combat.delay" if module == "enemies" else f"typeclasses.{module}.delay"))
 
     def test_room_roles_come_from_objects_and_real_exits(self):
 
@@ -84,22 +79,24 @@ class SemanticTextTests(WorldCommandTest):
                     # 보관 가능한 소지 실물이 있을 때만 보관 방법을 안내한다.
                     self.assertIn("넣어", tokens(output, "command"))
                     self.assertTrue(set(tokens(output, "command")) <= set(obj.actions))
-                elif isinstance(obj, SettlementOfficer):
+                elif getattr(obj, "capability_active", lambda _: False)("settlement"):
                     self.assertEqual(tokens(output, "command"), ["환율", "교환", "교환", "교환", "교환"])
-                elif isinstance(obj, Shopkeeper):
+                elif getattr(obj, "capability_active", lambda _: False)("shop"):
                     self.assertEqual(tokens(output, "command"), ["목록", "사", "가치", "팔아"])
-                elif isinstance(obj, SkillTrainer):
+                elif getattr(obj, "capability_active", lambda _: False)("training") and obj.db.skill_id:
                     self.assertEqual(tokens(output, "command"), ["배워"])
                     self.assertIn(SKILLS[obj.db.skill_id]["name"] + " 배워", output)
-                elif isinstance(obj, AttributeTrainer):
+                elif getattr(obj, "capability_active", lambda _: False)("training") and obj.db.attribute_id:
                     self.assertEqual(tokens(output, "command"), ["배분"])
                     self.assertIn(ATTRIBUTES[obj.db.attribute_id]["name"] + " 배분", output)
-                elif isinstance(obj, TrainingManager):
+                elif getattr(obj, "capability_active", lambda _: False)("training"):
                     self.assertEqual(tokens(output, "command"), ["재분배", "재분배", "재훈련"])
                 elif isinstance(obj, Incinerator):
                     self.assertEqual(tokens(output, "command"), ["소각"])
+                elif getattr(obj, "capability_active", lambda _: False)("medical"):
+                    self.assertIn("회복", tokens(output, "command"))
                 else:
-                    self.assertEqual(tokens(output, "command"), list(obj.actions))
+                    self.assertEqual(tokens(output, "command"), list(getattr(obj, "actions", ())))
                 from dataclasses import replace
 
                 from world.selection_numbers.api import descriptor, label, number_for
@@ -114,7 +111,7 @@ class SemanticTextTests(WorldCommandTest):
         self.char1.location = self.rooms["grass"]
         enemy = room_enemies(self.char1.location)[0]
         command = Look()
-        command.caller, command.args = self.char1, "어린 청소룡"
+        command.caller, command.session, command.args = self.char1, self.session, "어린 청소룡"
         with patch.object(self.char1, "msg") as message:
             command.func()
         output = message.call_args.args[0]
@@ -164,9 +161,9 @@ class SemanticTextTests(WorldCommandTest):
         from commands.registry import COMMANDS
 
         command = Help()
-        command.caller = self.char1
+        command.caller, command.session = self.char1, self.session
         with patch.object(self.char1, "msg") as message:
-            command.run()
+            command.func()
         output = message.call_args.args[0]
         from commands.help_pages import HELP_CATEGORIES, category_page
 
@@ -256,7 +253,11 @@ class SemanticTextTests(WorldCommandTest):
         def output(command, caller, args=""):
             command.caller, command.args = caller, args
             with patch.object(caller, "msg") as message:
-                command.run()
+                if isinstance(command, Help):
+                    command.session = caller.sessions.all()[0]
+                    command.func()
+                else:
+                    command.run()
             return message.call_args.args[0]
 
         self.assertIn("소속 일행 없음", output(PartyCommand(), self.char2))
@@ -282,8 +283,7 @@ class SemanticTextTests(WorldCommandTest):
         detail = output(Help(), self.char1, "능")
         for data in ATTRIBUTES.values():
             self.assertIn(data["description"], detail)
-        with self.assertRaises(rules.RuleError):
-            output(Help(), self.char1, "<script>")
+        self.assertIn("등록된 명령을 찾을 수 없습니다.", output(Help(), self.char1, "<script>"))
         cmdset = CmdSet(self.char1)
         cmdset.add(Help())
         self.assertEqual(cmdparser("공격 도움말", cmdset, self.char1)[0][1], "공격")
@@ -305,7 +305,7 @@ class SemanticTextTests(WorldCommandTest):
         enemy.engage(self.char2, now=100)
         enemy.receive_attack(self.char2, now=102.5, rng=Random(1))
         enemy.engage(self.char1, now=100)
-        enemy.db.hp = 1
+        enemy.hp = 1
         rng = Mock()
         rng.randint.return_value = 1
         rng.random.return_value = 0
@@ -337,16 +337,17 @@ class SemanticTextTests(WorldCommandTest):
         self.assertEqual(rng.random.call_count, 3)
 
     def test_npc_quest_rewards_and_player_movement_keep_roles(self):
-        from typeclasses.interactables import Commander, Generator
+        from typeclasses.actors import Actor
+        from typeclasses.interactables import Generator
 
         commander = next(
-            obj for obj in action_objects(self.rooms["dock"]) if isinstance(obj, Commander)
+            obj for obj in self.rooms["dock"].contents if isinstance(obj, Actor) and obj.actor_id == "commander"
         )
-        from world.npc_dialogue import say
+        from world.dialogue_actions import invoke
 
         with patch.object(self.char1, "msg") as message:
-            say(self.char1, "윤대장에게 임무")
-            say(self.char1, "윤대장에게 수락")
+            invoke(self.char1, self.session, message="윤대장에게 임무")
+            invoke(self.char1, self.session, message="윤대장에게 수락")
             spoken = [call.args[0] for call in message.call_args_list
                       if call.args and isinstance(call.args[0], ft.Text) and tokens(call.args[0], "npc")]
         self.assertEqual(tokens(spoken[0], "npc"), [commander.key])
@@ -376,12 +377,12 @@ class SemanticTextTests(WorldCommandTest):
         )
 
     def test_web_wire_preserves_literal_untrusted_text_without_markup(self):
-        from world.npc_dialogue import say
+        from world.dialogue_actions import invoke
 
         value = "<img src=x onerror=alert(1)> |r붕대|n $You()\x1b[31m"
         message = ft.text(ft.token("player", value), ": ", value, kind="chat")
         with patch.object(self.char1, "msg") as messages:
-            say(self.char1, "윤대장에게 임무")
+            invoke(self.char1, self.session, message="윤대장에게 임무")
         emitted = [call.args[0] for call in messages.call_args_list if call.args]
         self.assertTrue(all(isinstance(item, ft.Text) for item in emitted))
         self.assertEqual([item.kind for item in emitted], ["chat", "chat", "event", "event"])

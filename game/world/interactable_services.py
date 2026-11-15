@@ -83,7 +83,9 @@ def doctor(provider, caller, action, args):
         if not args.isascii() or not args.isdecimal() or len(args) > 7 or not 1 <= int(args) <= rules.MAX_TREAT_HP:
             raise rules.RuleError('회복량은 1~1,000,000 사이의 정수로 입력하세요.')
         args = int(args)
-    quoted_hp, quoted_cost = provider.quote(caller, args)
+    quoted_hp, quoted_cost = rules.treatment_quote(
+        caller.profile_snapshot(), args, safe=ROOMS.get(caller.zone, {}).get("safe", False),
+    )
     notify(caller, f'요청 HP {quoted_hp} 회복 예상 비용: {quoted_cost}칩 (실행 시 재계산)')
     from world.multiplayer import world_change
     with world_change():

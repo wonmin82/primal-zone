@@ -20,27 +20,25 @@ def setup(credentials):
 
     evennia._init()
     from evennia.accounts.models import AccountDB
-    from evennia.server.initial_setup import create_objects
     from evennia.server.models import ServerConfig
     from evennia.utils.create import create_account
+    from server.conf.at_initial_setup import prepare_world
     from world import rules
-    from world.bootstrap import build_world
-    from world.item_runtime import initialize_fresh
+    from world.bootstrap import get_room
 
     if AccountDB.objects.exists():
         raise RuntimeError("fixture는 비어 있는 새 smoke DB에서만 생성할 수 있습니다.")
     admin = AccountDB.objects.create_superuser("admin", "", None)
     admin.set_unusable_password()
     admin.save()
-    create_objects()
-    initialize_fresh()
-    rooms = build_world()
+    prepare_world()
+    staging = get_room("staging_room")
+    dock = get_room("dock")
     for name, password in credentials:
         # 공개 가입을 호출하지 않는다. 정상 Account/Character API와 일반 Player 권한을 쓴다.
         account = create_account(name, email="", password=password, typeclass=settings.BASE_ACCOUNT_TYPECLASS,
                                  permissions=settings.PERMISSION_ACCOUNT_DEFAULT)
-        character, errors = account.create_character(location=rooms["staging_room"],
-                                                      home=rooms["dock"])
+        character, errors = account.create_character(location=staging, home=dock)
         if errors or character is None:
             raise RuntimeError("smoke fixture character 생성에 실패했습니다.")
         from world.equipment_service import unequip_item

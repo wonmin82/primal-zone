@@ -23,23 +23,29 @@ def render(context):
         identity = hint["target"]
         if "intent" in hint:
             from world.dialogue_intents import intents_for
-            from world.npc_dialogue import supports
+            from world.npc_dialogue import supports, type_name
             from world.targets import labels
 
             dialogue_labels = labels([obj for obj in objects if supports(obj)
                                       and obj.access(context.viewer, "view") and can_perceive(obj, context)])
             for obj in objects:
-                if not obj.tags.has(identity, category="primal_interactable") or not can_perceive(obj, context):
+                if obj.pk not in dialogue_labels or not (
+                    obj.tags.has(identity, category="primal_actor_spawn")
+                    or obj.tags.has(identity, category="primal_interactable")
+                ):
                     continue
-                intent = next((item for item in intents_for(INTERACTABLES[identity]["typeclass"])
+                intent = next((item for item in intents_for(type_name(obj))
                                if item.intent_id == hint["intent"]), None)
                 if intent and dialogue_labels.get(obj.id) is not None:
                     rendered.append(f"'{dialogue_labels[obj.id]}에게 {intent.keyword}")
             continue
         action = hint["action"]
-        if any(obj.tags.has(identity, category="primal_interactable")
+        from world.actions.presentation import provider_verbs
+
+        if any((obj.tags.has(identity, category="primal_interactable")
+                or obj.tags.has(identity, category="primal_actor_spawn"))
                and can_perceive(obj, context)
-               and action in obj.current_actions(context.viewer, context.observed_at, verb_key=action)
+               and action in provider_verbs(context.viewer, obj, context.observed_at, verb_key=action)
                for obj in objects):
             rendered.append(f"{INTERACTABLES[identity]['name']} {action}")
     if rendered:

@@ -5,12 +5,12 @@ from django.test import TransactionTestCase
 from evennia import create_object
 from evennia.objects.models import ObjectDB
 from evennia.objects.objects import DefaultRoom
-from typeclasses.enemies import Enemy
 from typeclasses.exits import Exit
 from typeclasses.explorers import Explorer
 from typeclasses.interactables import ActionObject
 from typeclasses.loot import Corpse, DroppedLoot
 from world.actions.schema import ReferenceKind
+from world.actors.spawn import create_actor
 from world.content import ENEMIES
 from world.door_entities.models import Door
 from world.item_entities.api import create_item, merge_stack, move_item, move_item_tree, split_stack
@@ -125,13 +125,12 @@ class SelectionNumberTests(GameCommandTest):
         self.assertEqual(number_for(descriptor(self.facility()).reference), 3)
 
     def test_enemy_state_and_respawn_preserve_same_number(self):
-        enemy = create_object(Enemy, key="시험 적", location=self.room1,
-                              attributes=[("enemy_id", next(iter(ENEMIES)))])
+        enemy = create_actor(next(iter(ENEMIES)), self.room1, name="시험 적")
         before = descriptor(enemy).reference
         number = number_for(before)
         with world_change():
             enemy.db.state = "respawning"
-            enemy.db.hp = 0
+            enemy.hp = 0
             schedule_object(enemy.pk)
         self.assertEqual(number_for(before), number)
         with world_change():

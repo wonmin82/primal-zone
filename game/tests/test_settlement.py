@@ -7,8 +7,9 @@ from evennia import create_object, search_tag
 from evennia.objects.models import ObjectDB
 from evennia.utils.dbserialize import deserialize
 from typeclasses.explorers import Explorer
-from typeclasses.interactables import INTERACTABLES, SettlementOfficer
+from typeclasses.interactables import INTERACTABLES
 from world import rules
+from world.actors.content import ACTOR_SPAWNS
 from world.bootstrap import build_world, stale_definitions
 from world.content import ITEMS, SALVAGE_CREDIT_RATE
 from world.content.integrity import errors
@@ -29,7 +30,7 @@ class SettlementFixture:
         self.enterContext(patch("typeclasses.explorers.time", return_value=100))
         super().setUp()
         self.rooms = self.world_rooms()
-        self.officer = search_tag("salvage_officer", category="primal_interactable")[0]
+        self.officer = search_tag("salvage_officer", category="primal_actor_spawn")[0]
         for player in (self.char1, self.char2):
             player.location = self.rooms["salvage_office"]
             player.home = self.rooms["dock"]
@@ -42,7 +43,7 @@ class SettlementFixture:
             player.db.profile = profile
             use_item_entities(player)
         for module in ("enemies", "explorers", "loot"):
-            self.enterContext(patch(f"typeclasses.{module}.delay"))
+            self.enterContext(patch("world.shared_combat.delay" if module == "enemies" else f"typeclasses.{module}.delay"))
 
     def command(self, value):
         with patch.object(self.char1, "msg") as output:
@@ -99,9 +100,9 @@ class SettlementCommandsTests(SettlementFixture, WorldCommandTest):
             self.assertEqual(self.char1.profile(), before)
 
     def test_multiple_officers_require_target_and_hidden_does_not_count(self):
-        extra = create_object(SettlementOfficer, key=self.officer.key, location=self.char1.location,
+        extra = create_object(type(self.officer), key=self.officer.key, location=self.char1.location,
                               aliases=["정산관"],
-                              attributes=[("selection_group_id", descriptor(self.officer).group_id)])
+                              attributes=[("actor_id", self.officer.actor_id), ("selection_group_id", descriptor(self.officer).group_id)])
         self.prepare()
         before = deepcopy(self.char1.profile())
         for raw in ("환율", "회수부품 교환"):
@@ -211,7 +212,7 @@ class SettlementWorldTests(SettlementFixture, WorldCommandTest):
         api.create_item("scrap", quantity=3, location_kind="personal_storage", owner_object=self.char2)
         native_before = list(ItemEntity.objects.order_by("sequence").values("pk", "quantity", "location_kind", "owner_object_id"))
         profiles = [deepcopy(player.profile()) for player in (self.char1, self.char2)]
-        identities = {key: search_tag(key, category="primal_interactable")[0].id for key in INTERACTABLES}
+        identities = {key: search_tag(key, category="primal_actor_spawn" if key in ACTOR_SPAWNS else "primal_interactable")[0].id for key in INTERACTABLES}
         box = search_tag("shared_container", category="primal_interactable")[0]
         box.db.items = {"scrap": 4, "bandage": 2}
         count = ObjectDB.objects.count()
@@ -219,7 +220,7 @@ class SettlementWorldTests(SettlementFixture, WorldCommandTest):
             build_world()
             self.assertEqual(ObjectDB.objects.count(), count)
             for key, identity in identities.items():
-                objs = search_tag(key, category="primal_interactable")
+                objs = search_tag(key, category="primal_actor_spawn" if key in ACTOR_SPAWNS else "primal_interactable")
                 self.assertEqual([obj.id for obj in objs], [identity])
                 self.assertEqual(objs[0].location, self.rooms[INTERACTABLES[key]["room"]])
             self.assertEqual(self.officer.aliases.all(), ["정산관"])

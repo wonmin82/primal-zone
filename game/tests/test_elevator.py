@@ -20,6 +20,7 @@ class ElevatorTests(WorldCommandTest):
         for player in (self.char1, self.char2):
             player.location = self.rooms["hq_concourse"]
             player.push_state = Mock()
+            self.connect_character(player)
 
     def test_six_landings_and_destinations_are_actual_exits(self):
         for label, landing, _ in HQ_LANDINGS:

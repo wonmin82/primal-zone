@@ -4,7 +4,6 @@ from unittest.mock import Mock, patch
 
 from evennia import create_object, search_tag
 from evennia.utils.dbserialize import deserialize
-from typeclasses.enemies import Enemy, room_enemies
 from typeclasses.explorers import Explorer
 from typeclasses.interactables import Container
 from typeclasses.loot import DroppedLoot, room_loot, take_loot
@@ -15,6 +14,7 @@ from world.item_entities import api
 from world.item_entities.models import ItemEntity
 from world.item_transfers import transfer
 from world.selection_numbers.api import descriptor
+from world.shared_combat import room_enemies
 from world.state import multiplayer_state
 from world.targets import Mode, TargetSelector, parse_relation, parse_selector, stack_selector
 
@@ -33,7 +33,7 @@ class ItemInteractionFixture(WorldCommandTest):
             player.location = self.rooms["storage_room"]
             player.push_state = Mock()
         for module in ("enemies", "explorers", "loot"):
-            self.enterContext(patch(f"typeclasses.{module}.delay"))
+            self.enterContext(patch("world.shared_combat.delay" if module == "enemies" else f"typeclasses.{module}.delay"))
         self.box = search_tag("shared_container", category="primal_interactable")[0]
         self.locker = search_tag("personal_locker", category="primal_interactable")[0]
 
@@ -72,9 +72,10 @@ class ItemInteractionTests(ItemInteractionFixture):
     def test_attack_alias_default_index_and_all_cardinality(self):
         self.char1.location = self.rooms["trail"]
         enemy = room_enemies(self.char1.location)[0]
-        duplicate = create_object(Enemy, key=enemy.key, location=enemy.location,
-                                  attributes=[("enemy_id", enemy.db.enemy_id)])
-        duplicate.db.hp = duplicate.db.max_hp = enemy.db.max_hp
+        duplicate = create_object(type(enemy), key=enemy.key, location=enemy.location,
+                                  attributes=[("actor_id", enemy.actor_id),
+                                              ("combat_state", {"hp": enemy.max_hp})])
+        duplicate.initialize_shared_combat()
         for action in ("공격", "때려"):
             self.command(enemy.key + " " + action)
             self.assertEqual(self.char1.combat_target(), enemy)
@@ -238,9 +239,9 @@ class ItemInteractionTests(ItemInteractionFixture):
         self.command(enemy.key + " 때려")
         self.assertEqual(self.char1.combat_target(), enemy)
         damage, outcome = rules.player_attack(
-            profile, enemy.db.enemy_id, 100, 2.5, Mock(randint=Mock(return_value=0))
+            profile, enemy.combat_definition_id, 100, 2.5, Mock(randint=Mock(return_value=0))
         )
-        self.assertEqual(damage, max(1, 7 - ENEMIES[enemy.db.enemy_id]["defense"]))
+        self.assertEqual(damage, max(1, 7 - ENEMIES[enemy.combat_definition_id]["defense"]))
         output = view.outgoing_attack(profile, enemy.key, outcome, damage)
         self.assertIn("맨손", output)
         self.char1.leave_combat()

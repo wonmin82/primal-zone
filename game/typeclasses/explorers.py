@@ -8,7 +8,7 @@ from django.db import transaction
 from evennia.objects.objects import DefaultCharacter
 from evennia.utils import delay
 from evennia.utils.dbserialize import deserialize
-from world import recovery, rules
+from world import recovery, rules, shared_combat
 from world import text as ft
 from world.access import can_enter, entry_message
 from world.content import (
@@ -534,87 +534,39 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             self.ndb.command_output_depth -= 1
 
     def combat_target(self):
-        from world.multiplayer import object_by_id
-
-        from typeclasses.enemies import Enemy
-
-        enemy = object_by_id(self.profile_snapshot().get("combat_target"))
-        return enemy if enemy and enemy.is_typeclass(Enemy, exact=True) else None
+        return shared_combat.combat_target(self)
 
     def combat_snapshot(self):
-        enemy = self.combat_target()
-        if not enemy or enemy.db.state != "alive":
-            return None
-        return {
-            "id": enemy.id,
-            "enemy": enemy.db.enemy_id,
-            "name": enemy.key,
-            "hp": enemy.db.hp,
-            "max_hp": enemy.db.max_hp,
-            "round": enemy.db.enemy_round,
-            "state": enemy.db.state,
-            "telegraph": rules.boss_telegraph(enemy.db.enemy_id, enemy.db.enemy_round),
-        }
+        return shared_combat.combat_snapshot(self)
 
     def start_combat(self, enemy_id):
-        from world.lifecycle import reconcile_room
-
-        reconcile_room(self.location)
-        from typeclasses.enemies import room_enemies
-
-        enemy = enemy_id if enemy_id in room_enemies(self.location) else next(
-            (obj for obj in room_enemies(self.location) if obj.db.enemy_id == enemy_id), None
-        )
-        if not enemy:
-            raise rules.RuleError("이곳에는 공격할 수 있는 상대가 없습니다.")
-        enemy.engage(self)
-        message = ft.text(
-                ft.named("hostile", enemy.key, "과/와"),
-                " 교전을 시작했다. 기본 공격은 2.5초마다 이어진다.",
-        )
-        after_change(lambda: self.msg(message))
-        after_change(self.push_state)
+        return shared_combat.start_combat(self, enemy_id)
 
     def leave_combat(self, now=None):
-        from world.multiplayer import world_change
+        return shared_combat.leave_combat(self, now=now)
 
-        with world_change():
-            enemy = self.combat_target()
-            if enemy:
-                enemy.remove_combatant(self, now=now)
-            after_change(self.stop_combat_timer)
-            profile = self.profile()
-            if profile.get("combat_target"):
-                self.accrue_recovery(profile, now)
-                profile.update(combat_target=None, queued_action="attack", insight=None, heal_target=None)
-                self.save_profile(profile)
+    def _combat_reservation(self):
+        return shared_combat.combat_reservation(self)
 
     def schedule_combat(self):
-        if (
-            not self.ndb.combat_task
-            and self.sessions.count()
-            and self.profile().get("combat_target")
-        ):
-            remaining = max(0.05, self.profile()["next_attack_at"] - time())
-            self.ndb.combat_task = delay(remaining, self.combat_tick)
+        if not self.sessions.count():
+            return
+        reservation = self._combat_reservation()
+        if self.ndb.combat_task and self.ndb.combat_reservation != reservation:
+            self.stop_combat_timer()
+        if reservation[0] and not self.ndb.combat_task:
+            self.ndb.combat_reservation = reservation
+            self.ndb.combat_task = delay(max(0.05, reservation[2] - time()), self.combat_tick, *reservation)
 
     def stop_combat_timer(self):
         task = self.ndb.combat_task
         self.ndb.combat_task = None
+        self.ndb.combat_reservation = None
         if task:
             task.remove()
 
-    def combat_tick(self):
-        self.ndb.combat_task = None
-        if not self.sessions.count():
-            self.leave_combat()
-            return
-        self.resolve_combat_round()
-        self.schedule_combat()
+    def combat_tick(self, target_id, generation, due_at):
+        return shared_combat.player_combat_tick(self, target_id, generation, due_at, now=time())
 
     def resolve_combat_round(self, rng=None, now=None):
-        enemy = self.combat_target()
-        if enemy:
-            enemy.receive_attack(self, now=now, rng=rng)
-        else:
-            self.leave_combat()
+        return shared_combat.resolve_combat_round(self, rng=rng, now=now)

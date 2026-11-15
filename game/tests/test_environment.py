@@ -9,7 +9,6 @@ from django.template.loader import render_to_string
 from django.test import SimpleTestCase
 from evennia import create_object, create_script
 from evennia.utils.dbserialize import deserialize
-from typeclasses.enemies import room_enemies
 from typeclasses.explorers import Explorer
 from typeclasses.interactables import INTERACTABLES, Container
 from typeclasses.loot import Corpse
@@ -25,6 +24,7 @@ from world.item_entities import api
 from world.item_entities.models import ItemEntity
 from world.lifecycle import reconcile_world
 from world.multiplayer import world_change
+from world.shared_combat import room_enemies
 from world.state import multiplayer_state
 
 from tests.base import WorldCommandTest
@@ -35,7 +35,7 @@ class EnvironmentTests(WorldCommandTest):
 
     def setUp(self):
         super().setUp()
-        for module in ("typeclasses.enemies", "typeclasses.explorers", "typeclasses.loot"):
+        for module in ("world.shared_combat", "typeclasses.explorers", "typeclasses.loot"):
             self.enterContext(patch(module + ".delay"))
         self.enterContext(patch("commands.character.time", return_value=100))
         self.rooms = self.world_rooms()

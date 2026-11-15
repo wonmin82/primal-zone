@@ -35,7 +35,7 @@ def snapshot():
     from evennia import search_tag
     from evennia.utils.dbserialize import deserialize
     from server.conf.smoke_startstop import owned_items, owned_loot
-    from typeclasses.enemies import Enemy
+    from typeclasses.actors import Actor
     from typeclasses.explorers import Explorer
     from typeclasses.loot import Corpse, DroppedLoot
     from world.bootstrap import stale_definitions
@@ -47,7 +47,7 @@ def snapshot():
         result = {
             "observed_at": observed_at,
             "loot_births": {str(enemy.pk): deserialize(enemy.db.smoke_loot_births) or []
-                            for enemy in Enemy.objects.all()},
+                            for enemy in Actor.objects.all() if enemy.supports_shared_combat},
             "players": {player.key: {"profile": player.profile_snapshot(), "zone": player.zone,
                                       "home": player.home.db.zone_id, "id": player.id,
                                       "active_weapon": player.db.active_weapon_item_id,
@@ -58,7 +58,7 @@ def snapshot():
             "facilities": deserialize(script.db.facilities),
             "clock": deserialize(script.db.environment)["clock"],
             "enemies": {str(enemy.id): {"state": enemy.db.state, "combatants": list(enemy.db.combatants or []),
-                                        "claim": deserialize(enemy.db.claim), "room": enemy.db_location_id} for enemy in Enemy.objects.all()},
+                                        "claim": deserialize(enemy.db.claim), "room": enemy.db_location_id} for enemy in Actor.objects.all() if enemy.supports_shared_combat},
             "loot": {str(obj.id): owned_loot(obj)
                      for model in (Corpse, DroppedLoot) for obj in model.objects.all()},
             "stale": stale_definitions(),

@@ -36,6 +36,7 @@ from evennia.settings_default import *  # noqa: F403
 SERVERNAME = "원시구역"
 GAME_SLOGAN = "사냥하고, 강해지고, 잊힌 섬을 탐험하세요."
 BASE_CHARACTER_TYPECLASS = "typeclasses.explorers.Explorer"
+INITIAL_SETUP_MODULE = "server.conf.at_initial_setup"
 LANGUAGE_CODE = "ko"
 TIME_ZONE = "Asia/Seoul"
 # 게임 접속 서비스는 모든 IPv4 인터페이스에서 받는다. AMP 내부 연결은 loopback을 유지한다.
@@ -72,7 +73,8 @@ INPUT_FUNC_MODULES = ["evennia.server.inputfuncs", "server.conf.primal_inputfunc
 COMMAND_PARSER = "server.conf.cmdparser.cmdparser"
 ACTION_CONTENT_PACKAGES = ("world.actions.room_npc_content", "world.actions.item_shared_content",
                            "world.actions.item_equipment_content", "world.actions.storage_content",
-                           "world.actions.firearm_lighting_content", "world.actions.loot_content")  # M01/M02 운영 Cutover.
+                           "world.actions.firearm_lighting_content", "world.actions.loot_content",
+                           "world.actions.global_actions", "world.dialogue_actions")  # M01/M02 운영 Cutover.
 INSTALLED_APPS = [*INSTALLED_APPS, "world.item_entities.apps.ItemEntitiesConfig"]  # noqa: F405
 INSTALLED_APPS += ["world.loot_entities.apps.LootEntitiesConfig"]
 INSTALLED_APPS += ["world.door_entities.apps.DoorEntitiesConfig"]

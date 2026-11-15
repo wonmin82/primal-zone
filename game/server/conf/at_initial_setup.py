@@ -1,19 +1,32 @@
-"""
-At_initial_setup module template
+"""Evennia 기본 실물과 Actor 월드를 Fresh DB에서 함께 확정한다."""
 
-Custom at_initial_setup method. This allows you to hook special
-modifications to the initial server startup process. Note that this
-will only be run once - when the server starts up for the very first
-time! It is called last in the startup process and can thus be used to
-overload things that happened before it.
 
-The module must contain a global function at_initial_setup().  This
-will be called without arguments. Note that tracebacks in this module
-will be QUIETLY ignored, so make sure to check it well to make sure it
-does what you expect it to.
+def prepare_world():
+    from evennia.server.initial_setup import create_objects
+    from evennia.server.models import ServerConfig
+    from world.bootstrap import build_world, runtime_world_issues
+    from world.world_format import initialize_world
 
-"""
+    def build():
+        create_objects()
+        build_world()
+        ServerConfig.objects.conf("last_initial_setup_step", "create_objects")
+
+    return initialize_world(build, lambda: runtime_world_issues(installing=True))
+
+
+def handle_setup(last_step=None):
+    from evennia.server.initial_setup import handle_setup as evennia_setup
+    from world.bootstrap import runtime_world_issues
+    from world.world_format import require_ready
+
+    if last_step is None:
+        prepare_world()
+        last_step = "create_objects"
+    else:
+        require_ready(runtime_world_issues)
+    evennia_setup(last_step)
 
 
 def at_initial_setup():
-    pass
+    """기본 초기화가 호출하는 후속 Hook."""

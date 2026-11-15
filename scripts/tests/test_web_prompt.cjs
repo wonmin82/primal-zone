@@ -270,12 +270,22 @@ test("일행 패널은 영속 담당·현재 효과·승계를 표시하고 서�
     members:[{id:1,name:"탐사자",label:"탐사자 1",online:true},{id:2,name:"<b>철수</b>",label:"철수 2",online:false}],
     defender:{id:2,name:"<b>철수</b>",online:false,active:false},can_succeed:false,
     join_requests:[{id:3,name:"민수",label:"민수 1"}],invitations:[{id:4,name:"영희"}],confirm_dissolve:false};
-  c.receive("pz_state",partyState(party,{enemies:[{label:"어린청소룡 2",name:"어린청소룡",can_attack:true,hp:20,max_hp:20}]}));
+  const target = {variant:"adapter",roles:{subject:[{kind:"actor",identity:"42",scope_id:"room:7"}]},
+    arguments:{generation:9}};
+  const attack = {...target,action_id:"global.attack"};
+  const partyAttack = {...target,action_id:"global.party_attack"};
+  c.receive("pz_state",partyState(party,{enemies:[{label:"어린청소룡 2",name:"어린청소룡",can_attack:true,hp:20,max_hp:20,
+    attack_action:attack,party_attack_action:partyAttack}]}));
+  const partyAttackButton = c.byId("party-actions").children.find(el => el.dataset?.actionInvocation);
+  c.document.fire("click",{target:partyAttackButton});
+  const [event, [payload]] = c.socket.sent.at(-1);
+  assert.equal(event,"pz_action");
+  assert.deepEqual({...payload,request_id:null},{...partyAttack,request_id:null});
   assert.match(c.byId("party-state").textContent,/일행 #42/);
   assert.match(c.byId("party-tactics").textContent,/2\/4.*오프라인.*효과 비활성.*지정 유지/);
   assert.match(c.byId("party-members").textContent,/<b>철수<\/b>/);
   const commands = ["party-actions","party-members","party-pending"].flatMap(id => commandButtons(c.byId(id)));
-  for (const command of ["일행","일행탈퇴","일행방어","일행공격","어린청소룡 2 일행공격","해제 일행방어","순번 일행분배","일행해체","철수 2 일행리더","철수 2 일행제외","철수 2 일행방어","민수 1 일행허락","민수 1 일행거절"]) assert.ok(commands.includes(command), command);
+  for (const command of ["일행","일행탈퇴","일행방어","일행공격","해제 일행방어","순번 일행분배","일행해체","철수 2 일행리더","철수 2 일행제외","철수 2 일행방어","민수 1 일행허락","민수 1 일행거절"]) assert.ok(commands.includes(command), command);
   c.receive("pz_state",partyState({...party,confirm_dissolve:true}));
   assert.ok(commandButtons(c.byId("party-actions")).includes("확인 일행해체"));
   c.receive("pz_state",partyState({...party,is_leader:false,leader_online:false,can_succeed:true}));

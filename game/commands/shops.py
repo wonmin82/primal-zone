@@ -6,9 +6,9 @@ from world.targets import names, parse_selector, resolve, room_objects
 
 
 def shopkeepers(caller):
-    from typeclasses.interactables import Shopkeeper
+    from typeclasses.actors import Actor
 
-    return [obj for obj in room_objects(caller) if isinstance(obj, Shopkeeper)]
+    return [obj for obj in room_objects(caller) if isinstance(obj, Actor) and obj.capability_active("shop")]
 
 
 def resolve_shopkeeper(caller, name="", item=None, objects=None, action="사"):

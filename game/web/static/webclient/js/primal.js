@@ -196,7 +196,7 @@
     byId("xp").value = state.level >= state.max_level ? byId("xp").max : state.xp - state.xp_floor;
     renderExits(state.exit_details);
     const actions = state.enemies.map((enemy) => {
-      const el = button(enemy.label + " " + enemy.hp + "/" + enemy.max_hp + (enemy.can_attack ? " 사냥" : " · 다른 그룹 교전 중"), enemy.attack_command);
+      const el = actionButton(enemy.label + " " + enemy.hp + "/" + enemy.max_hp + (enemy.can_attack ? " 사냥" : " · 다른 그룹 교전 중"), enemy.attack_action);
       el.replaceChildren(semantic("hostile", enemy.label), " " + enemy.hp + "/" + enemy.max_hp + (enemy.can_attack ? " 사냥" : " · 다른 그룹 교전 중"));
       el.disabled = !enemy.can_attack;
       return el;
@@ -262,7 +262,7 @@
         partyActions.push(button("현재 적 공동 공격", "일행공격"), button("방어 해제", "해제 일행방어"), button("순번 분배", "순번 일행분배"),
           button(party.confirm_dissolve ? "해체 최종 확인" : "해체 요청", party.confirm_dissolve ? "확인 일행해체" : "일행해체"));
         for (const enemy of state.enemies) {
-          const attack = button(enemy.label + " 공동 공격", enemy.label + " 일행공격");
+          const attack = actionButton(enemy.label + " 공동 공격", enemy.party_attack_action);
           attack.disabled = !enemy.can_attack; partyActions.push(attack);
         }
       }

@@ -7,7 +7,7 @@ from world.actions.presentation_context import available, profile_snapshot
 def render(caller, index, reference, binding, observed_at=None):
     from world import rules
     from world.actions.resolver import role_records
-    from world.content import ITEMS
+    from world.content import ITEMS, ROOMS
     from world.selection_numbers.api import resolve_reference
 
     action = index.actions[binding.action_id]
@@ -32,7 +32,7 @@ def render(caller, index, reference, binding, observed_at=None):
             return []
     if config.get("effect") == "doctor":
         try:
-            restored, cost = provider.quote(caller)
+            restored, cost = rules.treatment_quote(profile_snapshot(caller), safe=ROOMS.get(caller.zone, {}).get("safe", False))
         except rules.RuleError:
             return []
     roles = {"provider": [reference_json(reference)]}

@@ -187,7 +187,7 @@ test('TEST-66A-01 실제 재분배 버튼의 안정 Provider·scope·단일 효�
     expect(payload.action_id).toBe('training.reset.' + scope);
     expect(payload.arguments.value).toBe(scope);
     expect(payload.roles.provider).toEqual(refs.find(row => row.action.arguments.value === scope).action.roles.provider);
-    expect(payload.roles.provider[0].kind).toBe('object');
+    expect(payload.roles.provider[0].kind).toBe('actor');
   }
   const skills = a.state.growth.skills.map(skill => [skill.id, skill.rank]);
   const prompts = a.prompts;

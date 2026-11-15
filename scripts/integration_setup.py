@@ -47,15 +47,12 @@ def prepare(credentials):
         p.update(hp=p["hp"] - 20, mental=1)
         players[0].save_profile(p)
     if scenario == "E2E-10":
-        from typeclasses.enemies import Enemy
-        from world.content import ENEMIES
+        from world.actors.spawn import create_actor
         from world.equipment_service import equip_item, unequip_item
-        for cls, key in [('Commander', '검증대장'), ('Doctor', '검증의무관')]:
-            create_object('typeclasses.interactables.'+cls, key=key, location=rooms['hq_concourse'])
-        enemy = create_object(Enemy, key='검증사냥룡', location=rooms['hq_concourse'])
-        enemy.db.enemy_id = 'hunter'
-        enemy.db.hp = enemy.db.max_hp = ENEMIES['hunter']['hp']
-        enemy.db.spawn_id = 'integration-combat-fixture'
+
+        create_actor("commander", rooms["hq_concourse"], name="검증대장")
+        create_actor("doctor", rooms["hq_concourse"], name="검증의무관")
+        create_actor("hunter", rooms["hq_concourse"], name="검증사냥룡")
         body = api.items_in_location('equipment', owner_object=players[0]).get(slot='body')
         unequip_item(players[0], body)
         armor = api.create_item('heavy_protective_suit', location_kind='inventory', owner_object=players[0])
@@ -74,22 +71,8 @@ def prepare(credentials):
         create_claim(row, reserved_party=party, assigned_player=players[0], protection_until=time()+1200)
         # 미래 보호 시각의 저장 fixture. 운영60/600초 상수·tick은 그대로다.
     if scenario in ("E2E-07", "E2E-12", "E2E-13"):
-        # 공개 회수는 Native A/B 실물을 사용한다. E2E-12만 읽기 전용
-        # historical Legacy fixture를 함께 두어 재시작 시 보존을 검증한다.
-        # 이 프로세스는 setup()의 marker/DB 검사를 통과한 새 격리 DB만 소유한다.
-        from django.conf import settings
-        from world.item_entities.models import ItemEntity, ItemRuntime
-        settings.ITEM_MIGRATION_AUDIT = True
+        # 공개 회수와 재시작은 같은 Native 실물과 보호 권리를 검증한다.
         if scenario == "E2E-12":
-            ItemRuntime.objects.all().delete()
-            legacy = players[1]
-            ItemEntity.objects.filter(owner_object=legacy).delete()
-            legacy.db.equipment_backend = 'legacy'
-            legacy.db.active_weapon_item_id = None
-            legacy.db.active_light_item_id = None
-            p = rules.new_profile()
-            p.update(credits=2000)
-            legacy.db.profile = p
             # 재시작 비교용 실제 UUID/inside/ground Scope. 시작 후 변경은 공개
             # 명령만 사용한다. Container 기능을 새로 추가하는 fixture가 아니다.
             from typeclasses.loot import DroppedLoot
@@ -108,7 +91,7 @@ def prepare(credentials):
             for player in players[:2]:
                 player.db.party_id = party.pk
         for native in (False, True):
-            corpse = create_object(Corpse, key="Legacy 검증 시체" if not native and scenario == "E2E-12" else "Native 검증 시체", location=players[0].location)
+            corpse = create_object(Corpse, key="Native 검증 시체", location=players[0].location)
             corpse.db.decay_at = time() + 600
             if native:
                 populate_source(corpse, [])
@@ -117,10 +100,6 @@ def prepare(credentials):
                              assigned_player=players[0], protection_until=time() + 300)
                 create_currency(corpse, 20, shares={players[0]: 6, players[1]: 14},
                                 reserved_party=party, protection_until=time()+300)
-            elif scenario == "E2E-12":
-                corpse.db.entries = [{"kind": "item", "id": "water", "quantity": 1,
-                                      "assigned_player": players[1].pk, "reserved_player": players[1].pk if not party else None,
-                                      "reserved_party": party.pk if party else None, "protection_until": time() + 300}]
             else:
                 populate_source(corpse, [])
                 row = api.create_item("water", quantity=1, location_kind="corpse_loot", owner_object=corpse)

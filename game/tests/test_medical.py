@@ -7,9 +7,8 @@ from unittest.mock import Mock, patch
 from evennia import create_object, search_tag
 from evennia.objects.models import ObjectDB
 from evennia.utils.dbserialize import deserialize
-from typeclasses.enemies import room_enemies
 from typeclasses.explorers import Explorer
-from typeclasses.interactables import INTERACTABLES, Bed, Doctor
+from typeclasses.interactables import INTERACTABLES, Bed
 from world import rules
 from world.bootstrap import build_world, stale_definitions
 from world.content import ROOMS
@@ -17,6 +16,7 @@ from world.content.integrity import errors
 from world.observation import context_for
 from world.room_hints import render
 from world.selection_numbers.api import descriptor
+from world.shared_combat import room_enemies
 from world.state import multiplayer_state
 
 from tests.base import WorldCommandTest
@@ -29,14 +29,14 @@ class MedicalCommandsTests(WorldCommandTest):
         self.enterContext(patch("typeclasses.explorers.time", return_value=100))
         super().setUp()
         self.rooms = self.world_rooms()
-        self.doctor = search_tag("doctor", category="primal_interactable")[0]
+        self.doctor = search_tag("doctor", category="primal_actor_spawn")[0]
         self.bed = search_tag("infirmary_bed", category="primal_interactable")[0]
         for player in (self.char1, self.char2):
             player.location = self.rooms["infirmary"]
             player.home = self.rooms["dock"]
             player.push_state = Mock()
         for module in ("enemies", "explorers", "loot"):
-            self.enterContext(patch(f"typeclasses.{module}.delay"))
+            self.enterContext(patch("world.shared_combat.delay" if module == "enemies" else f"typeclasses.{module}.delay"))
 
     def command(self, value):
         with patch.object(self.char1, "msg") as output:
@@ -74,10 +74,11 @@ class MedicalCommandsTests(WorldCommandTest):
                 self.assertEqual(render(context_for(self.char1)), "")
 
     def test_bare_ambiguity_hidden_objects_and_explicit_selector(self):
-        for cls, original, action in ((Doctor, self.doctor, "회복"), (Bed, self.bed, "휴식")):
+        for cls, original, action in ((type(self.doctor), self.doctor, "회복"), (Bed, self.bed, "휴식")):
             self.char1.location = original.location
             extra = create_object(cls, key=original.key, location=self.char1.location,
-                                  attributes=[("selection_group_id", descriptor(original).group_id)])
+                                  attributes=[("selection_group_id", descriptor(original).group_id),
+                                              *(([("actor_id", original.actor_id)]) if original == self.doctor else [])])
             self.char1.change(lambda p: p.update(hp=1, credits=1000))
             before = deepcopy(self.char1.profile())
             self.assertIn("대상이 여러 개", self.command(action))
@@ -202,7 +203,7 @@ class MedicalCommandsTests(WorldCommandTest):
             build_world()
             self.assertEqual(ObjectDB.objects.count(), count)
             for identity, obj in (("doctor", self.doctor), ("infirmary_bed", self.bed)):
-                current = search_tag(identity, category="primal_interactable")
+                current = search_tag(identity, category="primal_actor_spawn" if identity == "doctor" else "primal_interactable")
                 self.assertEqual([o.id for o in current], [obj.id])
                 self.assertEqual(current[0].location, self.rooms["infirmary" if identity == "doctor" else "recovery_room"])
                 self.assertEqual(current[0].aliases.all(), INTERACTABLES[identity]["aliases"])
@@ -227,7 +228,7 @@ class MedicalDefeatTests(WorldCommandTest):
             player.push_state = Mock()
             self.enterContext(patch.object(player.sessions, "count", return_value=1))
         for module in ("enemies", "explorers", "loot"):
-            self.enterContext(patch(f"typeclasses.{module}.delay"))
+            self.enterContext(patch("world.shared_combat.delay" if module == "enemies" else f"typeclasses.{module}.delay"))
         self.enemy = room_enemies(self.char1.location)[0]
 
     def prepare(self):
@@ -242,7 +243,7 @@ class MedicalDefeatTests(WorldCommandTest):
         self.prepare()
         before = deepcopy(self.char1.profile())
         other = deepcopy(self.char2.profile())
-        enemy_hp = self.enemy.db.hp
+        enemy_hp = self.enemy.hp
         task = self.char1.ndb.combat_task
         with patch.object(rules, "treat") as treat, patch.object(rules, "rest") as rest:
             self.enemy.enemy_tick(now=102.5, rng=Random(1))
@@ -261,7 +262,7 @@ class MedicalDefeatTests(WorldCommandTest):
         self.assertNotIn(self.char1.id, self.enemy.db.contribution)
         self.assertIn(self.char2.id, self.enemy.db.combatants)
         self.assertEqual(self.char2.profile(), other)
-        self.assertEqual(self.enemy.db.hp, enemy_hp)
+        self.assertEqual(self.enemy.hp, enemy_hp)
         self.enemy.enemy_tick(now=105, rng=Random(1))
         self.assertLess(self.char2.profile()["hp"], other["hp"])
 

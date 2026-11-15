@@ -9,11 +9,11 @@ from evennia.commands.cmdparser import cmdparser as default_parser
 from evennia.typeclasses.models import Attribute
 from server.conf.cmdparser import cmdparser
 from server.conf.primal_inputfuncs import pz_auth
-from typeclasses.enemies import room_enemies
 from typeclasses.explorers import Explorer
 from world import text as ft
 from world.bootstrap import build_world
 from world.content import ROOMS, ordered_directions
+from world.shared_combat import room_enemies
 
 from tests.base import GameCommandTest, WorldCommandTest
 
@@ -128,7 +128,7 @@ class GameplayIntegrationTests(WorldCommandTest):
         with patch.object(self.char1.sessions, "count", return_value=1):
             self.char1.start_combat("scavenger")
             enemy = room_enemies(self.char1.location)[0]
-            enemy.db.hp = 1
+            enemy.hp = 1
             now = self.char1.profile()["next_attack_at"]
             self.char1.resolve_combat_round(Random(3), now=now)
             attribute = self.char1.attributes.get("profile", return_obj=True)
@@ -235,7 +235,7 @@ class GameplayIntegrationTests(WorldCommandTest):
         self.assertEqual(self.char1.location, self.rooms["grass"])
         self.char1.execute_cmd("어린 청소룡 때려")
         before = self.char1.profile()["combat_target"]
-        self.assertEqual(self.char1.combat_target().db.enemy_id, "scavenger")
+        self.assertEqual(self.char1.combat_target().combat_definition_id, "scavenger")
         with patch.object(self.char1.sessions, "count", return_value=1):
             self.char1.execute_cmd("공격")
         self.assertEqual(self.char1.profile()["combat_target"], before)

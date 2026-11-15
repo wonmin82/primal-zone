@@ -22,6 +22,7 @@ from world.progression import ATTRIBUTES, SKILLS
 from world.targets import normalized
 
 PROVIDER = RoleDefinition("provider", (ReferenceKind.OBJECT,), required=False)
+SERVICE_ACTOR = RoleDefinition("provider", (ReferenceKind.ACTOR,), required=False)
 ITEM = RoleDefinition("subject", (ReferenceKind.ITEM,), DefaultTargetPolicy.FIRST_LEGACY_ORDER)
 CONFIG = (ArgumentDefinition("effect", required=False), ArgumentDefinition("operation", required=False),
           ArgumentDefinition("peaceful", bool, default=True), ArgumentDefinition("changed", bool, default=True))
@@ -50,7 +51,10 @@ def verb(key, aliases=()):
 
 def effect(identity, key, provider, pattern, function, arguments=(), *, required=False, changed=True, variants=None,
            subjects=(), service="room_npc.effect"):
-    role = RoleDefinition("provider", (ReferenceKind.OBJECT,), required=required)
+    kinds = (SERVICE_ACTOR.kinds if provider.startswith(("shop.", "skill.", "attribute."))
+             or provider in {"world.doctor", "world.settlementofficer", "world.trainingmanager"}
+             else PROVIDER.kinds)
+    role = RoleDefinition("provider", kinds, required=required)
     actions.append(ActionDefinition(identity, "game." + VERB_IDS[key], (role, *subjects),
                                     variants or (SyntaxVariant("normal", pattern),), arguments,
                                     help=f"현재 위치의 제공자에게 {key} 행동을 요청합니다."))
@@ -120,7 +124,7 @@ for shop, catalog in SHOP_CATALOGS.items():
     identity = "shop.sell." + shop
     subject = RoleDefinition("subject", (ReferenceKind.ITEM,), DefaultTargetPolicy.FIRST_LEGACY_ORDER,
                              definition_ids=accepted)
-    actions.append(ActionDefinition(identity, "game.sell", (PROVIDER, subject),
+    actions.append(ActionDefinition(identity, "game.sell", (SERVICE_ACTOR, subject),
                                     (SyntaxVariant("normal", r"(?:(?P<provider>.+)에게 )?(?P<subject>.+?)(?: (?P<count>[0-9]+개|모두))?"),),
                                     (ArgumentDefinition("count", default="1"),),
                                     help="소지한 실제 ItemEntity를 1개·N개·모두 판매합니다. 장비는 먼저 해제하세요."))
@@ -136,10 +140,10 @@ for item, data in ITEMS.items():
         identity = "shop." + method + "." + item
         names = tuple(dict.fromkeys((data["name"], item, *data.get("aliases", ()))))
         pattern = r"(?:(?P<provider>.+)에게 )?(?:" + "|".join(literal(name) for name in names) + ")"
-        roles = (PROVIDER,)
+        roles = (SERVICE_ACTOR,)
         variants = (SyntaxVariant("normal", pattern + (r"(?: (?P<count>[0-9]+개|모두))?" if method == "value" else "")),)
         if method == "value":
-            roles = (PROVIDER, RoleDefinition("subject", (ReferenceKind.ITEM,), DefaultTargetPolicy.FIRST_LEGACY_ORDER,
+            roles = (SERVICE_ACTOR, RoleDefinition("subject", (ReferenceKind.ITEM,), DefaultTargetPolicy.FIRST_LEGACY_ORDER,
                                               required=False, definition_ids=(item,)))
             item_pattern = "(?:" + "|".join(literal(name) for name in names) + ")"
             variants += (SyntaxVariant("numbered", r"(?:(?P<provider>.+)에게 )?(?P<subject>" + item_pattern + r" [0-9]+)(?: (?P<count>[0-9]+개|모두))?", show_control=False),)

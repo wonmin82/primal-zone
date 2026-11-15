@@ -2,11 +2,11 @@ from random import Random
 from unittest.mock import Mock, patch
 
 from evennia import create_object
-from typeclasses.enemies import room_enemies
 from typeclasses.explorers import Explorer
-from typeclasses.loot import take_loot
+from typeclasses.loot import Corpse, take_loot
 from typeclasses.parties import invite, respond
 from world.rules import RuleError
+from world.shared_combat import room_enemies
 
 from tests.base import WorldCommandTest
 
@@ -24,7 +24,7 @@ class RewardTests(WorldCommandTest):
             player.location = self.rooms["grass"]
             player.push_state = Mock()
             self.connect_character(player)
-        self.enterContext(patch("typeclasses.enemies.delay"))
+        self.enterContext(patch("world.shared_combat.delay"))
         self.enterContext(patch("typeclasses.explorers.delay"))
         self.enemy = room_enemies(self.rooms["grass"])[0]
 
@@ -40,7 +40,7 @@ class RewardTests(WorldCommandTest):
         with self.assertRaises(RuleError):
             self.enemy.engage(self.players[2], now=100)
         self.enemy.receive_attack(self.char1, now=102.5, rng=Random(1))
-        self.enemy.db.hp = 1
+        self.enemy.hp = 1
         self.enemy.receive_attack(self.char2, now=102.5, rng=Random(1))
         for player in (self.char1, self.char2):
             self.assertEqual((player.profile()["xp"], player.profile()["credits"]), (11, 20))
@@ -51,27 +51,54 @@ class RewardTests(WorldCommandTest):
     def test_claim_timeout_and_flee_release(self):
         self.enemy.engage(self.char1, now=100)
         self.enemy.receive_attack(self.char1, now=102.5, rng=Random(1))
-        damaged_hp = self.enemy.db.hp
+        damaged_hp = self.enemy.hp
         self.enemy.reconcile(now=117.5)
         self.assertIsNone(self.enemy.db.claim)
         self.assertIsNone(self.char1.profile()["combat_target"])
-        self.assertEqual(self.enemy.db.hp, damaged_hp)
+        self.assertEqual(self.enemy.hp, damaged_hp)
         self.enemy.engage(self.char2, now=118)
-        self.assertEqual(self.enemy.db.hp, damaged_hp)
+        self.assertEqual(self.enemy.hp, damaged_hp)
         self.char2.leave_combat(now=118)
         self.assertIsNone(self.enemy.db.claim)
         self.enemy.reconcile(now=140)
-        self.assertGreater(self.enemy.db.hp, damaged_hp)
-        self.assertLess(self.enemy.db.hp, self.enemy.db.max_hp)
+        self.assertGreater(self.enemy.hp, damaged_hp)
+        self.assertLess(self.enemy.hp, self.enemy.max_hp)
 
     def test_inactive_party_member_has_no_reward(self):
         self.party(self.char1, self.char2)
         self.enemy.engage(self.char1, now=100)
         self.enemy.engage(self.char2, now=100)
-        self.enemy.db.hp = 1
+        self.enemy.hp = 1
         self.enemy.receive_attack(self.char1, now=102.5, rng=Random(1))
         self.assertEqual(self.char1.profile()["xp"], 22)
         self.assertEqual(self.char2.profile()["xp"], 0)
+
+    def test_failed_native_corpse_settlement_rolls_back_and_retries_once(self):
+        from world.item_entities.models import ItemRuntime
+        from world.item_runtime import VERSION
+
+        self.char1.db.equipment_backend = "item_entities"
+        self.char1.db.item_runtime_version = VERSION
+        ItemRuntime.objects.get_or_create(pk=1, defaults={"version": VERSION})
+        self.enemy.engage(self.char1, now=100)
+        self.enemy.hp = 1
+        generation = self.enemy.db.combat_generation
+        corpses_before = set(Corpse.objects.values_list("pk", flat=True))
+        with patch("world.loot_service.populate_source", side_effect=RuntimeError("settlement failed")):
+            with self.assertRaisesRegex(RuntimeError, "settlement failed"):
+                self.enemy.receive_attack(self.char1, now=102.5, rng=Random(1))
+        self.assertEqual(self.enemy.hp, 1)
+        self.assertEqual(self.enemy.db.state, "alive")
+        self.assertFalse(self.enemy.db.encounter_state["settled"])
+        self.assertEqual(self.char1.profile()["xp"], 0)
+        self.assertEqual(set(Corpse.objects.values_list("pk", flat=True)), corpses_before)
+
+        self.enemy.receive_attack(self.char1, now=102.5, rng=Random(1))
+        self.enemy.finish_death(self.char1, now=102.5, rng=Random(1))
+        self.assertEqual(self.enemy.db.combat_generation, generation)
+        self.assertTrue(self.enemy.db.encounter_state["settled"])
+        self.assertEqual(self.char1.profile()["xp"], 22)
+        self.assertEqual(len(set(Corpse.objects.values_list("pk", flat=True)) - corpses_before), 1)
 
     def test_public_two_parties_and_eligible_quest_credit(self):
         first = self.party(self.players[0], self.players[1])
@@ -99,7 +126,7 @@ class RewardTests(WorldCommandTest):
                 "group": f"player:{self.players[4].id}",
             },
         }
-        boss.db.hp = 0
+        boss.hp = 0
         boss.finish_death(self.char1, now=105, rng=Random(1))
         self.assertEqual([p.profile()["xp"] for p in self.players], [44, 43, 22, 21, 0])
         self.assertEqual([p.profile()["credits"] for p in self.players], [20] * 5)

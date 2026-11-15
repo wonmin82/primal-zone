@@ -155,6 +155,7 @@ class VerbDefinition:
     unavailable_message: str = "현재 이곳에서 사용할 수 없는 행동입니다. 대상과 도움말을 확인하세요."
     invalid_message: str = "지금 선택할 수 없는 행동 또는 대상입니다."
     ambiguous_message: str = "행동의 제공자와 대상을 명확하게 지정하세요."
+    adapter_only: bool = False
 
     def __post_init__(self):
         object.__setattr__(self, "aliases", tuple(self.aliases))

@@ -412,7 +412,16 @@ class EmergencyLightCache(ActionObject):
 def action_objects(room):
     from world.targets import ordered
 
-    return ordered(obj for obj in room.contents if isinstance(obj, ActionObject)) if room else []
+    from typeclasses.actors import Actor
+
+    return ordered(obj for obj in room.contents if isinstance(obj, ActionObject)
+                   or isinstance(obj, Actor) and not obj.supports_shared_combat) if room else []
+
+
+def is_trainer(obj):
+    from typeclasses.actors import Actor
+
+    return isinstance(obj, Actor) and obj.capability_active("training")
 
 
 def instructor_for(caller, observed_at=None):
@@ -420,22 +429,23 @@ def instructor_for(caller, observed_at=None):
 
     return next(
         (obj for obj in room_objects(caller, observed_at=observed_at)
-         if isinstance(obj, GrowthTrainer) and obj.available(caller, observed_at=observed_at)), None
+         if is_trainer(obj) and obj.available(caller, observed_at=observed_at)), None
     )
 
 
 def growth_controls(caller, observed_at=None):
     """전용 패널도 실제 NPC가 생성한 명령만 사용한다. 중복 provider는 자동 선택하지 않는다."""
-    from world.targets import labels, room_objects
+    from world.targets import room_objects
 
     objects = room_objects(caller, observed_at=observed_at)
-    targets = labels(objects)
     grouped = {}
     for obj in objects:
-        if not isinstance(obj, GrowthTrainer) or not obj.available(caller, observed_at):
+        if not is_trainer(obj) or not obj.available(caller, observed_at):
             continue
-        key = obj.db.skill_id if isinstance(obj, SkillTrainer) else obj.db.attribute_id if isinstance(obj, AttributeTrainer) else "reset"
-        grouped.setdefault(key, []).append(obj.web_actions(caller, targets[obj.id], observed_at))
+        from world.actions.room_npc_presentation import controls_for
+
+        key = obj.db.skill_id or obj.db.attribute_id or "reset"
+        grouped.setdefault(key, []).append(controls_for(caller, obj, observed_at))
     return {key: values[0] for key, values in grouped.items() if len(values) == 1}
 
 

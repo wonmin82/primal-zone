@@ -26,14 +26,16 @@ def pz_dialogue(session, token=None, **kwargs):
     from typeclasses.explorers import Explorer
     from world import rules
     from world import text as ft
-    from world.npc_dialogue import select_keyword
+    from world.dialogue_actions import invoke
 
     caller = session.get_puppet()
     if not isinstance(caller, Explorer):
         return
     caller.begin_command_output(reconcile=False)
     try:
-        select_keyword(caller, token, session)
+        if not isinstance(token, str):
+            raise rules.RuleError("잘못된 대화 선택입니다.")
+        invoke(caller, session, token=token)
     except rules.RuleError as error:
         caller.msg(ft.text(ft.token("error", str(error)), kind="error"), session=session)
     finally:

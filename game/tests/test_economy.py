@@ -6,13 +6,13 @@ from unittest.mock import Mock, patch
 
 from evennia import create_object, search_tag
 from evennia.utils.dbserialize import deserialize
-from typeclasses.enemies import room_enemies
 from typeclasses.explorers import Explorer
 from typeclasses.loot import Corpse, create_dropped_loot, room_loot, take_loot
 from typeclasses.parties import invite, respond
 from world import rules
 from world.currency import currency_names
 from world.item_transfers import transfer_currency
+from world.shared_combat import room_enemies
 from world.state import loot_entries, multiplayer_state
 from world.targets import parse_loot
 
@@ -31,7 +31,7 @@ class EconomyTests(WorldCommandTest):
             player.location = self.rooms["storage_room"]
             player.push_state = Mock()
         for module in ("enemies", "explorers", "loot"):
-            self.enterContext(patch(f"typeclasses.{module}.delay"))
+            self.enterContext(patch("world.shared_combat.delay" if module == "enemies" else f"typeclasses.{module}.delay"))
 
     def command(self, raw, caller=None):
         caller = caller or self.char1
@@ -131,7 +131,7 @@ class EconomyTests(WorldCommandTest):
         self.enterContext(patch.object(self.char1.sessions, "count", return_value=1))
         enemy = room_enemies(self.char1.location)[0]
         enemy.engage(self.char1, now=100)
-        enemy.db.hp = 1
+        enemy.hp = 1
         enemy.receive_attack(self.char1, now=102.5, rng=Random(1))
         self.assertEqual((self.char1.profile()["credits"], self.char1.profile()["xp"], self.char1.profile()["kills"]), (20, 22, 1))
         corpse = room_loot(self.char1.location)[0]
@@ -232,7 +232,9 @@ class EconomyTests(WorldCommandTest):
         corpse.reconcile(130)
         self.take("붕대 모두", now=131)
         self.assertEqual(self.char1.profile()["inventory"]["bandage"], 5)
-        self.command("칩 버려")
+        from world.item_transfers import transfer_currency
+
+        transfer_currency(self.char1, 1)
         state = multiplayer_state(self.char1)
         entry = state["ground_loot"][0]["loot"][0]
         self.assertEqual((entry["kind"], entry["amount_label"], entry["take_command"], entry["action"]),
@@ -255,7 +257,7 @@ class EconomyTests(WorldCommandTest):
 
         from tests.action_control_fixture import assert_provider, execute_control
 
-        seller = search_tag("weapon_shopkeeper", category="primal_interactable")[0]
+        seller = search_tag("weapon_shopkeeper", category="primal_actor_spawn")[0]
         owned = ItemEntity.objects.filter(owner_object=self.char1, definition_id="cutting_machete")
         equipped = owned.get(location_kind="equipment")
         sellable_ids = {str(item.pk) for item in owned.filter(location_kind="inventory")}
@@ -279,7 +281,7 @@ class EconomyTests(WorldCommandTest):
         for raw in ("절단마체테 팔아", "회수부품 팔아", "붕대 팔아", "절단마체테 3개 팔아"):
             self.command(raw)
             self.assertEqual(self.char1.profile(), before)
-        seller = search_tag("weapon_shopkeeper", category="primal_interactable")[0]
+        seller = search_tag("weapon_shopkeeper", category="primal_actor_spawn")[0]
         seller.locks.add("view:false()")
         self.command("절단마체테 가치")
         self.assertEqual(self.char1.profile(), before)
@@ -300,7 +302,7 @@ class EconomyTests(WorldCommandTest):
 
         self.char1.location = self.rooms["supply_shop"]
         self.native_shop_fixture()
-        seller = search_tag("supply_shopkeeper", category="primal_interactable")[0]
+        seller = search_tag("supply_shopkeeper", category="primal_actor_spawn")[0]
         item = ItemEntity.objects.get(owner_object=self.char1, definition_id="bandage")
         actions = controls_for(self.char1, seller)
         single = next(a for a in actions if a["label"] == "붕대 1 · 5칩 팔아")
@@ -332,7 +334,7 @@ class EconomyTests(WorldCommandTest):
         lighting_service.insert_power(self.char1, "flashlight", "battery", now=100)
         device = deepcopy(self.char1.profile()["light_sources"]["flashlight"])
         # light_sources 사전은 Legacy 도메인 호환 책임이다. 공개 Action에 Legacy fallback을 만들지 않는다.
-        seller = search_tag("supply_shopkeeper", category="primal_interactable")[0]
+        seller = search_tag("supply_shopkeeper", category="primal_actor_spawn")[0]
         shop_service.sell(self.char1, seller, "탐사용손전등")
         self.assertEqual(self.char1.profile()["light_sources"]["flashlight"], device)
         shop_service.sell(self.char1, seller, "탐사용손전등")

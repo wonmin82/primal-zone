@@ -2,18 +2,15 @@
 
 from copy import deepcopy
 from random import Random
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, PropertyMock, patch
 
 from evennia import create_object, search_tag
 from evennia.utils.ansi import strip_ansi
 from evennia.utils.dbserialize import deserialize
-from typeclasses.enemies import room_enemies
+from typeclasses.actors import Actor
 from typeclasses.explorers import Explorer
 from typeclasses.interactables import (
     INTERACTABLES,
-    AttributeTrainer,
-    SkillTrainer,
-    TrainingManager,
     action_objects,
     growth_controls,
 )
@@ -23,6 +20,7 @@ from world import rules
 from world.bootstrap import build_world
 from world.content.integrity import errors
 from world.multiplayer import CLAIM_TIMEOUT_SECONDS, PARTY_MAX_SIZE
+from world.shared_combat import room_enemies
 
 from tests.base import WorldCommandTest
 
@@ -32,7 +30,7 @@ class GrowthReviewTests(WorldCommandTest):
 
     def setUp(self):
         self.clock = self.enterContext(patch("typeclasses.explorers.time", return_value=100))
-        for module in ("typeclasses.enemies", "world.skill_services", "time"):
+        for module in ("world.shared_combat", "world.skill_services", "time"):
             self.enterContext(patch(module + ".time", side_effect=lambda: self.clock.return_value))
         super().setUp()
         self.rooms = self.world_rooms()
@@ -41,7 +39,7 @@ class GrowthReviewTests(WorldCommandTest):
             player.push_state = Mock()
             self.connect_character(player)
         for module in ("enemies", "explorers", "loot"):
-            self.enterContext(patch(f"typeclasses.{module}.delay"))
+            self.enterContext(patch("world.shared_combat.delay" if module == "enemies" else f"typeclasses.{module}.delay"))
 
     def command(self, text, player=None):
         player = player or self.char1
@@ -62,14 +60,14 @@ class GrowthReviewTests(WorldCommandTest):
 
     def test_flee_and_reengage_clear_suppression_before_hp_recovery(self):
         enemy = self.suppressed_enemy()
-        hp = enemy.db.hp
-        self.assertLess(hp, enemy.db.max_hp)
+        hp = enemy.hp
+        self.assertLess(hp, enemy.max_hp)
         self.command("도망")
         self.assertEqual(enemy.db.suppressions, {})
-        self.assertEqual(enemy.db.hp, hp)
+        self.assertEqual(enemy.hp, hp)
         enemy.engage(self.char1, now=103)
         self.assertEqual(enemy.db.suppressions, {})
-        self.assertEqual(enemy.db.hp, hp)
+        self.assertEqual(enemy.hp, hp)
 
     def test_last_combatant_and_claim_timeout_cleanup(self):
         enemy = self.suppressed_enemy("ridge")
@@ -92,7 +90,7 @@ class GrowthReviewTests(WorldCommandTest):
         self.char1.location = enemy.location
         enemy.engage(self.char1, now=110)
         enemy.db.suppressions = {str(self.char1.id): pg.suppression_effect(10)}
-        enemy.db.hp = 1
+        enemy.hp = 1
         enemy.receive_attack(self.char1, now=112.5, rng=Random(1))
         self.assertEqual(enemy.db.state, "respawning")
         self.assertEqual(enemy.db.suppressions, {})
@@ -103,7 +101,7 @@ class GrowthReviewTests(WorldCommandTest):
 
     def test_source_specific_apply_logs_and_one_event_consumption(self):
         enemy = room_enemies(self.rooms["ridge"])[0]
-        enemy.db.hp = enemy.db.max_hp = 1000
+        enemy.hp = enemy.max_hp = 1000
         for player in (self.char1, self.char2):
             player.location = enemy.location
             player.change(lambda p: p.update(xp=rules.xp_threshold(50), mental=165))
@@ -145,9 +143,10 @@ class GrowthReviewTests(WorldCommandTest):
                 definition.pop("boss_quest", None)
                 if quest:
                     definition["boss_quest"] = quest
-                with patch.dict(rules.ENEMIES, alpha=definition):
+                with (patch.dict(rules.ENEMIES, alpha=definition),
+                      patch.object(type(enemy), "combat_profile", new_callable=PropertyMock, return_value=definition)):
                     self.assertEqual(definition["combat_mode"], "public")
-                    enemy.db.hp = enemy.db.max_hp = 10000
+                    enemy.hp = enemy.max_hp = 10000
                     enemy.db.suppressions = {}
                     for player in players:
                         player.change(lambda p: (p.update(xp=rules.xp_threshold(50), mental=165, next_attack_at=0),
@@ -183,12 +182,12 @@ class GrowthReviewTests(WorldCommandTest):
                 if in_combat:
                     enemy.engage(self.char1, now=100)
                 before = deepcopy(self.char1.profile()), deepcopy(self.char2.profile())
-                enemy_before = enemy.db.hp, deepcopy(deserialize(enemy.db.suppressions))
+                enemy_before = enemy.hp, deepcopy(deserialize(enemy.db.suppressions))
                 result = self.command(self.char2.key + " 치료")
                 self.assertIn("치료", result)
                 self.assertIn("정신력이 20 필요하다", result)
                 self.assertEqual((self.char1.profile(), self.char2.profile()), before)
-                self.assertEqual((enemy.db.hp, deserialize(enemy.db.suppressions)), enemy_before)
+                self.assertEqual((enemy.hp, deserialize(enemy.db.suppressions)), enemy_before)
 
     def test_cooldowns_survive_profile_reload_real_login_session_restore_and_resets(self):
         self.char1.change(lambda p: (p.update(xp=rules.xp_threshold(50)), p["skill_ready_at"].update(insight=110, suppress=110)))
@@ -242,12 +241,12 @@ class GrowthReviewTests(WorldCommandTest):
         for player in (self.char1, self.char2):
             player.change(lambda profile: profile.update(xp=rules.xp_threshold(20)))
         trainers = [obj for room in self.rooms.values() for obj in action_objects(room)
-                    if isinstance(obj, (SkillTrainer, AttributeTrainer, TrainingManager))]
-        self.assertEqual(sum(type(obj) is SkillTrainer for obj in trainers), 8)
-        self.assertEqual(sum(type(obj) is AttributeTrainer for obj in trainers), 4)
+                    if isinstance(obj, Actor) and obj.capability_active("training")]
+        self.assertEqual(sum(bool(obj.db.skill_id) for obj in trainers), 8)
+        self.assertEqual(sum(bool(obj.db.attribute_id) for obj in trainers), 4)
         dialogues = set()
         for obj in trainers:
-            identity = obj.tags.get(category="primal_interactable")
+            identity = obj.tags.get(category="primal_actor_spawn")
             definition = INTERACTABLES[identity]
             self.char1.location = self.char2.location = obj.location
             appearance = self.command(obj.key + " 봐")
@@ -258,7 +257,7 @@ class GrowthReviewTests(WorldCommandTest):
             dialogue = self.command(obj.key + "에게 훈련 말")
             self.assertIn(definition["dialogue"], dialogue)
             dialogues.add(definition["dialogue"])
-            if type(obj) is SkillTrainer:
+            if obj.db.skill_id:
                 name = pg.SKILLS[obj.db.skill_id]["name"]
                 self.assertIn(name + " 배워", appearance)
                 self.assertNotIn("재훈련", dialogue)
@@ -270,7 +269,7 @@ class GrowthReviewTests(WorldCommandTest):
                                         if part["role"] == "command"])
                 self.assertFalse(growth_controls(self.char2).get(obj.db.skill_id))
                 self.char2.change(lambda profile: profile.update(xp=rules.xp_threshold(20)))
-            elif type(obj) is AttributeTrainer:
+            elif obj.db.attribute_id:
                 name = pg.ATTRIBUTES[obj.db.attribute_id]["name"]
                 self.assertIn(name + " 배분", appearance)
                 self.assertNotIn("재훈련", dialogue)
@@ -296,7 +295,7 @@ class GrowthReviewTests(WorldCommandTest):
             build_world()
             self.assertFalse(enemy.attributes.has("suppression"))
             self.assertEqual(enemy.db.suppressions, effects)
-            self.assertEqual(search_tag(enemy.db.spawn_id, category="primal_spawn")[0].id, enemy.id)
+            self.assertEqual(search_tag(enemy.db.spawn_id, category="primal_actor_spawn")[0].id, enemy.id)
             self.assertEqual({obj.id for room in self.rooms.values() for obj in action_objects(room)}, old_ids)
             self.assertEqual(self.char1.profile(), before)
             self.assertEqual(self.char1.profile()["version"], 14)

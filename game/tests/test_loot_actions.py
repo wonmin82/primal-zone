@@ -134,10 +134,10 @@ class LootActionTests(NativeLootTest):
 
 
     def test_public_look_uses_actual_typed_corpse_and_keeps_npc_and_room(self):
-        from typeclasses.interactables import Doctor
+        from world.actors.spawn import create_actor
 
         self.loot_item(quantity=2)
-        doctor = create_object(Doctor, key="시험 의무관", location=self.char1.location)
+        doctor = create_actor("doctor", self.char1.location, name="시험 의무관")
         with patch("commands.character.time", return_value=100), patch.object(
                 self.char1, "at_look", wraps=self.char1.at_look) as at_look:
             for command, expected in (("시체 1 봐", self.source), ("시험 의무관 1 봐", doctor),

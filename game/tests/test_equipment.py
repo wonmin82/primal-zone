@@ -160,7 +160,7 @@ class EquipmentTests(NativeItemTest, WorldCommandTest):
             if data["slot"] not in EQUIPMENT_ACTIONS:
                 continue
             command = Look()
-            command.caller, command.args = self.char1, data["name"]
+            command.caller, command.session, command.args = self.char1, self.session, data["name"]
             with patch.object(self.char1, "msg") as message:
                 command.func()
             output = next(c.args[0] for c in message.call_args_list if c.args)
@@ -188,9 +188,9 @@ class EquipmentTests(NativeItemTest, WorldCommandTest):
             self.assertEqual(len(registered), 1)
             self.assertCountEqual(registered[0].aliases, aliases)
             command = Help()
-            command.caller, command.args = self.char1, action
+            command.caller, command.session, command.args = self.char1, self.session, action
             with patch.object(self.char1, "msg") as message:
-                command.run()
+                command.func()
             for alias in aliases:
                 self.assertIn(alias, tokens(message.call_args.args[0], "command"))
             self.assertIn(registered[0].usage, message.call_args.args[0])

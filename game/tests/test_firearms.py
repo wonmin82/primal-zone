@@ -350,26 +350,28 @@ class FirearmTests(NativeItemTest):
 
     def test_live_enemy_path_commits_shot_and_rolls_back_ammo_failure(self):
         from evennia.utils.create import create_object
-        from typeclasses.enemies import Enemy
+        from typeclasses.actors import Actor
 
-        self.enterContext(patch("typeclasses.enemies.delay"))
+        self.enterContext(patch("world.shared_combat.delay"))
         self.enterContext(patch.object(self.char1.sessions, "count", return_value=1))
-        enemy = create_object(Enemy, key="시험 적", location=self.char1.location)
-        enemy.db.enemy_id = "scavenger"
-        enemy.db.hp = enemy.db.max_hp = 1000
+        enemy = create_object(
+            Actor, key="시험 적", location=self.char1.location,
+            attributes=(("actor_id", "scavenger"), ("combat_state", {"hp": 1000, "max_hp": 1000})),
+        )
+        enemy.initialize_shared_combat()
         gun = self.gun("full_standard")
         equipment.equip_item(self.char1, gun)
         enemy.engage(self.char1, now=100)
         magazine = service.loaded_magazine_item(gun)
-        before_hp = enemy.db.hp
+        before_hp = enemy.hp
         enemy.receive_attack(self.char1, now=103, rng=Random(1))
         magazine.refresh_from_db()
         self.assertEqual(magazine.state["rounds"], 11)
-        self.assertLess(enemy.db.hp, before_hp)
+        self.assertLess(enemy.hp, before_hp)
         before = self.atomic_state()
-        enemy_before = (enemy.db.hp, deepcopy(enemy.db.contribution), deepcopy(enemy.db.threat))
+        enemy_before = (enemy.hp, deepcopy(enemy.db.contribution), deepcopy(enemy.db.threat))
         with patch.object(api, "update_item_state", side_effect=ValidationError("발사 저장 실패")):
             with self.assertRaises(ValidationError):
                 enemy.receive_attack(self.char1, now=106, rng=Random(1))
         self.assertEqual(before, self.atomic_state())
-        self.assertEqual(enemy_before, (enemy.db.hp, enemy.db.contribution, enemy.db.threat))
+        self.assertEqual(enemy_before, (enemy.hp, enemy.db.contribution, enemy.db.threat))

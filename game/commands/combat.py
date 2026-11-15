@@ -1,9 +1,5 @@
 """combat 영역의 명시적 게임 명령."""
 
-from world import rules
-from world import text as ft
-from world.targets import names, parse_selector, resolve, room_objects
-
 from commands.base import GameCommand
 from commands.help_contracts import command_sections
 
@@ -17,28 +13,10 @@ class Attack(GameCommand):
     key = "때려"
     aliases = ["쳐", "공격"]
 
-    def run(self):
-        from typeclasses.enemies import Enemy
-        from world.lifecycle import reconcile_room
+    def func(self):
+        from world.actions.global_actions import invoke
 
-        name = self.args.strip()
-        current = self.caller.combat_target()
-        reconcile_room(self.caller.location)
-        objects = room_objects(self.caller)
-        enemy = (
-            resolve(
-                objects,
-                parse_selector(name, [n for obj in objects for n in names(obj)]),
-                self.caller,
-                self.key,
-                lambda obj: isinstance(obj, Enemy) and obj.db.state == "alive",
-            )[0]
-            if name
-            else current
-        )
-        if not enemy:
-            raise rules.RuleError("사용법: 어린청소룡 때려 · '봐'로 사냥 대상을 확인하세요.")
-        self.caller.start_combat(enemy)
+        return invoke(self.caller, self.session, "attack", query=self.args)
 
 
 class Heavy(GameCommand):
@@ -49,9 +27,10 @@ class Heavy(GameCommand):
     aliases = ["heavy"]
     action = "heavy"
 
-    def run(self):
-        self.caller.change(lambda profile: rules.queue_action(profile, self.action))
-        self.caller.msg(ft.text("다음 차례에 ", ft.token("command", self.key), " 행동을 준비한다."))
+    def func(self):
+        from world.actions.global_actions import invoke
+
+        return invoke(self.caller, self.session, "queue_attack", skill=self.action)
 
 
 class Shooting(Heavy):
@@ -89,10 +68,10 @@ class Heal(GameCommand):
     aliases = ["힐", "heal"]
     action = "heal"
 
-    def run(self):
-        from world.skill_services import use_support
+    def func(self):
+        from world.actions.global_actions import invoke
 
-        use_support(self.caller, self.action, self.args)
+        return invoke(self.caller, self.session, "support", skill=self.action, query=self.args)
 
 
 class Breathe(Heal):
@@ -113,8 +92,7 @@ class Flee(GameCommand):
     key = "도망"
     aliases = ["flee"]
 
-    def run(self):
-        if not self.caller.profile().get("combat_target"):
-            raise rules.RuleError("진행 중인 교전이 없습니다.")
-        self.caller.leave_combat()
-        self.caller.msg("교전을 끝냈습니다. 적은 일정 시간 아무도 싸우지 않으면 회복합니다.")
+    def func(self):
+        from world.actions.global_actions import invoke
+
+        return invoke(self.caller, self.session, "flee")
