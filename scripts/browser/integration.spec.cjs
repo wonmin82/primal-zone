@@ -335,7 +335,7 @@ test('TEST-E2E-12 정상 Portal/Server 재시작·같은 DB·재인증', async (
   expect(stopped.claims).toEqual(before.claims); expect(stopped.currency).toEqual(before.currency); expect(stopped.shares).toEqual(before.shares);
   expect(stopped.legacy_loot).toEqual(before.legacy_loot);
   // NumberScope와 SelectionNumber를 직접 비교한다. Item UUID/quantity는 위
-  // items assertion, Corpse/Ground Item·Currency·Door·Enemy는 typed row로 검증.
+  // items assertion, Corpse/Ground Item·Currency·Door·Actor는 typed row로 검증.
   expect(stopped.number_scopes).toEqual(before.number_scopes);
   expect(stopped.selection_numbers).toEqual(before.selection_numbers);
   expect(stopped.phase3_race).toEqual(before.phase3_race);
@@ -346,7 +346,7 @@ test('TEST-E2E-12 정상 Portal/Server 재시작·같은 DB·재인증', async (
   expect(stopped.selection_numbers.filter(row => row.scope_id === race.scope).map(row => row.number).sort()).toEqual([2, 3]);
   for (const identity of race.survivors) expect(stopped.selection_numbers.some(row => row.kind === 'corpse' && row.identity === identity)).toBe(true);
   expect(stopped.selection_numbers.some(row => row.kind === 'corpse' && row.identity === race.removed)).toBe(false);
-  for (const kind of ['item', 'loot', 'currency', 'corpse', 'door', 'enemy']) {
+  for (const kind of ['item', 'loot', 'currency', 'corpse', 'door', 'actor']) {
     expect(before.selection_numbers.some(row => row.kind === kind)).toBe(true);
   }
   expect(before.number_scopes.some(row => row.scope_id.startsWith('inside:'))).toBe(true);
@@ -377,11 +377,10 @@ test('TEST-E2E-12 정상 Portal/Server 재시작·같은 DB·재인증', async (
   await travel(again, 'hq_concourse');
   const selected = stopped.selection_numbers.find(row => row.kind === 'item' && row.identity === parent.id);
   expect(selected).toBeTruthy();
-  // 버려는 승인된 비전환 명령이므로 기존 sequence 기반 선택을 따른다.
-  // 여기서는 선택 정책이 아니라 목적지의 영속 Counter 발급을 검증한다.
-  const legacyIndex = stopped.items.filter(row => row.owner_object_id === parent.owner_object_id && row.location_kind === 'inventory' && row.definition_id === parent.definition_id).findIndex(row => row.id === parent.id) + 1;
-  expect(legacyIndex).toBeGreaterThan(0);
-  await command(again, `붕대 ${legacyIndex} 버려`, '바닥에 내려놓았다');
+  // 이 검사는 목적지의 영속 번호 발급을 확인한다.
+  const sequenceIndex = stopped.items.filter(row => row.owner_object_id === parent.owner_object_id && row.location_kind === 'inventory' && row.definition_id === parent.definition_id).findIndex(row => row.id === parent.id) + 1;
+  expect(sequenceIndex).toBeGreaterThan(0);
+  await command(again, `붕대 ${sequenceIndex} 버려`, '바닥에 내려놓았다');
   const moved = snapshot();
   const allocated = moved.selection_numbers.find(row => row.kind === 'loot' && row.identity === parent.id);
   expect(allocated).toBeTruthy();

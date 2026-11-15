@@ -188,7 +188,7 @@ def main(scenario=None):
             shutil.copyfile(ROOT/'scripts/integration_hooks.py', harness.run_dir/'game/server/conf/integration_hooks.py')
             with (harness.run_dir/'game/server/conf/settings_smoke.py').open('a', encoding='utf-8') as config:
                 config.write('\nAT_SERVER_STARTSTOP_MODULE = "server.conf.integration_hooks"\n')
-                if scenario in ('E2E-07', 'E2E-12', 'E2E-13'):
+                if scenario in ('E2E-07', 'E2E-13'):
                     config.write('ITEM_MIGRATION_AUDIT = True\n')
         harness.start()
         asyncio.run(harness.supervise(browser(harness, results)))
