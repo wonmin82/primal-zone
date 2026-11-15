@@ -2,6 +2,7 @@ from random import Random
 from unittest.mock import Mock, patch
 
 from typeclasses.explorers import Explorer
+from world import shared_combat
 from world.rules import RuleError
 from world.shared_combat import room_enemies
 
@@ -27,6 +28,16 @@ class SharedCombatTests(WorldCommandTest):
     def join(self):
         for player in (self.char1, self.char2):
             self.enemy.engage(player, now=100)
+
+    def test_engine_adapters_delegate_to_shared_combat_service(self):
+        with patch.object(shared_combat, "engage") as engage:
+            self.enemy.engage(self.char1, now=100)
+        engage.assert_called_once_with(self.enemy, self.char1, now=100)
+
+        self.enemy.engage(self.char1, now=100)
+        with patch.object(shared_combat, "receive_attack") as attack:
+            self.char1.resolve_combat_round(now=102.5)
+        attack.assert_called_once_with(self.enemy, self.char1, now=102.5, rng=None)
 
     def test_shared_hp_and_independent_retaliation(self):
         self.join()
@@ -63,6 +74,45 @@ class SharedCombatTests(WorldCommandTest):
         self.assertEqual(tuple(state["completed_operations"]), (pending["operation_id"],))
         self.assertEqual(state["pending"]["due_at"], 105)
 
+    def test_sweep_recovers_player_tick_after_engage_callback_loss(self):
+        with patch.object(self.char1, "schedule_combat"):
+            self.enemy.engage(self.char1, now=100)
+        reservation = self.char1._combat_reservation()
+        self.assertEqual(reservation, (self.enemy.pk, self.enemy.db.combat_generation, 102.5))
+        self.assertIsNone(self.char1.ndb.combat_task)
+        self.assert_player_tick_recovered(reservation)
+
+    def test_sweep_recovers_same_player_tick_after_rollback(self):
+        self.enemy.engage(self.char1, now=100)
+        reservation = self.char1.ndb.combat_reservation
+        before_hp = self.enemy.hp
+        before_profile = self.char1.profile_snapshot()
+        with (patch("typeclasses.explorers.time", return_value=reservation[2]),
+              patch.object(shared_combat, "deliver_combat_message", side_effect=RuntimeError("회차 오류")),
+              self.assertRaisesRegex(RuntimeError, "회차 오류")):
+            self.char1.combat_tick(*reservation)
+        self.assertEqual(self.enemy.hp, before_hp)
+        self.assertEqual(self.char1.profile_snapshot(), before_profile)
+        self.assertEqual(self.char1._combat_reservation(), reservation)
+        self.assertIsNone(self.char1.ndb.combat_task)
+        self.assert_player_tick_recovered(reservation)
+
+    def assert_player_tick_recovered(self, reservation):
+        from world.lifecycle import reconcile_world
+
+        with (patch("typeclasses.explorers.delay") as timer,
+              patch("typeclasses.explorers.time", return_value=reservation[2])):
+            reconcile_world(now=reservation[2])
+            task = self.char1.ndb.combat_task
+            reconcile_world(now=reservation[2])
+            timer.assert_called_once_with(0.05, self.char1.combat_tick, *reservation)
+            self.assertIs(self.char1.ndb.combat_task, task)
+            self.assertEqual(self.char1.ndb.combat_reservation, reservation)
+            self.char1.combat_tick(*reservation)
+            self.char1.combat_tick(*reservation)
+        self.assertEqual(self.char1.profile()["player_round"], 1)
+        self.assertEqual(self.char1.ndb.combat_reservation, (*reservation[:2], 105))
+
     def test_state_delivery_failure_preserves_following_recipient_and_next_tick(self):
         self.join()
         due_at = self.enemy.db.next_attack_at
@@ -88,7 +138,7 @@ class SharedCombatTests(WorldCommandTest):
         self.enemy.engage(self.char1, now=103)
         task = self.enemy.ndb.combat_task
         self.assertGreater(self.enemy.db.combat_generation, generation)
-        with patch.object(self.enemy, "enemy_tick") as tick:
+        with patch.object(shared_combat, "enemy_tick") as tick:
             self.enemy.combat_tick(generation, deadline)
             self.enemy.combat_tick(self.enemy.db.combat_generation, deadline)
         tick.assert_not_called()
@@ -121,7 +171,7 @@ class SharedCombatTests(WorldCommandTest):
         task = Mock()
         self.enemy.ndb.lifecycle_task = task
         self.enemy.ndb.lifecycle_reservation = reservation
-        with patch.object(self.enemy, "reconcile") as reconcile:
+        with patch.object(shared_combat, "reconcile") as reconcile:
             self.enemy.lifecycle_tick(old_generation, deadline)
         reconcile.assert_not_called()
         self.assertEqual(self.enemy.ndb.lifecycle_reservation, reservation)
@@ -234,6 +284,42 @@ class SharedCombatTests(WorldCommandTest):
         self.assertIsNone(self.char1.profile()["combat_target"])
         timer.assert_called_once()
 
+    def test_player_timer_applies_its_authorized_encounter_round_once(self):
+        from world.combat_contracts import Combatant, Encounter
+        from world.domain_context import Origin
+
+        self.enemy.engage(self.char1, now=100)
+        reservation = self.char1.ndb.combat_reservation
+        encounter = Encounter(self.enemy, reservation[1])
+        self.assertEqual(reservation, (self.enemy.pk, encounter.generation, 102.5))
+        before = Combatant(self.enemy).snapshot()
+        with (patch("typeclasses.explorers.time", return_value=reservation[2]),
+              patch.object(shared_combat, "validate_context", wraps=shared_combat.validate_context) as validate):
+            self.char1.combat_tick(*reservation)
+            self.char1.combat_tick(*reservation)
+        validate.assert_called_once()
+        context = validate.call_args.args[0]
+        self.assertEqual((context.origin, context.actor, context.target), (Origin.TIMER, self.char1, self.enemy))
+        self.assertEqual((context.generation, context.domain_scope), (encounter.generation, encounter.identity))
+        self.assertEqual(context.operation_id, f"player:{self.char1.pk}:tick:102.5")
+        self.assertEqual(self.char1.profile()["player_round"], 1)
+        after = Combatant(self.enemy).snapshot()
+        self.assertLess(after["hp"], before["hp"])
+        self.assertEqual(after["hp"], self.enemy.hp)
+        self.assertEqual(self.char1.ndb.combat_reservation, (self.enemy.pk, encounter.generation, 105))
+
+    def test_disconnected_player_timer_releases_encounter_without_attacking(self):
+        self.enemy.engage(self.char1, now=100)
+        reservation = self.char1.ndb.combat_reservation
+        hp = self.enemy.hp
+        with (patch("typeclasses.explorers.time", return_value=reservation[2]),
+              patch.object(self.char1.sessions, "count", return_value=0)):
+            self.char1.combat_tick(*reservation)
+        self.assertEqual(self.enemy.hp, hp)
+        self.assertIsNone(self.char1.profile()["combat_target"])
+        self.assertIsNone(self.char1.ndb.combat_reservation)
+        self.assertEqual(self.enemy.db.encounter_state["final_result"], {"kind": "disengaged"})
+
     def test_previous_player_timer_does_not_consume_current_reservation(self):
         self.enemy.engage(self.char1, now=100)
         first_reservation = self.char1.ndb.combat_reservation
@@ -242,8 +328,8 @@ class SharedCombatTests(WorldCommandTest):
         current_reservation = self.char1.ndb.combat_reservation
         current_task = self.char1.ndb.combat_task
         self.assertNotEqual(first_reservation, current_reservation)
-        with patch.object(self.char1, "resolve_combat_round") as resolve:
+        with patch.object(shared_combat, "receive_attack") as attack:
             self.char1.combat_tick(*first_reservation)
-        resolve.assert_not_called()
+        attack.assert_not_called()
         self.assertEqual(self.char1.ndb.combat_reservation, current_reservation)
         self.assertIs(self.char1.ndb.combat_task, current_task)

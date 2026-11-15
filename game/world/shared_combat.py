@@ -1,4 +1,4 @@
-"""공유 교전과 전투 정산을 실행하는 전투 참가 객체의 동작."""
+"""공유 교전, 피해, 기술, 정산과 복구를 실행하는 Combat Domain Service."""
 
 from time import time
 
@@ -8,7 +8,16 @@ from evennia.utils.dbserialize import deserialize
 from world import presentation as view
 from world import recovery, rules
 from world import text as ft
+from world.combat_contracts import (
+    Combatant,
+    Encounter,
+    apply_tick,
+    begin_encounter,
+    plan_tick,
+    settle_encounter,
+)
 from world.currency import format_currency
+from world.domain_context import combat_timer_context, validate_context
 from world.multiplayer import (
     CLAIM_TIMEOUT_SECONDS,
     COMBAT_INTERVAL,
@@ -29,514 +38,635 @@ def deliver_combat_message(recipient, message):
     after_change(lambda: _run_post_commit(lambda: deliver_read_only(lambda: recipient.msg(message))))
 
 
-class SharedCombatMixin:
-    def initialize_shared_combat(self):
-        self.db.state = "alive"
-        self.db.respawn_at = None
-        self.db.claim = None
-        self.db.claim_last_activity = 0
-        self.db.combatants = []
-        self.db.contribution = {}
-        self.db.threat = {}
-        self.db.enemy_round = 0
-        self.db.next_attack_at = 0
-        self.db.last_activity = 0
-        self.db.suppressions = {}
+def initialize_shared_combat(enemy):
+    enemy.db.state = "alive"
+    enemy.db.respawn_at = None
+    enemy.db.claim = None
+    enemy.db.claim_last_activity = 0
+    enemy.db.combatants = []
+    enemy.db.contribution = {}
+    enemy.db.threat = {}
+    enemy.db.enemy_round = 0
+    enemy.db.next_attack_at = 0
+    enemy.db.last_activity = 0
+    enemy.db.suppressions = {}
 
-    def at_post_move(self, source_location, **kwargs):
-        super().at_post_move(source_location, **kwargs)
-        if not self.supports_shared_combat:
-            return
-        with world_change(isolate_callbacks=True):
-            for identity in list(self.db.combatants or []):
-                player = object_by_id(identity)
-                if player and player.profile().get("combat_target") == self.id:
-                    player.leave_combat()
-            self.db.suppressions = {}
-            self.reconcile()
 
-    def active_players(self):
-        return [
-            player
-            for identity in self.db.combatants
-            if (player := object_by_id(identity))
-            and player.location == self.location
-            and player.sessions.count()
-            and player.profile().get("combat_target") == self.id
-        ]
-
-    @staticmethod
-    def group_for(player):
-        from typeclasses.parties import party_for
-
-        party = party_for(player)
-        return f"party:{party.id}" if party else f"player:{player.id}"
-
-    def can_attack(self, player):
-        return self.shared_combat_active and (
-            self.combat_profile["combat_mode"] == "public"
-            or self.db.claim in (None, self.group_for(player))
-        )
-
-    def reward_groups(self, now):
-        groups = {}
-        for player in self.active_players():
-            entry = self.db.contribution.get(player.id)
-            group = self.group_for(player)
-            if (
-                not entry
-                or entry["damage"] <= 0
-                or now - entry["last_action_at"] > PARTICIPATION_TIMEOUT_SECONDS
-            ):
-                continue
-            if entry["group"] != group:
-                continue
-            if self.combat_profile["combat_mode"] == "claimed" and group != self.db.claim:
-                continue
-            groups.setdefault(group, {})[player.id] = entry["damage"]
-        return groups
-
-    def scale_boss(self, now):
-        definition = self.combat_profile
-        if not definition.get("boss"):
-            return
-        from world.loot_rules import boss_hp
-
-        participants = sum(len(group) for group in self.reward_groups(now).values())
-        count = max(self.db.scaling_participants or 1, participants)
-        maximum = boss_hp(definition["hp"], count)
-        self.hp += max(0, maximum - self.max_hp)
-        self.max_hp = maximum
-        self.db.scaling_participants = count
-
-    def engage(self, player, now=None):
-        now = time() if now is None else now
-        with world_change(isolate_callbacks=True):
-            self.reconcile(now)
-            if self.db.state != "alive":
-                raise rules.RuleError("아직 다시 나타나지 않은 적입니다.")
-            if not self.shared_combat_active or player.location != self.location or not player.sessions.count():
-                raise rules.RuleError("현재 전투에 참가할 수 없습니다.")
-            profile = player.profile()
-            from world.observation import can_perceive, context_for
-
-            if profile.get("combat_target") != self.id and not can_perceive(self, context_for(player, observed_at=now)):
-                raise rules.RuleError("지금은 그 상대를 식별할 수 없습니다. 광원을 사용하세요.")
-            if profile.get("combat_target") not in (None, self.id):
-                raise rules.RuleError("현재 상대에게서 먼저 도망하세요.")
-            if not self.can_attack(player):
-                owner = "다른 일행" if str(self.db.claim).startswith("party:") else "다른 탐사자"
-                raise rules.RuleError(
-                    f"{self.key}{ft.particle(self.key, '은/는')} {owner}와 교전 중입니다."
-                )
-            if self.combat_profile["combat_mode"] == "claimed" and not self.db.claim:
-                self.db.claim = self.group_for(player)
-            if player.id not in self.db.combatants:
-                player.accrue_recovery(profile, now)
-                self.db.combatants = [*self.db.combatants, player.id]
-                from world.combat_contracts import begin_encounter
-
-                encounter = dict(self.db.encounter_state or {})
-                if encounter.get("state") == "active":
-                    encounter["participants"] = tuple(dict.fromkeys((*encounter["participants"], str(player.pk))))
-                    self.db.encounter_state = encounter
-                else:
-                    begin_encounter(self, (self, player))
-                profile.update(
-                    combat_target=self.id,
-                    queued_action="attack",
-                    next_attack_at=max(profile["next_attack_at"], now + COMBAT_INTERVAL),
-                )
-                player.save_profile(profile)
-                self.db.recovery_ready_at = None
-                if not self.db.next_attack_at:
-                    self.db.next_attack_at = now + COMBAT_INTERVAL
-                    self._reserve_tick(self.db.combat_generation, self.db.next_attack_at)
-            if len(self.db.combatants) == 1 and not self.db.claim_last_activity:
-                self.db.claim_last_activity = now
-                self.db.last_activity = now
-        after_change(player.schedule_combat)
-        after_change(self.schedule_combat)
-
-    def _end_abandoned_encounter(self):
-        state = self.db.encounter_state or {}
-        if self.db.state != "alive" or self.hp <= 0 or state.get("state") != "active":
-            return
-        from world.combat_contracts import Encounter, settle_encounter
-
-        settle_encounter(Encounter(self, state["generation"]), {"kind": "disengaged"}, lambda _: None)
-        self.db.next_attack_at = 0
-
-    def remove_combatant(self, player, now=None):
-        now = time() if now is None else now
-        self.db.combatants = [identity for identity in self.db.combatants if identity != player.id]
-        threat = deserialize(self.db.threat)
-        threat.pop(player.id, None)
-        self.db.threat = threat
-        contribution = deserialize(self.db.contribution)
-        contribution.pop(player.id, None)
-        self.db.contribution = contribution
-        if not self.db.combatants:
-            self._end_abandoned_encounter()
-            self.db.suppressions = {}
-            self.db.recovery_ready_at = now + ENEMY_RECOVERY_DELAY_SECONDS
-            state = deserialize(self.db.recovery) or recovery.initialize(now)
-            # 재교전 중의 시간은 회복량에 더하지 않고 앞 구간의 소수 기여는 보존한다.
-            recovery.accrue(state, now, {})
-            self.db.recovery = state
-            self.db.claim = None
-            self.db.claim_last_activity = 0
-            after_change(self.stop_combat_timer)
-        after_change(self.schedule_lifecycle)
-
-    def reconcile(self, now=None):
-        now = time() if now is None else now
-        with world_change(isolate_callbacks=True):
-            # The old unowned effect cannot be assigned to a source safely.
-            self.attributes.remove("suppression")
-            if self.db.claim and now - self.db.claim_last_activity >= CLAIM_TIMEOUT_SECONDS:
-                for player in self.active_players():
-                    player.leave_combat(now=now)
-                self.db.claim = None
-                self.db.claim_last_activity = 0
-            active = self.active_players() if self.shared_combat_active else []
-            active_ids = [player.id for player in active]
-            for identity in list(self.db.combatants):
-                if identity not in active_ids:
-                    player = object_by_id(identity)
-                    if player and player.profile().get("combat_target") == self.id:
-                        player.leave_combat(now=now)
-                    elif player:
-                        self.remove_combatant(player, now=now)
-                    else:
-                        self.db.combatants = [key for key in self.db.combatants if key != identity]
-            if not self.db.combatants:
-                self._end_abandoned_encounter()
-                self.db.suppressions = {}
-                self.db.claim = None
-                self.db.claim_last_activity = 0
-                self.db.threat = {}
-                if self.db.state == "alive" and self.db.last_activity and self.db.recovery is None:
-                    self.db.recovery = recovery.initialize(self.db.last_activity)
-                    self.db.recovery_ready_at = self.db.last_activity + ENEMY_RECOVERY_DELAY_SECONDS
-            if (
-                not self.db.combatants
-                and self.db.last_activity
-                and now >= (self.db.recovery_ready_at or self.db.last_activity + ENEMY_RECOVERY_DELAY_SECONDS)
-            ):
-                if self.db.state == "alive":
-                    self.db.enemy_round = 0
-                    self.db.next_attack_at = 0
-                    self.db.threat = {}
-                    self.db.contribution = {}
-                    self.db.last_activity = 0
-            if self.db.state == "alive" and not self.db.combatants and 0 < self.hp < self.max_hp:
-                state = deserialize(self.db.recovery)
-                ready_at = self.db.recovery_ready_at
-                if state is None:
-                    start = self.db.last_activity or now
-                    state = recovery.initialize(start)
-                    ready_at = start + ENEMY_RECOVERY_DELAY_SECONDS
-                    self.db.recovery_ready_at = ready_at
-                recovery.accrue(state, now, {}, [{"started_at": ready_at or now,
-                    "expires_at": max(now, ready_at or now) + 1,
-                    "hp_per_minute": recovery.enemy_rate(self.max_hp)}])
-                resources = {"hp": self.hp, "mental": 0, "recovery": state}
-                recovery.commit(resources, {"max_hp": self.max_hp, "max_mental": 0})
-                self.hp = resources["hp"]
-                self.db.recovery = state
-            if self.db.state == "alive" and not self.db.combatants and not self.db.contribution and self.hp == self.max_hp:
-                self.db.scaling_participants = 1
-                self.max_hp = self.combat_profile["hp"]
-                self.hp = self.max_hp
-            if self.db.state == "respawning" and self.db.respawn_at <= now:
-                self.db.suppressions = {}
-                self.db.state = "alive"
-                self.db.scaling_participants = 1
-                self.max_hp = self.combat_profile["hp"]
-                self.hp = self.max_hp
-                self.db.respawn_at = None
-                self.db.enemy_round = 0
-                self.db.next_attack_at = 0
-                self.db.last_activity = 0
-                self.db.contribution = {}
-                self.db.threat = {}
-                self.db.recovery = None
-                self.db.recovery_ready_at = None
-        after_change(self.schedule_lifecycle)
-
-    def receive_attack(self, player, now=None, rng=None):
-        now = time() if now is None else now
-        with world_change(isolate_callbacks=True):
-            self.reconcile(now)
-            if not self.shared_combat_active or player not in self.active_players():
-                player.leave_combat()
-                return
-            profile = player.profile()
-            if now < profile["next_attack_at"]:
-                return
-            player.accrue_recovery(profile, now)
-            recipient = player
-            recipient_profile = None
-            error = None
-            if profile["queued_action"] == "heal":
-                from world.skill_services import heal_target
-
-                try:
-                    recipient = heal_target(player, profile.get("heal_target"))
-                    if recipient is not player:
-                        recipient_profile = recipient.profile()
-                        recipient.accrue_recovery(recipient_profile, now)
-                except rules.RuleError as failure:
-                    error = str(failure)
-            if error:
-                profile.update(queued_action="attack", next_attack_at=now + COMBAT_INTERVAL)
-                profile["player_round"] += 1
-                damage, outcome = 0, {"action": "error", "message": error}
-            else:
-                from world.firearm_service import player_attack
-
-                damage, outcome = player_attack(
-                    player, profile, self.combat_definition_id, now, COMBAT_INTERVAL, rng, recipient_profile
-                )
-            profile["heal_target"] = None
-            if recipient_profile is not None and outcome["action"] == "heal":
-                recipient.save_profile(recipient_profile)
-                outcome["recipient"] = recipient.key
-                deliver_combat_message(recipient, f"{player.key}의 치료로 HP {outcome['amount']}을 회복했다.")
-            # 현재 공격의 기여를 먼저 등록해 late join의 증가분도 사망 판정 전에 적용한다.
-            contribution = deserialize(self.db.contribution)
-            previous = contribution.get(player.id, {"damage": 0})
-            contribution[player.id] = {"damage": previous["damage"] + damage,
-                                       "last_action_at": now, "group": self.group_for(player)}
-            self.db.contribution = contribution
-            self.scale_boss(now)
-            actual = min(self.hp, damage)
-            contribution[player.id]["damage"] = previous["damage"] + actual
-            self.db.contribution = contribution
-            damage = actual
-            self.hp -= damage
-            if "suppression" in outcome:
-                from world.progression import apply_suppression
-
-                effects, status = apply_suppression(
-                    deserialize(self.db.suppressions), player.id, outcome["suppression"]["rank"],
-                    bool(self.combat_profile.get("boss")), effect=outcome["suppression"],
-                )
-                self.db.suppressions = effects
-                outcome["suppression"] = effects[str(player.id)]
-                outcome["suppression_status"] = status
-            self.db.last_activity = now
-            self.db.claim_last_activity = now
-            threat = deserialize(self.db.threat)
-            threat[player.id] = threat.get(player.id, 0) + damage
-            self.db.threat = threat
-            player.save_profile(profile)
-            message = view.outgoing_attack(profile, self.key, outcome, damage)
-            deliver_combat_message(player, message)
-            if self.hp <= 0:
-                self.finish_death(player, now, rng)
-        after_change(self.broadcast_state)
-
-    def finish_death(self, killer, now, rng=None):
-        with world_change(isolate_callbacks=True):
-            return self._finish_death(now, rng)
-
-    def _finish_death(self, now, rng=None):
-        if self.db.state != "alive" or self.hp > 0:
-            return
-        from world.combat_contracts import Encounter, begin_encounter, settle_encounter
-
-        state = self.db.encounter_state or {}
-        encounter = (Encounter(self, state["generation"]) if state.get("state") == "active"
-                     else begin_encounter(self, (self, *self.active_players())))
-        return settle_encounter(encounter, {"kind": "death"}, lambda _: self._settle_death(now, rng))
-
-    def _settle_death(self, now, rng):
-        from typeclasses.loot import Corpse
-
-        groups = self.reward_groups(now)
-        fallen = ft.text(
-            ft.named("hostile", self.key, "이/가"), " 더는 버티지 못하고 바닥에 쓰러졌다."
-        )
-        for participant in self.active_players():
-            deliver_combat_message(participant, fallen)
-        self.db.state = "respawning"
-        self.db.suppressions = {}
-        self.db.respawn_at = now + CORPSE_TTL_SECONDS + RESPAWN_DELAY_SECONDS
-        definition = self.combat_profile
-        for identity, xp in rules.reward_allocation(
-            definition["xp"], groups
-        ).items():
+def actor_moved(enemy):
+    if not enemy.supports_shared_combat:
+        return
+    with world_change(isolate_callbacks=True):
+        for identity in list(enemy.db.combatants or []):
             player = object_by_id(identity)
-            profile = player.profile()
+            if player and player.profile().get("combat_target") == enemy.id:
+                leave_combat(player)
+        enemy.db.suppressions = {}
+        reconcile(enemy)
+
+
+def active_players(enemy):
+    return [
+        player
+        for identity in enemy.db.combatants
+        if (player := object_by_id(identity))
+        and player.location == enemy.location
+        and player.sessions.count()
+        and player.profile().get("combat_target") == enemy.id
+    ]
+
+
+def group_for(player):
+    from typeclasses.parties import party_for
+
+    party = party_for(player)
+    return f"party:{party.id}" if party else f"player:{player.id}"
+
+
+def can_attack(enemy, player):
+    return enemy.shared_combat_active and (
+        enemy.combat_profile["combat_mode"] == "public"
+        or enemy.db.claim in (None, group_for(player))
+    )
+
+
+def reward_groups(enemy, now):
+    groups = {}
+    for player in active_players(enemy):
+        entry = enemy.db.contribution.get(player.id)
+        group = group_for(player)
+        if (
+            not entry
+            or entry["damage"] <= 0
+            or now - entry["last_action_at"] > PARTICIPATION_TIMEOUT_SECONDS
+        ):
+            continue
+        if entry["group"] != group:
+            continue
+        if enemy.combat_profile["combat_mode"] == "claimed" and group != enemy.db.claim:
+            continue
+        groups.setdefault(group, {})[player.id] = entry["damage"]
+    return groups
+
+
+def scale_boss(enemy, now):
+    definition = enemy.combat_profile
+    if not definition.get("boss"):
+        return
+    from world.loot_rules import boss_hp
+
+    participants = sum(len(group) for group in reward_groups(enemy, now).values())
+    count = max(enemy.db.scaling_participants or 1, participants)
+    maximum = boss_hp(definition["hp"], count)
+    enemy.hp += max(0, maximum - enemy.max_hp)
+    enemy.max_hp = maximum
+    enemy.db.scaling_participants = count
+
+
+def engage(enemy, player, now=None):
+    now = time() if now is None else now
+    with world_change(isolate_callbacks=True):
+        reconcile(enemy, now)
+        if enemy.db.state != "alive":
+            raise rules.RuleError("아직 다시 나타나지 않은 적입니다.")
+        if not enemy.shared_combat_active or player.location != enemy.location or not player.sessions.count():
+            raise rules.RuleError("현재 전투에 참가할 수 없습니다.")
+        profile = player.profile()
+        from world.observation import can_perceive, context_for
+
+        if profile.get("combat_target") != enemy.id and not can_perceive(enemy, context_for(player, observed_at=now)):
+            raise rules.RuleError("지금은 그 상대를 식별할 수 없습니다. 광원을 사용하세요.")
+        if profile.get("combat_target") not in (None, enemy.id):
+            raise rules.RuleError("현재 상대에게서 먼저 도망하세요.")
+        if not can_attack(enemy, player):
+            owner = "다른 일행" if str(enemy.db.claim).startswith("party:") else "다른 탐사자"
+            raise rules.RuleError(
+                f"{enemy.key}{ft.particle(enemy.key, '은/는')} {owner}와 교전 중입니다."
+            )
+        if enemy.combat_profile["combat_mode"] == "claimed" and not enemy.db.claim:
+            enemy.db.claim = group_for(player)
+        if player.id not in enemy.db.combatants:
             player.accrue_recovery(profile, now)
-            rules.gain_xp(profile, xp)
-            profile["kills"] += 1
-            if definition.get("boss_quest"):
-                profile["quests"][definition["boss_quest"]]["boss_defeated"] = True
+            enemy.db.combatants = [*enemy.db.combatants, player.id]
+            encounter = dict(enemy.db.encounter_state or {})
+            if encounter.get("state") == "active":
+                encounter["participants"] = tuple(dict.fromkeys((*encounter["participants"], str(player.pk))))
+                enemy.db.encounter_state = encounter
+            else:
+                begin_encounter(enemy, (enemy, player))
+            profile.update(
+                combat_target=enemy.id,
+                queued_action="attack",
+                next_attack_at=max(profile["next_attack_at"], now + COMBAT_INTERVAL),
+            )
             player.save_profile(profile)
-            message = view.reward(xp)
-            deliver_combat_message(player, message)
-        Corpse.from_enemy(self, groups, now, rng)
-        for player in self.active_players():
-            player.leave_combat(now=now)
-        after_change(self.stop_combat_timer)
-        after_change(self.schedule_lifecycle)
+            enemy.db.recovery_ready_at = None
+            if not enemy.db.next_attack_at:
+                enemy.db.next_attack_at = now + COMBAT_INTERVAL
+                _reserve_tick(enemy, enemy.db.combat_generation, enemy.db.next_attack_at)
+        if len(enemy.db.combatants) == 1 and not enemy.db.claim_last_activity:
+            enemy.db.claim_last_activity = now
+            enemy.db.last_activity = now
+    after_change(player.schedule_combat)
+    after_change(lambda: schedule_combat(enemy))
 
-    def enemy_tick(self, now=None, rng=None):
-        now = time() if now is None else now
-        with world_change(isolate_callbacks=True):
-            self.reconcile(now)
-            players = self.active_players()
-            if not self.shared_combat_active or not players or now < self.db.next_attack_at:
-                return
-            target = min(players, key=lambda player: (-self.db.threat.get(player.id, 0), player.id))
-            from typeclasses.parties import party_for
-            party = party_for(target)
-            if party:
-                target = party.defense_target(self, target, players)
-            self.db.enemy_round += 1
-            self.db.next_attack_at = now + COMBAT_INTERVAL
-            result_profile = target.profile()
-            target.accrue_recovery(result_profile, now)
-            from world.progression import combined_suppression, consume_suppressions
 
-            effects = deserialize(self.db.suppressions)
-            reduction = combined_suppression(effects, bool(self.combat_profile.get("boss")))
-            self.db.suppressions = consume_suppressions(effects)
-            result = rules.enemy_attack(
-                result_profile, self.combat_definition_id, self.db.enemy_round, now, rng, reduction
-            )
-            lost = rules.apply_defeat(result_profile) if result["defeated"] else 0
-            target.save_profile(result_profile)
-            message = ft.text(
-                ft.named("hostile", self.key, "이/가"),
-                f" {self.combat_profile.get('special_verb', '거세게 돌진해')} "
-                if result["charged"] else " 달려들어 ",
-                f"{result['damage']}의 피해를 입혔다.",
-            )
-            deliver_combat_message(target, message)
-            if result["defeated"]:
-                from world.bootstrap import get_room
+def _end_abandoned_encounter(enemy):
+    state = enemy.db.encounter_state or {}
+    if enemy.db.state != "alive" or enemy.hp <= 0 or state.get("state") != "active":
+        return
+    settle_encounter(Encounter(enemy, state["generation"]), {"kind": "disengaged"}, lambda _: None)
+    enemy.db.next_attack_at = 0
 
-                target.leave_combat(now=now)
-                destination = get_room("infirmary")
-                rescue = (
-                    "탐사대가 본부 3층 의무실로 구조했습니다.\n"
-                    + (f"{format_currency(lost)}을 잃었습니다.\n" if lost else "")
-                    + f"응급 처치로 체력 {rules.DEFEAT_RECOVERY_HP}을 회복했습니다. 추가 회복이 필요합니다."
-                )
-                deliver_combat_message(target, rescue)
-                if destination is None or not target.move_to(destination, quiet=True, move_type="defeat"):
-                    raise RuntimeError("패배 후 의무실 이동을 완료하지 못했습니다.")
-                after_change(target.request_prompt)
-            if rules.boss_telegraph(self.combat_definition_id, self.db.enemy_round):
-                for player in self.active_players():
-                    message = ft.text(
-                        ft.token("warning", "! "),
-                        ft.named("hostile", self.key, "이/가"),
-                        " ",
-                        self.combat_profile.get("telegraph", "몸을 낮추고 돌진할 자세를 취한다."),
-                    )
-                    deliver_combat_message(player, message)
-        after_change(self.broadcast_state)
 
-    def schedule_combat(self):
-        if not self.shared_combat_active or not self.active_players() or self.ndb.combat_task:
+def remove_combatant(enemy, player, now=None):
+    now = time() if now is None else now
+    enemy.db.combatants = [identity for identity in enemy.db.combatants if identity != player.id]
+    threat = deserialize(enemy.db.threat)
+    threat.pop(player.id, None)
+    enemy.db.threat = threat
+    contribution = deserialize(enemy.db.contribution)
+    contribution.pop(player.id, None)
+    enemy.db.contribution = contribution
+    if not enemy.db.combatants:
+        _end_abandoned_encounter(enemy)
+        enemy.db.suppressions = {}
+        enemy.db.recovery_ready_at = now + ENEMY_RECOVERY_DELAY_SECONDS
+        state = deserialize(enemy.db.recovery) or recovery.initialize(now)
+        # 재교전 중의 시간은 회복량에 더하지 않고 앞 구간의 소수 기여는 보존한다.
+        recovery.accrue(state, now, {})
+        enemy.db.recovery = state
+        enemy.db.claim = None
+        enemy.db.claim_last_activity = 0
+        after_change(lambda: stop_combat_timer(enemy))
+    after_change(lambda: schedule_lifecycle(enemy))
+
+
+def reconcile(enemy, now=None):
+    now = time() if now is None else now
+    with world_change(isolate_callbacks=True):
+        # The old unowned effect cannot be assigned to a source safely.
+        enemy.attributes.remove("suppression")
+        if enemy.db.claim and now - enemy.db.claim_last_activity >= CLAIM_TIMEOUT_SECONDS:
+            for player in active_players(enemy):
+                leave_combat(player, now=now)
+            enemy.db.claim = None
+            enemy.db.claim_last_activity = 0
+        active = active_players(enemy) if enemy.shared_combat_active else []
+        active_ids = [player.id for player in active]
+        for identity in list(enemy.db.combatants):
+            if identity not in active_ids:
+                player = object_by_id(identity)
+                if player and player.profile().get("combat_target") == enemy.id:
+                    leave_combat(player, now=now)
+                elif player:
+                    remove_combatant(enemy, player, now=now)
+                else:
+                    enemy.db.combatants = [key for key in enemy.db.combatants if key != identity]
+        if not enemy.db.combatants:
+            _end_abandoned_encounter(enemy)
+            enemy.db.suppressions = {}
+            enemy.db.claim = None
+            enemy.db.claim_last_activity = 0
+            enemy.db.threat = {}
+            if enemy.db.state == "alive" and enemy.db.last_activity and enemy.db.recovery is None:
+                enemy.db.recovery = recovery.initialize(enemy.db.last_activity)
+                enemy.db.recovery_ready_at = enemy.db.last_activity + ENEMY_RECOVERY_DELAY_SECONDS
+        if (
+            not enemy.db.combatants
+            and enemy.db.last_activity
+            and now >= (enemy.db.recovery_ready_at or enemy.db.last_activity + ENEMY_RECOVERY_DELAY_SECONDS)
+        ):
+            if enemy.db.state == "alive":
+                enemy.db.enemy_round = 0
+                enemy.db.next_attack_at = 0
+                enemy.db.threat = {}
+                enemy.db.contribution = {}
+                enemy.db.last_activity = 0
+        if enemy.db.state == "alive" and not enemy.db.combatants and 0 < enemy.hp < enemy.max_hp:
+            state = deserialize(enemy.db.recovery)
+            ready_at = enemy.db.recovery_ready_at
+            if state is None:
+                start = enemy.db.last_activity or now
+                state = recovery.initialize(start)
+                ready_at = start + ENEMY_RECOVERY_DELAY_SECONDS
+                enemy.db.recovery_ready_at = ready_at
+            recovery.accrue(state, now, {}, [{"started_at": ready_at or now,
+                "expires_at": max(now, ready_at or now) + 1,
+                "hp_per_minute": recovery.enemy_rate(enemy.max_hp)}])
+            resources = {"hp": enemy.hp, "mental": 0, "recovery": state}
+            recovery.commit(resources, {"max_hp": enemy.max_hp, "max_mental": 0})
+            enemy.hp = resources["hp"]
+            enemy.db.recovery = state
+        if enemy.db.state == "alive" and not enemy.db.combatants and not enemy.db.contribution and enemy.hp == enemy.max_hp:
+            enemy.db.scaling_participants = 1
+            enemy.max_hp = enemy.combat_profile["hp"]
+            enemy.hp = enemy.max_hp
+        if enemy.db.state == "respawning" and enemy.db.respawn_at <= now:
+            enemy.db.suppressions = {}
+            enemy.db.combat_lifecycle = (enemy.db.combat_lifecycle or 0) + 1
+            enemy.db.state = "alive"
+            enemy.db.scaling_participants = 1
+            enemy.max_hp = enemy.combat_profile["hp"]
+            enemy.hp = enemy.max_hp
+            enemy.db.respawn_at = None
+            enemy.db.enemy_round = 0
+            enemy.db.next_attack_at = 0
+            enemy.db.last_activity = 0
+            enemy.db.contribution = {}
+            enemy.db.threat = {}
+            enemy.db.recovery = None
+            enemy.db.recovery_ready_at = None
+    after_change(lambda: schedule_lifecycle(enemy))
+
+
+def receive_attack(enemy, player, now=None, rng=None):
+    now = time() if now is None else now
+    with world_change(isolate_callbacks=True):
+        reconcile(enemy, now)
+        if not enemy.shared_combat_active or player not in active_players(enemy):
+            leave_combat(player)
             return
-        generation = self.db.combat_generation
-        if generation is None:
+        profile = player.profile()
+        if now < profile["next_attack_at"]:
             return
-        from world.combat_contracts import Encounter
+        player.accrue_recovery(profile, now)
+        recipient = player
+        recipient_profile = None
+        error = None
+        if profile["queued_action"] == "heal":
+            from world.skill_services import heal_target
 
-        encounter = Encounter(self, generation)
-        pending = encounter.state.get("pending")
-        if pending and not pending["completed"]:
-            self._schedule_reserved_tick(encounter, pending["operation_id"], pending["due_at"])
+            try:
+                recipient = heal_target(player, profile.get("heal_target"))
+                if recipient is not player:
+                    recipient_profile = recipient.profile()
+                    recipient.accrue_recovery(recipient_profile, now)
+            except rules.RuleError as failure:
+                error = str(failure)
+        if error:
+            profile.update(queued_action="attack", next_attack_at=now + COMBAT_INTERVAL)
+            profile["player_round"] += 1
+            damage, outcome = 0, {"action": "error", "message": error}
+        else:
+            from world.firearm_service import player_attack
 
-    def _reserve_tick(self, generation, due_at):
-        from world.combat_contracts import Encounter, plan_tick
-
-        plan_tick(Encounter(self, generation), operation_id=f"tick:{due_at}", due_at=due_at,
-                  trigger=self._schedule_reserved_tick)
-
-    def _schedule_reserved_tick(self, encounter, operation_id, due_at):
-        state = self.db.encounter_state or {}
-        pending = state.get("pending") or {}
-        if (state.get("state") == "active" and state.get("generation") == encounter.generation
-                and pending.get("operation_id") == operation_id and not pending.get("completed")
-                and pending.get("due_at") == due_at == self.db.next_attack_at
-                and self.shared_combat_active and not self.ndb.combat_task):
-            self._schedule_tick(encounter.generation, due_at)
-
-    def _schedule_tick(self, generation, due_at):
-        self.ndb.combat_task = delay(max(0.05, due_at - time()), self.combat_tick, generation, due_at)
-
-    def combat_tick(self, generation, due_at):
-        if generation is None or generation != self.db.combat_generation or due_at != self.db.next_attack_at:
-            return
-        self.ndb.combat_task = None
-        now = time()
-        if now >= due_at:
-            from world.combat_contracts import Encounter, apply_tick
-            from world.domain_context import combat_timer_context
-
-            encounter = Encounter(self, generation)
-            context = combat_timer_context(
-                self, operation_id=f"tick:{due_at}", domain_scope=encounter.identity,
-                generation=generation, clock=lambda: now,
+            damage, outcome = player_attack(
+                player, profile, enemy.combat_definition_id, now, COMBAT_INTERVAL, rng, recipient_profile
             )
-            with world_change(isolate_callbacks=True):
-                apply_tick(encounter, context, lambda _: self.enemy_tick(now=now))
-                deadline = self.db.next_attack_at
-                if self.shared_combat_active and self.active_players() and deadline > now:
-                    self._reserve_tick(generation, deadline)
-        self.schedule_combat()
+        profile["heal_target"] = None
+        if recipient_profile is not None and outcome["action"] == "heal":
+            recipient.save_profile(recipient_profile)
+            outcome["recipient"] = recipient.key
+            deliver_combat_message(recipient, f"{player.key}의 치료로 HP {outcome['amount']}을 회복했다.")
+        # 현재 공격의 기여를 먼저 등록해 late join의 증가분도 사망 판정 전에 적용한다.
+        contribution = deserialize(enemy.db.contribution)
+        previous = contribution.get(player.id, {"damage": 0})
+        contribution[player.id] = {"damage": previous["damage"] + damage,
+                                   "last_action_at": now, "group": group_for(player)}
+        enemy.db.contribution = contribution
+        scale_boss(enemy, now)
+        actual = min(enemy.hp, damage)
+        contribution[player.id]["damage"] = previous["damage"] + actual
+        enemy.db.contribution = contribution
+        damage = actual
+        Combatant(enemy).apply(lambda state: state.update(hp=state["hp"] - damage))
+        if "suppression" in outcome:
+            from world.progression import apply_suppression
 
-    def stop_combat_timer(self):
-        task = self.ndb.combat_task
-        self.ndb.combat_task = None
-        if task:
-            task.remove()
+            effects, status = apply_suppression(
+                deserialize(enemy.db.suppressions), player.id, outcome["suppression"]["rank"],
+                bool(enemy.combat_profile.get("boss")), effect=outcome["suppression"],
+            )
+            enemy.db.suppressions = effects
+            outcome["suppression"] = effects[str(player.id)]
+            outcome["suppression_status"] = status
+        enemy.db.last_activity = now
+        enemy.db.claim_last_activity = now
+        threat = deserialize(enemy.db.threat)
+        threat[player.id] = threat.get(player.id, 0) + damage
+        enemy.db.threat = threat
+        player.save_profile(profile)
+        message = view.outgoing_attack(profile, enemy.key, outcome, damage)
+        deliver_combat_message(player, message)
+        if enemy.hp <= 0:
+            _finish_death(enemy, now, rng)
+    after_change(lambda: broadcast_state(enemy))
 
-    def schedule_lifecycle(self):
-        deadline = (
-            self.db.respawn_at
-            if self.db.state == "respawning"
-            else recovery.next_boundary(max(time(), self.db.recovery_ready_at or time()))
-            if not self.db.combatants and self.db.state == "alive" and 0 < self.hp < self.max_hp
-            and self.location and any(getattr(obj, "push_state", None) and obj.sessions.count()
-                                      for obj in self.location.contents)
-            else None
+
+def finish_death(enemy, now, rng=None):
+    with world_change(isolate_callbacks=True):
+        return _finish_death(enemy, now, rng)
+
+
+def _finish_death(enemy, now, rng=None):
+    if enemy.db.state != "alive" or enemy.hp > 0:
+        return
+    state = enemy.db.encounter_state or {}
+    encounter = (Encounter(enemy, state["generation"]) if state.get("state") == "active"
+                 else begin_encounter(enemy, (enemy, *active_players(enemy))))
+    return settle_encounter(encounter, {"kind": "death"}, lambda _: _settle_death(enemy, now, rng))
+
+
+def _settle_death(enemy, now, rng):
+    from typeclasses.loot import Corpse
+
+    groups = reward_groups(enemy, now)
+    fallen = ft.text(
+        ft.named("hostile", enemy.key, "이/가"), " 더는 버티지 못하고 바닥에 쓰러졌다."
+    )
+    for participant in active_players(enemy):
+        deliver_combat_message(participant, fallen)
+    enemy.db.state = "respawning"
+    enemy.db.suppressions = {}
+    enemy.db.respawn_at = now + CORPSE_TTL_SECONDS + RESPAWN_DELAY_SECONDS
+    definition = enemy.combat_profile
+    for identity, xp in rules.reward_allocation(
+        definition["xp"], groups
+    ).items():
+        player = object_by_id(identity)
+        profile = player.profile()
+        player.accrue_recovery(profile, now)
+        rules.gain_xp(profile, xp)
+        profile["kills"] += 1
+        if definition.get("boss_quest"):
+            profile["quests"][definition["boss_quest"]]["boss_defeated"] = True
+        player.save_profile(profile)
+        message = view.reward(xp)
+        deliver_combat_message(player, message)
+    Corpse.from_enemy(enemy, groups, now, rng)
+    for player in active_players(enemy):
+        leave_combat(player, now=now)
+    after_change(lambda: stop_combat_timer(enemy))
+    after_change(lambda: schedule_lifecycle(enemy))
+
+
+def enemy_tick(enemy, now=None, rng=None):
+    now = time() if now is None else now
+    with world_change(isolate_callbacks=True):
+        reconcile(enemy, now)
+        players = active_players(enemy)
+        if not enemy.shared_combat_active or not players or now < enemy.db.next_attack_at:
+            return
+        target = min(players, key=lambda player: (-enemy.db.threat.get(player.id, 0), player.id))
+        from typeclasses.parties import party_for
+        party = party_for(target)
+        if party:
+            target = party.defense_target(enemy, target, players)
+        enemy.db.enemy_round += 1
+        enemy.db.next_attack_at = now + COMBAT_INTERVAL
+        result_profile = target.profile()
+        target.accrue_recovery(result_profile, now)
+        from world.progression import combined_suppression, consume_suppressions
+
+        effects = deserialize(enemy.db.suppressions)
+        reduction = combined_suppression(effects, bool(enemy.combat_profile.get("boss")))
+        enemy.db.suppressions = consume_suppressions(effects)
+        result = rules.enemy_attack(
+            result_profile, enemy.combat_definition_id, enemy.db.enemy_round, now, rng, reduction
         )
-        reservation = (self.db.combat_generation, deadline) if deadline else None
-        if self.ndb.lifecycle_task and self.ndb.lifecycle_reservation != reservation:
-            self.ndb.lifecycle_task.remove()
-            self.ndb.lifecycle_task = None
-            self.ndb.lifecycle_reservation = None
-        if reservation and not self.ndb.lifecycle_task:
-            self.ndb.lifecycle_reservation = reservation
-            self.ndb.lifecycle_task = delay(
-                max(0.05, deadline - time()), self.lifecycle_tick, *reservation,
+        lost = rules.apply_defeat(result_profile) if result["defeated"] else 0
+        target.save_profile(result_profile)
+        message = ft.text(
+            ft.named("hostile", enemy.key, "이/가"),
+            f" {enemy.combat_profile.get('special_verb', '거세게 돌진해')} "
+            if result["charged"] else " 달려들어 ",
+            f"{result['damage']}의 피해를 입혔다.",
+        )
+        deliver_combat_message(target, message)
+        if result["defeated"]:
+            from world.bootstrap import get_room
+
+            leave_combat(target, now=now)
+            destination = get_room("infirmary")
+            rescue = (
+                "탐사대가 본부 3층 의무실로 구조했습니다.\n"
+                + (f"{format_currency(lost)}을 잃었습니다.\n" if lost else "")
+                + f"응급 처치로 체력 {rules.DEFEAT_RECOVERY_HP}을 회복했습니다. 추가 회복이 필요합니다."
             )
+            deliver_combat_message(target, rescue)
+            if destination is None or not target.move_to(destination, quiet=True, move_type="defeat"):
+                raise RuntimeError("패배 후 의무실 이동을 완료하지 못했습니다.")
+            after_change(target.request_prompt)
+        if rules.boss_telegraph(enemy.combat_definition_id, enemy.db.enemy_round):
+            for player in active_players(enemy):
+                message = ft.text(
+                    ft.token("warning", "! "),
+                    ft.named("hostile", enemy.key, "이/가"),
+                    " ",
+                    enemy.combat_profile.get("telegraph", "몸을 낮추고 돌진할 자세를 취한다."),
+                )
+                deliver_combat_message(player, message)
+    after_change(lambda: broadcast_state(enemy))
 
-    def lifecycle_tick(self, generation, deadline):
-        if self.ndb.lifecycle_reservation != (generation, deadline):
-            return
-        self.ndb.lifecycle_task = None
-        self.ndb.lifecycle_reservation = None
-        if self.db.combat_generation != generation:
-            self.schedule_lifecycle()
-            return
-        self.reconcile()
-        self.broadcast_state()
 
-    def broadcast_state(self):
-        if self.location:
-            for obj in self.location.contents:
-                if hasattr(obj, "push_state"):
-                    _run_post_commit(obj.push_state)
+def schedule_combat(enemy):
+    if not enemy.shared_combat_active or not active_players(enemy) or enemy.ndb.combat_task:
+        return
+    generation = enemy.db.combat_generation
+    if generation is None:
+        return
+    encounter = Encounter(enemy, generation)
+    pending = encounter.state.get("pending")
+    if pending and not pending["completed"]:
+        _schedule_reserved_tick(encounter, pending["operation_id"], pending["due_at"])
+
+
+def _reserve_tick(enemy, generation, due_at):
+    plan_tick(Encounter(enemy, generation), operation_id=f"tick:{due_at}", due_at=due_at,
+              trigger=_schedule_reserved_tick)
+
+
+def _schedule_reserved_tick(encounter, operation_id, due_at):
+    enemy = encounter.owner
+    state = enemy.db.encounter_state or {}
+    pending = state.get("pending") or {}
+    if (state.get("state") == "active" and state.get("generation") == encounter.generation
+            and pending.get("operation_id") == operation_id and not pending.get("completed")
+            and pending.get("due_at") == due_at == enemy.db.next_attack_at
+            and enemy.shared_combat_active and not enemy.ndb.combat_task):
+        _schedule_tick(enemy, encounter.generation, due_at)
+
+
+def _schedule_tick(enemy, generation, due_at):
+    enemy.ndb.combat_task = delay(max(0.05, due_at - time()), enemy.combat_tick, generation, due_at)
+
+
+def combat_tick(enemy, generation, due_at):
+    if generation is None or generation != enemy.db.combat_generation or due_at != enemy.db.next_attack_at:
+        return
+    encounter = Encounter(enemy, generation)
+    state = encounter.state
+    pending = state.get("pending") or {}
+    operation_id = f"tick:{due_at}"
+    if (state.get("state") != "active" or state.get("generation") != generation
+            or pending.get("operation_id") != operation_id or pending.get("due_at") != due_at
+            or pending.get("completed")):
+        return
+    enemy.ndb.combat_task = None
+    now = time()
+    if now >= due_at:
+        context = combat_timer_context(
+            enemy, operation_id=operation_id, domain_scope=encounter.identity, generation=generation, clock=lambda: now,
+        )
+        with world_change(isolate_callbacks=True):
+            apply_tick(encounter, context, lambda _: enemy_tick(enemy, now=now))
+            deadline = enemy.db.next_attack_at
+            if enemy.shared_combat_active and active_players(enemy) and deadline > now:
+                _reserve_tick(enemy, generation, deadline)
+    schedule_combat(enemy)
+
+
+def stop_combat_timer(enemy):
+    task = enemy.ndb.combat_task
+    enemy.ndb.combat_task = None
+    if task:
+        task.remove()
+
+
+def schedule_lifecycle(enemy):
+    deadline = (
+        enemy.db.respawn_at
+        if enemy.db.state == "respawning"
+        else recovery.next_boundary(max(time(), enemy.db.recovery_ready_at or time()))
+        if not enemy.db.combatants and enemy.db.state == "alive" and 0 < enemy.hp < enemy.max_hp
+        and enemy.location and any(getattr(obj, "push_state", None) and obj.sessions.count()
+                                  for obj in enemy.location.contents)
+        else None
+    )
+    reservation = (enemy.db.combat_generation, deadline) if deadline else None
+    if enemy.ndb.lifecycle_task and enemy.ndb.lifecycle_reservation != reservation:
+        enemy.ndb.lifecycle_task.remove()
+        enemy.ndb.lifecycle_task = None
+        enemy.ndb.lifecycle_reservation = None
+    if reservation and not enemy.ndb.lifecycle_task:
+        enemy.ndb.lifecycle_reservation = reservation
+        enemy.ndb.lifecycle_task = delay(
+            max(0.05, deadline - time()), enemy.lifecycle_tick, *reservation,
+        )
+
+
+def lifecycle_tick(enemy, generation, deadline):
+    if enemy.ndb.lifecycle_reservation != (generation, deadline):
+        return
+    enemy.ndb.lifecycle_task = None
+    enemy.ndb.lifecycle_reservation = None
+    if enemy.db.combat_generation != generation:
+        schedule_lifecycle(enemy)
+        return
+    reconcile(enemy)
+    broadcast_state(enemy)
+
+
+def broadcast_state(enemy):
+    if enemy.location:
+        for obj in enemy.location.contents:
+            if hasattr(obj, "push_state"):
+                _run_post_commit(obj.push_state)
+
+
+def combat_target(player):
+    from typeclasses.actors import Actor
+
+    enemy = object_by_id(player.profile_snapshot().get("combat_target"))
+    return enemy if isinstance(enemy, Actor) and enemy.supports_shared_combat else None
+
+
+def combat_snapshot(player):
+    enemy = combat_target(player)
+    if not enemy or not enemy.shared_combat_active:
+        return None
+    return {
+        "id": enemy.id,
+        "enemy": enemy.combat_definition_id,
+        "name": enemy.key,
+        "hp": enemy.hp,
+        "max_hp": enemy.max_hp,
+        "round": enemy.db.enemy_round,
+        "state": enemy.db.state,
+        "telegraph": rules.boss_telegraph(enemy.combat_definition_id, enemy.db.enemy_round),
+    }
+
+
+def start_combat(player, enemy_id):
+    from world.lifecycle import reconcile_room
+
+    reconcile_room(player.location)
+
+    enemies = room_enemies(player.location)
+    enemy = enemy_id if enemy_id in enemies else next(
+        (obj for obj in enemies if obj.combat_definition_id == enemy_id), None
+    )
+    if not enemy:
+        raise rules.RuleError("이곳에는 공격할 수 있는 상대가 없습니다.")
+    engage(enemy, player)
+    message = ft.text(
+        ft.named("hostile", enemy.key, "과/와"),
+        " 교전을 시작했다. 기본 공격은 2.5초마다 이어진다.",
+    )
+    deliver_combat_message(player, message)
+    after_change(player.push_state)
+
+
+def leave_combat(player, now=None):
+    with world_change():
+        enemy = combat_target(player)
+        if enemy:
+            remove_combatant(enemy, player, now=now)
+        after_change(player.stop_combat_timer)
+        profile = player.profile()
+        if profile.get("combat_target"):
+            player.accrue_recovery(profile, now)
+            profile.update(combat_target=None, queued_action="attack", insight=None, heal_target=None)
+            player.save_profile(profile)
+
+
+def combat_reservation(player):
+    profile = player.profile_snapshot()
+    enemy = combat_target(player)
+    return (profile.get("combat_target"), enemy.db.combat_generation if enemy else None,
+            profile["next_attack_at"])
+
+
+def player_combat_tick(player, target_id, generation, due_at, *, now):
+    reservation = (target_id, generation, due_at)
+    if player.ndb.combat_reservation != reservation:
+        return
+    player.ndb.combat_task = None
+    player.ndb.combat_reservation = None
+    current = combat_reservation(player)
+    if current[0] != target_id or current[2] != due_at or current[1] not in (generation, None):
+        player.schedule_combat()
+        return
+    enemy = combat_target(player)
+    if enemy is None or not player.sessions.count():
+        leave_combat(player, now=now)
+        return
+    if now >= due_at:
+        encounter = Encounter(enemy, generation)
+        with world_change(isolate_callbacks=True):
+            state = encounter.state
+            if (state.get("state") == "active" and state.get("generation") == generation
+                    and str(player.pk) in state["participants"]):
+                context = combat_timer_context(
+                    player, target=enemy, operation_id=f"player:{player.pk}:tick:{due_at}",
+                    domain_scope=encounter.identity, generation=generation, clock=lambda: now,
+                )
+                validate_context(
+                    context, "combat.tick", actor=player, target=enemy, domain_scope=encounter.identity,
+                    generation=generation, permission=lambda _: combat_reservation(player) == reservation,
+                )
+                receive_attack(enemy, player, now=now)
+            else:
+                leave_combat(player, now=now)
+    player.schedule_combat()
+
+
+def resolve_combat_round(player, rng=None, now=None):
+    enemy = combat_target(player)
+    if enemy:
+        receive_attack(enemy, player, now=now, rng=rng)
+    else:
+        leave_combat(player)
 
 
 def room_enemies(room, alive_only=True):

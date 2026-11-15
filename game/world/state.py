@@ -57,7 +57,10 @@ def multiplayer_state(player, now=None):
     def combat_action(enemy, action_id):
         return {"action_id": action_id, "variant": "adapter",
                 "roles": {"subject": [reference_json(descriptor(enemy).reference)]},
-                "arguments": {"generation": enemy.db.combat_generation or 0}}
+                "arguments": {
+                    "generation": enemy.db.combat_generation or 0,
+                    "lifecycle": enemy.db.combat_lifecycle or 0,
+                }}
 
     def object_actions(obj):
         from world.actions.room_npc_presentation import sort_controls

@@ -110,3 +110,9 @@ macOS/Python 3.13.18, 메모리 SQLite 각각의 새 Schema에서 기준 `6de939
 - 위 실행 이후 변경된 전투 전달 격리와 무표식 구형 실물 차단은 Actor·Domain·전투·Door 직접 검사 53개에서 확인했다. Job `eec3c558f7714882b7ec3ec22cc88eff`, Fingerprint `38e1d724…`, 종료 코드 0, 소유 자원 정리 확인.
 - 독립 Reviewer는 외부 savepoint, 영속 상태의 실제 커밋 이후 전달, 오래된 Actor 버튼·타이머, Door 국소 격리 및 레거시 공식 입력을 검토했다. 지적 보완과 직접 검사 근거 확인 뒤 재검토 범위에서 미해결 P0/P1을 보고하지 않았다.
 - JavaScript 구문과 계약 테스트 58개가 통과했다. macOS 로컬 Chromium 통합은 프로세스 소유 검증 실행기가 Windows/Linux만 지원해 브라우저 시작 전에 중단됐다. 브라우저의 데스크톱·좁은 화면 자동 검증은 PR HEAD의 GitHub Actions에서 확인한다. 실제 OS 한글 IME는 미실행이며, 버튼의 구조화 요청 전송만 변경한 이 PR에서 텍스트 조합 입력의 기본 Gate는 기존 정책을 따른다.
+
+### PR #89 리뷰 보완
+
+- 사망 당시의 전투 세대는 리스폰 정산 이후에도 보존한다. 리스폰을 확정할 때 영속 `combat_lifecycle`을 한 번 증가시키고, 웹 공격·일행공격은 대상 참조의 Scope와 실물, 교전 세대, 생명주기 번호를 함께 검사한다. 기존 Actor에 번호가 저장되기 전에는 0으로 읽는다. 번호가 없는 이전 웹 요청은 거절한다.
+- 공유 교전 시작, 공격·기술, 정산 및 예약 실행은 `world.shared_combat`에서 소유한다. Actor와 Explorer는 상태 접근, Evennia 훅 및 기존 호출자용 어댑터를 제공한다. 전투 규칙과 기존 Encounter 영속 계약을 재사용한다.
+- 출구 Action은 Evennia 이동 훅 호출 뒤 실제 목적지 도달을 확인한다. 원래 위치에서 목적지로 이동했을 때만 `changed=True`를 반환하고 커밋 이후 성공 Signal을 한 번 발행한다. 거부와 롤백에서는 Signal이 발생하지 않는다.

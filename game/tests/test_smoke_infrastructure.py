@@ -114,7 +114,8 @@ class SmokeLootBirthObserverTests(NativeItemTest):
         super().setUp()
         from server.conf.smoke_startstop import install_observer
         from typeclasses import loot
-        from world.shared_combat import SharedCombatMixin, room_enemies
+        from world import shared_combat
+        from world.shared_combat import room_enemies
 
         self.rooms = build_world()
         from world.item_entities.models import ItemRuntime
@@ -125,7 +126,7 @@ class SmokeLootBirthObserverTests(NativeItemTest):
         self.enemy = room_enemies(self.rooms["grass"])[0]
         self.enterContext(patch("world.shared_combat.delay"))
         self.enterContext(patch("typeclasses.loot.delay"))
-        self.enterContext(patch.object(SharedCombatMixin, "_finish_death", SharedCombatMixin._finish_death))
+        self.enterContext(patch.object(shared_combat, "_finish_death", shared_combat._finish_death))
         self.enterContext(patch.object(loot, "build_entries", loot.build_entries))
         with patch("server.conf.smoke_support.require_smoke"), self.settings(PRIMAL_SMOKE_MODE="full"):
             install_observer()

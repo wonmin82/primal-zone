@@ -56,11 +56,91 @@ class WebStateTests(WorldCommandTest):
         self.assertEqual(execute(self.char1, self.session, invocation, index).status, ResultStatus.REFUSED)
         self.assertIsNone(self.char1.combat_target())
         self.char1.location = room
+        enemy.location = self.rooms["wreck"]
+        self.assertEqual(execute(self.char1, self.session, invocation, index).status, ResultStatus.REFUSED)
+        self.assertIsNone(self.char1.combat_target())
+        enemy.location = room
         with patch("world.shared_combat.time", return_value=100), patch("world.lifecycle.time", return_value=100):
             self.assertEqual(execute(self.char1, self.session, invocation, index).status, ResultStatus.SUCCESS)
             self.char1.leave_combat(now=100)
             self.assertEqual(execute(self.char1, self.session, invocation, index).status, ResultStatus.REFUSED)
         self.assertIsNone(self.char1.combat_target())
+
+    def test_typed_combat_buttons_expire_after_respawn(self):
+        from random import Random
+
+        from world.actions.gateway import ResultStatus, execute, from_web
+        from world.actions.manifest import get_index
+        from world.combat_contracts import Encounter, settle_encounter
+        from world.lifecycle import reconcile_room, reconcile_world
+        from world.rules import RuleError
+
+        party = invite(self.char1, self.char2, now=99)
+        respond(self.char2, True, now=99)
+        room = self.char1.location
+        enemy = room_enemies(room)[0]
+        index = get_index()
+
+        def buttons(now):
+            row = next(row for row in multiplayer_state(self.char1, now=now)["enemies"] if row["id"] == enemy.pk)
+            return row["label"], row["attack_action"], row["party_attack_action"]
+
+        def use(button, request_id, player=None):
+            invocation = from_web({**button, "request_id": request_id}, index)
+            player = player if player is not None else self.char1
+            return execute(player, player.sessions.all()[0], invocation, index).status
+
+        with patch("world.shared_combat.time", return_value=100), patch("world.lifecycle.time", return_value=100):
+            scope_label, first_attack, _ = buttons(100)
+            self.assertEqual(use(first_attack, "combat-life-first"), ResultStatus.SUCCESS)
+            self.assertEqual(self.char1.combat_target(), enemy)
+            self.assertEqual(enemy.db.claim, f"party:{party.pk}")
+            _, old_attack, old_party = buttons(100)
+            generation = enemy.db.combat_generation
+            pending = dict(enemy.db.encounter_state["pending"])
+            enemy.hp = 1
+            enemy.receive_attack(self.char1, now=102.5, rng=Random(1))
+            self.assertEqual(enemy.db.state, "respawning")
+
+        respawn = enemy.db.respawn_at
+        self.assertGreater(self.char1.profile()["kills"], 0)
+        enemy.attributes.reset_cache()
+        with (patch("world.shared_combat.time", return_value=respawn),
+              patch("world.lifecycle.time", return_value=respawn)):
+            enemy.ndb.lifecycle_task = None
+            reconcile_world(now=respawn, restart=True)
+            reconcile_world(now=respawn, restart=True)
+            enemy.attributes.reset_cache()
+            self.assertEqual(enemy.db.state, "alive")
+            self.assertEqual(enemy.db.combat_generation, generation)
+            self.assertIsNone(self.char1.combat_target())
+            before = (enemy.hp, enemy.db.claim, dict(enemy.db.encounter_state), self.char1.profile())
+            with patch("world.lifecycle.reconcile_room", wraps=reconcile_room) as reconcile:
+                self.assertEqual(use(old_attack, "combat-life-stale"), ResultStatus.REFUSED)
+                self.assertEqual(use(old_party, "combat-life-stale-party"), ResultStatus.REFUSED)
+            reconcile.assert_not_called()
+            self.assertEqual((enemy.hp, enemy.db.claim, dict(enemy.db.encounter_state), self.char1.profile()), before)
+            current_label, new_attack, new_party = buttons(respawn)
+            self.assertEqual(current_label, scope_label)
+            self.assertEqual(new_attack["roles"], old_attack["roles"])
+            self.assertEqual(new_attack["arguments"]["lifecycle"], old_attack["arguments"]["lifecycle"] + 1)
+            unversioned_attack = {**new_attack, "arguments": {"generation": generation}}
+            self.assertEqual(use(unversioned_attack, "combat-life-unversioned"), ResultStatus.REFUSED)
+            self.assertEqual(use(new_party, "combat-life-not-leader", self.char2), ResultStatus.REFUSED)
+            self.assertEqual((enemy.hp, enemy.db.claim, dict(enemy.db.encounter_state), self.char1.profile()), before)
+            self.assertEqual(use(new_party, "combat-life-current-party"), ResultStatus.SUCCESS)
+            self.assertEqual(self.char1.combat_target(), enemy)
+            self.assertEqual(self.char2.combat_target(), enemy)
+            self.assertGreater(enemy.db.combat_generation, generation)
+            current = (enemy.hp, dict(enemy.db.encounter_state), self.char1.profile())
+            enemy.combat_tick(generation, pending["due_at"])
+            settle = Mock()
+            with self.assertRaises(RuleError):
+                settle_encounter(Encounter(enemy, generation), {"kind": "death"}, settle)
+            settle.assert_not_called()
+            self.assertEqual((enemy.hp, dict(enemy.db.encounter_state), self.char1.profile()), current)
+            _, new_attack, _ = buttons(respawn)
+            self.assertEqual(use(new_attack, "combat-life-current"), ResultStatus.SUCCESS)
 
     def test_rt45_tactics_succession_requests_and_confirm_snapshot(self):
         from evennia import create_object

@@ -237,7 +237,7 @@ class GrowthIntegrationTests(WorldCommandTest):
         enemy.engage(self.char1, now=100)
         enemy.hp = 1
         before = self.char1.profile()
-        with patch.object(enemy, 'finish_death', side_effect=RuntimeError('death failed')):
+        with patch('world.shared_combat._finish_death', side_effect=RuntimeError('death failed')):
             with self.assertRaises(RuntimeError):
                 enemy.receive_attack(self.char1, now=102.5, rng=Random(1))
         self.assertEqual(self.char1.profile(), before)

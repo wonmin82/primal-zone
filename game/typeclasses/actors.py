@@ -1,16 +1,68 @@
 """비플레이어 실물의 단일 정체성. 게임 효과는 도메인 Service가 소유한다."""
 
 from evennia.objects.objects import DefaultObject
+from world import shared_combat
 from world import text as ft
 from world.actors import content
 from world.actors.validation import ActorDefinitionError
 from world.distant_presentation import DistantPresence, DistantPresenceMixin
 from world.multiplayer import world_change
 from world.selection_numbers.mixins import NumberedObjectMixin
-from world.shared_combat import SharedCombatMixin
 
 
-class Actor(SharedCombatMixin, NumberedObjectMixin, DistantPresenceMixin, DefaultObject):
+class Actor(NumberedObjectMixin, DistantPresenceMixin, DefaultObject):
+    def at_post_move(self, source_location, **kwargs):
+        super().at_post_move(source_location, **kwargs)
+        shared_combat.actor_moved(self)
+
+    def initialize_shared_combat(self):
+        shared_combat.initialize_shared_combat(self)
+
+    def active_players(self):
+        return shared_combat.active_players(self)
+
+    def can_attack(self, player):
+        return shared_combat.can_attack(self, player)
+
+    def reward_groups(self, now):
+        return shared_combat.reward_groups(self, now)
+
+    def scale_boss(self, now):
+        return shared_combat.scale_boss(self, now)
+
+    def engage(self, player, now=None):
+        return shared_combat.engage(self, player, now=now)
+
+    def remove_combatant(self, player, now=None):
+        return shared_combat.remove_combatant(self, player, now=now)
+
+    def reconcile(self, now=None):
+        return shared_combat.reconcile(self, now=now)
+
+    def receive_attack(self, player, now=None, rng=None):
+        return shared_combat.receive_attack(self, player, now=now, rng=rng)
+
+    def finish_death(self, killer, now, rng=None):
+        return shared_combat.finish_death(self, now, rng=rng)
+
+    def enemy_tick(self, now=None, rng=None):
+        return shared_combat.enemy_tick(self, now=now, rng=rng)
+
+    def schedule_combat(self):
+        return shared_combat.schedule_combat(self)
+
+    def combat_tick(self, generation, due_at):
+        return shared_combat.combat_tick(self, generation, due_at)
+
+    def stop_combat_timer(self):
+        shared_combat.stop_combat_timer(self)
+
+    def schedule_lifecycle(self):
+        shared_combat.schedule_lifecycle(self)
+
+    def lifecycle_tick(self, generation, deadline):
+        shared_combat.lifecycle_tick(self, generation, deadline)
+
     @property
     def actor_id(self):
         return self.db.actor_id

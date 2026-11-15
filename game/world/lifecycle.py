@@ -50,6 +50,11 @@ def reconcile_world(now=None, restart=False):
         if enemy.db.state == "respawning" or enemy.db.combatants or observed:
             enemy.reconcile(now)
         enemy.schedule_combat()
+        if not restart and enemy.shared_combat_active and enemy.db.combatants:
+            # Commit 후 예약이 누락되거나 Tick이 롤백되면 다음 공격 시각이 profile에 남는다.
+            for player in enemy.active_players():
+                if not player.ndb.combat_task:
+                    player.schedule_combat()
     for dropped in DroppedLoot.objects.all():
         dropped.reconcile(now)
     # legacy는 timestamp로 FFA, native의 expired claim은 출처 단위로 정리한다.

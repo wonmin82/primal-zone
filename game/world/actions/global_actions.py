@@ -214,7 +214,8 @@ def web_combat_target(context):
         raise rules.RuleError("원래 전투 대상을 지정하세요.")
     enemy = refs[0]
     if (not enemy.shared_combat_active
-            or context.arguments.get("generation") != (enemy.db.combat_generation or 0)):
+            or context.arguments.get("generation") != (enemy.db.combat_generation or 0)
+            or context.arguments.get("lifecycle") != (enemy.db.combat_lifecycle or 0)):
         raise rules.RuleError("원래 전투 대상의 상태가 바뀌었습니다.")
     return enemy
 
@@ -227,13 +228,13 @@ def attack(context):
     from world.lifecycle import reconcile_room
     from world.targets import names, parse_selector, resolve, room_objects
 
-    name = query.strip()
-    current = caller.combat_target()
-    reconcile_room(caller.location)
     enemy = web_combat_target(context)
     if enemy:
         caller.start_combat(enemy)
         return ActionResult(changed=True)
+    name = query.strip()
+    current = caller.combat_target()
+    reconcile_room(caller.location)
     objects = room_objects(caller)
     enemy = (
         resolve(
@@ -373,6 +374,7 @@ def transfer_item(context):
 QUERY = ArgumentDefinition("query", default="")
 COMBAT_TARGET = RoleDefinition("subject", (ReferenceKind.ACTOR,), required=False, scope_root=ScopeRoot.CURRENT_ROOM)
 COMBAT_GENERATION = ArgumentDefinition("generation", int, required=False, minimum=0)
+COMBAT_LIFECYCLE = ArgumentDefinition("lifecycle", int, required=False, minimum=0)
 COMBAT_ACTIONS = {"attack", "party_attack"}
 DECLARATIONS = (
     ("look", look, ExecutionPolicy.STATE_CHANGE, (QUERY,)),
@@ -399,7 +401,8 @@ PACKAGE = ContentPackage(
     actions=tuple(ActionDefinition("global." + key, "global." + key + "_verb",
                                    (COMBAT_TARGET,) if key in COMBAT_ACTIONS else (),
                                    (SyntaxVariant("adapter", "", show_control=False),),
-                                   arguments=(*arguments, COMBAT_GENERATION) if key in COMBAT_ACTIONS else arguments)
+                                   arguments=(*arguments, COMBAT_GENERATION, COMBAT_LIFECYCLE)
+                                   if key in COMBAT_ACTIONS else arguments)
                   for key, _, _, arguments in DECLARATIONS),
     services=tuple(ServiceDefinition("global." + key + "_service", handler, policy=policy)
                    for key, handler, policy, _ in DECLARATIONS),

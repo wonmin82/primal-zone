@@ -110,13 +110,13 @@ def install_observer():
     from django.db import connection
     from evennia.utils.dbserialize import deserialize
     from typeclasses import loot
+    from world import shared_combat
     from world.item_entities.models import ItemEntity
     from world.loot_entities.models import CurrencyLoot
-    from world.shared_combat import SharedCombatMixin
 
-    if getattr(SharedCombatMixin._finish_death, "_smoke_observer", False):
+    if getattr(shared_combat._finish_death, "_smoke_observer", False):
         return
-    original_build, original_death = loot.build_entries, SharedCombatMixin._finish_death
+    original_build, original_death = loot.build_entries, shared_combat._finish_death
 
     @wraps(original_build)
     def observed_build(enemy, groups, now, rng=None):
@@ -166,7 +166,7 @@ def install_observer():
         return result
 
     observed_death._smoke_observer = True
-    loot.build_entries, SharedCombatMixin._finish_death = observed_build, observed_death
+    loot.build_entries, shared_combat._finish_death = observed_build, observed_death
 
 
 def at_server_init():
