@@ -14,9 +14,11 @@ from world.combat_contracts import (
     PendingState,
     apply_tick,
     begin_encounter,
+    encounter_state,
     pending_state,
     plan_tick,
     settle_encounter,
+    validate_final_result,
 )
 from world.delivery import Delivery, deliver_after_commit
 from world.domain_context import (
@@ -26,6 +28,7 @@ from world.domain_context import (
     combat_timer_context,
     validate_context,
 )
+from world.duel import DuelEncounter
 from world.multiplayer import world_change
 from world.rules import RuleError
 from world.world_format import FORMAT_KEY, assert_fresh, initialize_world, require_ready
@@ -86,6 +89,113 @@ class DomainFoundationTests(GameCommandTest):
         self.assertFalse(settle_encounter(encounter, {"kind": "death"}, reward))
         self.assertEqual(self.char1.db.foundation_reward, 10)
         self.assertEqual(self.obj1.db.foundation_corpse_count, 1)
+
+    def test_invalid_shared_final_result_cannot_run_settlement(self):
+        encounter = self.encounter()
+        plan_tick(encounter, operation_id="tick:1", due_at=100, trigger=Mock())
+        before = encounter.current()
+        reward = Mock()
+        for result in (
+            {"kind": "unknown"},
+            {"reason": "idle"},
+            {"kind": ["death"]},
+            {"kind": "death", "unexpected": True},
+            {"kind": "surrender"},
+            {"kind": "capture"},
+            {"kind": "disabled"},
+        ):
+            with self.subTest(result=result):
+                with self.assertRaises(RuleError):
+                    settle_encounter(encounter, result, reward)
+                self.assertEqual(encounter.current(), before)
+        reward.assert_not_called()
+
+    def test_result_validation_failure_rolls_back_enclosing_operation(self):
+        encounter = self.encounter()
+        before = encounter.current()
+        with self.assertRaises(RuleError), world_change():
+            self.char1.db.foundation_reward = 10
+            settle_encounter(encounter, {"kind": "victory", "reason": None, "finished_at": 100}, Mock())
+        self.assertIsNone(self.char1.db.foundation_reward)
+        self.assertEqual(encounter.current(), before)
+
+    def test_settlement_commits_the_result_validated_before_effects(self):
+        encounter = self.encounter()
+        result = {"kind": "death"}
+
+        def settle(_):
+            result["kind"] = "capture"
+
+        self.assertTrue(settle_encounter(encounter, result, settle))
+        self.assertEqual(encounter.current()["final_result"], {"kind": "death"})
+
+    def test_future_results_have_a_schema_without_shared_or_duel_execution(self):
+        shared = self.encounter()
+        duel = DuelEncounter(self.obj1, 1, "isolated-duel")
+        duel.save(encounter_state(duel, (str(self.char1.pk), str(self.char2.pk)), EncounterPolicy.EXCLUSIVE_DUEL))
+        for kind in ("surrender", "capture", "disabled"):
+            with self.subTest(kind=kind):
+                result = {"kind": kind}
+                validate_final_result(result)
+                with self.assertRaises(RuleError):
+                    validate_final_result({**result, "finished_at": True})
+                for encounter in (shared, duel):
+                    effect = Mock()
+                    with self.assertRaises(RuleError):
+                        settle_encounter(encounter, result, effect)
+                    effect.assert_not_called()
+                    self.assertEqual(encounter.current()["state"], "active")
+
+    def test_duel_results_require_valid_time_and_kind_specific_reason(self):
+        encounter = DuelEncounter(self.obj1, 1, "isolated-duel")
+        valid_results = (
+            ("victory", None), ("defeat", None), ("surrender", None),
+            ("timeout", "idle"), ("timeout", "maximum"), ("disconnect", "disconnect"),
+            ("abort", "invalid"), ("abort", "unknown_disconnect"),
+        )
+        for kind, reason in valid_results:
+            with self.subTest(kind=kind, reason=reason):
+                encounter.save(encounter_state(
+                    encounter, (str(self.char1.pk), str(self.char2.pk)), EncounterPolicy.EXCLUSIVE_DUEL,
+                ))
+                result = {"kind": kind, "reason": reason, "finished_at": 100.5}
+                effect = Mock()
+                self.assertTrue(settle_encounter(encounter, result, effect))
+                self.assertEqual(encounter.current()["final_result"], result)
+                self.assertFalse(settle_encounter(encounter, result, effect))
+                effect.assert_called_once()
+
+        encounter.save(encounter_state(
+            encounter, (str(self.char1.pk), str(self.char2.pk)), EncounterPolicy.EXCLUSIVE_DUEL,
+        ))
+        before = encounter.current()
+        effect = Mock()
+        for result in (
+            {"kind": "death"},
+            {"kind": "victory", "finished_at": 100},
+            {"kind": "defeat", "reason": None},
+            {"kind": "timeout", "reason": "disconnect", "finished_at": 100},
+            {"kind": "disconnect", "reason": ["disconnect"], "finished_at": 100},
+            {"kind": "abort", "reason": "invalid", "finished_at": float("inf")},
+            {"kind": "victory", "reason": None, "finished_at": True},
+            {"kind": "victory", "reason": None, "finished_at": -1},
+        ):
+            with self.subTest(result=result), self.assertRaises(RuleError):
+                settle_encounter(encounter, result, effect)
+        self.assertEqual(encounter.current(), before)
+        effect.assert_not_called()
+
+    def test_unsupported_encounter_policies_cannot_settle_existing_state(self):
+        encounter = self.encounter()
+        effect = Mock()
+        for policy in (str(EncounterPolicy.SIMULATION), str(EncounterPolicy.WORLD_EVENT), "unknown", None):
+            with self.subTest(policy=policy):
+                state = {**encounter.current(), "policy": policy}
+                encounter.save(state)
+                with self.assertRaises(RuleError):
+                    settle_encounter(encounter, {"kind": "death"}, effect)
+                self.assertEqual(encounter.current(), state)
+        effect.assert_not_called()
 
     def test_callback_loss_recovers_from_persistent_due_and_rejects_duplicate(self):
         encounter = self.encounter()

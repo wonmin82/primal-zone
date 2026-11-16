@@ -14,8 +14,9 @@ from typeclasses.explorers import Explorer
 from typeclasses.loot import Corpse, DroppedLoot
 from world import duel, equipment_service, firearm_service, rules
 from world.actions.gateway import ResultStatus, execute, from_web
+from world.actions.global_actions import DUEL_SKILLS
 from world.actions.manifest import get_index
-from world.actions.presentation import reference_json
+from world.actions.presentation import action_controls, reference_json
 from world.actions.registry import compile_manifest
 from world.actions.resolver import dispatch_text
 from world.actions.schema import PackageManifest
@@ -112,7 +113,7 @@ class ExclusiveDuelTests(NativeItemTest):
                 break
         self.assertFalse(duel.active_on(self.actor))
         result = self.projection(150)["final_result"]
-        self.assertIn(result["kind"], {"victory", "defeat", "disabled"})
+        self.assertIn(result["kind"], {"victory", "defeat"})
         self.assertEqual(self.actor.hp, previous_actor_hp)
         self.assertEqual(Corpse.objects.count(), corpses)
         self.assertEqual(DroppedLoot.objects.count(), loot)
@@ -123,6 +124,21 @@ class ExclusiveDuelTests(NativeItemTest):
         self.assertIsNone(self.char1.combat_target())
         self.step(identity, 100 + COMBAT_INTERVAL, now=151)
         self.assertEqual(self.projection(151)["final_result"], result)
+
+    def test_lethal_duel_round_commits_victory_and_defeat_with_typed_result(self):
+        for index, (hp_field, kind) in enumerate((("actor_hp", "victory"), ("player_hp", "defeat"))):
+            with self.subTest(kind=kind):
+                now = 100 + index * 40
+                identity = self.start(now)
+                self.actor.db.duel_state = {**self.actor.db.duel_state, hp_field: 1}
+                due_at = now + COMBAT_INTERVAL
+                self.assertTrue(self.step(identity, due_at))
+                state = dict(self.actor.db.duel_state)
+                self.assertEqual(state["final_result"], {"kind": kind, "reason": None, "finished_at": due_at})
+                self.assertTrue(state["settled"])
+                self.assertIsNone(state["pending"])
+                self.assertFalse(self.step(identity, due_at))
+                self.assertEqual(dict(self.actor.db.duel_state), state)
 
     def test_equipment_and_normal_costs_are_not_reverted(self):
         gun = firearm_service.create_firearm("test_pistol", owner_object=self.char1, mode="full_standard")
@@ -139,6 +155,105 @@ class ExclusiveDuelTests(NativeItemTest):
             duel.surrender(self.actor, self.char1, identity, now=103)
         self.assertEqual(firearm_service.loaded_magazine_item(gun).state["rounds"], rounds - 1)
         self.assertEqual(self.char1.profile()["mental"], mental)
+
+    def test_general_support_and_native_bandage_refused_without_duel_changes(self):
+        bandage = self.create("bandage", quantity=2)
+        index = get_index()
+        button = next(control["action"] for control in action_controls(self.char1, index)
+                      if control["action"]["action_id"] == "item.bandage.use"
+                      and control["action"]["roles"]["provider"][0]["identity"] == str(bandage.pk))
+        self.char1.change(lambda profile: profile.update(mental=12))
+        self.start()
+        before = self.atomic_state()
+        encounter = deepcopy(dict(self.actor.db.duel_state))
+        with (patch("world.skill_services.time", return_value=101),
+              patch.object(self.char1, "msg") as output):
+            for command in ("호흡", "치료", "붕대 사용"):
+                with self.subTest(command=command):
+                    output.reset_mock()
+                    self.char1.execute_cmd(command)
+                    self.assertIn("대련", str(output.call_args_list))
+                    self.assertEqual(self.atomic_state(), before)
+                    self.assertEqual(dict(self.actor.db.duel_state), encounter)
+            invocation = from_web({**button, "request_id": "ordinary-bandage-in-duel"}, index)
+            result = execute(self.char1, self.sessions[self.char1.pk], invocation, index)
+        self.assertEqual(result.status, ResultStatus.REFUSED)
+        self.assertEqual(self.atomic_state(), before)
+        self.assertEqual(dict(self.actor.db.duel_state), encounter)
+
+    def test_duel_bandage_refused_by_domain_text_and_web(self):
+        self.assertEqual(set(duel.SKILLS), set(DUEL_SKILLS.values()))
+        bandage = self.create("bandage", quantity=2)
+        identity = self.start()
+        before = self.atomic_state()
+        encounter = deepcopy(dict(self.actor.db.duel_state))
+        with self.assertRaisesRegex(rules.RuleError, "지원하지 않는 대련 행동"):
+            duel.act(self.actor, self.char1, identity, skill="bandage", now=101)
+        with patch.object(self.char1, "msg") as output, patch("world.duel.time", return_value=101):
+            self.char1.execute_cmd(f"{self.actor.key} / 붕대 대련행동")
+        self.assertIn("행동 인자", str(output.call_args_list))
+        with self.assertRaises(rules.RuleError):
+            from_web({
+                "action_id": "global.duel_act",
+                "variant": "adapter",
+                "roles": {"subject": [reference_json(descriptor(self.actor).reference)]},
+                "arguments": {"encounter_id": identity, "skill": "bandage"},
+                "request_id": "duel-bandage-unsupported",
+            }, get_index())
+        self.assertEqual(self.atomic_state(), before)
+        self.assertEqual(dict(self.actor.db.duel_state), encounter)
+        duel.surrender(self.actor, self.char1, identity, now=102)
+        bandage.refresh_from_db()
+        self.assertEqual(bandage.quantity, 2)
+
+    def test_duel_support_uses_a_round_and_commits_cost_once(self):
+        self.char1.change(lambda profile: profile.update(mental=12))
+        identity = self.start()
+        public_hp = self.char1.profile()["hp"]
+        actor_hp = self.projection()["actor_hp"]
+        with patch("world.duel.time", return_value=101):
+            self.char1.execute_cmd(f"{self.actor.key} / 치료 대련행동")
+        self.assertEqual(self.projection(101)["idle_at"], 161)
+        self.assertEqual(self.char1.profile()["mental"], 12)
+        due = 100 + COMBAT_INTERVAL
+        with patch.object(self.char1, "msg") as output:
+            self.assertTrue(self.step(identity, due))
+        self.assertIn("회복", str(output.call_args_list))
+        self.assertEqual(self.char1.profile()["hp"], public_hp)
+        self.assertEqual(self.char1.profile()["mental"], 2)
+        self.assertEqual(self.char1.profile()["skill_ready_at"]["heal"], due + 10)
+        self.assertEqual(self.projection(due)["actor_hp"], actor_hp)
+        self.assertEqual(self.projection(due)["idle_at"], 161)
+        before = self.atomic_state()
+        encounter = deepcopy(dict(self.actor.db.duel_state))
+        self.assertFalse(self.step(identity, due))
+        with self.assertRaises(rules.RuleError):
+            duel.act(self.actor, self.char1, identity, skill="heal", now=103)
+        self.assertEqual(self.atomic_state(), before)
+        self.assertEqual(dict(self.actor.db.duel_state), encounter)
+
+        index = get_index()
+        invocation = from_web({
+            "action_id": "global.duel_act",
+            "variant": "adapter",
+            "roles": {"subject": [reference_json(descriptor(self.actor).reference)]},
+            "arguments": {"encounter_id": identity, "skill": "breathing"},
+            "request_id": "duel-breathing",
+        }, index)
+        with patch("world.duel.time", return_value=103):
+            self.assertEqual(execute(self.char1, self.sessions[self.char2.pk], invocation, index).status,
+                             ResultStatus.REFUSED)
+            self.assertEqual(self.atomic_state(), before)
+            self.assertEqual(dict(self.actor.db.duel_state), encounter)
+            self.assertEqual(execute(self.char1, self.sessions[self.char1.pk], invocation, index).status,
+                             ResultStatus.SUCCESS)
+        self.assertEqual(self.char1.profile()["mental"], 2)
+        self.assertEqual(self.projection(103)["idle_at"], 163)
+        self.assertTrue(self.step(identity, due + COMBAT_INTERVAL))
+        self.assertGreater(self.char1.profile()["mental"], 2)
+        self.assertEqual(self.char1.profile()["skill_ready_at"]["breathing"], due + COMBAT_INTERVAL + 30)
+        self.assertEqual(self.projection(due + COMBAT_INTERVAL)["idle_at"], 163)
+        self.assertEqual(self.projection(due + COMBAT_INTERVAL)["actor_hp"], actor_hp)
 
     def test_explicit_action_updates_idle_deadline_but_tick_does_not(self):
         identity = self.start()
@@ -255,6 +370,15 @@ class ExclusiveDuelTests(NativeItemTest):
             duel.reconcile(self.actor, now=120, restart=True)
         self.assertEqual(self.actor.db.duel_state["final_result"]["reason"], "unknown_disconnect")
         self.assertFalse(duel.active_for(self.char1))
+
+    def test_missing_policy_aborts_and_releases_participant(self):
+        self.start()
+        state = dict(self.actor.db.duel_state)
+        del state["policy"]
+        self.actor.db.duel_state = state
+        duel.reconcile(self.actor, now=161, restart=True)
+        self.assertEqual(self.actor.db.duel_state["final_result"]["kind"], "abort")
+        self.assertIsNone(self.char1.db.active_duel_actor)
 
     def test_missing_reconnect_deadline_aborts_without_breaking_projection(self):
         self.start()

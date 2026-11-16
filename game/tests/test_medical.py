@@ -43,6 +43,24 @@ class MedicalCommandsTests(WorldCommandTest):
             self.char1.execute_cmd(value)
         return str(output.call_args_list)
 
+    def test_bed_cannot_refresh_duel_participant_mental_without_round(self):
+        from world import duel
+        from world.actors.spawn import create_actor
+
+        from tests.duel_fixture import INSTRUCTOR_ID, registry_overlay
+
+        self.char1.location = self.bed.location
+        self.connect_character(self.char1)
+        self.char1.change(lambda profile: profile.update(mental=3))
+        with registry_overlay(), patch("world.duel.time", return_value=100), patch("world.duel.delay"):
+            actor = create_actor(INSTRUCTOR_ID, self.char1.location)
+            duel.start(actor, self.char1, now=100)
+            before = self.char1.profile_snapshot()
+            encounter = dict(actor.db.duel_state)
+            self.assertIn("대련 중에는 침대에서 휴식할 수 없습니다", self.command("침대 휴식"))
+            self.assertEqual(self.char1.profile_snapshot(), before)
+            self.assertEqual(dict(actor.db.duel_state), encounter)
+
     def test_bare_targeted_particles_alias_and_independent_rules(self):
         for raw in ("회복", "의무관 회복", "의무관에게 회복", "의사에게 회복", "의사 회복",
                     "휴식", "침대 휴식", "침대에서 휴식", "병상에서 휴식", "병상 rest"):

@@ -20,6 +20,7 @@ from world.combat_contracts import (
     encounter_state,
     plan_tick,
     settle_encounter,
+    validate_final_result,
 )
 from world.domain_context import combat_timer_context
 from world.multiplayer import COMBAT_INTERVAL, after_change, object_by_id, world_change
@@ -28,7 +29,7 @@ MAX_DURATION = 600
 IDLE_LIMIT = 60
 RECONNECT_GRACE = 30
 COOLDOWN = 30
-SKILLS = ("attack", "heavy", "shooting", "insight", "suppress", "heal", "breathing", "bandage")
+SKILLS = ("attack", "heavy", "shooting", "insight", "suppress", "heal", "breathing")
 
 
 def _state(actor):
@@ -270,7 +271,8 @@ def _schedule_current(actor, identity):
 
 def _valid_state(state):
     return (
-        type(state.get("generation")) is int and state["generation"] > 0
+        state.get("policy") == EncounterPolicy.EXCLUSIVE_DUEL
+        and type(state.get("generation")) is int and state["generation"] > 0
         and type(state.get("identity")) is str and bool(state["identity"])
         and type(state.get("participant_id")) is int
         and type(state.get("room_id")) is int
@@ -292,6 +294,8 @@ def _valid_state(state):
 
 
 def _abort_invalid(actor, state, now):
+    final_result = {"kind": "abort", "reason": "invalid", "finished_at": now}
+    validate_final_result(final_result)
     invalid_identity = state.get("identity")
     participant_id = state.get("participant_id")
     player = object_by_id(participant_id) if type(participant_id) is int and participant_id > 0 else None
@@ -301,8 +305,8 @@ def _abort_invalid(actor, state, now):
     actor.db.duel_state = {
         "identity": invalid_identity if isinstance(invalid_identity, str) else uuid4().hex,
         "generation": generation if type(generation) is int and generation > 0 else 1,
-        "participant_id": participant_id if player else None, "state": "finished", "settled": True,
-        "final_result": {"kind": "abort", "reason": "invalid", "finished_at": now},
+        "participant_id": participant_id if player else None, "policy": str(EncounterPolicy.EXCLUSIVE_DUEL),
+        "state": "finished", "settled": True, "final_result": final_result,
     }
     after_change(lambda: _unschedule(actor, invalid_identity))
     _publish(actor)

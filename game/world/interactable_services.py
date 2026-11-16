@@ -96,7 +96,14 @@ def doctor(provider, caller, action, args):
 
 
 def bed(provider, caller, action, args):
-    caller.change(lambda profile: rules.rest(profile, safe=ROOMS.get(caller.zone, {}).get('safe', False)))
+    from world.duel import active_for
+
+    def rest(profile):
+        if active_for(caller):
+            raise rules.RuleError("대련 중에는 침대에서 휴식할 수 없습니다.")
+        return rules.rest(profile, safe=ROOMS.get(caller.zone, {}).get("safe", False))
+
+    caller.change(rest)
     notify(caller, '침대에서 휴식하며 체력과 정신력을 모두 회복했습니다.')
 
 

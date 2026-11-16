@@ -56,6 +56,48 @@ class EncounterPolicy(StrEnum):
     WORLD_EVENT = "world_event"
 
 
+_SHARED_FINAL_KINDS = frozenset(("death", "disengaged"))
+_FINAL_KINDS_WITHOUT_DETAILS = _SHARED_FINAL_KINDS | {"surrender", "capture", "disabled"}
+_DUEL_FINAL_REASONS = {
+    "victory": (None,),
+    "defeat": (None,),
+    "surrender": (None,),
+    "timeout": ("idle", "maximum"),
+    "disconnect": ("disconnect",),
+    "abort": ("invalid", "unknown_disconnect"),
+}
+
+
+def validate_final_result(result):
+    """종료 결과의 형태와 의미를 검사한다. 실행 권한은 정산 경계에서 검사한다."""
+    if type(result) is not dict or type(result.get("kind")) is not str:
+        raise RuleError("종료 결과 종류가 필요합니다.")
+    kind = result["kind"]
+    if result.keys() == {"kind"} and kind in _FINAL_KINDS_WITHOUT_DETAILS:
+        return
+    if kind not in _DUEL_FINAL_REASONS or result.keys() != {"kind", "reason", "finished_at"}:
+        raise RuleError("지원하지 않는 종료 결과 형식입니다.")
+    reason = result["reason"]
+    if (reason is not None and type(reason) is not str) or reason not in _DUEL_FINAL_REASONS[kind]:
+        raise RuleError("종료 결과에 맞는 사유가 필요합니다.")
+    finished_at = result["finished_at"]
+    if not (type(finished_at) is int and finished_at >= 0
+            or type(finished_at) is float and isfinite(finished_at) and finished_at >= 0):
+        raise RuleError("유효한 전투 종료 시각이 필요합니다.")
+
+
+def _validate_settlement_result(result, policy):
+    validate_final_result(result)
+    if policy == EncounterPolicy.SHARED:
+        allowed = result["kind"] in _SHARED_FINAL_KINDS
+    elif policy == EncounterPolicy.EXCLUSIVE_DUEL:
+        allowed = result["kind"] in _DUEL_FINAL_REASONS and "finished_at" in result
+    else:
+        raise RuleError("아직 종료를 지원하지 않는 Encounter 정책입니다.")
+    if not allowed:
+        raise RuleError("현재 Encounter 정책에서 실행할 수 없는 종료 결과입니다.")
+
+
 class PendingState(StrEnum):
     PENDING = "pending"
     DUE = "due"
@@ -124,16 +166,18 @@ def begin_encounter(owner, participants, *, policy=EncounterPolicy.SHARED):
 
 def settle_encounter(encounter, result, settle):
     """종료·정산·완료 근거를 함께 확정한다. 실패는 DB와 Evennia Cache를 함께 복구한다."""
-    if type(result) is not dict or not result or not callable(settle):
+    if type(result) is not dict or not callable(settle):
         raise RuleError("종료 결과와 정산 함수가 필요합니다.")
+    final_result = result.copy()
     with world_change():
         state = encounter.current()
+        _validate_settlement_result(final_result, state.get("policy"))
         if state["state"] == "finished" and state["settled"]:
             return False
         if state["state"] != "active" or state["settled"]:
             raise RuleError("종료할 수 없는 전투 상태입니다.")
         settle(state)
-        state.update(state="finished", final_result=deepcopy(result), settled=True, pending=None)
+        state.update(state="finished", final_result=final_result, settled=True, pending=None)
         encounter.save(state)
     return True
 
