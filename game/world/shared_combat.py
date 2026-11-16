@@ -320,7 +320,8 @@ def receive_attack(enemy, player, now=None, rng=None):
             from world.firearm_service import player_attack
 
             damage, outcome = player_attack(
-                player, profile, enemy.combat_definition_id, now, COMBAT_INTERVAL, rng, recipient_profile
+                player, profile, enemy.combat_definition_id, now, COMBAT_INTERVAL, rng, recipient_profile,
+                enemy_profile=enemy.combat_profile,
             )
         profile["heal_target"] = None
         if recipient_profile is not None and outcome["action"] == "heal":
@@ -479,7 +480,8 @@ def enemy_tick(enemy, now=None, rng=None):
         reduction = combined_suppression(effects, bool(enemy.combat_profile.get("boss")))
         enemy.db.suppressions = consume_suppressions(effects)
         result = rules.enemy_attack(
-            result_profile, enemy.combat_definition_id, enemy.db.enemy_round, now, rng, reduction
+            result_profile, enemy.combat_definition_id, enemy.db.enemy_round, now, rng, reduction,
+            enemy_profile=enemy.combat_profile,
         )
         lost = rules.apply_defeat(result_profile) if result["defeated"] else 0
         target.save_profile(result_profile)
@@ -504,7 +506,7 @@ def enemy_tick(enemy, now=None, rng=None):
             if destination is None or not target.move_to(destination, quiet=True, move_type="defeat"):
                 raise RuntimeError("패배 후 의무실 이동을 완료하지 못했습니다.")
             after_change(target.request_prompt)
-        if rules.boss_telegraph(enemy.combat_definition_id, enemy.db.enemy_round):
+        if rules.boss_telegraph(enemy.combat_definition_id, enemy.db.enemy_round, enemy_profile=enemy.combat_profile):
             for player in active_players(enemy):
                 message = ft.text(
                     ft.token("warning", "! "),
@@ -640,7 +642,9 @@ def combat_snapshot(player):
         "max_hp": enemy.max_hp,
         "round": enemy.db.enemy_round,
         "state": enemy.db.state,
-        "telegraph": rules.boss_telegraph(enemy.combat_definition_id, enemy.db.enemy_round),
+        "telegraph": rules.boss_telegraph(
+            enemy.combat_definition_id, enemy.db.enemy_round, enemy_profile=enemy.combat_profile,
+        ),
     }
 
 

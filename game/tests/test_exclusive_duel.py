@@ -81,6 +81,17 @@ class ExclusiveDuelTests(NativeItemTest):
         self.assertTrue(all("duel" not in definition.capabilities for actor_id, definition in content.ACTORS.items()
                             if actor_id not in {INSTRUCTOR_ID, GUARD_ID}))
 
+    def test_declared_combat_profile_supports_shared_rounds(self):
+        guard = spawn_fixture(GUARD_ID, self.room1)
+        for actor in (self.actor, guard):
+            with self.subTest(actor=actor.key):
+                actor.engage(self.char1, now=100)
+                actor.receive_attack(self.char1, now=103, rng=Random(1))
+                actor.enemy_tick(now=103, rng=Random(1))
+                self.assertEqual(actor.db.enemy_round, 1)
+                self.assertEqual(self.char1.combat_snapshot()["enemy"], actor.actor_id)
+                self.char1.leave_combat(now=104)
+
     def test_shared_encounter_excludes_duel(self):
         self.actor.engage(self.char1, now=100)
         before = deepcopy(dict(self.actor.db.encounter_state))

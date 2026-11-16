@@ -9,7 +9,7 @@ from evennia.utils import delay
 from evennia.utils.dbserialize import deserialize
 from world import rules
 from world import text as ft
-from world.content import ENEMIES, ITEMS, find_id
+from world.content import ITEMS, find_id
 from world.content.economy import CURRENCY
 from world.currency import currency_request, format_currency
 from world.distant_presentation import DistantPresenceMixin
@@ -26,7 +26,7 @@ from world.targets import LootRequest, Mode, TargetSelector, ordered, select
 
 
 def build_entries(enemy, groups, now, rng=None):
-    definition = ENEMIES[enemy.combat_definition_id]
+    definition = enemy.combat_profile
     from world.loot_rules import roll_loot
 
     items = roll_loot(enemy.combat_definition_id, rng or Random())

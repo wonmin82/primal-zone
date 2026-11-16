@@ -456,8 +456,8 @@ def rest(profile, *, safe=False):
     return restored
 
 
-def boss_telegraph(enemy_id, enemy_round):
-    period = ENEMIES[enemy_id].get("special_period")
+def boss_telegraph(enemy_id, enemy_round, *, enemy_profile=None):
+    period = (ENEMIES[enemy_id] if enemy_profile is None else enemy_profile).get("special_period")
     return bool(period and enemy_round % period == period - 1)
 
 
