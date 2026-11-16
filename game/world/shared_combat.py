@@ -53,6 +53,9 @@ def initialize_shared_combat(enemy):
 
 
 def actor_moved(enemy):
+    from world.duel import reconcile as reconcile_duel
+
+    reconcile_duel(enemy)
     if not enemy.supports_shared_combat:
         return
     with world_change(isolate_callbacks=True):
@@ -83,7 +86,9 @@ def group_for(player):
 
 
 def can_attack(enemy, player):
-    return enemy.shared_combat_active and (
+    from world.duel import active_for, active_on
+
+    return not active_on(enemy) and not active_for(player) and enemy.shared_combat_active and (
         enemy.combat_profile["combat_mode"] == "public"
         or enemy.db.claim in (None, group_for(player))
     )
@@ -123,8 +128,12 @@ def scale_boss(enemy, now):
 
 
 def engage(enemy, player, now=None):
+    from world.duel import active_for, active_on
+
     now = time() if now is None else now
     with world_change(isolate_callbacks=True):
+        if active_on(enemy) or active_for(player):
+            raise rules.RuleError("대련 중에는 일반 교전을 시작할 수 없습니다.")
         reconcile(enemy, now)
         if enemy.db.state != "alive":
             raise rules.RuleError("아직 다시 나타나지 않은 적입니다.")
@@ -351,6 +360,54 @@ def receive_attack(enemy, player, now=None, rng=None):
         if enemy.hp <= 0:
             _finish_death(enemy, now, rng)
     after_change(lambda: broadcast_state(enemy))
+
+
+def duel_round(actor, player, state, now, rng):
+    """공통 공격·장비·자원 정책을 대련의 전투 상태에 적용한다."""
+    from world.firearm_service import player_attack
+    from world.progression import apply_suppression, combined_suppression, consume_suppressions
+
+    profile = player.profile()
+    player.accrue_recovery(profile, now)
+    transient = {key: profile[key] for key in (
+        "hp", "combat_target", "queued_action", "insight", "next_attack_at", "player_round",
+    )}
+    hp_recovery = {key: profile["recovery"][key]["hp"] for key in ("ready", "credit")}
+    profile.update(hp=state["player_hp"], combat_target=actor.pk,
+                   queued_action=state["queued_skill"], insight=state["insight"])
+    enemy_profile = actor.combat_profile
+    damage, outcome = player_attack(
+        player, profile, actor.combat_definition_id, now, COMBAT_INTERVAL, rng, enemy_profile=enemy_profile,
+    )
+    state["actor_hp"] -= min(state["actor_hp"], damage)
+    state["queued_skill"] = "attack"
+    state["insight"] = profile["insight"]
+    publish_attack = view.outgoing_attack(profile, actor.key, outcome, damage)
+    deliver_combat_message(player, publish_attack)
+    effects = state["suppressions"]
+    if "suppression" in outcome:
+        effect = outcome["suppression"]
+        effects, _ = apply_suppression(effects, player.pk, effect["rank"], bool(enemy_profile.get("boss")),
+                                       effect=effect)
+    kind = None
+    if state["actor_hp"] <= 0:
+        kind = "victory"
+    else:
+        state["enemy_round"] += 1
+        reduction = combined_suppression(effects, bool(enemy_profile.get("boss")))
+        result = rules.enemy_attack(profile, actor.combat_definition_id, state["enemy_round"], now, rng,
+                                    reduction, enemy_profile=enemy_profile)
+        state["suppressions"] = consume_suppressions(effects)
+        deliver_combat_message(player, f"{actor.key}의 반격으로 대련 체력 {result['damage']}을 잃었습니다.")
+        if result["defeated"]:
+            kind = "defeat"
+    state["player_hp"] = max(0, profile["hp"])
+    # 공용 HP·전투 회차는 그대로 두고 실제 사용한 자원과 장비 상태를 저장한다.
+    profile.update(transient)
+    for key, value in hp_recovery.items():
+        profile["recovery"][key]["hp"] = value
+    player.save_profile(profile)
+    return kind
 
 
 def finish_death(enemy, now, rng=None):

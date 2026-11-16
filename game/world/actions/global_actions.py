@@ -105,8 +105,11 @@ def look(context):
                         pool=[obj for obj in objects if isinstance(obj, Corpse)],
                     )
                 else:
+                    from world.state import duel_observation
+
                     output = ft.join(
-                        [caller.at_look(obj, observed_at=observed_at) for obj in selected],
+                        [ft.join((caller.at_look(obj, observed_at=observed_at),
+                                  *duel_observation(obj, caller, observed_at)), "\n") for obj in selected],
                         "\n\n",
                     )
                 messages.append(output)
@@ -313,6 +316,75 @@ def party_attack(context):
     return ActionResult(changed=True)
 
 
+DUEL_SKILLS = {
+    "기본공격": "attack",
+    **{label: key for key, label in QUEUED_ATTACK_NAMES.items()},
+    "치료": "heal",
+    "호흡": "breathing",
+}
+
+
+def duel_target(context):
+    from world.selection_numbers.api import resolve_reference
+
+    from .resolver import select_role
+
+    targets = context.roles.get("subject", ())
+    query = context.arguments.get("query", "")
+    if context.invocation.origin == "web":
+        if len(targets) != 1 or query:
+            raise rules.RuleError("원래 대련 상대를 지정하세요.")
+        return targets[0]
+    if not query.strip():
+        raise rules.RuleError("대련 상대의 이름을 입력하세요.")
+    reference, = select_role(context.caller, COMBAT_TARGET, query)
+    actor = resolve_reference(reference)
+    if actor is None:
+        raise rules.RuleError("대련 상대의 위치가 바뀌었습니다.")
+    return actor
+
+
+def duel_start(context):
+    from world import duel
+
+    actor = duel_target(context)
+    generation = context.arguments.get("generation")
+    if context.invocation.origin == "web" and generation is None:
+        raise rules.RuleError("대련 상대의 현재 상태를 다시 확인하세요.")
+    duel.start(actor, context.caller, expected_generation=generation)
+    return ActionResult(changed=True)
+
+
+def duel_encounter(context, actor):
+    from world import duel
+
+    if context.invocation.origin == "web":
+        identity = context.arguments.get("encounter_id")
+        if not identity:
+            raise rules.RuleError("원래 대련을 지정하세요.")
+        return identity
+    status = duel.projection(actor, context.caller)
+    if status is None or status["state"] != "active" or not status["participant"]:
+        raise rules.RuleError("참가 중인 대련이 없습니다.")
+    return status["identity"]
+
+
+def duel_act(context):
+    from world import duel
+
+    actor = duel_target(context)
+    changed = duel.act(actor, context.caller, duel_encounter(context, actor), skill=context.arguments["skill"])
+    return ActionResult(changed=changed)
+
+
+def duel_surrender(context):
+    from world import duel
+
+    actor = duel_target(context)
+    changed = duel.surrender(actor, context.caller, duel_encounter(context, actor))
+    return ActionResult(changed=changed)
+
+
 
 def party_defender(context):
     from commands.party import required
@@ -376,6 +448,8 @@ COMBAT_TARGET = RoleDefinition("subject", (ReferenceKind.ACTOR,), required=False
 COMBAT_GENERATION = ArgumentDefinition("generation", int, required=False, minimum=0)
 COMBAT_LIFECYCLE = ArgumentDefinition("lifecycle", int, required=False, minimum=0)
 COMBAT_ACTIONS = {"attack", "party_attack"}
+DUEL_ACTIONS = {"duel_start", "duel_act", "duel_surrender"}
+DUEL_ID = ArgumentDefinition("encounter_id", required=False)
 DECLARATIONS = (
     ("look", look, ExecutionPolicy.STATE_CHANGE, (QUERY,)),
     ("help", help_page, ExecutionPolicy.READ_ONLY, (QUERY,)),
@@ -388,6 +462,10 @@ DECLARATIONS = (
      (ArgumentDefinition("skill", choices=("heal", "breathing")), QUERY)),
     ("flee", flee, ExecutionPolicy.STATE_CHANGE, ()),
     ("party_attack", party_attack, ExecutionPolicy.STATE_CHANGE, (QUERY,)),
+    ("duel_start", duel_start, ExecutionPolicy.STATE_CHANGE, (QUERY, COMBAT_GENERATION)),
+    ("duel_act", duel_act, ExecutionPolicy.STATE_CHANGE,
+     (QUERY, DUEL_ID, ArgumentDefinition("skill", default="attack", choices=tuple(DUEL_SKILLS.values())))),
+    ("duel_surrender", duel_surrender, ExecutionPolicy.STATE_CHANGE, (QUERY, DUEL_ID)),
     ("party_defense", party_defense, ExecutionPolicy.STATE_CHANGE, (QUERY,)),
     ("party_defender", party_defender, ExecutionPolicy.READ_ONLY, (QUERY,)),
     ("drop", transfer_item, ExecutionPolicy.STATE_CHANGE, (QUERY,)),
@@ -399,7 +477,7 @@ PACKAGE = ContentPackage(
     verbs=tuple(VerbDefinition("global." + key + "_verb", "전역-" + key, adapter_only=True)
                 for key, _, _, _ in DECLARATIONS),
     actions=tuple(ActionDefinition("global." + key, "global." + key + "_verb",
-                                   (COMBAT_TARGET,) if key in COMBAT_ACTIONS else (),
+                                   (COMBAT_TARGET,) if key in COMBAT_ACTIONS | DUEL_ACTIONS else (),
                                    (SyntaxVariant("adapter", "", show_control=False),),
                                    arguments=(*arguments, COMBAT_GENERATION, COMBAT_LIFECYCLE)
                                    if key in COMBAT_ACTIONS else arguments)

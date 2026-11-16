@@ -85,6 +85,8 @@ def validate_definitions(definitions, capabilities, spawns=(), *, index=None, ro
                 "Actor Profile과 초기 상태는 Mapping이어야 합니다.")
         require(len(set(actor.capabilities)) == len(actor.capabilities)
                 and set(actor.capabilities) <= descriptors.keys(), "Capability 중복/미존재 참조")
+        require("duel" not in actor.capabilities or "combat" in actor.capabilities,
+                "대련에는 Combat Capability가 필요합니다.")
         require(not {"actor_id", "spawn_id", "definition_id", "action_provider_id",
                      "selection_definition_id", "selection_group_id"}
                 .intersection(actor.defaults), "초기 상태가 영속 정체성을 덮어쓸 수 없습니다.")

@@ -21,6 +21,7 @@ def reconcile_room(room, now=None):
 
 def reconcile_world(now=None, restart=False):
     now = time() if now is None else now
+    from world.duel import reconcile as reconcile_duel
     from world.environment_state import reconcile_environment
     from world.facilities import reconcile_facilities
 
@@ -42,6 +43,7 @@ def reconcile_world(now=None, restart=False):
         if corpse.pk:
             corpse.schedule_lifecycle()
     for enemy in Actor.objects.all():
+        reconcile_duel(enemy, now, restart=restart)
         if not enemy.supports_shared_combat:
             continue
         # 빈 방의 살아 있는 적은 다음 입실/관찰까지 지연 계산한다.

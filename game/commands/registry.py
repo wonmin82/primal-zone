@@ -14,7 +14,19 @@ from commands.character import (
     Status,
     Weather,
 )
-from commands.combat import Attack, Breathe, Flee, Heal, Heavy, Insight, Shooting, Suppress
+from commands.combat import (
+    Attack,
+    Breathe,
+    Duel,
+    DuelAct,
+    DuelSurrender,
+    Flee,
+    Heal,
+    Heavy,
+    Insight,
+    Shooting,
+    Suppress,
+)
 from commands.command_shortcuts import DeleteShortcut, Sequence, Shortcuts
 from commands.inventory import (
     Equipment,
@@ -54,6 +66,9 @@ COMMANDS = [
     Heal,
     Breathe,
     Flee,
+    Duel,
+    DuelAct,
+    DuelSurrender,
     Return,
     Quest,
     Map,

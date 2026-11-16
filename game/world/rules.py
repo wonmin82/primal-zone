@@ -330,7 +330,8 @@ def consume_combat_opportunity(profile, now, interval):
     profile["next_attack_at"] = now + interval
 
 
-def player_attack(profile, enemy_id, now, interval, rng=None, target_profile=None, *, shot_available=True):
+def player_attack(profile, enemy_id, now, interval, rng=None, target_profile=None, *, shot_available=True,
+                  enemy_profile=None):
     """One opportunity, regardless of whether it attacks or prepares/supports."""
     rng = rng or Random()
     action = profile["queued_action"]
@@ -373,17 +374,18 @@ def player_attack(profile, enemy_id, now, interval, rng=None, target_profile=Non
     if action in ("heavy", "shooting"):
         raw = modified(profile, f"skill.{action}.damage", raw)
     raw *= bonus * pg.attack_multiplier(skill_rank(profile, "attack"))
-    damage = apply_defense(raw, ENEMIES[enemy_id]["defense"], penetration)
+    enemy = ENEMIES[enemy_id] if enemy_profile is None else enemy_profile
+    damage = apply_defense(raw, enemy["defense"], penetration)
     outcome = {"action": action, "insight": bool(insight), "shot_fired": shot}
     if action == "suppress":
-        outcome["suppression"] = pg.suppression_effect(rank, bool(ENEMIES[enemy_id].get("boss")))
+        outcome["suppression"] = pg.suppression_effect(rank, bool(enemy.get("boss")))
         outcome["suppression"]["reduction"] = modified(profile, "skill.suppress.reduction", outcome["suppression"]["reduction"])
     return damage, outcome
 
 
-def enemy_attack(profile, enemy_id, enemy_round, now, rng=None, suppression=0):
+def enemy_attack(profile, enemy_id, enemy_round, now, rng=None, suppression=0, *, enemy_profile=None):
     rng = rng or Random()
-    enemy = ENEMIES[enemy_id]
+    enemy = ENEMIES[enemy_id] if enemy_profile is None else enemy_profile
     charged = bool(enemy.get("special_period") and enemy_round % enemy["special_period"] == 0)
     raw = (enemy["attack"] + rng.randint(-1, 1)) * (1 - suppression)
     if charged:

@@ -168,6 +168,45 @@
     return {label:remaining ? remaining + "초 남음 (수신 기준)" : "만료됨", expired:remaining === 0};
   }
 
+  function duelControls(duels, serverNow) {
+    const controls = [];
+    const endings = {victory:"승리", defeat:"패배", surrender:"기권",
+      timeout:"시간 초과", disconnect:"재접속 유예 만료", abort:"복구 불가"};
+    for (const duel of duels) {
+      const status = duel.status;
+      if (status) {
+        const text = document.createElement("p");
+        text.className = "loot-label";
+        if (status.state === "active") {
+          const duelTime = pendingTime({expires_at:status.ends_at}, serverNow).label;
+          text.textContent = duel.label + " · 대련 진행 중 · 최대 시간 " + duelTime;
+          if (Number.isFinite(status.actor_hp)) text.textContent += " · 상대 HP " + status.actor_hp;
+          if (status.participant) {
+            if (Number.isFinite(status.player_hp)) text.textContent += " · 내 대련 HP " + status.player_hp;
+            const idle = pendingTime({expires_at:status.idle_at}, serverNow).label;
+            text.textContent += " · 명시 행동 기한 " + idle + " · 자동 공격은 명시 행동으로 세지 않습니다.";
+            if (status.reconnect_until) {
+              const reconnect = pendingTime({expires_at:status.reconnect_until}, serverNow).label;
+              text.textContent += " · 재접속 유예 " + reconnect;
+            }
+          }
+        } else {
+          const result = status.final_result;
+          const reason = result?.reason === "idle" ? "무행동 시간 초과" : endings[result?.kind];
+          text.textContent = duel.label + " · 대련 종료" + (reason ? " · " + reason : "");
+          if (status.cooldown_until > serverNow) {
+            text.textContent += " · 재신청까지 " + pendingTime({expires_at:status.cooldown_until}, serverNow).label;
+          }
+        }
+        controls.push(text);
+      }
+      if (duel.start_action) controls.push(actionButton(duel.label + " 대련", duel.start_action));
+      for (const [label, action] of Object.entries(duel.actions)) controls.push(actionButton("대련 " + label, action));
+      if (duel.surrender_action) controls.push(actionButton("대련 기권", duel.surrender_action));
+    }
+    return controls;
+  }
+
   function render(state) {
     if (Array.isArray(state.resource_prompt?.segments)) latestPrompt = state.resource_prompt.segments;
     playing = true;
@@ -201,6 +240,7 @@
       el.disabled = !enemy.can_attack;
       return el;
     });
+    actions.push(...duelControls(state.duels || [], state.server_now));
     if (state.corpses.length > 1 && state.loot_actions?.corpses) {
       const all = actionButton("모든 시체의 전리품 회수", state.loot_actions.corpses);
       all.disabled = !state.corpses.some((source) => source.loot.some((item) => item.can_take));

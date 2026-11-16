@@ -83,6 +83,17 @@ class Encounter:
             raise RuleError("오래된 전투 회차입니다.")
         return state
 
+    def save(self, state):
+        self.owner.db.encounter_state = state
+
+
+def encounter_state(encounter, participants, policy):
+    return {
+        "identity": encounter.identity, "generation": encounter.generation,
+        "participants": participants, "policy": str(policy), "state": "active",
+        "final_result": None, "settled": False, "pending": None, "completed_operations": (),
+    }
+
 
 def begin_encounter(owner, participants, *, policy=EncounterPolicy.SHARED):
     """Shared의 최소 영속 근거. Duel/미지원 정책 실행은 후속 구현 전 거절한다."""
@@ -106,12 +117,9 @@ def begin_encounter(owner, participants, *, policy=EncounterPolicy.SHARED):
         owner.db.combat_generation = generation
         if not owner.db.combat_identity:
             owner.db.combat_identity = uuid4().hex
-        owner.db.encounter_state = {
-            "identity": f"{identity(owner)}:{owner.db.combat_identity}:{generation}", "generation": generation,
-            "participants": participant_ids, "policy": str(policy), "state": "active",
-            "final_result": None, "settled": False, "pending": None, "completed_operations": (),
-        }
-    return Encounter(owner, generation)
+        encounter = Encounter(owner, generation)
+        encounter.save(encounter_state(encounter, participant_ids, policy))
+    return encounter
 
 
 def settle_encounter(encounter, result, settle):
@@ -126,7 +134,7 @@ def settle_encounter(encounter, result, settle):
             raise RuleError("종료할 수 없는 전투 상태입니다.")
         settle(state)
         state.update(state="finished", final_result=deepcopy(result), settled=True, pending=None)
-        encounter.owner.db.encounter_state = state
+        encounter.save(state)
     return True
 
 
@@ -147,7 +155,7 @@ def plan_tick(encounter, *, operation_id, due_at, trigger):
                 return False
             raise RuleError("아직 완료되지 않은 전투 Tick이 있습니다.")
         state["pending"] = {"operation_id": operation_id, "due_at": due_at, "completed": False}
-        encounter.owner.db.encounter_state = state
+        encounter.save(state)
         after_change(lambda: trigger(encounter, operation_id, due_at))
     return True
 
@@ -181,5 +189,5 @@ def apply_tick(encounter, context, apply):
             return True
         state["pending"]["completed"] = True
         state["completed_operations"] = (*state.get("completed_operations", ()), context.operation_id)
-        encounter.owner.db.encounter_state = state
+        encounter.save(state)
     return True
