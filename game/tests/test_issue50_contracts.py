@@ -156,6 +156,10 @@ class IntegratedContractTests(WorldCommandTest):
         cmdset, actions = public_action_catalog()
         migrated = {entry.key for entry in actions}
         fixed = [*COMMANDS, Who, Quit]
+        duel_keys = {"대련", "대련행동", "대련기권"}
+        self.assertEqual({c.key: (list(c.aliases), c.input_style) for c in fixed if c.key in duel_keys},
+                         {key: ([], "target") for key in duel_keys})
+        fixed = [c for c in fixed if c.key not in duel_keys]
         # #50 스냅샷은 역사적 baseline이다. 미전환 고정 명령의 순서·입력 방식은
         # 보존하고, 승인된 동적 전환은 공개 key/Alias와 실제 어댑터로 대조한다.
         self.assertEqual([{'key': c.key, 'aliases': sorted(c.aliases), 'input_style': getattr(c, 'input_style', 'standalone')}

@@ -30,7 +30,7 @@ class PartyCommandContractTests(GameCommandTest):
                         for verb in (get_index().verbs[action.verb_id],)
                         for variant in action.variants if variant.suffix)
         current = {name for cls in COMMANDS if cls not in PARTY_COMMANDS for name in (cls.key, *cls.aliases)}
-        self.assertSetEqual(set(V13_RUNTIME_NAMES), current | migrated)
+        self.assertSetEqual(set(V13_RUNTIME_NAMES) | {"대련", "대련행동", "대련기권"}, current | migrated)
         self.assertEqual(V14_PARTY_NAMES, {name for cls in PARTY_COMMANDS for name in (cls.key, *cls.aliases)})
         expected = {
             "일행": ["무리", "그룹"], "일행모으기": ["그룹만들기", "그룹모으기"],
