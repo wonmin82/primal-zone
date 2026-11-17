@@ -14,7 +14,9 @@
 
 ## 실제 OS 한글 입력
 
-지원 환경에서 격리 E2E-15 교관 서버를 띄운 뒤 실제 한글 입력기를 켠다. 입력 중 Enter가 조합만 확정하는지, 다음 Enter가 명령을 한 번 전송하는지 확인한다. 한글 명령 기록, 상태 갱신 중 조합, NPC 대화와 대련 행동, 재접속 후 입력을 반복한다. 화면과 서버 응답으로 결과를 확인하고 OS·브라우저·입력기 버전을 기록한다. 이 수동 검증은 현재 미실행이다.
+**USER-CONFIRMED** — 2026-11-17 Closeout 요청에서 사용자가 실제 OS 한글 IME 검증 완료를 확인했다. OS·브라우저·입력기 버전, 실행 일시, 검증한 SHA, 항목별 세부 결과는 **NOT RECORDED**다. 앞선 Codex 검증은 격리 Chrome의 입력 제어가 인증 전에 끊겨 **NOT RUN**이었다. 이 기록은 사용자 확인을 G3의 수동 검증 근거로 채택한다.
+
+지원 환경에서 격리 E2E-15 교관 서버를 띄운 뒤 실제 한글 입력기를 켠다. 입력 중 Enter가 조합만 확정하는지, 다음 Enter가 명령을 한 번 전송하는지 확인한다. 한글 명령 기록, 상태 갱신 중 조합, NPC 대화와 대련 행동, 재접속 후 입력을 반복한다. 화면과 서버 응답으로 결과를 확인하고 OS·브라우저·입력기 버전을 기록한다.
 
 저장소 루트에서 아래 명령으로 E2E-15의 교관과 테스트 계정을 가진 서버를 연다. 출력된 로컬 주소와 일회용 계정을 Chrome에서 사용한다. 검증을 마친 뒤 터미널에서 Enter를 눌러 이 실행의 서버를 정리한다.
 
@@ -34,7 +36,9 @@ try:
     asyncio.run(harness.ready())
     print(f"http://127.0.0.1:{harness.ports['http']}/webclient/")
     print("격리 계정", *harness.credentials[0])
-    input("검증이 끝나면 Enter를 누르세요. ")
+    print("검증이 끝나면 Enter를 누르세요.", flush=True)
+    with open("/dev/tty", encoding="utf-8") as terminal:
+        terminal.readline()
 finally:
     harness.stop()
 PY
