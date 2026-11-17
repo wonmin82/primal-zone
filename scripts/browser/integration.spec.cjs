@@ -518,3 +518,66 @@ test('TEST-TIMING-PARTY 실제 600초 오프라인 자동 승계', async ({ acto
   expect(snapshot().claims).toEqual(saved.claims);
   expect(snapshot().items).toEqual(saved.items);
 });
+
+test('TEST-E2E-15 대련 잠금·재접속·기권·무행동 종료', async ({ actors }) => {
+  const a = await actors.create(0);
+  const b = await actors.create(1, { width: 390, height: 844 });
+  const row = player => player.state?.duels?.find(value => value.label.includes('검증대련교관'));
+  const status = player => row(player)?.status;
+  await expect.poll(() => Boolean(row(a)?.start_action)).toBe(true);
+  const name = row(a).label;
+  const start = a.page.getByRole('button', { name: name + ' 대련', exact: true });
+  await start.click();
+  await expect.poll(() => status(a)?.state).toBe('active');
+  await expect.poll(() => status(b)?.state).toBe('active');
+  const identity = status(a).identity;
+  expect(status(a).ends_at - status(a).idle_at).toBe(540);
+  expect(status(b).identity).toBeUndefined();
+  expect(row(b).surrender_action).toBeFalsy();
+  await command(b, name + ' 대련행동');
+  expect(status(a).identity).toBe(identity);
+  await command(b, name + ' 대련');
+  expect(status(a).identity).toBe(identity);
+  await expect(b.page.getByText(/대련 진행 중/).first()).toBeVisible();
+
+  const idleBefore = status(a).idle_at;
+  await expect.poll(() => status(a)?.actor_hp).toBeLessThan(1000);
+  expect(status(a).idle_at).toBe(idleBefore);
+  await command(a, name + ' 대련행동');
+  await expect.poll(() => status(a)?.idle_at).toBeGreaterThan(idleBefore);
+  await actors.close(a);
+  const again = await actors.create(0);
+  await expect.poll(() => status(again)?.identity).toBe(identity);
+  const surrender = again.page.getByRole('button', { name: '대련 기권', exact: true });
+  const stale = await surrender.getAttribute('data-action-invocation');
+  await surrender.click();
+  await expect.poll(() => status(again)?.state).toBe('finished');
+  await expect(again.page.getByText(/대련 종료.*기권/).last()).toBeVisible();
+  expect(row(again).start_action).toBeFalsy();
+
+  // 다른 참가자는 기존 기권자의 재신청 제한과 무관하게 자신의 대련을 시작한다.
+  await command(b, name + ' 대련');
+  await expect.poll(() => status(b)?.state).toBe('active');
+  const nextIdentity = status(b).identity;
+  expect(nextIdentity).not.toBe(identity);
+  const priorLog = await again.page.locator('#log').textContent();
+  await again.page.evaluate(invocation => {
+    const old = document.createElement('button');
+    old.dataset.actionInvocation = invocation;
+    document.body.append(old);
+    old.click();
+    old.remove();
+  }, stale);
+  await expect.poll(async () => (await again.page.locator('#log').textContent()).slice(priorLog.length))
+    .toContain('현재 대련에 이 행동을 사용할 수 없습니다.');
+  expect(status(b).identity).toBe(nextIdentity);
+  await actors.close(again);
+  await actors.close(b);
+  await restart();
+  const restored = await actors.create(1);
+  await expect.poll(() => status(restored)?.identity).toBe(nextIdentity);
+  await expect.poll(() => status(restored)?.state).toBe('active');
+  await expect.poll(() => status(restored)?.state, { timeout: 75000 }).toBe('finished');
+  await expect(restored.page.getByText(/대련 종료.*무행동/).last()).toBeVisible();
+  expect(restored.errors).toEqual([]);
+});

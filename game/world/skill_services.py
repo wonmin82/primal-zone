@@ -26,8 +26,14 @@ def heal_target(caller, identity=None):
 
 
 def use_support(caller, action, name="", *, item=None):
+    from world.duel import active_for
+
     now = time()
     with world_change():
+        if active_for(caller):
+            if action == "bandage":
+                raise rules.RuleError("대련 중에는 붕대를 사용할 수 없습니다.")
+            raise rules.RuleError("대련 중에는 상대와 기술을 지정해 대련행동으로 예약하세요.")
         target = caller
         if action == "heal" and name.strip():
             from typeclasses.explorers import Explorer

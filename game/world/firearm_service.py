@@ -230,7 +230,7 @@ def consume_shot(magazine, outcome):
     magazine.state = row.state
 
 
-def player_attack(character, profile, enemy_id, now, interval, rng=None, target_profile=None):
+def player_attack(character, profile, enemy_id, now, interval, rng=None, target_profile=None, *, enemy_profile=None):
     """pure combat 결과와 magazine 감소를 하나의 원자적 경계로 묶는다."""
     from world.equipment_service import entity_runtime
 
@@ -239,7 +239,8 @@ def player_attack(character, profile, enemy_id, now, interval, rng=None, target_
     try:
         with world_change():
             if not entity_runtime(character):
-                return rules.player_attack(profile, enemy_id, now, interval, rng, target_profile)
+                return rules.player_attack(profile, enemy_id, now, interval, rng, target_profile,
+                                           enemy_profile=enemy_profile)
             lock_character_items(character)
             from world.equipment_service import equipment_snapshot
 
@@ -255,7 +256,7 @@ def player_attack(character, profile, enemy_id, now, interval, rng=None, target_
                 magazine = loaded_magazine_item(firearm)
                 available = magazine is not None and magazine.state["rounds"] > 0
             damage, outcome = rules.player_attack(profile, enemy_id, now, interval, rng, target_profile,
-                                                   shot_available=available)
+                                                   shot_available=available, enemy_profile=enemy_profile)
             consume_shot(magazine, outcome)
             return damage, outcome
     except Exception:

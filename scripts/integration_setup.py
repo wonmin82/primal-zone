@@ -3,23 +3,38 @@
 import json
 import os
 import sys
+from pathlib import Path
+from shutil import copyfile
 from time import time
 
 from smoke_setup import setup
 
 
+def install_duel_fixture():
+    from django.conf import settings
+    from server.conf.smoke_support import require_smoke
+
+    require_smoke(settings)
+    actors = Path(settings.PRIMAL_SMOKE_RUN_DIR) / "game/world/actors"
+    copyfile(Path(__file__).with_name("browser_duel_fixture.py"), actors / "browser_duel_fixture.py")
+    with (actors / "content.py").open("a", encoding="utf-8") as source:
+        source.write("\nfrom .browser_duel_fixture import with_duel_instructor  # noqa: E402\n"
+                     "ACTORS = with_duel_instructor(ACTORS)\n")
+
+
 def prepare(credentials):
+    scenario = os.environ["PRIMAL_INTEGRATION_SCENARIO"]
+    if scenario == "E2E-15":
+        install_duel_fixture()
     setup(credentials)
     from evennia import create_object
     from typeclasses.explorers import Explorer
     from typeclasses.loot import Corpse
     from typeclasses.parties import Party
+    from typeclasses.zone_rooms import ZoneRoom
     from world import rules
     from world.item_entities import api
     from world.loot_service import create_claim, create_currency, populate_source
-
-    scenario = os.environ["PRIMAL_INTEGRATION_SCENARIO"]
-    from typeclasses.zone_rooms import ZoneRoom
     rooms = {room.db.zone_id: room for room in ZoneRoom.objects.all()}
     players = [Explorer.objects.get(db_key=name) for name, _ in credentials]
     starts = {"E2E-02": "dock", "E2E-03": "weapon_shop", "E2E-04": "infirmary",
@@ -57,6 +72,10 @@ def prepare(credentials):
         unequip_item(players[0], body)
         armor = api.create_item('heavy_protective_suit', location_kind='inventory', owner_object=players[0])
         equip_item(players[0], armor)
+    if scenario == "E2E-15":
+        from world.actors.spawn import create_actor
+
+        create_actor("browser_duel_instructor", rooms["staging_room"])
     if scenario == 'TIMING-PARTY':
         from typeclasses.loot import DroppedLoot
         party = create_object(Party, key='실시간 승계 검증 일행')

@@ -9,7 +9,7 @@ from contextlib import closing
 from pathlib import Path
 from time import monotonic
 
-E2E = tuple(f"E2E-{number:02}" for number in range(1, 15))
+E2E = tuple(f"E2E-{number:02}" for number in range(1, 16))
 SCENARIOS = (*E2E, "TIMING-DOOR", "TIMING-PARTY")
 
 
@@ -80,7 +80,10 @@ async def wait_browser(process, harness):
                     # 이 부모/Probe는 DB 또는 세션을 변경하지 않는다.
                     await asyncio.sleep(0.05)
                     continue
-                if payload not in ({'operation': 'restart'}, {'operation': 'restore-restart'}) or harness.env['PRIMAL_INTEGRATION_SCENARIO'] != 'E2E-12':
+                scenario = harness.env['PRIMAL_INTEGRATION_SCENARIO']
+                restart_allowed = payload == {'operation': 'restart'} and scenario in ('E2E-12', 'E2E-15')
+                restore_allowed = payload == {'operation': 'restore-restart'} and scenario == 'E2E-12'
+                if not (restart_allowed or restore_allowed):
                     raise RuntimeError('허용되지 않은 격리 제어')
                 request.unlink()
                 if payload['operation'] == 'restore-restart':

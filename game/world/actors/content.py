@@ -114,5 +114,6 @@ CAPABILITIES = MappingProxyType({
             ArgumentDefinition("telegraph", required=False),
         )),), active_states=("alive",),
     ),
+    "duel": CapabilityDescriptor("duel", active_states=("alive",)),
 })
 WORLD_OBJECTS = MappingProxyType({})

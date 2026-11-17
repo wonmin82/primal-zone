@@ -23,7 +23,7 @@ def choice(options, value):
 
 def roll_loot(enemy_id, rng=None):
     rng = rng or Random()
-    definition = LOOT[enemy_id]
+    definition = LOOT.get(enemy_id, {})
     result = []
     if "resource" in definition:
         chance, options = definition["resource"]

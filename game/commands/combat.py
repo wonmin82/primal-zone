@@ -96,3 +96,46 @@ class Flee(GameCommand):
         from world.actions.global_actions import invoke
 
         return invoke(self.caller, self.session, "flee")
+
+
+class Duel(GameCommand):
+    category = "전투·회복"
+    input_style = "target"
+    key = "대련"
+    usage = "대상이름 대련"
+    summary = "대련이 가능한 상대에게 독점 대련을 신청합니다."
+
+    def func(self):
+        from world.actions.global_actions import invoke
+
+        return invoke(self.caller, self.session, "duel_start", query=self.args)
+
+
+class DuelAct(GameCommand):
+    category = "전투·회복"
+    input_style = "target"
+    key = "대련행동"
+    usage = "대상이름 대련행동 · 대상이름 / 강타 대련행동"
+    summary = "다음 공격을 선택합니다. 자동 공격 중에도 60초마다 명시적인 행동이 필요합니다."
+
+    def func(self):
+        from world.actions.global_actions import DUEL_SKILLS, invoke
+
+        target, separator, label = self.args.strip().partition(" / ")
+        if not separator:
+            return invoke(self.caller, self.session, "duel_act", query=target)
+        return invoke(self.caller, self.session, "duel_act",
+                      query=target.strip(), skill=DUEL_SKILLS.get(label.strip(), label.strip()))
+
+
+class DuelSurrender(GameCommand):
+    category = "전투·회복"
+    input_style = "target"
+    key = "대련기권"
+    usage = "대상이름 대련기권"
+    summary = "참가 중인 대련을 기권합니다."
+
+    def func(self):
+        from world.actions.global_actions import invoke
+
+        return invoke(self.caller, self.session, "duel_surrender", query=self.args)

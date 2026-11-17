@@ -367,10 +367,11 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         # 새 authentication/puppet만 이 hook을 통과한다. Evennia 6.1 at_sync의
         # live-session reload 복원은 puppet hook 없이 기존 Object를 연결한다.
         from world.bootstrap import get_room
+        from world.duel import reconnect_room
 
         # 오프라인 구간은 옛 위치로 계산한 다음 로그인 위치를 바꾼다.
         self.reconcile_recovery(emit_prompt=False)
-        self.location = get_room("staging_room")
+        self.location = reconnect_room(self) or get_room("staging_room")
         super().at_pre_puppet(account, session=session, **kwargs)
 
     def at_post_puppet(self, **kwargs):
@@ -388,6 +389,9 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             super().at_post_puppet(**kwargs)
             from typeclasses.parties import connection_changed
             connection_changed(self)
+            from world.duel import connection_changed as duel_connection_changed
+            if self.db.active_duel_actor:
+                duel_connection_changed(self, online=True)
             self.msg("|g원시구역에 오신 것을 환영합니다.|n '도움말'로 명령을 확인하세요.")
             self.leave_combat()
             self.push_state()
@@ -404,6 +408,10 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         self.ndb.npc_dialogue_tokens = None
         self.ndb.npc_dialogue_guides = None
         if not self.sessions.count():
+            if self.db.active_duel_actor:
+                from world.duel import connection_changed as duel_connection_changed
+
+                duel_connection_changed(self, online=False)
             self.cancel_pending_prompt()
             self.ndb.command_output_depth = 0
             self.reconcile_lights(time(), turn_off=True)
@@ -512,6 +520,10 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         # 이동 성공 이후 옛 방의 문맥과 선택을 폐기한다. rollback 때는 전달하지 않는다.
         after_change(self.clear_dialogue)
         self.leave_combat()
+        if self.db.active_duel_actor:
+            from world.duel import connection_changed as duel_connection_changed
+
+            duel_connection_changed(self)
         if self.zone in ROOMS:
             profile = self.profile()
             if self.zone not in profile["visited"]:
