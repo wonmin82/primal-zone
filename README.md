@@ -167,6 +167,8 @@ uv run python scripts/dev.py stop
 
 Node 24 LTS에서 아래 명령으로 기존 Harness가 준비·종료하는 격리 Evennia 서버에 실제 Chromium을 접속한다. 서로 다른 두 Account/Browser Context의 로그인·명령·공개 메시지·재접속과 Desktop/Narrow를 검증한다. 게임 및 운영 DB를 변경하지 않는다.
 
+브라우저 실행기는 Windows, Linux, macOS를 지원한다. macOS에서는 로그인한 사용자의 GUI 세션에서 실행한다. 실행별 launchd 작업을 만들고 소유 Node·Chromium의 종료를 확인한 뒤 해제한다. 플랫폼별 종료 근거와 제한은 [브라우저 검증 안내](docs/issue50-browser-validation.md#issue-91-macos-브라우저-실행)를 참고한다.
+
 ```sh
 npm ci
 npx playwright install --no-shell chromium
@@ -194,7 +196,7 @@ uv run python -m evennia collectstatic --noinput
 | 데이터베이스 | SQLite, 단일 게임 서버 |
 | 웹 | HTML·CSS·JavaScript, Evennia WebSocket 프로토콜 |
 | 환경 관리 | uv, [pyproject.toml](pyproject.toml)·[uv.lock](uv.lock)의 의존성 고정 |
-| 확인된 환경 | Windows 로컬 실행, Linux GitHub Actions 자동 검사. macOS 실제 실행은 미검증 |
+| 확인된 개발·검사 환경 | Windows 로컬 실행, Linux GitHub Actions, macOS Apple Silicon 격리 브라우저 검증 |
 
 로컬 플레이 DB는 `game/server/evennia.db3`, 비밀 설정은 `game/server/conf/secret_settings.py`다.
 DB·비밀 설정·로그·가상환경·수집된 정적 파일은 소스 관리에 포함하지 않는다.
