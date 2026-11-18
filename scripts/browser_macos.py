@@ -24,6 +24,7 @@ LOCAL_PEERTOKEN = 6
 SOL_LOCAL = 0
 BOOTSTRAP_UNKNOWN_SERVICE = 113
 GONE = (errno.ESRCH, errno.ENOENT)
+AuditToken = ctypes.c_uint32 * 8
 
 
 class Coalition:
@@ -31,9 +32,12 @@ class Coalition:
         self.api = ctypes.CDLL('/usr/lib/libproc.dylib', use_errno=True)
         self.api.proc_pidinfo.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_uint64,
                                          ctypes.c_void_p, ctypes.c_int]
+        self.api.proc_pidinfo.restype = ctypes.c_int
         self.api.proc_listpids.argtypes = [ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_int]
+        self.api.proc_listpids.restype = ctypes.c_int
         self.api.coalition_info_resource_usage.argtypes = [ctypes.c_uint64, ctypes.c_void_p, ctypes.c_size_t]
-        self.api.proc_signal_with_audittoken.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        self.api.proc_signal_with_audittoken.argtypes = [ctypes.POINTER(AuditToken), ctypes.c_int]
+        self.api.proc_signal_with_audittoken.restype = ctypes.c_int
 
     def pidinfo(self, pid, flavor, layout):
         ctypes.set_errno(0)
@@ -41,9 +45,13 @@ class Coalition:
         size = self.api.proc_pidinfo(pid, flavor, 0, data, len(data))
         if size == len(data):
             return layout.unpack(data)
-        if size == 0 and ctypes.get_errno() in GONE:
-            return None
-        raise RuntimeError('macOS 프로세스 식별 정보 조회 실패')
+        if size == 0:
+            error = ctypes.get_errno()
+            if error in GONE:
+                return None
+            if error:
+                raise OSError(error, 'macOS 프로세스 식별 정보 조회 실패')
+        raise RuntimeError('macOS 프로세스 식별 정보 크기 불일치')
 
     def identity(self, pid):
         info = self.pidinfo(pid, PROC_PIDUNIQIDENTIFIERINFO, struct.Struct('@16xQQII16x'))
@@ -73,13 +81,16 @@ class Coalition:
     def send(self, identity, signum):
         # XNU가 PID와 generation을 함께 검증한 proc에만 신호를 보낸다.
         pid, version = identity
-        token = (ctypes.c_uint32 * 8)(0, 0, 0, 0, 0, pid, 0, version)
-        ctypes.set_errno(0)
-        if self.api.proc_signal_with_audittoken(token, signum) == 0:
+        token = AuditToken(0, 0, 0, 0, 0, pid, 0, version)
+        # libproc는 syscall의 errno를 양의 반환값으로 변환한다.
+        result = self.api.proc_signal_with_audittoken(ctypes.byref(token), signum)
+        if result == 0:
             return True
-        if ctypes.get_errno() == errno.ESRCH:
+        if result == errno.ESRCH:
             return False
-        raise OSError(ctypes.get_errno(), 'macOS 소유 프로세스 신호 실패')
+        if result < 0:
+            raise RuntimeError(f'macOS 신호 API 반환 규약 불일치 ({result})')
+        raise OSError(result, 'macOS 소유 프로세스 신호 실패')
 
     def member(self, pid, coalition):
         # 두 조회 사이 PID가 교체되었다면 coalition 관측과 다른 정체성을 결합하지 않는다.
@@ -92,19 +103,33 @@ class Coalition:
         deadline = monotonic() + timeout
         final = deadline + 2
         signaled = set()
+        known_pids = set()
+        denied = set()
         forced = 0
         while True:
             poll()
-            if self.count(coalition) == int(guardian is not None):
+            active = self.count(coalition)
+            expected = int(guardian is not None)
+            if active == expected:
                 return forced
             if monotonic() >= final:
-                raise TimeoutError('macOS coalition 소유 자손 종료 미확인')
+                raise TimeoutError(f'macOS coalition 소유 자손 종료 미확인: 활성 {active - expected}, '
+                                   f'조회 제한 {len(denied)}건(이전 소유 PID {len(denied & known_pids)}건)')
+            denied.clear()
             signum = signal.SIGTERM if monotonic() < deadline else signal.SIGKILL
             for pid in self.pids():
                 if not pid or (guardian and pid == guardian[0]):
                     continue
-                identity = self.member(pid, coalition)
-                if identity is None or (identity, signum) in signaled:
+                try:
+                    identity = self.member(pid, coalition)
+                except PermissionError:
+                    # 이 PID에 신호를 보내지 않는다. 목록과 독립된 active 수가 종료 판정을 맡는다.
+                    denied.add(pid)
+                    continue
+                if identity is None:
+                    continue
+                known_pids.add(pid)
+                if (identity, signum) in signaled:
                     continue
                 if self.send(identity, signum):
                     signaled.add((identity, signum))
@@ -139,6 +164,10 @@ class MacBrowser:
         self.guardian = None
         self.connection = None
         self.registered = False
+        self.stop_error = None
+        self.disconnect = None
+        self.forced = None  # 실행기가 활성 작업 수 0을 확인한 뒤에만 기록한다.
+        self.guardian_forced = False
         domain = f'gui/{os.getuid()}'
         label = 'org.primalzone.browser.' + uuid.uuid4().hex
         self.target = f'{domain}/{label}'
@@ -196,46 +225,95 @@ class MacBrowser:
         return json.loads(self.control.read_text(encoding='utf-8'))
 
     def stop(self, timeout):
+        errors = []
         if self.connection is not None:
-            try:
-                self.connection.sendall(f'{timeout}\n'.encode())
-            except (BrokenPipeError, ConnectionResetError):
-                pass
-            self.connection.settimeout(max(5, timeout+3))
-            try:
-                if self.connection.recv(1):
-                    raise RuntimeError('macOS 브라우저 정리 제어 응답 불일치')
-            except ConnectionResetError:
-                pass
-            self.connection.close()
+            connection = self.connection
             self.connection = None
-        if self.coalition is not None and self.registered:
-            reason = None
-            if not self.proof.exists():
-                # Guardian이 사라져도 독립적으로 등록한 coalition의 자손만 회수한다.
-                reason = 'guardian-proof-missing'
+            try:
+                self.disconnect = self._request_stop(connection, timeout)
+            except BaseException as error:
+                self.stop_error = error
+            try:
+                connection.close()
+            except BaseException as error:
+                if self.stop_error is None:
+                    self.stop_error = error
+                else:
+                    errors.append(error)
+
+        try:
+            if self.coalition is not None and self.forced is None:
+                self._verify_stop(timeout)
+            if self.registered:
+                # 종료 증거를 얻기 전에는 재시도에 필요한 coalition 등록을 유지한다.
+                launchctl('bootout', self.target)
+                if launchctl('print', self.target) != BOOTSTRAP_UNKNOWN_SERVICE:
+                    raise RuntimeError('macOS 소유 launchd 작업 해제 실패')
+                self.registered = False
+        except BaseException as error:
+            errors.append(error)
+            if self.disconnect is not None and self.forced is None and self.stop_error is None:
+                errors.insert(0, self.disconnect)
+
+        if self.stop_error is not None:
+            errors.insert(0, self.stop_error)
+            if self.forced is not None:
+                try:
+                    # Guardian의 .clean은 변경하지 않고 독립 복구의 근거만 별도 저장한다.
+                    write_result(self.control.with_suffix('.recovery.json'), {
+                        'stopped': False, 'active': 0, 'forced': self.forced,
+                        'guardian_forced': self.guardian_forced, 'job_removed': not self.registered,
+                    })
+                except BaseException as error:
+                    errors.append(error)
+        if len(errors) > 1:
+            raise BaseExceptionGroup('macOS 브라우저 종료 및 복구 실패', errors)
+        if errors:
+            raise errors[0]
+        return self.forced if self.forced is not None else 0
+
+    @staticmethod
+    def _request_stop(connection, timeout):
+        # 시작 단계 소켓에도 적용하며 쓰기와 응답 대기 양쪽에 제한을 둔다.
+        connection.settimeout(max(5, timeout + 3))
+        try:
+            connection.sendall(f'{timeout}\n'.encode())
+            if connection.recv(1):
+                raise RuntimeError('macOS 브라우저 정리 제어 응답 불일치')
+            # EOF는 Guardian 종료의 후보이며 .clean과 커널 작업 수를 별도 확인한다.
+        except TimeoutError as error:
+            raise TimeoutError('macOS 브라우저 정리 제어 Timeout') from error
+        except (BrokenPipeError, ConnectionResetError) as error:
+            # Node 시작 실패처럼 Guardian이 증거를 쓰고 먼저 종료한 경우도 있다.
+            return error
+
+    def _verify_stop(self, timeout):
+        if self.stop_error is None:
+            try:
+                proof = json.loads(self.proof.read_text(encoding='utf-8'))
+                if (proof['stopped'] is not True or proof['active'] != 0
+                        or type(proof['forced']) is not int or proof['forced'] < 0):
+                    raise ValueError('정리 증거 값 불일치')
+            except (OSError, ValueError, TypeError, KeyError) as error:
+                self.stop_error = RuntimeError('macOS 브라우저 보호 프로세스 정리 증거 없음')
+                self.stop_error.__cause__ = self.disconnect or error
             else:
-                # 소켓 EOF와 커널의 guardian task 회수 사이에는 짧은 경합이 가능하다.
+                # EOF 직후에는 Guardian task의 커널 회수가 진행 중일 수 있다.
                 deadline = monotonic() + 2
                 while self.api.count(self.coalition) != 0:
                     if monotonic() >= deadline:
-                        reason = 'coalition-not-empty'
+                        self.stop_error = RuntimeError('macOS 정리 증거와 실제 coalition 작업 수 불일치')
+                        self.stop_error.__cause__ = self.disconnect
                         break
                     sleep(0.05)
-            if reason:
-                forced = self.api.drain(self.coalition, timeout)
-                write_result(self.proof, {'stopped': False, 'forced': forced, 'active': 0, 'error': reason})
-        if self.registered:
-            if (launchctl('bootout', self.target)
-                    and launchctl('print', self.target) != BOOTSTRAP_UNKNOWN_SERVICE):
-                raise RuntimeError('macOS 소유 launchd 작업 해제 실패')
-            self.registered = False
-        if self.coalition is None:
-            return 0  # 소유권 검증/설정 전에는 Node를 시작할 수 없다.
-        proof = json.loads(self.proof.read_text(encoding='utf-8'))
-        if proof.get('stopped') is not True or proof.get('active') != 0:
-            raise RuntimeError('macOS 브라우저 보호 프로세스 정리 증거 없음')
-        return proof['forced']
+                else:
+                    self.forced = proof['forced']
+                    return
+
+        # 등록 때 확인한 Guardian의 PID 세대를 사용한다. 새 프로세스에 신호를 보낼 수 없다.
+        if not self.guardian_forced:
+            self.guardian_forced = self.api.send(self.guardian, signal.SIGKILL)
+        self.forced = self.api.drain(self.coalition, timeout)
 
 
 def guardian(address):

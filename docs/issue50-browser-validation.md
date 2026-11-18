@@ -6,7 +6,7 @@ Node 24와 프로젝트 Python을 준비하고 macOS의 로그인된 GUI 세션�
 
 macOS에서는 일회성 launchd 작업마다 커널 리소스 coalition을 만든다. [XNU coalition](https://github.com/apple-oss-distributions/xnu/blob/main/doc/observability/coalitions.md)은 자손에게 상속되므로 부모가 먼저 종료하거나 Playwright가 별도 세션을 만들어도 membership이 유지된다. 실행기는 비공개 Unix 소켓의 audit token과 전용 coalition을 확인한 뒤 Guardian에 Node 실행 환경과 로그 파일 디스크립터를 전달한다. 실행 환경은 launchd 설정에 기록하지 않는다.
 
-정리할 때는 소유 coalition과 PID 세대가 일치하는 프로세스에만 [XNU audit token 신호](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/proc_info.c)를 보낸다. 커널의 활성 작업 수로 자손과 Guardian 종료를 각각 확인하고 임시 launchd 작업을 해제한다. Guardian이 조기 종료하면 실행기가 등록된 coalition의 잔류를 회수하더라도 해당 실행의 정리 증거는 실패로 보존한다. Windows Job Object와 Linux subreaper/pidfd는 기존 경로를 사용한다.
+정리할 때는 소유 coalition과 PID 세대가 일치하는 프로세스에만 [XNU audit token 신호](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/proc_info.c)를 보낸다. 커널의 활성 작업 수로 자손과 Guardian 종료를 각각 확인하고 임시 launchd 작업이 사라졌는지 조회한다. Guardian이 조기 종료하거나 제어 요청에 응답하지 않으면 실행기가 등록된 Guardian의 PID 세대와 coalition으로 독립 정리를 시도한다. 복구를 완료해도 원래 실행은 실패이며, 검증된 작업 수와 launchd 해제 여부는 `.recovery.json`에 남긴다. 활성 작업 수를 확인할 수 없으면 재시도에 필요한 launchd 등록을 유지한다. Windows Job Object와 Linux subreaper/pidfd는 기존 경로를 사용한다.
 
 사용자 GUI launchd 도메인 또는 필요한 Darwin API가 없으면 시작에 실패한다. macOS 실검증 범위는 Apple Silicon과 로그인된 GUI 세션이다. Intel과 GUI 세션 없는 실행, 다른 macOS 버전은 별도 검증하지 않았다. 실행기를 강제 종료하면 Guardian은 소켓 EOF에서 자손을 정리할 수 있지만 등록된 비실행 작업의 해제까지 확인할 실행기는 사라진다. 실행기와 Guardian을 동시에 잃는 상황의 자동 복구는 보장하지 않는다. 실패 시 격리 실행의 로그·증거를 보존하며 기존 서버나 브라우저를 이름 또는 그룹으로 종료하지 않는다.
 
