@@ -161,7 +161,7 @@ uv run python scripts/dev.py stop
 | `stop` | 실행 중인 서버를 종료한다. |
 
 병렬·선별 테스트, DB 격리, Quick/Full smoke 차이, 수동 확인과 과거 CI·실패 이력은 [테스트 안내](docs/playtest.md#6-자동-테스트-실행)에 있다.
-검사는 플레이 DB와 운영 인증 설정을 보존한다. 브라우저 화면·실제 한글 IME 확인은 자동 테스트와 별도로 수행한다.
+검사는 플레이 DB와 운영 인증 설정을 보존한다. 웹 입력 변경은 영향에 따라 입력·조합 이벤트·명령 전송의 자동 회귀와 브라우저 E2E를 실행한다. 실제 OS 한글 IME는 과거 `USER-CONFIRMED` 결과를 재사용하며 관례적으로 수동 재검증하지 않는다. 자세한 기준은 [작업 지침](AGENTS.md#검증-근거와-보고)을 따른다.
 
 ### 실제 브라우저 자동 검증 (Issue #50 Phase 50-A)
 
@@ -176,7 +176,7 @@ npm run test:browser
 npm run test:contracts
 ```
 
-CI는 Chromium 설치에 `--with-deps`를 추가하며 기존 `test`·`smoke`와 새 `browser-e2e`·`contracts`를 실행한다. [격리·보안·증거 안내](docs/issue50-browser-validation.md), [단계별 추적](docs/issue50-integration-matrix.md), [실행·실패 이력](docs/playtest.md#issue-50-phase-50-a)을 참고한다. 50-B~50-F는 미실행이며 이미 수동 검증한 OS 한글 IME는 `PRIOR VERIFIED`로 구분한다.
+CI는 Chromium 설치에 `--with-deps`를 추가하며 `test`·`smoke`·`browser-e2e`·`contracts`를 실행한다. [격리·보안·증거 안내](docs/issue50-browser-validation.md), [단계별 추적](docs/issue50-integration-matrix.md), [실행·실패 이력](docs/playtest.md#issue-50-phase-50-a)을 참고한다.
 
 ### 정적 파일 수집
 
