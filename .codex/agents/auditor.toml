@@ -1,6 +1,6 @@
 name = "auditor"
 description = "고위험 변경의 불변조건·동시성·권한·영속성·실패와 복구 경로를 독립 감사한다."
-model = "gpt-6.1-sol"
+model = "gpt-6.2-sol"
 model_reasoning_effort = "high"
 sandbox_mode = "read-only"
 

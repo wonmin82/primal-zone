@@ -1,6 +1,6 @@
 name = "implementer"
 description = "명시적으로 할당된 파일에 최소 구현과 필요한 회귀 검증을 수행한다."
-model = "gpt-6.1-sol"
+model = "gpt-6.2-sol"
 model_reasoning_effort = "medium"
 sandbox_mode = "workspace-write"
 developer_instructions = """
