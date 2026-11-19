@@ -172,7 +172,37 @@ print("T01: PASS (6 TOML)")
 PY
 ```
 
-Windows PowerShell에서는 위 블록의 Python 본문(`import pathlib`부터 마지막 `print`까지)만 임시 `.py` 파일에 저장한다. 저장소 루트에서 `.\.venv\Scripts\python.exe "<임시 파일 경로>"`를 실행한다. 두 환경에서 같은 Python 본문과 기대값을 사용한다.
+Windows PowerShell 7에서도 저장소 루트에서 아래 블록 전체를 붙여 넣는다. here-string의 Python 본문을 가상환경 Python의 표준 입력으로 전달한다.
+
+```powershell
+@'
+import pathlib
+import tomllib
+
+root = pathlib.Path(".codex")
+main = tomllib.loads(
+    (root / "config.toml").read_text(encoding="utf-8")
+)
+assert main == {"model": "gpt-6.2-sol", "model_reasoning_effort": "low",
+                "agents": {"enabled": True, "max_concurrent_threads_per_session": 3}}
+expected = {
+    "scout": ("gpt-6-luna", "high", "read-only"),
+    "implementer": ("gpt-6.2-sol", "medium", "workspace-write"),
+    "reviewer": ("gpt-6.2-sol", "high", "read-only"),
+    "auditor": ("gpt-6.2-sol", "high", "read-only"),
+    "verifier": ("gpt-6-luna", "high", "workspace-write"),
+}
+assert {p.stem for p in (root / "agents").glob("*.toml")} == set(expected)
+for name, values in expected.items():
+    cfg = tomllib.loads((root / "agents" / f"{name}.toml").read_text(encoding="utf-8"))
+    assert cfg["name"] == name
+    assert (cfg["model"], cfg["model_reasoning_effort"], cfg["sandbox_mode"]) == values
+    assert cfg["description"].strip() and cfg["developer_instructions"].strip()
+print("T01: PASS (6 TOML)")
+'@ | .\.venv\Scripts\python.exe -
+```
+
+두 예제의 Python 본문은 동일하다. 검증 항목이나 기대값을 변경할 때는 두 블록에 함께 반영한다.
 
 T01은 설정 선언만 확인한다. 역할의 기존 지침·Sandbox 선언 및 Scout/Verifier 원문 보존은 기준 브랜치와 Diff를 대조한다. 실제 모델·역할 선택은 T04에서 별도 확인하며 이 검사로 OS 권한 분리를 증명하지 않는다.
 
