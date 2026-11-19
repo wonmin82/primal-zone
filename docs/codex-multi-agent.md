@@ -1,6 +1,6 @@
-# Codex Windows 멀티 에이전트 운영
+# Codex 멀티 에이전트 운영
 
-[Issue #68](https://github.com/wonmin82/primal-zone/issues/68)의 현행 운영 정책이다. [Issue #58](https://github.com/wonmin82/primal-zone/issues/58)의 실제 실행·실패 기록은 아래 역사 자료로 보존한다. 게임 코드·DB·CI·글로벌 설정은 바꾸지 않는다. 모델/Effort 지원은 **USER VERIFIED**이며 설정값과 실제 로딩·라우팅·권한 관측은 구분한다.
+[Issue #68](https://github.com/wonmin82/primal-zone/issues/68)에서 확정한 운영 정책을 바탕으로 [Issue #93](https://github.com/wonmin82/primal-zone/issues/93)의 모델 구성과 macOS 절차를 적용한다. [Issue #58](https://github.com/wonmin82/primal-zone/issues/58)의 **USER VERIFIED**와 실제 실행·실패는 당시 구성의 역사적 기록이다. 새 구성의 설정값·실제 로딩·라우팅·권한 관측은 T01과 T04에서 구분한다. 게임 코드·DB·CI·글로벌 설정은 바꾸지 않는다.
 
 같은 부모 대화에서 **역할 지시·파일 소유권·Orchestrator의 Diff 검사**로 책임을 분리한다. `sandbox_mode = "read-only"`는 OS 강제 쓰기 차단의 증명이 아니다. 최초 MA-07 FAIL과 Reviewer 강제 쓰기 차단 NOT RUN은 유지한다. 강제 격리가 필요한 작업에는 이 구성을 사용하지 않는다.
 
@@ -8,16 +8,16 @@
 
 | 역할 / agent_type | 모델 | Effort | 설정 Sandbox | 담당 |
 | --- | --- | --- | --- | --- |
-| Orchestrator (부모) | `gpt-6.1-sol` | `low` | 부모 정책 유지 | 전체 계획·자율 위임·파일 소유권·생명주기·Git·최종 통합 |
+| Orchestrator (부모) | `gpt-6.2-sol` | `low` | 부모 정책 유지 | 전체 계획·자율 위임·파일 소유권·생명주기·Git·최종 통합 |
 | Scout / `scout` | `gpt-6-luna` | `high` | `read-only` | 소스·문서·의존성·영향 조사, 파일·Git 쓰기 금지 |
-| Implementer / `implementer` | `gpt-6.1-sol` | `medium` | `workspace-write` | 할당된 파일 구현·직접 영향 테스트 |
-| Reviewer / `reviewer` | `gpt-6.1-sol` | `high` | `read-only` | 일반 코드 정확성·회귀·예외·테스트 공백 독립 리뷰, 파일·Git 쓰기 금지 |
-| Auditor / `auditor` | `gpt-6.1-sol` | `high` | `read-only` | 고위험 불변조건·동시성·권한·영속성·실패/복구 감사, 파일·Git 쓰기 금지 |
+| Implementer / `implementer` | `gpt-6.2-sol` | `medium` | `workspace-write` | 할당된 파일 구현·직접 영향 테스트 |
+| Reviewer / `reviewer` | `gpt-6.2-sol` | `high` | `read-only` | 일반 코드 정확성·회귀·예외·테스트 공백 독립 리뷰, 파일·Git 쓰기 금지 |
+| Auditor / `auditor` | `gpt-6.2-sol` | `high` | `read-only` | 고위험 불변조건·동시성·권한·영속성·실패/복구 감사, 파일·Git 쓰기 금지 |
 | Verifier / `verifier` | `gpt-6-luna` | `high` | `workspace-write` | 필요한 테스트 실행·재현성·CI 근거 검증, 제품 코드·Git 쓰기 금지 |
 
-설정은 [config.toml](../.codex/config.toml), [scout.toml](../.codex/agents/scout.toml), [implementer.toml](../.codex/agents/implementer.toml), [reviewer.toml](../.codex/agents/reviewer.toml), [auditor.toml](../.codex/agents/auditor.toml), [verifier.toml](../.codex/agents/verifier.toml)에 있다. Verifier의 쓰기는 사전 허용된 격리 DB·소유 프로세스·테스트 산출물로 제한한다. 운영 DB·다른 에이전트 자원·제품 코드 수정 승인이 아니다.
+모델·Effort·역할의 실행 설정 원본은 [config.toml](../.codex/config.toml), [scout.toml](../.codex/agents/scout.toml), [implementer.toml](../.codex/agents/implementer.toml), [reviewer.toml](../.codex/agents/reviewer.toml), [auditor.toml](../.codex/agents/auditor.toml), [verifier.toml](../.codex/agents/verifier.toml)에 있다. 값을 바꾸면 이 표와 [AGENTS.md](../AGENTS.md#8-멀티-에이전트-운영)의 표, 아래 T01의 기대값을 함께 갱신한다. Verifier의 쓰기는 사전 허용된 격리 DB·소유 프로세스·테스트 산출물로 제한한다. 운영 DB·다른 에이전트 자원·제품 코드 수정 승인이 아니다.
 
-메인은 Sol/Low, `[agents] enabled = true`, `max_concurrent_threads_per_session = 3`을 유지한다. 역할은 다섯 개지만 메인을 제외한 동시 실행 상한은 **3개**다. 모든 서브 에이전트의 중첩 위임을 금지한다. 메인의 Sandbox·승인 모드는 새로 강제하지 않는다.
+메인 기본값은 GPT-6.2 Sol Low이다. `[agents] enabled = true`, `max_concurrent_threads_per_session = 3`을 유지한다. 역할은 다섯 개지만 메인을 제외한 동시 실행 상한은 **3개**다. 모든 서브 에이전트의 중첩 위임을 금지한다. 메인의 Sandbox·승인 모드는 새로 강제하지 않는다.
 
 공식 근거: [서브에이전트 설정](https://developers.openai.com/codex/multi-agent), [설정 Reference](https://developers.openai.com/codex/config-reference), [Windows 앱](https://developers.openai.com/codex/app/windows). 프로젝트 Trust와 세션 override를 고려하며 현재 인터페이스에 없는 기능을 가정하지 않는다.
 
@@ -104,7 +104,7 @@ Stop·실행 오류·연결 문제 뒤의 재개 요청은 **기존 작업의 �
 
 1. 실제 경로·브랜치·Worktree·미커밋 변경과 Trust·Windows Native 환경을 확인한다. 글로벌 설정을 출력하거나 수정하지 않는다.
 2. 설정 변경은 새 대화에서 확인한다. 기존 세션의 재로딩을 가정하지 않는다. 필요한 정상 앱 재시작은 사용자에게 맡기고 강제 종료하지 않는다.
-3. 메인 Sol/Low와 세션 override를 구분한다. 지원 모델 재조사 없이 제공된 런타임 값만 대조하고 없으면 UNVERIFIED다.
+3. 메인 기본값 GPT-6.2 Sol Low과 세션 override를 구분한다. 새 세션에서 제공되는 실제 모델·Effort를 대조하고 관측할 수 없으면 UNVERIFIED로 기록한다.
 4. 사용자 작업 요청 안에서 필요에 따라 자율 위임한다. 파일/자원 소유권과 랜덤 작업명을 배정하고 실제 역할 `scout`/`implementer`/`reviewer`/`auditor`/`verifier`를 지원되는 선택 수단으로 호출한다. 전원을 호출할 필요는 없다.
 5. 역할 인식 실패 시 오류·경로·Trust·로딩을 확인하고 일반 에이전트나 다른 모델로 대체하지 않는다. 읽기 전용 선언과 실제 권한을 구분한다.
 6. 위임 전후 Git 상태·Diff·새 파일을 확인하고 결과를 수집한다. 필요한 검사·최신 HEAD CI를 확인하며 기존 승인 범위 안에서 Git/PR/Issue 작업을 수행한다.
@@ -116,6 +116,15 @@ Stop·실행 오류·연결 문제 뒤의 재개 요청은 **기존 작업의 �
 Windows Native는 Windows의 프로젝트 `.codex/`와 사용자 Codex Home을 사용하고 PowerShell·Windows Git으로 작업한다. WSL2는 Linux 환경의 경로·Shell·Codex Home을 사용하므로 Windows 글로벌 설정과 같다고 가정하지 않는다. WSL1은 이 가이드의 대상이 아니다.
 
 같은 저장소를 WSL에서 열면 추적된 프로젝트 설정 파일은 공유할 수 있지만 Trust·경로·개인 설정·실행 중 권한은 다시 확인한다. `CODEX_HOME`을 명시적으로 지정했다면 그 위치가 사용자 설정 기준이 된다. Windows와 WSL의 Home을 자동 동기화하거나 Windows의 개인 설정을 WSL에 복사하지 않는다. Agent Environment 전환은 공식 Windows 안내에 따라 앱 재시작이 필요할 수 있으며, 사용자 작업을 보호한 정상 재시작으로 진행한다.
+
+## macOS 사용 절차
+
+1. 기본 zsh 환경에서 터미널을 열고 저장소 루트로 이동한다. `pwd`, `git branch --show-current`, `git worktree list`, `git status --short`로 작업 위치와 사용자 변경을 확인한다. `command -v codex`와 `codex --version`으로 사용할 CLI를 확인한다. 이 확인을 위해 기존 작업을 중단하거나 파일을 정리하지 않는다.
+2. 저장소 루트에서 `codex`로 새 세션을 시작한다. 프로젝트의 메인 설정은 `.codex/config.toml`, 역할별 설정은 `.codex/agents/*.toml`이다. Codex는 신뢰된 프로젝트의 프로젝트 설정을 적용한다. 사용자 설정은 기본적으로 `~/.codex/config.toml`이며, `CODEX_HOME`을 지정한 실행에서는 그 디렉터리의 `config.toml`을 사용한다. 사용자·글로벌 설정이나 Trust를 진단 목적으로 바꾸지 않는다.
+3. Trust 상태, CLI의 `-m`·`-c` 옵션 및 현재 클라이언트의 모델 선택값처럼 세션에 적용되는 override를 확인한다. 프로젝트 기본값을 검증할 때는 모델·Effort override 없이 새 세션을 열고 GPT-6.2 Sol Low가 실제로 선택됐는지 확인한다. 기존 대화가 새 TOML을 다시 읽는다고 가정하지 않는다.
+4. 설정이 적용되지 않으면 실행 경로·CLI 버전·Trust·고정 역할명·TOML 문법을 순서대로 확인한다. 지원되는 App Server의 `config/read`는 해석된 설정, `model/list`는 그 클라이언트에서 노출된 후보를 확인하는 데 사용한다. 실제 선택값은 새 세션이 보고하는 모델·Effort로 따로 확인한다. 재현에 필요한 항목만 기록하고 글로벌 설정 전체나 인증정보를 출력하지 않는다. 로딩 불가·관측 불가는 T04에 기록하며 다른 모델로 대체하지 않는다.
+
+CLI, Desktop, Windows, WSL은 Trust·모델 선택·역할 호출·UI 표시·Close를 같은 방식으로 제공한다고 가정하지 않는다. [설정 계층과 Trust](https://learn.chatgpt.com/docs/config-file/config-basic), [App Server 프로토콜](https://learn.chatgpt.com/docs/app-server), [공식 GPT-6.2 Sol 모델 ID](https://developers.openai.com/api/docs/models/gpt-6.2-sol)를 참고한다. API 모델 문서는 개별 Codex 실행 환경의 접근·선택을 증명하지 않는다.
 
 ## 문제 해결
 
@@ -129,24 +138,58 @@ Windows Native는 Windows의 프로젝트 `.codex/`와 사용자 Codex Home을 �
 
 ## 최소 자동 검증
 
-Issue #68은 T01~T03 PASS를 필수 완료 조건으로 사용한다. 새 외부 의존성·별도 영구 검증 스크립트는 추가하지 않는다.
+Issue #68에서 사용한 T01~T03 검사 구조를 Issue #93에도 적용한다. 새 외부 의존성·별도 영구 검증 스크립트는 추가하지 않는다.
 
 ### T01 — 설정 정합성
 
-저장소 루트에서 Python 표준 `tomllib`으로 설정 6개를 검사한다.
+저장소 루트에서 실행한다. macOS zsh/Linux에서는 아래 블록 전체를 붙여 넣으면 Python 표준 `tomllib`으로 메인 1개와 역할 5개를 확인할 수 있다.
 
-```powershell
-@'
-import pathlib, tomllib
+```bash
+uv run python - <<'PY'
+import pathlib
+import tomllib
+
 root = pathlib.Path(".codex")
-main = tomllib.loads((root / "config.toml").read_text(encoding="utf-8"))
-assert main == {"model": "gpt-6.1-sol", "model_reasoning_effort": "low",
+main = tomllib.loads(
+    (root / "config.toml").read_text(encoding="utf-8")
+)
+assert main == {"model": "gpt-6.2-sol", "model_reasoning_effort": "low",
                 "agents": {"enabled": True, "max_concurrent_threads_per_session": 3}}
 expected = {
     "scout": ("gpt-6-luna", "high", "read-only"),
-    "implementer": ("gpt-6.1-sol", "medium", "workspace-write"),
-    "reviewer": ("gpt-6.1-sol", "high", "read-only"),
-    "auditor": ("gpt-6.1-sol", "high", "read-only"),
+    "implementer": ("gpt-6.2-sol", "medium", "workspace-write"),
+    "reviewer": ("gpt-6.2-sol", "high", "read-only"),
+    "auditor": ("gpt-6.2-sol", "high", "read-only"),
+    "verifier": ("gpt-6-luna", "high", "workspace-write"),
+}
+assert {p.stem for p in (root / "agents").glob("*.toml")} == set(expected)
+for name, values in expected.items():
+    cfg = tomllib.loads((root / "agents" / f"{name}.toml").read_text(encoding="utf-8"))
+    assert cfg["name"] == name
+    assert (cfg["model"], cfg["model_reasoning_effort"], cfg["sandbox_mode"]) == values
+    assert cfg["description"].strip() and cfg["developer_instructions"].strip()
+print("T01: PASS (6 TOML)")
+PY
+```
+
+Windows PowerShell 7에서도 저장소 루트에서 아래 블록 전체를 붙여 넣는다. here-string의 Python 본문을 가상환경 Python의 표준 입력으로 전달한다.
+
+```powershell
+@'
+import pathlib
+import tomllib
+
+root = pathlib.Path(".codex")
+main = tomllib.loads(
+    (root / "config.toml").read_text(encoding="utf-8")
+)
+assert main == {"model": "gpt-6.2-sol", "model_reasoning_effort": "low",
+                "agents": {"enabled": True, "max_concurrent_threads_per_session": 3}}
+expected = {
+    "scout": ("gpt-6-luna", "high", "read-only"),
+    "implementer": ("gpt-6.2-sol", "medium", "workspace-write"),
+    "reviewer": ("gpt-6.2-sol", "high", "read-only"),
+    "auditor": ("gpt-6.2-sol", "high", "read-only"),
     "verifier": ("gpt-6-luna", "high", "workspace-write"),
 }
 assert {p.stem for p in (root / "agents").glob("*.toml")} == set(expected)
@@ -159,7 +202,9 @@ print("T01: PASS (6 TOML)")
 '@ | .\.venv\Scripts\python.exe -
 ```
 
-T01은 설정 선언만 확인하며 실제 모델 적용·역할 선택·권한 분리를 증명하지 않는다.
+두 예제의 Python 본문은 동일하다. 검증 항목이나 기대값을 변경할 때는 두 블록에 함께 반영한다.
+
+T01은 설정 선언만 확인한다. 역할의 기존 지침·Sandbox 선언 및 Scout/Verifier 원문 보존은 기준 브랜치와 Diff를 대조한다. 실제 모델·역할 선택은 T04에서 별도 확인하며 이 검사로 OS 권한 분리를 증명하지 않는다.
 
 ### T02 — 문서 정합성
 
@@ -171,7 +216,7 @@ T01은 설정 선언만 확인하며 실제 모델 적용·역할 선택·권한
 
 ### T04 — 선택적 경량 Smoke
 
-수동 조작·추가 승인 없이 안전하게 자동 호출할 수 있을 때만 읽기 전용 서브 에이전트 1개를 짧게 실행해 역할 지정·응답을 확인한다. 불가능하면 NOT RUN과 이유를 기록한다. 모델/Effort·UI 표시·재사용·Close·재개처럼 호출로 관측되지 않는 기능은 UNVERIFIED다.
+지원되는 도구에서 프로젝트 루트의 새 세션을 열고 기본 모델과 Effort의 실제 관측값을 기록한다. 수동 조작·추가 승인 없이 안전하게 호출할 수 있을 때만 읽기 전용 역할 1개로 역할 지정·응답을 확인한다. 역할 로딩이 지원되지 않거나 호출하지 않았으면 NOT RUN과 이유를 기록한다. 호출했더라도 모델·Effort·UI 표시·재사용·Close·재개처럼 직접 관측하지 못한 항목은 UNVERIFIED다. 실행 중인 기존 작업은 종료하지 않는다.
 
 게임 테스트·Full Smoke·브라우저 E2E·모델 비교·다수 에이전트 생성·반복 종료 시험·인위적인 중단/오류/충돌 재현은 하지 않는다. Windows/모바일 UI 수동 확인을 필수로 요구하지 않는다. 자동 CI는 변경·비활성화하지 않고 최신 PR HEAD 결과를 확인한다. 결과는 PASS / FAIL / NOT RUN / UNVERIFIED로 구분해 PR Validation에 간결히 남긴다. 아래 역사 자료의 Issue #58 권한 시험은 이번에 반복하지 않는다.
 
