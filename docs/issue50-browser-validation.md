@@ -1,5 +1,19 @@
 # Issue #50 실제 브라우저 검증 기록
 
+## Issue #91 macOS 브라우저 실행
+
+Node 24와 프로젝트 Python을 준비하고 macOS의 로그인된 GUI 세션에서 `npm ci`, `npx playwright install --no-shell chromium`, `npm run test:browser`를 실행한다. 통합 검증은 `npm run test:browser:integration`을 사용한다. 직접 영향 검사는 `npm run test:browser:integration -- --scenario E2E-12`처럼 좁힐 수 있다. Chromium 바이너리는 기존 Playwright 설정이 선택한다.
+
+macOS에서는 일회성 launchd 작업마다 커널 리소스 coalition을 만든다. [XNU coalition](https://github.com/apple-oss-distributions/xnu/blob/main/doc/observability/coalitions.md)은 자손에게 상속되므로 부모가 먼저 종료하거나 Playwright가 별도 세션을 만들어도 membership이 유지된다. 실행기는 비공개 Unix 소켓의 audit token과 전용 coalition을 확인한 뒤 Guardian에 Node 실행 환경과 로그 파일 디스크립터를 전달한다. 실행 환경은 launchd 설정에 기록하지 않는다.
+
+정리할 때는 소유 coalition과 PID 세대가 일치하는 프로세스에만 [XNU audit token 신호](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/proc_info.c)를 보낸다. 커널의 활성 작업 수로 자손과 Guardian 종료를 각각 확인하고 임시 launchd 작업이 사라졌는지 조회한다. Guardian이 조기 종료하거나 제어 요청에 응답하지 않으면 실행기가 등록된 Guardian의 PID 세대와 coalition으로 독립 정리를 시도한다. 복구를 완료해도 원래 실행은 실패이며, 검증된 작업 수와 launchd 해제 여부는 `.recovery.json`에 남긴다. 활성 작업 수를 확인할 수 없으면 재시도에 필요한 launchd 등록을 유지한다. Windows Job Object와 Linux subreaper/pidfd는 기존 경로를 사용한다.
+
+사용자 GUI launchd 도메인 또는 필요한 Darwin API가 없으면 시작에 실패한다. macOS 실검증 범위는 Apple Silicon과 로그인된 GUI 세션이다. Intel과 GUI 세션 없는 실행, 다른 macOS 버전은 별도 검증하지 않았다. 실행기를 강제 종료하면 Guardian은 소켓 EOF에서 자손을 정리할 수 있지만 등록된 비실행 작업의 해제까지 확인할 실행기는 사라진다. 실행기와 Guardian을 동시에 잃는 상황의 자동 복구는 보장하지 않는다. 실패 시 격리 실행의 로그·증거를 보존하며 기존 서버나 브라우저를 이름 또는 그룹으로 종료하지 않는다.
+
+2026-11-19 macOS 27.2.1 arm64, Node 24.22.3, Python 3.13.18, Playwright 1.64.0에서 기본 E2E 12개(`run-4bw_luij`)와 정상 재시작·SQLite 백업 복원의 E2E-12(`run-0u52bcfa`)가 통과했다. 의도된 실제 Assertion 실패(`run-rk5jik_4`)는 종료 코드 1로 전파됐다. 실제 detached Chromium이 활성화된 상태에서 Node SIGKILL(`run-iy0vmxi4`)과 실행기 SIGTERM(`run-l_q9jeya`)도 실패로 기록됐으며 종료 후 소유 coalition의 활성 작업 수는 0이었다. 다섯 실행의 `run.json`에서 브라우저·서버 종료와 자격 증명 삭제를 확인했다. 로컬 검증의 기준 및 최신 CI는 Issue #91의 PR에 기록한다.
+
+아래 macOS 미지원 표기는 Issue #50 당시의 기록이다.
+
 ## 2026-10-12 최초 성공 RELEASE 및 최종 Closeout 준비
 
 [PR #60](https://github.com/wonmin82/primal-zone/pull/60)은 Merge Commit `855ada380e5276334f0744797a86a5aef300297c`으로 병합됐다. 첫 부모는 `82641de0ea66898676b0b29194d7918489443def`, 둘째 부모는 검토 Source `26da18221f890f3405aca84b746741e3da7f747b`이며 임시 병합 결과와 Tree가 같고 원본 이력이 보존됐다. [당시 main CI](https://github.com/wonmin82/primal-zone/actions/runs/38239786496)의 네 Job은 모두 SUCCESS다.

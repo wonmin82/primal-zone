@@ -1,4 +1,4 @@
-"""브라우저 실행의 소유 경계: Windows Job / 식별자가 고정된 POSIX 그룹."""
+"""브라우저 실행의 소유 경계: Windows Job / Linux subreaper / macOS coalition."""
 
 import ctypes
 import json
@@ -167,13 +167,18 @@ class OwnedBrowser:
     def __init__(self, command, *, cwd, env, stdout, control):
         self.control = Path(control)
         self.ready = self.control.with_suffix('.ready')
-        if self.control.exists() or self.ready.exists():
+        if any(path.exists() for path in (self.control, self.ready, self.control.with_suffix('.clean'))):
             raise RuntimeError('기존 실행의 소유권/결과 파일을 재사용하지 않음')
         self.returncode = None
         self.stopped = False
         self.job = None
+        if sys.platform == 'darwin':
+            from browser_macos import MacBrowser
+
+            self.mac = MacBrowser(command, cwd=cwd, env=env, stdout=stdout, control=self.control)
+            return
         if os.name != 'nt' and sys.platform != 'linux':
-            raise RuntimeError('현재 브라우저 소유 수명 검증은 Windows/Linux만 지원함')
+            raise RuntimeError('현재 브라우저 소유 수명 검증은 Windows/Linux/macOS만 지원함')
         name = 'PrimalBrowser-' + uuid.uuid4().hex if os.name == 'nt' else '-'
         if os.name == 'nt':
             self.job = WindowsJob(name)
@@ -207,6 +212,16 @@ class OwnedBrowser:
             raise
 
     def wait(self, timeout):
+        if getattr(self, 'mac', None):
+            result = self.mac.result(timeout)
+        else:
+            result = self._wait_result(timeout)
+        if 'error' in result:
+            raise RuntimeError('브라우저 프로세스 시작/소유권 등록 실패')
+        self.returncode = result['code']
+        return self.returncode
+
+    def _wait_result(self, timeout):
         deadline = monotonic() + timeout
         while not self.control.exists():
             if self.process.poll() is not None:
@@ -214,16 +229,14 @@ class OwnedBrowser:
             if monotonic() >= deadline:
                 raise subprocess.TimeoutExpired('owned-browser', timeout)
             sleep(0.05)
-        result = json.loads(self.control.read_text(encoding='utf-8'))
-        if 'error' in result:
-            raise RuntimeError('브라우저 프로세스 시작/소유권 등록 실패')
-        self.returncode = result['code']
-        return self.returncode
+        return json.loads(self.control.read_text(encoding='utf-8'))
 
     def stop(self, timeout=5):
         if self.stopped:
             return
-        if self.job:
+        if getattr(self, 'mac', None):
+            self.forced_count = self.mac.stop(timeout)
+        elif self.job:
             # 부모 종료와 무관하게 Job 전체의 실제 active count를 검사한다.
             if self.job.active():
                 if self.process.poll() is None:

@@ -161,11 +161,13 @@ uv run python scripts/dev.py stop
 | `stop` | 실행 중인 서버를 종료한다. |
 
 병렬·선별 테스트, DB 격리, Quick/Full smoke 차이, 수동 확인과 과거 CI·실패 이력은 [테스트 안내](docs/playtest.md#6-자동-테스트-실행)에 있다.
-검사는 플레이 DB와 운영 인증 설정을 보존한다. 브라우저 화면·실제 한글 IME 확인은 자동 테스트와 별도로 수행한다.
+검사는 플레이 DB와 운영 인증 설정을 보존한다. 웹 입력 변경은 영향에 따라 입력·조합 이벤트·명령 전송의 자동 회귀와 브라우저 E2E를 실행한다. 실제 OS 한글 IME는 과거 `USER-CONFIRMED` 결과를 재사용하며 관례적으로 수동 재검증하지 않는다. 자세한 기준은 [작업 지침](AGENTS.md#검증-근거와-보고)을 따른다.
 
 ### 실제 브라우저 자동 검증 (Issue #50 Phase 50-A)
 
 Node 24 LTS에서 아래 명령으로 기존 Harness가 준비·종료하는 격리 Evennia 서버에 실제 Chromium을 접속한다. 서로 다른 두 Account/Browser Context의 로그인·명령·공개 메시지·재접속과 Desktop/Narrow를 검증한다. 게임 및 운영 DB를 변경하지 않는다.
+
+브라우저 실행기는 Windows, Linux, macOS를 지원한다. macOS에서는 로그인한 사용자의 GUI 세션에서 실행한다. 실행별 launchd 작업을 만들고 소유 Node·Chromium의 종료를 확인한 뒤 해제한다. 플랫폼별 종료 근거와 제한은 [브라우저 검증 안내](docs/issue50-browser-validation.md#issue-91-macos-브라우저-실행)를 참고한다.
 
 ```sh
 npm ci
@@ -174,7 +176,7 @@ npm run test:browser
 npm run test:contracts
 ```
 
-CI는 Chromium 설치에 `--with-deps`를 추가하며 기존 `test`·`smoke`와 새 `browser-e2e`·`contracts`를 실행한다. [격리·보안·증거 안내](docs/issue50-browser-validation.md), [단계별 추적](docs/issue50-integration-matrix.md), [실행·실패 이력](docs/playtest.md#issue-50-phase-50-a)을 참고한다. 50-B~50-F는 미실행이며 이미 수동 검증한 OS 한글 IME는 `PRIOR VERIFIED`로 구분한다.
+CI는 Chromium 설치에 `--with-deps`를 추가하며 `test`·`smoke`·`browser-e2e`·`contracts`를 실행한다. [격리·보안·증거 안내](docs/issue50-browser-validation.md), [단계별 추적](docs/issue50-integration-matrix.md), [실행·실패 이력](docs/playtest.md#issue-50-phase-50-a)을 참고한다.
 
 ### 정적 파일 수집
 
@@ -194,7 +196,7 @@ uv run python -m evennia collectstatic --noinput
 | 데이터베이스 | SQLite, 단일 게임 서버 |
 | 웹 | HTML·CSS·JavaScript, Evennia WebSocket 프로토콜 |
 | 환경 관리 | uv, [pyproject.toml](pyproject.toml)·[uv.lock](uv.lock)의 의존성 고정 |
-| 확인된 환경 | Windows 로컬 실행, Linux GitHub Actions 자동 검사. macOS 실제 실행은 미검증 |
+| 확인된 개발·검사 환경 | Windows 로컬 실행, Linux GitHub Actions, macOS Apple Silicon 격리 브라우저 검증 |
 
 로컬 플레이 DB는 `game/server/evennia.db3`, 비밀 설정은 `game/server/conf/secret_settings.py`다.
 DB·비밀 설정·로그·가상환경·수집된 정적 파일은 소스 관리에 포함하지 않는다.

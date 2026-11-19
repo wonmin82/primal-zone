@@ -83,7 +83,7 @@ async def browser(harness, results):
         failures = []
         try:
             stop_browser(process)
-            harness.browser_processes_stopped = process is None or process.stopped is True
+            harness.browser_processes_stopped = process is not None and process.stopped is True
         except BaseException as failure:
             failures.append(failure)
         try:
