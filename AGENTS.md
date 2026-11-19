@@ -300,7 +300,7 @@ PR 제목과 본문은 최종 변경 범위에 맞추며, 커밋 메시지를 �
 
 | 역할 | 모델 / Effort | 책임과 쓰기 경계 |
 | --- | --- | --- |
-| Orchestrator | `gpt-6.2-sol` / `medium` | 계획·위임·소유권·생명주기·최종 검증과 통합, Git·PR·Issue 작업 |
+| Orchestrator | `gpt-6.2-sol` / `low` | 계획·위임·소유권·생명주기·최종 검증과 통합, Git·PR·Issue 작업 |
 | Scout | `gpt-6-luna` / `high` | 코드·의존성·영향 조사. 파일·Git 쓰기 금지 |
 | Implementer | `gpt-6.2-sol` / `medium` | 명시적으로 할당된 파일만 구현하고 직접 영향 검사 |
 | Reviewer | `gpt-6.2-sol` / `high` | 일반 코드와 회귀의 독립 리뷰. 파일·Git 쓰기 금지 |
