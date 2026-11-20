@@ -28,8 +28,10 @@ from world.actors.schema import (
     ActorDefinition,
     ActorPresentation,
     ActorSpawn,
+    AttackPhrase,
     CapabilityDescriptor,
     Classification,
+    CombatNarrationSpec,
     WorldObjectDefinition,
 )
 from world.actors.spawn import ensure_spawn
@@ -60,7 +62,8 @@ def fixture():
                                  capabilities=("dialogue", "combat"),
                                  profiles={"dialogue": {"topic": "검증"}, "combat": {"max_hp": 40}},
                                  defaults={"state": "alive", "combat_state": {"hp": 40}},
-                                 action_provider_id="fixture.actor")
+                                 action_provider_id="fixture.actor",
+                                 combat_narration=CombatNarrationSpec((AttackPhrase("주먹", "때렸다", "때렸다"),)))
     return definition, descriptors
 
 
@@ -88,7 +91,7 @@ class ActorCompositionTests(TestCase):
         with self.assertRaises(TypeError):
             definition.profiles["combat"]["max_hp"] = 1
         dialogue_only = replace(definition, capabilities=("dialogue",),
-                                profiles={"dialogue": {"topic": "검증"}}, defaults={})
+                                profiles={"dialogue": {"topic": "검증"}}, defaults={}, combat_narration=None)
         validate_definitions((dialogue_only,), capabilities)
         self.assertNotIn("combat", dialogue_only.profiles)
 
@@ -241,7 +244,7 @@ class ActorRuntimeTests(GameCommandTest):
 
     def test_noncombat_actor_has_no_forced_combat_state_or_timer(self):
         definition = replace(self.definition, capabilities=("dialogue",),
-                             profiles={"dialogue": {"topic": "검증"}}, defaults={})
+                             profiles={"dialogue": {"topic": "검증"}}, defaults={}, combat_narration=None)
         with patch.object(content, "ACTORS", {definition.id: definition}):
             actor = ensure_spawn(self.spawn, self.room1)
             self.assertFalse(actor.attributes.has("hp"))

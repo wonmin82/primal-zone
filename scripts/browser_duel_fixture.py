@@ -3,6 +3,8 @@
 from dataclasses import replace
 from types import MappingProxyType
 
+from world.actors.schema import AttackPhrase, CombatNarrationSpec
+
 
 def with_duel_instructor(actors):
     trainer = next(actor for actor in actors.values() if actor.action_provider_id == "world.trainingmanager")
@@ -10,6 +12,7 @@ def with_duel_instructor(actors):
     fixture = replace(
         trainer, id="browser_duel_instructor", name="검증대련교관", aliases=(),
         capabilities=(*trainer.capabilities, "combat", "duel"),
+        combat_narration=CombatNarrationSpec((AttackPhrase("주먹", "때렸다", "세게 때렸다"),)),
         profiles={**trainer.profiles, "combat": combat},
         defaults={**trainer.defaults, "combat_state": {"hp": combat["hp"]}},
     )

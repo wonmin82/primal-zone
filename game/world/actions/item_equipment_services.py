@@ -2,6 +2,21 @@
 
 from world.actions.gateway import ActionResult
 
+EQUIPMENT_VERBS = {
+    "weapon": ("무장했다", "해제했다"),
+    "shield": ("들었다", "내려놓았다"),
+    "offhand": ("장착했다", "해제했다"),
+    "head": ("썼다", "벗었다"),
+    "neck": ("걸었다", "벗었다"),
+    "body": ("입었다", "벗었다"),
+    "gloves": ("꼈다", "벗었다"),
+    "waist": ("둘렀다", "풀었다"),
+    "legs": ("입었다", "벗었다"),
+    "feet": ("신었다", "벗었다"),
+    "ring": ("꼈다", "뺐다"),
+    "accessory": ("착용했다", "벗었다"),
+}
+
 
 def execute(context):
     from world import equipment_service as equipment
@@ -47,14 +62,28 @@ def execute(context):
         amount = context.caller.change(apply)
         message = ft.text(ft.token("item", label), ft.particle(ITEMS[item.definition_id]["name"], "을/를"),
                           " 먹었다." if operation == "eat" else " 마셨다.", f" 체력이 {amount} 회복되었다.")
-    elif operation == "active_weapon":
+        return ActionResult(messages=(message,), changed=True)
+
+    definition = ITEMS[item.definition_id]
+    particle = "을/를"
+    description = ""
+    if operation == "active_weapon":
         equipment.set_active_weapon(context.caller, item)
-        message = "주무기를 지정했다."
-    else:
+        description = "주무기로 "
+        verb = "지정했다"
+    elif operation in ("equip", "wield", "remove", "unwield"):
         remove = operation in ("remove", "unwield")
-        slot = "weapon" if operation in ("wield", "unwield") else "armor"
-        (equipment.unequip_item if remove else equipment.equip_item)(context.caller, item, slot)
-        key = {"equip": "착용했다.", "wield": "무장했다.", "remove": "벗었다.", "unwield": "해제했다."}[operation]
-        particle = "으로/로" if operation == "wield" else "을/를"
-        message = ft.text(ft.token("item", label), ft.particle(label, particle), " " + key)
+        expected_slot = "weapon" if operation in ("wield", "unwield") else "armor"
+        properties = definition["equipment_properties"]
+        slot = properties["slot"]
+        kind = properties["role"] if slot == "hands" else slot
+        equip_verb, remove_verb = EQUIPMENT_VERBS[kind]
+        verb = remove_verb if remove else equip_verb
+        if kind == "weapon" and not remove:
+            particle = "으로/로"
+        (equipment.unequip_item if remove else equipment.equip_item)(context.caller, item, expected_slot)
+    else:
+        raise rules.RuleError("지원하지 않는 장비 행동입니다.")
+    message = ft.text(ft.token("item", label), f"{ft.particle(definition['name'], particle)} {description}",
+                      ft.token("success", verb), ".")
     return ActionResult(messages=(message,), changed=True)

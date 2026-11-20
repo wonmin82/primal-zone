@@ -191,6 +191,29 @@ class SharedCombatTests(WorldCommandTest):
         self.assertTrue(self.char1.combat_snapshot()["telegraph"])
         self.assertTrue(self.char2.combat_snapshot()["telegraph"])
 
+    def test_official_attack_and_boss_output_keep_existing_wording(self):
+        player = self.char1
+        self.enemy.engage(player, now=100)
+        with patch.object(shared_combat, "deliver_combat_message") as deliver:
+            before = self.enemy.hp
+            self.enemy.receive_attack(player, now=102.5, rng=Random(84))
+            self.assertEqual(str(deliver.call_args.args[1]),
+                             f"탐사용 벌목도로 능선의우두머리를 공격해 {before - self.enemy.hp} 피해를 입혔다.")
+            for now, verb, telegraph in (
+                (102.5, "달려들어", False),
+                (105, "달려들어", True),
+                (107.5, "거세게 돌진해", False),
+            ):
+                with self.subTest(now=now):
+                    player.change(lambda profile: profile.update(hp=60))
+                    deliver.reset_mock()
+                    self.enemy.enemy_tick(now=now, rng=Random(84))
+                    damage = 60 - player.profile()["hp"]
+                    expected = [f"능선의우두머리가 {verb} {damage}의 피해를 입혔다."]
+                    if telegraph:
+                        expected.append("! 능선의우두머리가 몸을 낮추고 돌진할 자세를 취한다.")
+                    self.assertEqual([str(call.args[1]) for call in deliver.call_args_list], expected)
+
     def test_flee_disconnect_and_idle_recovery(self):
         self.join()
         self.enemy.receive_attack(self.char1, now=102.5, rng=Random(1))

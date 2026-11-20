@@ -9,7 +9,15 @@ def multiply(target, value):
     return {"target": target, "op": "multiply", "value": value, "scope": "equipped"}
 
 
-def gear(name, slot, price, *modifiers, role=None, hands=1, attack=0, family=None, tier=1, field=False):
+def _attack_candidates(*pairs):
+    return tuple({"verb": verb, "strong_verb": strong_verb} for verb, strong_verb in pairs)
+
+
+BAREHAND_NARRATION = {"normal": _attack_candidates(("때렸다", "세게 때렸다"), ("후려쳤다", "힘껏 후려쳤다"))}
+
+
+def gear(name, slot, price, *modifiers, role=None, hands=1, attack=0, family=None, tier=1, field=False,
+         normal_attacks=None):
     properties = {"slot": slot}
     if slot == "hands":
         properties.update(role=role, hands_required=hands)
@@ -24,16 +32,33 @@ def gear(name, slot, price, *modifiers, role=None, hands=1, attack=0, family=Non
     if family:
         definition["firearm_family"] = family
         definition["weapon_type"] = "firearm"
+    if normal_attacks is not None:
+        definition["combat_narration"] = {"normal": _attack_candidates(*normal_attacks)}
     return definition
 
 
 FINAL_ITEMS = {
-    "explorer_machete": gear("탐사용 벌목도", "hands", 10, role="weapon", attack=2, tier=0),
+    "explorer_machete": gear(
+        "탐사용 벌목도", "hands", 10, role="weapon", attack=2, tier=0,
+        normal_attacks=(("베었다", "크게 베었다"), ("내리쳤다", "힘껏 내리쳤다")),
+    ),
     "expedition_workwear": gear("탐사대 작업복", "body", 10, add("stat.defense", 1), tier=0),
-    "cutting_machete": gear("절단마체테", "hands", 55, multiply("skill.heavy.damage", 1.02), role="weapon", attack=4),
-    "pioneer_spear": gear("개척창", "hands", 70, multiply("skill.heavy.damage", 1.03), role="weapon", hands=2, attack=6),
-    "scout_pistol": gear("정찰권총", "hands", 60, role="weapon", attack=5, family="pistol_9mm"),
-    "guard_carbine": gear("경비카빈", "hands", 95, multiply("skill.shooting.damage", 1.02), role="weapon", hands=2, attack=8, family="carbine_556"),
+    "cutting_machete": gear(
+        "절단마체테", "hands", 55, multiply("skill.heavy.damage", 1.02), role="weapon", attack=4,
+        normal_attacks=(("베었다", "깊게 베었다"), ("가로베었다", "세차게 가로베었다")),
+    ),
+    "pioneer_spear": gear(
+        "개척창", "hands", 70, multiply("skill.heavy.damage", 1.03), role="weapon", hands=2, attack=6,
+        normal_attacks=(("찔렀다", "깊게 찔렀다"),),
+    ),
+    "scout_pistol": gear(
+        "정찰권총", "hands", 60, role="weapon", attack=5, family="pistol_9mm",
+        normal_attacks=(("쏘았다", "쏘았다"), ("사격했다", "사격했다")),
+    ),
+    "guard_carbine": gear(
+        "경비카빈", "hands", 95, multiply("skill.shooting.damage", 1.02), role="weapon", hands=2, attack=8, family="carbine_556",
+        normal_attacks=(("사격했다", "사격했다"), ("쏘았다", "쏘았다")),
+    ),
     "folding_shield": gear("접이식방패", "hands", 45, add("stat.defense", 2), role="shield"),
     "portable_analyzer": gear("휴대분석기", "hands", 35, add("skill.insight.penetration", .02), role="offhand"),
     "security_goggles": gear("보안고글", "head", 30, add("stat.max_mental", 4), multiply("skill.insight.damage", 1.01)),
@@ -47,11 +72,26 @@ FINAL_ITEMS = {
     "focus_ring": gear("집중링", "ring", 30, add("stat.max_mental", 4)),
     "protection_ring": gear("방호링", "ring", 35, add("stat.defense", 1)),
     "survival_module": gear("생존모듈", "accessory", 45, add("recovery.hp_per_minute", 1)),
-    "jungle_longblade": gear("정글장도", "hands", 110, multiply("skill.heavy.damage", 1.03), role="weapon", attack=7, tier=2),
-    "shattering_spear": gear("파쇄창", "hands", 145, multiply("skill.heavy.damage", 1.04), add("skill.suppress.reduction", .01), role="weapon", hands=2, attack=9, tier=2),
-    "tactical_pistol": gear("전술권총", "hands", 95, add("skill.shooting.penetration", .01), role="weapon", attack=7, family="pistol_9mm", tier=2),
-    "exploration_carbine": gear("탐사카빈", "hands", 140, multiply("skill.shooting.damage", 1.03), role="weapon", hands=2, attack=10, family="carbine_556", tier=2),
-    "heavy_rifle": gear("중량소총", "hands", 175, add("skill.shooting.penetration", .03), role="weapon", hands=2, attack=12, family="rifle_762", tier=2),
+    "jungle_longblade": gear(
+        "정글장도", "hands", 110, multiply("skill.heavy.damage", 1.03), role="weapon", attack=7, tier=2,
+        normal_attacks=(("베었다", "크게 베었다"), ("가로베었다", "세차게 가로베었다")),
+    ),
+    "shattering_spear": gear(
+        "파쇄창", "hands", 145, multiply("skill.heavy.damage", 1.04), add("skill.suppress.reduction", .01), role="weapon", hands=2, attack=9, tier=2,
+        normal_attacks=(("찔렀다", "힘껏 찔렀다"),),
+    ),
+    "tactical_pistol": gear(
+        "전술권총", "hands", 95, add("skill.shooting.penetration", .01), role="weapon", attack=7, family="pistol_9mm", tier=2,
+        normal_attacks=(("사격했다", "사격했다"), ("쏘았다", "쏘았다")),
+    ),
+    "exploration_carbine": gear(
+        "탐사카빈", "hands", 140, multiply("skill.shooting.damage", 1.03), role="weapon", hands=2, attack=10, family="carbine_556", tier=2,
+        normal_attacks=(("쏘았다", "쏘았다"), ("사격했다", "사격했다")),
+    ),
+    "heavy_rifle": gear(
+        "중량소총", "hands", 175, add("skill.shooting.penetration", .03), role="weapon", hands=2, attack=12, family="rifle_762", tier=2,
+        normal_attacks=(("사격했다", "사격했다"), ("쏘았다", "쏘았다")),
+    ),
     "composite_shield": gear("합성방패", "hands", 105, add("stat.defense", 4), add("stat.max_hp", 8), role="shield", tier=2),
     "tactical_analyzer": gear("전술분석단말", "hands", 80, add("skill.insight.penetration", .03), multiply("skill.insight.damage", 1.02), role="offhand", tier=2),
     "emergency_injector": gear("응급주입기", "hands", 80, add("skill.heal.amount", 5), role="offhand", tier=2),

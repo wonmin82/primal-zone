@@ -54,6 +54,27 @@ class CapabilityDescriptor:
 
 
 @dataclass(frozen=True)
+class AttackPhrase:
+    instrument: str
+    verb: str
+    strong_verb: str
+
+
+@dataclass(frozen=True)
+class SpecialAttackPhrase:
+    prelude: str
+    verb: str
+    strong_verb: str
+
+
+@dataclass(frozen=True)
+class CombatNarrationSpec:
+    normal_attacks: tuple[AttackPhrase, ...]
+    special_attack: SpecialAttackPhrase | None = None
+    telegraph: str | None = None
+
+
+@dataclass(frozen=True)
 class ActorDefinition:
     id: str
     name: str
@@ -67,6 +88,7 @@ class ActorDefinition:
     profiles: Mapping = field(default_factory=dict)
     defaults: Mapping = field(default_factory=dict)
     action_provider_id: str = "actor.entity"
+    combat_narration: CombatNarrationSpec | None = None
 
     def __post_init__(self):
         object.__setattr__(self, "aliases", tuple(self.aliases))

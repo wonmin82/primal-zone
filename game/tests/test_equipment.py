@@ -8,6 +8,7 @@ from commands.registry import COMMANDS
 from typeclasses.explorers import Explorer
 from world import presentation as view
 from world import rules
+from world import text as ft
 from world.actions.manifest import get_index
 from world.actions.presentation import action_controls
 from world.content import EQUIPMENT_ACTIONS, ITEMS, SHOP_CATALOGS
@@ -76,10 +77,10 @@ class EquipmentTests(NativeItemTest, WorldCommandTest):
                                   for entry in ItemEntity.objects.all()}, expected)
                 # Archive의 legacy 장비 dict를 authority로 쓰거나 이중 저장하지 않는다.
                 self.assertEqual(self.char1.db.profile["equipment"], archive["equipment"])
-                output = next(call.args[0] for call in message.call_args_list if call.args and
-                              f"{action}했다." in str(call.args[0]))
-                self.assertIn(selection_label(row), tokens(output, "item"))
-                self.assertIn(f"{action}했다.", output)
+                outputs = [call.args[0] for call in message.call_args_list
+                           if call.args and isinstance(call.args[0], ft.Text) and tokens(call.args[0], "success")]
+                self.assertEqual(len(outputs), 1)
+                self.assertEqual(tokens(outputs[0], "item"), [selection_label(row)])
 
     def test_wrong_actions_and_legacy_alias_do_not_save(self):
         self.all_items()
