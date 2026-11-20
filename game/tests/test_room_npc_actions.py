@@ -57,7 +57,7 @@ class RoomNpcActionsTests(NativeItemTest, WorldCommandTest):
 
     def test_paid_medical_real_command_and_stable_web_effect_once(self):
         self.char1.change(lambda p: p.update(hp=1, credits=1000))
-        self.assertIn("HP 20 회복", self.raw("의무관에게 20 회복"))
+        self.assertIn("체력이 20 회복됐다.", self.raw("의무관에게 20 회복"))
         self.assertEqual(self.char1.profile()["hp"], 21)
         self.assertEqual(self.char1.profile()["credits"], 995)
         control = next(c for c in action_controls(self.char1, self.index) if c["action"]["action_id"] == "medical.treat")

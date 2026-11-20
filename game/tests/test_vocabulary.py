@@ -77,7 +77,7 @@ class VocabularyTests(WorldCommandTest):
             self.char1.change(lambda p: p.update(hp=1, credits=1000))
             before = self.char1.profile_snapshot()
             output = self.raw(command)
-            self.assertIn('HP 59 회복' if command in ('회복', '의무관 회복', '의무관에게 회복', 'treat') else '휴식하며', output)
+            self.assertIn('체력이 59 회복됐다.' if command in ('회복', '의무관 회복', '의무관에게 회복', 'treat') else '침대에서 휴식했다.', output)
             self.assertGreater(self.char1.profile_snapshot()['hp'], 1)
             if '회복' in command:
                 self.assertEqual(self.char1.profile_snapshot()['credits'], before['credits'] - 12)

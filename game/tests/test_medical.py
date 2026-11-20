@@ -10,6 +10,7 @@ from evennia.utils.dbserialize import deserialize
 from typeclasses.explorers import Explorer
 from typeclasses.interactables import INTERACTABLES, Bed
 from world import rules
+from world import text as ft
 from world.bootstrap import build_world, stale_definitions
 from world.content import ROOMS
 from world.content.integrity import errors
@@ -70,7 +71,7 @@ class MedicalCommandsTests(WorldCommandTest):
                 before = deepcopy(self.char1.profile())
                 other = "rest" if "회복" in raw else "treat"
                 with patch.object(rules, other) as separate, patch.object(rules, "use_bandage") as bandage:
-                    self.assertIn("HP 59 회복" if other == "rest" else "체력과 정신력을 모두 회복", self.command(raw))
+                    self.assertIn("체력이 59 회복됐다." if other == "rest" else "침대에서 휴식했다. 체력이 59 회복됐다.", self.command(raw))
                     separate.assert_not_called()
                     bandage.assert_not_called()
                 if "회복" in raw:
@@ -90,6 +91,22 @@ class MedicalCommandsTests(WorldCommandTest):
             if target:
                 self.assertTrue(all(not obj["actions"] for obj in multiplayer_state(self.char1)["interactables"]))
                 self.assertEqual(render(context_for(self.char1)), "")
+
+    def test_bed_emphasizes_only_actual_resource_recovery(self):
+        self.char1.location = self.bed.location
+        self.char1.change(lambda profile: profile.update(hp=60, mental=1))
+        with patch.object(self.char1, "msg") as output:
+            self.char1.execute_cmd("침대 휴식")
+        message, = (call.args[0] for call in output.call_args_list
+                    if call.args and str(call.args[0]).startswith("침대에서 휴식했다."))
+        self.assertIsInstance(message, ft.Text)
+        self.assertEqual(message, "침대에서 휴식했다. 정신력이 39 회복됐다.")
+        self.assertEqual(message.segments, [
+            {"role": "text", "text": "침대에서 휴식했다. "},
+            {"role": "text", "text": "정신력이 "},
+            {"role": "mental_recovered", "text": "39"},
+            {"role": "text", "text": " 회복됐다."},
+        ])
 
     def test_bare_ambiguity_hidden_objects_and_explicit_selector(self):
         for cls, original, action in ((type(self.doctor), self.doctor, "회복"), (Bed, self.bed, "휴식")):
@@ -164,7 +181,7 @@ class MedicalCommandsTests(WorldCommandTest):
         from world import interactable_services
 
         with patch.object(interactable_services, "doctor", wraps=interactable_services.doctor) as effect:
-            self.assertIn("HP 59 회복", execute_control(self, controls[0]))
+            self.assertIn("체력이 59 회복됐다.", execute_control(self, controls[0]))
         self.assertEqual(effect.call_count, 1)
         self.assertEqual(effect.call_args.args[0].pk, self.doctor.pk)
         self.assertEqual(self.char1.profile()["hp"], 60)

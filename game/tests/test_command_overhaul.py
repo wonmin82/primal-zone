@@ -228,13 +228,13 @@ class CommandOverhaulSmoke(NativeItemTest):
         self.char1.change(lambda p: p.update(hp=maximum - 20, credits=100, mental=10))
         self.assertIn("예상 비용", self.raw("의무관 봐"))
         with patch("typeclasses.explorers.time", return_value=200):
-            self.assertIn("HP 20 회복", self.raw("회복"))
+            self.assertIn("체력이 20 회복됐다.", self.raw("회복"))
         self.assertEqual((self.char1.profile_snapshot()["hp"], self.char1.profile_snapshot()["credits"], self.char1.profile_snapshot()["mental"]), (maximum, 95, 10))
         self.char1.change(lambda p: p.update(hp=maximum - 30, credits=100))
-        self.assertIn("HP 20 회복", self.raw("의무관에게 20 회복"))
+        self.assertIn("체력이 20 회복됐다.", self.raw("의무관에게 20 회복"))
         self.assertEqual((self.char1.profile_snapshot()["hp"], self.char1.profile_snapshot()["credits"]), (maximum - 10, 95))
         self.char1.change(lambda p: p.update(hp=maximum - 5, credits=100))
-        self.assertIn("HP 5 회복", self.raw("의사에게 회복"))
+        self.assertIn("체력이 5 회복됐다.", self.raw("의사에게 회복"))
         self.assertEqual((self.char1.profile_snapshot()["hp"], self.char1.profile_snapshot()["credits"]), (maximum, 98))
         self.char1.change(lambda p: p.update(hp=maximum - 10, credits=0))
         before = deepcopy(self.atomic_state())
@@ -265,7 +265,7 @@ class CommandOverhaulSmoke(NativeItemTest):
             self.assertEqual(errors(INTERACTABLES), [])
         self.char1.location = self.rooms["recovery_room"]
         credits = self.char1.profile_snapshot()["credits"]
-        self.assertIn("체력과 정신력을 모두 회복", self.raw("휴식"))
+        self.assertIn("침대에서 휴식했다.", self.raw("휴식"))
         profile = self.char1.profile_snapshot()
         self.assertEqual((profile["hp"], profile["mental"], profile["credits"]), (maximum, rules.stats(profile)["max_mental"], credits))
         self.assertIn("2*H", self.raw("회복 도움"))

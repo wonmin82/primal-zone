@@ -9,6 +9,7 @@ from world import text as ft
 from world.content import ENEMIES, ITEMS, ROOMS, SALVAGE_CREDIT_RATE, SHOP_CATALOGS
 from world.currency import format_currency
 from world.multiplayer import after_change
+from world.presentation import medical_recovery, rest_recovery
 from world.progression import ATTRIBUTES, SKILLS
 
 
@@ -92,7 +93,8 @@ def doctor(provider, caller, action, args):
         profile = caller.profile()
         restored, cost = rules.treat(profile, args, safe=ROOMS.get(caller.zone, {}).get('safe', False))
         caller.save_profile(profile)
-    notify(caller, f'HP {restored} 회복 · 비용 {cost}칩을 지불했습니다. 정신력은 회복하지 않습니다.')
+        message = medical_recovery(restored, cost)
+    notify(caller, message)
 
 
 def bed(provider, caller, action, args):
@@ -101,10 +103,11 @@ def bed(provider, caller, action, args):
     def rest(profile):
         if active_for(caller):
             raise rules.RuleError("대련 중에는 침대에서 휴식할 수 없습니다.")
-        return rules.rest(profile, safe=ROOMS.get(caller.zone, {}).get("safe", False))
+        before_hp, before_mental = profile["hp"], profile["mental"]
+        rules.rest(profile, safe=ROOMS.get(caller.zone, {}).get("safe", False))
+        return rest_recovery(profile["hp"] - before_hp, profile["mental"] - before_mental)
 
-    caller.change(rest)
-    notify(caller, '침대에서 휴식하며 체력과 정신력을 모두 회복했습니다.')
+    notify(caller, caller.change(rest))
 
 
 def settlementofficer(provider, caller, action, args):

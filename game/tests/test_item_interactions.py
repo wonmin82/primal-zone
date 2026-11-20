@@ -7,8 +7,9 @@ from evennia.utils.dbserialize import deserialize
 from typeclasses.explorers import Explorer
 from typeclasses.interactables import Container
 from typeclasses.loot import DroppedLoot, room_loot, take_loot
+from world import combat_narration as narration
+from world import equipment, rules
 from world import presentation as view
-from world import rules
 from world.content import ENEMIES, ITEMS
 from world.item_entities import api
 from world.item_entities.models import ItemEntity
@@ -242,7 +243,8 @@ class ItemInteractionTests(ItemInteractionFixture):
             profile, enemy.combat_definition_id, 100, 2.5, Mock(randint=Mock(return_value=0))
         )
         self.assertEqual(damage, max(1, 7 - ENEMIES[enemy.combat_definition_id]["defense"]))
-        output = view.outgoing_attack(profile, enemy.key, outcome, damage)
+        output = narration.outgoing(enemy.key, equipment.context(profile).active, outcome, damage,
+                                    enemy.max_hp, profile["player_round"])
         self.assertIn("맨손", output)
         self.char1.leave_combat()
 
@@ -434,7 +436,8 @@ class LegacyItemInteractionTests(ItemInteractionFixture):
         self.assertEqual(migrated, {**old, "version": rules.PROFILE_VERSION, "storage": {}, "light_sources": {},
                                     "mental": rules.stats(old)["max_mental"], "recovery_effects": []})
         self.assertEqual(self.char1.profile(), migrated)
-        self.assertIn("맨손", view.outgoing_attack(migrated, "어린청소룡", {"action": "attack"}, 7))
+        self.assertIn("맨손", narration.outgoing("어린청소룡", equipment.context(migrated).active,
+                                               {"action": "attack"}, 7, ENEMIES["scavenger"]["hp"], 1))
 
     def test_ground_drop_remains_compatible_with_existing_loot_entry_api(self):
         transfer(self.char1, "bandage", all_items=True)

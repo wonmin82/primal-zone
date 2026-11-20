@@ -10,7 +10,12 @@
     entry.className = "log-entry " + kind;
     if (kind === "prompt") entry.dataset.awaitingInput = "true";
     if (segments) {
-      const roles = new Set(["text", "muted", "title", "hostile", "npc", "player", "object", "remains", "item", "command", "direction", "reward", "warning", "success", "error", "critical", "dialogue_topic", "dialogue_action"]);
+      const roles = new Set([
+        "text", "muted", "title", "hostile", "npc", "player", "object", "remains", "item", "command",
+        "direction", "reward", "warning", "success", "error", "critical", "dialogue_topic", "dialogue_action",
+        "combat_verb_outgoing", "damage_dealt", "combat_verb_incoming", "damage_taken",
+        "hp_recovered", "mental_recovered", "status_buff", "status_debuff",
+      ]);
       for (const part of segments) {
         if (!part || typeof part.text !== "string") continue;
         const selectable = ["dialogue_topic", "dialogue_action"].includes(part.role) &&
@@ -356,7 +361,7 @@
     byId("inventory").replaceChildren(...rows);
     const encounter = state.combat_target;
     byId("encounter").hidden = !encounter;
-    if (encounter) byId("encounter").replaceChildren(semantic("hostile", encounter.name), " · 공유 체력 " + encounter.hp + "/" + encounter.max_hp + " · 적 " + encounter.round + "차례" + (encounter.telegraph ? " · 다음 돌진! 견제와 치료를 준비하세요." : " · 강타 / 쏴 / 견제 / 치료"));
+    if (encounter) byId("encounter").replaceChildren(semantic("hostile", encounter.name), " · 공유 체력 " + encounter.hp + "/" + encounter.max_hp + " · 적 " + encounter.round + "차례" + (encounter.telegraph ? " · 다음 특수 공격! 견제와 치료를 준비하세요." : " · 강타 / 쏴 / 견제 / 치료"));
   }
   function connect() {
     if (socket && [WebSocket.OPEN, WebSocket.CONNECTING].includes(socket.readyState)) return;

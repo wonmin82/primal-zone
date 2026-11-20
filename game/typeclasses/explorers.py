@@ -57,8 +57,16 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             else:
                 from evennia.utils.ansi import parse_ansi
 
+                flags = getattr(target, "protocol_flags", {})
+                terminal_options = options or {}
+                negotiated = target.protocol_key == "ssh" or flags.get("TTYPE", False)
+                default_color = target.protocol_key == "ssh"
+                ansi = terminal_options.get("ansi", flags.get("ANSI", default_color) if negotiated else True)
+                xterm256 = terminal_options.get("xterm256", flags.get("XTERM256", default_color) if negotiated else True)
+                no_color = terminal_options.get("nocolor", flags.get("NOCOLOR") or not (ansi or xterm256))
+                # raw 전송은 Portal의 색상 제거를 거치지 않으므로 이 경계에서 옵션을 적용한다.
                 super().msg(
-                    parse_ansi(message.ansi()),
+                    parse_ansi(message.ansi(), strip_ansi=bool(no_color)),
                     from_obj=from_obj,
                     session=target,
                     options={**(options or {}), "raw": True},

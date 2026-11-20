@@ -58,7 +58,17 @@ class ItemEquipmentActionsTests(NativeItemTest):
         self.char1.change(lambda p: p.update(hp=1))
         invocation = dispatch_text(self.char1, self.index, "game.use", "붕대 2", "사용")
         self.assertEqual(dict(invocation.roles)["subject"][0].identity, str(second.pk))
-        self.assertIn("회복", self.raw("붕대 2 사용"))
+        self.assertIn("붕대 2를 사용했다. 체력이 20 회복됐다.", self.raw("붕대 2 사용"))
+        message, = (call.args[0] for call in self.output.call_args_list if
+                    call.args and str(call.args[0]).startswith("붕대 2를 사용했다."))
+        self.assertIsInstance(message, ft.Text)
+        self.assertEqual(message.segments, [
+            {"role": "item", "text": "붕대 2"},
+            {"role": "text", "text": "를 사용했다. "},
+            {"role": "text", "text": "체력이 "},
+            {"role": "hp_recovered", "text": "20"},
+            {"role": "text", "text": " 회복됐다."},
+        ])
         first.refresh_from_db()
         second.refresh_from_db()
         self.assertEqual((first.quantity, second.quantity), (2, 2))
@@ -120,15 +130,16 @@ class ItemEquipmentActionsTests(NativeItemTest):
     def assert_consumption_message(self, result, label, particle, action, amount):
         self.assertEqual(result.status, ResultStatus.SUCCESS)
         self.assertTrue(result.changed)
-        recovery = f" 체력이 {amount} 회복되었다."
-        self.assertEqual(result.messages, (f"{label}{particle}{action}{recovery}",))
+        self.assertEqual(result.messages, (f"{label}{particle}{action} 체력이 {amount} 회복됐다.",))
         message = result.messages[0]
         self.assertIsInstance(message, ft.Text)
         self.assertEqual(message.segments, [
             {"role": "item", "text": label},
             {"role": "text", "text": particle},
-            {"role": "text", "text": action},
-            {"role": "text", "text": recovery},
+            {"role": "text", "text": action + " "},
+            {"role": "text", "text": "체력이 "},
+            {"role": "hp_recovered", "text": str(amount)},
+            {"role": "text", "text": " 회복됐다."},
         ])
 
     def test_stale_web_item_does_not_fall_back_to_same_definition(self):
@@ -294,19 +305,28 @@ class ItemEquipmentActionsTests(NativeItemTest):
         self.assertEqual(first.quantity, 1)
 
     def test_actual_combat_boundary_consumes_queued_uuid_once(self):
-        from world.firearm_service import player_attack
+        from world.actors.spawn import create_actor
 
         first = self.create("bandage", quantity=2)
-        second = self.create("bandage", quantity=3)
-        self.char1.change(lambda p: p.update(hp=1, combat_target=123))
-        self.raw("붕대 2 사용")
-        profile = self.char1.profile()
-        damage, outcome = player_attack(self.char1, profile, "scavenger", 100, 2.5)
-        self.assertEqual((damage, outcome["action"]), (0, "bandage"))
-        self.char1.save_profile(profile)
+        second = self.create("bandage", quantity=1)
+        self.char1.change(lambda p: p.update(hp=1))
+        enemy = create_actor("scavenger", self.char1.location)
+        with (patch("world.observation.can_perceive", return_value=True),
+              patch("world.shared_combat.delay")):
+            enemy.engage(self.char1, now=100)
+            self.assertIn("다음 차례에는 공격 대신 붕대를 사용한다.", self.raw("붕대 2 사용"))
+            self.output.reset_mock()
+            enemy.receive_attack(self.char1, now=102.5)
+            enemy.receive_attack(self.char1, now=102.5)
+        message, = (call.args[0] for call in self.output.call_args_list
+                    if call.args and str(call.args[0]).startswith("붕대 2를 사용했다."))
+        self.assertIsInstance(message, ft.Text)
+        self.assertEqual(message, "붕대 2를 사용했다. 체력이 20 회복됐다.")
+        self.assertIn({"role": "hp_recovered", "text": "20"}, message.segments)
         first.refresh_from_db()
-        second.refresh_from_db()
-        self.assertEqual((first.quantity, second.quantity), (2, 2))
+        self.assertEqual(first.quantity, 2)
+        self.assertFalse(ItemEntity.objects.filter(pk=second.pk).exists())
+        self.assertEqual(self.char1.profile()["hp"], 21)
         self.assertNotIn("queued_item_id", self.char1.profile())
 
     def test_web_request_duplicate_applies_exactly_once(self):

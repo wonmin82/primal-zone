@@ -158,43 +158,63 @@ def quest(profile):
     return ft.compact("임무", *lines)
 
 
-def support_result(outcome, recipient=None, combat=False):
+def _recovered(resource, role, amount, ending=" 회복됐다."):
+    if amount <= 0:
+        return ft.text(f"{resource}은 회복되지 않았다.")
+    return ft.text(f"{resource}이 ", ft.token(role, amount), ending)
+
+
+def support_result(outcome, recipient=None, *, bandage_label=None):
     action, amount = outcome["action"], outcome["amount"]
     if action == "bandage":
-        return ft.text(ft.item("bandage"), f" 하나를 사용해 HP {amount}{ft.particle(amount, '을/를')} 회복했다.")
+        if bandage_label is None:
+            label, use = ITEMS["bandage"]["name"], " 하나를 사용했다. "
+        else:
+            label, use = bandage_label, f"{ft.particle(bandage_label, '을/를')} 사용했다. "
+        return ft.text(ft.token("item", label), use, _recovered("체력", "hp_recovered", amount))
     if action == "breathing":
-        return ft.text(("공격을 멈추고 " if combat else "") + f"호흡을 가다듬어 정신력 {amount}{ft.particle(amount, '을/를')} 회복했다.")
-    subject = ft.text(ft.named("player", recipient, "을/를"), " 치료해") if recipient else "상처를 치료해"
-    return ft.text(subject, f" HP {amount}{ft.particle(amount, '을/를')} 회복", "시키고" if recipient else "하고", f" 정신력 {outcome['cost']}{ft.particle(outcome['cost'], '을/를')} 소모했다.")
+        return ft.text("호흡을 가다듬었다. ", _recovered("정신력", "mental_recovered", amount))
+    if action != "heal":
+        raise ValueError(f"알 수 없는 지원 결과: {action}")
+    if recipient is None:
+        subject = "상처를 치료했다. " if amount > 0 else "치료를 시도했다. "
+    else:
+        subject = ft.text(ft.named("player", recipient, "을/를"),
+                          " 치료했다. " if amount > 0 else " 치료하려 했다. ",
+                          ft.token("player", recipient), "의 ")
+    cost = outcome["cost"]
+    cost_text = f"정신력 {cost}{ft.particle(cost, '을/를')} 소모했다."
+    if amount <= 0:
+        return ft.text(subject, _recovered("체력", "hp_recovered", amount), " ", cost_text)
+    return ft.text(subject, _recovered("체력", "hp_recovered", amount, " 회복되고 "), cost_text)
 
 
-def outgoing_attack(profile, enemy_name, outcome, damage):
-    action = outcome["action"]
-    if action == "error":
-        return ft.text(ft.token("error", "! "), outcome["message"], kind="error")
-    if action in ("heal", "breathing", "bandage"):
-        return support_result(outcome, outcome.get("recipient"), combat=True)
-    if action == "insight":
-        return ft.text(ft.token("hostile", enemy_name), f"의 빈틈을 간파해 다음 공격의 방어 관통이 {outcome['penetration']:.0%}, 피해가 {outcome['bonus']:.0%} 증가한다.")
-    prefix = "간파한 빈틈에 " if outcome.get("insight") else ""
-    if action == "heavy":
-        return ft.text(prefix, ft.token("hostile", enemy_name), f"에게 강타를 적중시켜 {damage} 피해를 입혔다.")
-    if action == "shooting":
-        return ft.text(prefix, ft.named("hostile", enemy_name, "을/를"), f" 사격해 {damage} 피해를 입혔다.")
-    if action == "suppress":
-        effect = outcome["suppression"]
-        status = outcome.get("suppression_status", "applied")
-        suffix = {
-            "applied": f"입히고 다음 {effect['attacks']}회 공격력을 {effect['reduction'] * 100:g}% 낮췄다.",
-            "refreshed": f"입히고 자신의 견제 효과를 다음 {effect['attacks']}회 공격까지 연장했다.",
-            "upgraded": f"입히고 자신의 견제 효과를 다음 {effect['attacks']}회 공격력 {effect['reduction'] * 100:g}% 감소로 강화했다.",
-            "preserved": "입혔지만 기존의 더 강한 견제 효과가 유지됐다.",
-        }[status]
-        return ft.text(prefix, ft.named("hostile", enemy_name, "을/를"), f" 견제해 {damage} 피해를 {suffix}")
-    active = eq.context(profile).active
-    weapon = active.definition_id if active else None
-    weapon_name = ITEMS[weapon]["name"] if weapon else "맨손"
-    return ft.text(prefix, ft.item(weapon) if weapon else weapon_name, ft.particle(weapon_name, "으로/로"), " ", ft.named("hostile", enemy_name, "을/를"), f" 공격해 {damage} 피해를 입혔다.")
+def received_healing(healer, amount):
+    return ft.text(ft.token("player", healer), "의 치료로 ", _recovered("체력", "hp_recovered", amount))
+
+
+def consumable_recovery(label, operation, amount):
+    verb = {"eat": " 먹었다. ", "drink": " 마셨다. "}[operation]
+    return ft.text(ft.named("item", label, "을/를"), verb, _recovered("체력", "hp_recovered", amount))
+
+
+def emergency_recovery(final_hp):
+    return ft.text("응급 처치로 체력이 ", ft.token("hp_recovered", final_hp),
+                   ft.particle(final_hp, "으로/로"), " 회복됐다. 추가 회복이 필요하다.")
+
+
+def medical_recovery(amount, cost):
+    return ft.text(_recovered("체력", "hp_recovered", amount),
+                   f" 비용 {cost}칩을 지불했습니다. 정신력은 회복하지 않습니다.")
+
+
+def rest_recovery(hp, mental):
+    results = []
+    if hp > 0:
+        results.append(_recovered("체력", "hp_recovered", hp))
+    if mental > 0:
+        results.append(_recovered("정신력", "mental_recovered", mental))
+    return ft.text("침대에서 휴식했다. ", ft.join(results, " "))
 
 
 def reward(xp):

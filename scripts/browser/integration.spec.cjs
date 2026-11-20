@@ -108,6 +108,8 @@ test('TEST-E2E-04 유료 회복·회복실 Door·무료 침대', async ({ actors
   const hp = after.hp - before.hp;
   expect(hp).toBeGreaterThan(0);
   expect(before.credits - after.credits).toBe(Math.max(1, Math.ceil((2 * hp + 1) / 10)));
+  await expect(a.page.locator('#log .semantic-hp_recovered').last()).toHaveCSS('color', 'rgb(145, 219, 165)');
+  await expect(a.page.locator('#log .semantic-hp_recovered').last()).toHaveCSS('font-synthesis-weight', 'auto');
   await travel(a, 'support_3f_e1');
   await command(a, '회복실 문 닫아');
   await command(a, '북');
@@ -119,6 +121,8 @@ test('TEST-E2E-04 유료 회복·회복실 Door·무료 침대', async ({ actors
   const credits = snapshot().players[a.name].profile.credits;
   await command(a, '침대 휴식');
   await expect.poll(() => a.state.mental).toBe(a.state.max_mental);
+  await expect(a.page.locator('#log .semantic-mental_recovered').last()).toHaveCSS('color', 'rgb(142, 207, 206)');
+  await expect(a.page.locator('#log .semantic-mental_recovered').last()).toHaveCSS('font-synthesis-weight', 'auto');
   expect(snapshot().players[a.name].profile.credits).toBe(credits);
 });
 
@@ -146,6 +150,18 @@ test('TEST-E2E-06 일행 실제 전투·XP·Native 전리품·중복 방지', as
   await command(a, '어린청소룡 일행공격');
   await expect.poll(() => a.state.combat_target, { timeout: 60000 }).toBeNull();
   await expect.poll(() => b.state.combat_target, { timeout: 60000 }).toBeNull();
+  for (const width of [1366, 390]) {
+    await a.page.setViewportSize({ width, height: 844 });
+    const damage = a.page.locator('#log .semantic-damage_dealt').last();
+    await expect(damage).toHaveText(/^\d+ 피해$/);
+    await expect(damage).toHaveCSS('color', 'rgb(255, 208, 152)');
+    await expect(damage).toHaveCSS('font-weight', '700');
+    await expect(damage).toHaveCSS('font-synthesis-weight', 'auto');
+    const entry = damage.locator('..');
+    await expect(entry.locator('.semantic-combat_verb_outgoing')).toHaveCSS('color', 'rgb(239, 182, 109)');
+    await expect(entry.locator('.semantic-hostile')).toHaveText('어린청소룡');
+    expect(await entry.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+  }
   const dead = snapshot();
   for (const p of [a, b]) expect(dead.players[p.name].profile.xp).toBeGreaterThan(before.players[p.name].profile.xp);
   await command(a, '시체에서 모두 가져');
@@ -543,6 +559,13 @@ test('TEST-E2E-15 대련 잠금·재접속·기권·무행동 종료', async ({ 
   const idleBefore = status(a).idle_at;
   await expect.poll(() => status(a)?.actor_hp).toBeLessThan(1000);
   expect(status(a).idle_at).toBe(idleBefore);
+  await expect(a.page.locator('#log .semantic-combat_verb_incoming').last()).toHaveCSS('color', 'rgb(240, 179, 155)');
+  await expect(a.page.locator('#log .semantic-damage_taken').last()).toHaveCSS('color', 'rgb(255, 133, 133)');
+  await expect(a.page.locator('#log .semantic-damage_taken').last()).toHaveCSS('font-synthesis-weight', 'auto');
+  await command(a, name + ' / 간파 대련행동');
+  await expect(a.page.locator('#log .semantic-status_buff').last()).toHaveCSS('color', 'rgb(148, 196, 232)');
+  await command(a, name + ' / 견제 대련행동');
+  await expect(a.page.locator('#log .semantic-status_debuff').last()).toHaveCSS('color', 'rgb(232, 199, 121)');
   await command(a, name + ' 대련행동');
   await expect.poll(() => status(a)?.idle_at).toBeGreaterThan(idleBefore);
   await actors.close(a);

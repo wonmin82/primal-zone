@@ -270,6 +270,7 @@ def _schedule_current(actor, identity):
 
 
 def _valid_state(state):
+    enemy_round = state.get("enemy_round")
     return (
         state.get("policy") == EncounterPolicy.EXCLUSIVE_DUEL
         and type(state.get("generation")) is int and state["generation"] > 0
@@ -286,7 +287,9 @@ def _valid_state(state):
         and all(type(value) in (int, float) and isfinite(value)
                 for value in (state.get("ends_at"), state.get("last_action_at"),
                               state["pending"].get("due_at"), state.get("actor_hp"),
-                              state.get("player_hp"), state.get("enemy_round")))
+                              state.get("player_hp")))
+        and (type(enemy_round) is int or type(enemy_round) is float and enemy_round.is_integer())
+        and enemy_round >= 0
         and "reconnect_until" in state
         and (state["reconnect_until"] is None
              or type(state["reconnect_until"]) in (int, float) and isfinite(state["reconnect_until"]))

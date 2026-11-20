@@ -2,7 +2,7 @@
 
 import unicodedata
 
-# 터미널 근사색. 웹의 실제 팔레트는 CSS 변수 한 곳에서 관리한다.
+# 터미널 근사색. 웹의 실제 팔레트는 CSS에서 관리한다.
 ANSI = {
     "text": "",
     "muted": "|w",
@@ -22,6 +22,14 @@ ANSI = {
     "critical": "|r|h",
     "dialogue_topic": "|c",
     "dialogue_action": "|y|h",
+    "combat_verb_outgoing": "|Y",
+    "damage_dealt": "|y",
+    "combat_verb_incoming": "|R",
+    "damage_taken": "|r",
+    "hp_recovered": "|g",
+    "mental_recovered": "|c",
+    "status_buff": "|C",
+    "status_debuff": "|Y",
 }
 
 

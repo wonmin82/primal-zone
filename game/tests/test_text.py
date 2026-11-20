@@ -1,4 +1,7 @@
+import re
+from pathlib import Path
 from random import Random
+from unittest import TestCase
 from unittest.mock import Mock, patch
 
 import evennia
@@ -26,6 +29,59 @@ from tests.base import WorldCommandTest
 
 def tokens(message, role):
     return [part["text"] for part in message.segments if part["role"] == role]
+
+
+class NarrationSemanticTests(TestCase):
+    def test_narration_respects_colorless_terminal_before_raw_delivery(self):
+        message = ft.text(ft.token("damage_taken", "1 피해"), " |r 원문")
+        for protocol, flags, options, colored in (
+            ("telnet", {"NOCOLOR": True}, {}, False),
+            ("telnet", {"TTYPE": True, "ANSI": False, "XTERM256": False}, {}, False),
+            ("telnet", {}, {"ansi": False, "xterm256": False}, False),
+            ("telnet", {"TTYPE": True, "ANSI": True}, {}, True),
+            ("ssh", {"ANSI": False, "XTERM256": False}, {}, False),
+            ("ssh", {"NOCOLOR": True}, {}, False),
+            ("ssh", {}, {}, True),
+        ):
+            with self.subTest(protocol=protocol, flags=flags, options=options), patch.object(DefaultCharacter, "msg") as deliver:
+                target = Mock(protocol_key=protocol, protocol_flags=flags)
+                Explorer().msg(message, session=target, options=options)
+                rendered = deliver.call_args.args[0]
+                self.assertEqual(strip_raw_ansi(rendered), str(message))
+                self.assertEqual("\x1b" in rendered, colored)
+                self.assertTrue(deliver.call_args.kwargs["options"]["raw"])
+
+    def test_narration_roles_share_exact_web_and_terminal_contract(self):
+        static = Path(__file__).resolve().parents[1] / "web" / "static" / "webclient"
+        javascript = (static / "js" / "primal.js").read_text(encoding="utf-8")
+        stylesheet = (static / "css" / "primal.css").read_text(encoding="utf-8")
+        allowlist = re.search(r"const roles = new Set\(\[([^]]+)\]\)", javascript)
+        self.assertIsNotNone(allowlist)
+        self.assertEqual(set(re.findall(r'"(\w+)"', allowlist[1])), set(ft.ANSI))
+        self.assertRegex(stylesheet, r"(?:^|\n)body\{font-synthesis:none[;\}]")
+        for role, rgb, ansi, bold in (
+            ("combat_verb_outgoing", "#EFB66D", "\033[22m\033[33m", False),
+            ("damage_dealt", "#FFD098", "\033[1m\033[33m", True),
+            ("combat_verb_incoming", "#F0B39B", "\033[22m\033[31m", False),
+            ("damage_taken", "#FF8585", "\033[1m\033[31m", True),
+            ("hp_recovered", "#91DBA5", "\033[1m\033[32m", True),
+            ("mental_recovered", "#8ECFCE", "\033[1m\033[36m", True),
+            ("status_buff", "#94C4E8", "\033[22m\033[36m", False),
+            ("status_debuff", "#E8C779", "\033[22m\033[33m", False),
+        ):
+            with self.subTest(role=role):
+                rule = re.search(rf"\.semantic-{role}\{{([^}}]+)\}}", stylesheet)
+                self.assertIsNotNone(rule)
+                declarations = rule[1].split(";")
+                self.assertIn(f"color:{rgb}", declarations)
+                self.assertEqual("font-weight:700" in declarations, bold)
+                self.assertEqual("font-synthesis:weight" in declarations, bold)
+                output = ft.text(ft.token(role, "핵심"), " 기본색")
+                rendered = parse_ansi(output.ansi())
+                self.assertEqual(rendered, f"{ansi}핵심\033[0m 기본색\033[0m")
+                self.assertEqual(strip_raw_ansi(rendered), str(output))
+        with self.assertRaisesRegex(ValueError, "알 수 없는 텍스트 역할"):
+            ft.token("undefined_narration_role", "오류")
 
 
 class SemanticTextTests(WorldCommandTest):

@@ -1,6 +1,7 @@
 """전환 전 main에서 확보한 8종·15 Spawn·고정 RNG 결과의 Golden 기준선."""
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from random import Random
 from unittest import TestCase
@@ -8,7 +9,7 @@ from unittest import TestCase
 from world import rules
 from world.actors.content import ACTOR_SPAWNS, ACTORS, CAPABILITIES
 from world.actors.spawn import ensure_spawn
-from world.actors.validation import validate_definitions
+from world.actors.validation import ActorDefinitionError, validate_definitions
 from world.bootstrap import CATEGORY
 from world.combat_contracts import Combatant
 from world.content import ENEMIES, ROOMS, spawn_id_for
@@ -20,7 +21,13 @@ from tests.base import GameCommandTest
 class ActorBalanceBaselineTests(TestCase):
     def test_original_content_spawns_and_fixed_rng_combat_are_preserved(self):
         baseline = json.loads((Path(__file__).parent / "fixtures" / "actor_v16_baseline.json").read_text(encoding="utf-8"))
-        self.assertEqual(ENEMIES, baseline["enemies"])
+        # 과거 기준선은 보존하고 이번에 Actor Narration으로 옮긴 표현 필드만 비교에서 제외한다.
+        former_profile_text = {"special_verb", "telegraph"}
+        expected_enemies = {
+            identity: {key: value for key, value in profile.items() if key not in former_profile_text}
+            for identity, profile in baseline["enemies"].items()
+        }
+        self.assertEqual(ENEMIES, expected_enemies)
         hostiles = {actor.id: actor for actor in ACTORS.values() if "combat" in actor.capabilities}
         self.assertEqual(set(hostiles), set(ENEMIES))
         self.assertEqual(validate_definitions(ACTORS, CAPABILITIES, ACTOR_SPAWNS, room_ids=ROOMS), ACTORS)
@@ -42,6 +49,23 @@ class ActorBalanceBaselineTests(TestCase):
                 damage, outcome = rules.player_attack(rules.new_profile(), enemy, 100, 2.5, rng=Random(84))
                 self.assertEqual([damage, outcome], expected["player"])
                 self.assertEqual(rules.enemy_attack(rules.new_profile(), enemy, 1, 100, rng=Random(84)), expected["enemy"])
+
+    def test_special_period_requires_static_phrase_and_telegraph(self):
+        for identity in ("alpha", "jungle_apex"):
+            actor = ACTORS[identity]
+            spec = actor.combat_narration
+            for field in ("special_attack", "telegraph"):
+                with self.subTest(actor=identity, field=field), self.assertRaisesRegex(
+                    ActorDefinitionError, "특수 공격 주기에는 공격 문구와 예고가 필요합니다",
+                ):
+                    broken = replace(actor, combat_narration=replace(spec, **{field: None}))
+                    validate_definitions((broken,), CAPABILITIES)
+            for legacy_field in ("special_verb", "telegraph"):
+                profile = {**actor.profiles["combat"], legacy_field: "구형 문구"}
+                with self.subTest(actor=identity, field=legacy_field), self.assertRaisesRegex(
+                    ActorDefinitionError, "미선언 Profile 설정",
+                ):
+                    validate_definitions((replace(actor, profiles={"combat": profile}),), CAPABILITIES)
 
 
 class HostileActorSpawnTests(GameCommandTest):
