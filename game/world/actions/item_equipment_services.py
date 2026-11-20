@@ -60,7 +60,7 @@ def execute(context):
             return rules.eat_or_drink(profile, item.definition_id, "먹어" if operation == "eat" else "마셔")
 
         amount = context.caller.change(apply)
-        message = ft.text(ft.token("item", label), ft.particle(ITEMS[item.definition_id]["name"], "을/를"),
+        message = ft.text(ft.token("item", label), ft.particle(label, "을/를"),
                           " 먹었다." if operation == "eat" else " 마셨다.", f" 체력이 {amount} 회복되었다.")
         return ActionResult(messages=(message,), changed=True)
 

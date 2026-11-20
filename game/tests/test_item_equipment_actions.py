@@ -85,16 +85,51 @@ class ItemEquipmentActionsTests(NativeItemTest):
     def test_food_number_and_explicit_quantity_do_not_consume_other_stack(self):
         first = self.create("field_ration", quantity=2)
         second = self.create("field_ration", quantity=2)
+        second_id = second.pk
         self.char1.change(lambda p: p.update(hp=1))
-        self.assertIn("먹었다", self.raw("야전식량 2 1개 eat"))
+        invocation = dispatch_text(self.char1, self.index, "game.eat", "야전식량 2 1개", "eat")
+        self.assertEqual(dict(invocation.roles)["subject"][0].identity, str(second_id))
+        result = execute(self.char1, self.session, invocation, self.index)
+        self.assert_consumption_message(result, "야전식량 2", "를", " 먹었다.", 12)
+        self.assertEqual(self.char1.profile()["hp"], 13)
         first.refresh_from_db()
         second.refresh_from_db()
         self.assertEqual((first.quantity, second.quantity), (2, 1))
+        self.assertEqual(second.pk, second_id)
+        self.assertEqual(number_for(descriptor(second).reference), 2)
         before = self.atomic_state()
         self.raw("야전식량 2 2개 먹어")
         self.assertEqual(self.atomic_state(), before)
         self.raw("야전식량 모두 먹어")
         self.assertEqual(self.atomic_state(), before)
+
+    def test_drink_message_uses_selected_stack_label(self):
+        item = self.create("water", quantity=3)
+        identity = item.pk
+        self.char1.change(lambda p: p.update(hp=1))
+        control = next(c for c in action_controls(self.char1, self.index)
+                       if c["action"]["action_id"] == "item.water.drink")
+        invocation = from_web({**control["action"], "request_id": "drink-numbered-label"}, self.index)
+        self.assertEqual(dict(invocation.roles)["subject"][0].identity, str(identity))
+        result = execute(self.char1, self.session, invocation, self.index)
+        self.assert_consumption_message(result, "정제수 1", "을", " 마셨다.", 6)
+        self.assertEqual(self.char1.profile()["hp"], 7)
+        item.refresh_from_db()
+        self.assertEqual((item.pk, item.quantity, number_for(descriptor(item).reference)), (identity, 2, 1))
+
+    def assert_consumption_message(self, result, label, particle, action, amount):
+        self.assertEqual(result.status, ResultStatus.SUCCESS)
+        self.assertTrue(result.changed)
+        recovery = f" 체력이 {amount} 회복되었다."
+        self.assertEqual(result.messages, (f"{label}{particle}{action}{recovery}",))
+        message = result.messages[0]
+        self.assertIsInstance(message, ft.Text)
+        self.assertEqual(message.segments, [
+            {"role": "item", "text": label},
+            {"role": "text", "text": particle},
+            {"role": "text", "text": action},
+            {"role": "text", "text": recovery},
+        ])
 
     def test_stale_web_item_does_not_fall_back_to_same_definition(self):
         first = self.create("bandage", quantity=1)
