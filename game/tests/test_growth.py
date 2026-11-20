@@ -17,6 +17,7 @@ from typeclasses.interactables import (
 )
 from typeclasses.parties import invite, respond
 from world import rules
+from world import text as ft
 from world.bootstrap import build_world
 from world.content import ROOMS
 from world.progression import ATTRIBUTES, SKILLS
@@ -204,13 +205,95 @@ class GrowthIntegrationTests(WorldCommandTest):
         self.assertEqual(self.char1.profile(), before)
         invite(self.char1, self.char2, now=100)
         respond(self.char2, True, now=100)
-        self.assertIn('HP 2', self.command(self.char2.key + ' 치료'))
+        with patch.object(self.char2, 'msg') as recipient, patch.object(self.char1, 'msg') as sender:
+            self.char1.execute_cmd(self.char2.key + ' 치료')
+        treatment, = (call.args[0] for call in sender.call_args_list if call.args
+                      and isinstance(call.args[0], ft.Text) and '정신력 10을 소모했다.' in call.args[0])
+        name = self.char2.key
+        self.assertEqual(treatment, f"{name}{ft.particle(name, '을/를')} 치료했다. "
+                                    f"{name}의 체력이 2 회복되고 정신력 10을 소모했다.")
+        self.assertEqual([(part['role'], part['text']) for part in treatment.segments if part['role'] != 'text'],
+                         [('player', name), ('player', name), ('hp_recovered', '2')])
+        recipient.assert_called_once()
+        message = recipient.call_args.args[0]
+        self.assertIsInstance(message, ft.Text)
+        self.assertEqual(message, f'{self.char1.key}의 치료로 체력이 2 회복됐다.')
+        self.assertEqual(message.segments, [
+            {'role': 'player', 'text': self.char1.key},
+            {'role': 'text', 'text': '의 치료로 '},
+            {'role': 'text', 'text': '체력이 '},
+            {'role': 'hp_recovered', 'text': '2'},
+            {'role': 'text', 'text': ' 회복됐다.'},
+        ])
         self.assertEqual(self.char2.profile()['hp'], 60)
         self.assertEqual(self.char1.profile()['mental'], 30)
         self.char2.location = self.rooms['dock']
         before = deepcopy(self.char1.profile())
         self.command(self.char2.key + ' 치료')
         self.assertEqual(self.char1.profile(), before)
+
+    def test_self_heal_breathing_and_full_resource_failure(self):
+        self.char1.change(lambda profile: profile.update(hp=20))
+        with patch.object(self.char1, 'msg') as output:
+            self.char1.execute_cmd('치료')
+        message, = (call.args[0] for call in output.call_args_list
+                    if call.args and str(call.args[0]).startswith('상처를 치료했다.'))
+        self.assertIsInstance(message, ft.Text)
+        self.assertEqual(message, '상처를 치료했다. 체력이 4 회복되고 정신력 10을 소모했다.')
+        self.assertEqual(message.segments, [
+            {'role': 'text', 'text': '상처를 치료했다. '},
+            {'role': 'text', 'text': '체력이 '},
+            {'role': 'hp_recovered', 'text': '4'},
+            {'role': 'text', 'text': ' 회복되고 '},
+            {'role': 'text', 'text': '정신력 10을 소모했다.'},
+        ])
+        self.assertEqual((self.char1.profile()['hp'], self.char1.profile()['mental']), (24, 30))
+        self.char1.change(lambda profile: profile.update(hp=60, mental=1, skill_ready_at={}))
+        with patch.object(self.char1, 'msg') as output:
+            self.char1.execute_cmd('호흡')
+        message, = (call.args[0] for call in output.call_args_list
+                    if call.args and str(call.args[0]).startswith('호흡을 가다듬었다.'))
+        self.assertIsInstance(message, ft.Text)
+        self.assertEqual(message, '호흡을 가다듬었다. 정신력이 3 회복됐다.')
+        self.assertEqual(message.segments, [
+            {'role': 'text', 'text': '호흡을 가다듬었다. '},
+            {'role': 'text', 'text': '정신력이 '},
+            {'role': 'mental_recovered', 'text': '3'},
+            {'role': 'text', 'text': ' 회복됐다.'},
+        ])
+        self.assertEqual(self.char1.profile()['mental'], 4)
+        self.char1.change(lambda profile: profile.update(mental=40))
+        self.assertIn('이미 체력이 가득합니다.', self.command('치료'))
+        self.assertEqual(self.char1.profile()['mental'], 40)
+
+    def test_zero_support_healing_displays_cost_without_recovery_emphasis(self):
+        self.char1.change(lambda profile: profile.update(hp=20))
+        with (patch('world.progression.healing_amount', return_value=0),
+              patch.object(self.char1, 'msg') as output):
+            self.char1.execute_cmd('치료')
+        message, = (call.args[0] for call in output.call_args_list
+                    if call.args and str(call.args[0]).startswith('치료를 시도했다.'))
+        self.assertIsInstance(message, ft.Text)
+        self.assertEqual(message, '치료를 시도했다. 체력은 회복되지 않았다. 정신력 10을 소모했다.')
+        self.assertEqual({segment['role'] for segment in message.segments}, {'text'})
+        self.assertEqual((self.char1.profile()['hp'], self.char1.profile()['mental']), (20, 30))
+
+    def test_party_healing_narration_and_delivery_failures_preserve_commit_boundary(self):
+        from world.skill_services import use_support
+
+        self.char1.location = self.char2.location = self.rooms['grass']
+        invite(self.char1, self.char2, now=100)
+        respond(self.char2, True, now=100)
+        self.char2.change(lambda profile: profile.update(hp=58))
+        before = tuple(deepcopy(player.profile()) for player in (self.char1, self.char2))
+        with patch('world.presentation.received_healing', side_effect=ValueError('표현 실패')):
+            with self.assertRaisesRegex(ValueError, '표현 실패'):
+                use_support(self.char1, 'heal', self.char2.key)
+        self.assertEqual(tuple(player.profile() for player in (self.char1, self.char2)), before)
+        with patch.object(self.char2, 'msg', side_effect=RuntimeError('전달 실패')) as recipient:
+            self.assertIn('체력이 2 회복되고 정신력 10을 소모했다.', self.command(self.char2.key + ' 치료'))
+        recipient.assert_called_once()
+        self.assertEqual((self.char1.profile()['mental'], self.char2.profile()['hp']), (30, 60))
 
     def test_queued_party_heal_replaces_one_attack_and_keeps_insight(self):
         self.char1.location = self.char2.location = self.rooms['ridge']
@@ -222,7 +305,13 @@ class GrowthIntegrationTests(WorldCommandTest):
         enemy.receive_attack(self.char1, 102.5, Random(1))
         self.char2.change(lambda p: p.update(hp=40))
         before_hp = enemy.hp
-        self.command(self.char2.key + ' 치료')
+        with patch.object(self.char1, 'msg') as output:
+            self.char1.execute_cmd(self.char2.key + ' 치료')
+        message, = (call.args[0] for call in output.call_args_list
+                    if call.args and str(call.args[0]).startswith('다음 차례에는 공격 대신'))
+        self.assertEqual(message, '다음 차례에는 공격 대신 치료한다.')
+        if isinstance(message, ft.Text):
+            self.assertEqual({part['role'] for part in message.segments}, {'text'})
         enemy.receive_attack(self.char1, 105, Random(1))
         self.assertEqual(enemy.hp, before_hp)
         self.assertGreater(self.char2.profile()['hp'], 40)
@@ -282,7 +371,7 @@ class GrowthIntegrationTests(WorldCommandTest):
 
     def test_breathing_deadline_survives_reload_snapshot_and_reset(self):
         self.char1.change(lambda p: p.update(mental=0))
-        self.assertIn('정신력 3', self.command('호흡'))
+        self.assertIn('정신력이 3 회복됐다.', self.command('호흡'))
         self.assertEqual(self.char1.profile()['skill_ready_at']['breathing'], 130)
         saved = deepcopy(self.char1.profile())
         self.char1.db.profile = saved

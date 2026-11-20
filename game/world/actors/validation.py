@@ -149,6 +149,10 @@ def validate_definitions(definitions, capabilities, spawns=(), *, index=None, ro
                     bindings.append(binding)
         require("hp" not in actor.defaults, "Actor HP는 combat_state에만 저장합니다.")
         if "combat" in actor.capabilities:
+            if "special_period" in actor.profiles.get("combat", {}):
+                spec = actor.combat_narration
+                require(spec.special_attack is not None and spec.telegraph is not None,
+                        f"{actor.id}: 특수 공격 주기에는 공격 문구와 예고가 필요합니다.")
             combat_state = actor.defaults.get("combat_state")
             hp = combat_state.get("hp") if isinstance(combat_state, Mapping) else None
             require(type(hp) is int and hp >= 0, "전투 Actor의 초기 HP가 필요합니다.")

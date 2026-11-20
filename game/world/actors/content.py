@@ -110,8 +110,6 @@ CAPABILITIES = MappingProxyType({
             ArgumentDefinition("boss", bool, required=False),
             ArgumentDefinition("boss_quest", required=False),
             ArgumentDefinition("special_period", int, required=False, minimum=1),
-            ArgumentDefinition("special_verb", required=False),
-            ArgumentDefinition("telegraph", required=False),
         )),), active_states=("alive",),
     ),
     "duel": CapabilityDescriptor("duel", active_states=("alive",)),

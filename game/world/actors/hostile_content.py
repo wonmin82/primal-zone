@@ -8,6 +8,7 @@ from .schema import (
     AttackPhrase,
     Classification,
     CombatNarrationSpec,
+    SpecialAttackPhrase,
 )
 
 HOSTILE_ACTORS = MappingProxyType({
@@ -77,7 +78,11 @@ HOSTILE_ACTORS = MappingProxyType({
             detectability="conspicuous",
         ),
         level=4, capabilities=("combat",),
-        combat_narration=CombatNarrationSpec((AttackPhrase("거대한 몸", "덮쳤다", "거세게 덮쳤다"),)),
+        combat_narration=CombatNarrationSpec(
+            (AttackPhrase("거대한 몸", "덮쳤다", "거세게 덮쳤다"),),
+            special_attack=SpecialAttackPhrase("돌진해", "들이받았다", "거세게 들이받았다"),
+            telegraph="몸을 낮추고 돌진할 자세를 취한다.",
+        ),
         defaults={"state": "alive", "combat_state": {"hp": 170}},
         profiles={"combat": {
             "combat_mode": 'public',
@@ -157,7 +162,11 @@ HOSTILE_ACTORS = MappingProxyType({
             detectability="conspicuous",
         ),
         level=10, capabilities=("combat",),
-        combat_narration=CombatNarrationSpec((AttackPhrase("거대한 발톱", "할퀴었다", "깊게 할퀴었다"),)),
+        combat_narration=CombatNarrationSpec(
+            (AttackPhrase("거대한 발톱", "할퀴었다", "깊게 할퀴었다"),),
+            special_attack=SpecialAttackPhrase("몸을 날려", "덮쳤다", "거세게 덮쳤다"),
+            telegraph="숨을 고르며 도약할 자세를 취한다.",
+        ),
         defaults={"state": "alive", "combat_state": {"hp": 270}},
         profiles={"combat": {
             "combat_mode": 'public',
@@ -169,8 +178,6 @@ HOSTILE_ACTORS = MappingProxyType({
             "boss": True,
             "boss_quest": 'deep_jungle',
             "special_period": 4,
-            "special_verb": '몸을 날려 덮쳐',
-            "telegraph": '숨을 고르며 도약할 자세를 취한다.',
         }},
     ),
 })

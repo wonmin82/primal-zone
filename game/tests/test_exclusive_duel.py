@@ -60,7 +60,10 @@ class ExclusiveDuelTests(NativeItemTest):
         return duel.tick(self.actor, identity, due_at, now=due_at if now is None else now, rng=Random(seed))
 
     def test_exclusive_start_observation_scope_and_public_npc_policy(self):
-        identity = self.start()
+        with patch.object(self.char1, "msg") as output:
+            identity = self.start()
+        self.assertIn("대련을 시작합니다. 최대 10분이며, 자동 공격과 별도로 60초마다 전투 행동을 입력해야 합니다.",
+                      [call.args[0] for call in output.call_args_list if call.args])
         self.assertTrue(duel.active_on(self.actor))
         self.assertEqual(self.projection()["identity"], identity)
         self.assertEqual(self.projection()["ends_at"], 700)
@@ -132,7 +135,14 @@ class ExclusiveDuelTests(NativeItemTest):
                 identity = self.start(now)
                 self.actor.db.duel_state = {**self.actor.db.duel_state, hp_field: 1}
                 due_at = now + COMBAT_INTERVAL
-                self.assertTrue(self.step(identity, due_at))
+                with patch.object(self.char1, "msg") as deliver:
+                    self.assertTrue(self.step(identity, due_at))
+                messages = [call.args[0] for call in deliver.call_args_list if call.args]
+                self.assertIn(f"대련이 끝났습니다. {'승리' if kind == 'victory' else '패배'}.", messages)
+                if kind == "victory":
+                    self.assertTrue(any("상대의 대련 체력에 1 피해를 입혔다." in str(msg) for msg in messages))
+                else:
+                    self.assertTrue(any("대련 체력이 1 감소했다." in str(msg) for msg in messages))
                 state = dict(self.actor.db.duel_state)
                 self.assertEqual(state["final_result"], {"kind": kind, "reason": None, "finished_at": due_at})
                 self.assertTrue(state["settled"])
@@ -209,6 +219,7 @@ class ExclusiveDuelTests(NativeItemTest):
     def test_duel_support_uses_a_round_and_commits_cost_once(self):
         self.char1.change(lambda profile: profile.update(mental=12))
         identity = self.start()
+        self.actor.db.duel_state = {**self.actor.db.duel_state, "player_hp": 30}
         public_hp = self.char1.profile()["hp"]
         actor_hp = self.projection()["actor_hp"]
         with patch("world.duel.time", return_value=101):
@@ -218,7 +229,12 @@ class ExclusiveDuelTests(NativeItemTest):
         due = 100 + COMBAT_INTERVAL
         with patch.object(self.char1, "msg") as output:
             self.assertTrue(self.step(identity, due))
-        self.assertIn("회복", str(output.call_args_list))
+        segments = [segment for call in output.call_args_list if call.args
+                    for segment in getattr(call.args[0], "segments", ())]
+        healed = next(int(segment["text"]) for segment in segments if segment["role"] == "hp_recovered")
+        damage = next(int(segment["text"]) for segment in segments if segment["role"] == "damage_taken")
+        self.assertGreater(healed, 0)
+        self.assertEqual(self.projection(due)["player_hp"], 30 + healed - damage)
         self.assertEqual(self.char1.profile()["hp"], public_hp)
         self.assertEqual(self.char1.profile()["mental"], 2)
         self.assertEqual(self.char1.profile()["skill_ready_at"]["heal"], due + 10)
@@ -274,12 +290,16 @@ class ExclusiveDuelTests(NativeItemTest):
         for now in range(150, 700, 50):
             duel.act(self.actor, self.char1, identity, now=now)
         self.assertEqual(self.projection(699.999)["ends_at"], 700)
-        duel.reconcile(self.actor, now=700)
+        with patch.object(self.char1, "msg") as output:
+            duel.reconcile(self.actor, now=700)
+        self.assertIn("대련이 끝났습니다. 시간 초과.", [call.args[0] for call in output.call_args_list if call.args])
         self.assertEqual(self.projection(700)["final_result"]["kind"], "timeout")
 
     def test_surrender_cooldown_and_stale_request_or_tick(self):
         identity = self.start()
-        duel.surrender(self.actor, self.char1, identity, now=101)
+        with patch.object(self.char1, "msg") as output:
+            duel.surrender(self.actor, self.char1, identity, now=101)
+        self.assertIn("대련이 끝났습니다. 기권.", [call.args[0] for call in output.call_args_list if call.args])
         self.assertEqual(self.projection(101)["final_result"]["kind"], "surrender")
         with self.assertRaises(rules.RuleError):
             self.start(130.999)
@@ -302,7 +322,9 @@ class ExclusiveDuelTests(NativeItemTest):
         self.assertEqual(self.projection(134.999)["idle_at"], 160)
         duel.act(self.actor, self.char1, identity, now=134.999)
         duel.connection_changed(self.char1, now=135, online=False)
-        duel.connection_changed(self.char1, now=165, online=True)
+        with patch.object(self.char1, "msg") as output:
+            duel.connection_changed(self.char1, now=165, online=True)
+        self.assertIn("대련이 끝났습니다. 연결 유예 만료.", [call.args[0] for call in output.call_args_list if call.args])
         self.assertFalse(duel.active_on(self.actor))
         result = self.projection(165)["final_result"]
         self.assertEqual(result["kind"], "disconnect")
@@ -348,6 +370,33 @@ class ExclusiveDuelTests(NativeItemTest):
         self.actor.attributes.reset_cache()
         duel.reconcile(self.actor, now=101)
         self.assertEqual(self.actor.ndb.duel_task[:2], (identity, 100 + COMBAT_INTERVAL))
+
+    def test_attack_and_result_delivery_failure_does_not_repeat_duel_cost(self):
+        identity = self.start()
+        duel.act(self.actor, self.char1, identity, skill="heavy", now=101)
+        self.actor.db.duel_state = {**self.actor.db.duel_state, "actor_hp": 1}
+        before = self.char1.profile()["mental"]
+        due = 100 + COMBAT_INTERVAL
+        with (patch.object(self.char1, "msg", side_effect=RuntimeError("전달 실패")) as output,
+              patch("world.multiplayer.logger.log_err")):
+            self.assertTrue(self.step(identity, due))
+            self.assertFalse(self.step(identity, due))
+        messages = [str(call.args[0]) for call in output.call_args_list if call.args]
+        self.assertEqual(sum("상대의 대련 체력에 1 피해" in msg for msg in messages), 1)
+        self.assertEqual(messages.count("대련이 끝났습니다. 승리."), 1)
+        self.assertLess(self.char1.profile()["mental"], before)
+        self.assertEqual(self.char1.profile()["skill_ready_at"]["heavy"], due + 7.5)
+        self.assertEqual(self.projection(due)["final_result"]["kind"], "victory")
+
+    def test_restored_numeric_round_renders_without_losing_pending_tick(self):
+        identity = self.start()
+        self.actor.db.duel_state = {**self.actor.db.duel_state, "enemy_round": 0.0}
+        with patch.object(self.char1, "msg") as output:
+            self.assertTrue(self.step(identity, 100 + COMBAT_INTERVAL))
+        roles = {segment["role"] for call in output.call_args_list if call.args
+                 for segment in getattr(call.args[0], "segments", ())}
+        self.assertTrue({"damage_dealt", "damage_taken"}.issubset(roles))
+        self.assertEqual(self.actor.db.duel_state["enemy_round"], 1.0)
 
     def test_incomplete_pending_state_aborts_without_resetting_actor(self):
         identity = self.start()

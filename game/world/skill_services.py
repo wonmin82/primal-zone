@@ -25,7 +25,7 @@ def heal_target(caller, identity=None):
     return target
 
 
-def use_support(caller, action, name="", *, item=None):
+def use_support(caller, action, name="", *, item=None, bandage_label=None):
     from world.duel import active_for
 
     now = time()
@@ -63,6 +63,8 @@ def use_support(caller, action, name="", *, item=None):
             caller.save_profile(profile)
             if target is not caller:
                 target.save_profile(target_profile)
-                after_change(lambda: target.msg(f"{caller.key}의 치료로 HP {outcome['amount']}을 회복했다."))
-            message = view.support_result(outcome, target.key if target is not caller else None)
+                received = view.received_healing(caller.key, outcome["amount"])
+                after_change(lambda: target.msg(received))
+            message = view.support_result(outcome, target.key if target is not caller else None,
+                                          bandage_label=bandage_label)
             after_change(lambda: caller.msg(message))

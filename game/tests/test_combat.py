@@ -1,4 +1,5 @@
 from random import Random
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from typeclasses.explorers import Explorer
@@ -88,7 +89,7 @@ class SharedCombatTests(WorldCommandTest):
         before_hp = self.enemy.hp
         before_profile = self.char1.profile_snapshot()
         with (patch("typeclasses.explorers.time", return_value=reservation[2]),
-              patch.object(shared_combat, "deliver_combat_message", side_effect=RuntimeError("회차 오류")),
+              patch.object(shared_combat.narration, "outgoing", side_effect=RuntimeError("회차 오류")),
               self.assertRaisesRegex(RuntimeError, "회차 오류")):
             self.char1.combat_tick(*reservation)
         self.assertEqual(self.enemy.hp, before_hp)
@@ -191,28 +192,106 @@ class SharedCombatTests(WorldCommandTest):
         self.assertTrue(self.char1.combat_snapshot()["telegraph"])
         self.assertTrue(self.char2.combat_snapshot()["telegraph"])
 
-    def test_official_attack_and_boss_output_keep_existing_wording(self):
+    def test_official_attack_boss_telegraph_and_special_use_narration(self):
         player = self.char1
         self.enemy.engage(player, now=100)
         with patch.object(shared_combat, "deliver_combat_message") as deliver:
             before = self.enemy.hp
             self.enemy.receive_attack(player, now=102.5, rng=Random(84))
-            self.assertEqual(str(deliver.call_args.args[1]),
-                             f"탐사용 벌목도로 능선의우두머리를 공격해 {before - self.enemy.hp} 피해를 입혔다.")
-            for now, verb, telegraph in (
-                (102.5, "달려들어", False),
-                (105, "달려들어", True),
-                (107.5, "거세게 돌진해", False),
-            ):
+            outgoing = deliver.call_args.args[1]
+            self.assertEqual(str(outgoing),
+                             f"탐사용 벌목도로 능선의우두머리를 베었다. {before - self.enemy.hp} 피해를 입혔다.")
+            self.assertIn({"role": "damage_dealt", "text": f"{before - self.enemy.hp} 피해"}, outgoing.segments)
+            for now, telegraph in ((102.5, False), (105, True), (107.5, False)):
                 with self.subTest(now=now):
                     player.change(lambda profile: profile.update(hp=60))
                     deliver.reset_mock()
                     self.enemy.enemy_tick(now=now, rng=Random(84))
                     damage = 60 - player.profile()["hp"]
-                    expected = [f"능선의우두머리가 {verb} {damage}의 피해를 입혔다."]
+                    attack = ("능선의우두머리가 돌진해 당신을 거세게 들이받았다!" if now == 107.5
+                              else "능선의우두머리가 거대한 몸으로 당신을 거세게 덮쳤다.")
+                    expected = [f"{attack} {damage} 피해를 입었다."]
                     if telegraph:
                         expected.append("! 능선의우두머리가 몸을 낮추고 돌진할 자세를 취한다.")
                     self.assertEqual([str(call.args[1]) for call in deliver.call_args_list], expected)
+                    self.assertIn({"role": "damage_taken", "text": f"{damage} 피해"},
+                                  deliver.call_args_list[0].args[1].segments)
+
+    def test_defeat_message_caps_damage_before_emergency_recovery(self):
+        from world.rules import DEFEAT_RECOVERY_HP
+
+        player = self.char1
+        self.enemy.engage(player, now=100)
+        player.change(lambda profile: profile.update(hp=6))
+        with patch.object(shared_combat, "deliver_combat_message") as deliver:
+            self.enemy.enemy_tick(now=102.5, rng=Random(84))
+        messages = [call.args[1] for call in deliver.call_args_list]
+        self.assertIn({"role": "damage_taken", "text": "6 피해"}, messages[0].segments)
+        self.assertEqual(messages[-1], "탐사대가 본부 3층 의무실로 구조했습니다.\n"
+                                       "10칩을 잃었습니다.\n"
+                                       "응급 처치로 체력이 1로 회복됐다. 추가 회복이 필요하다.")
+        self.assertIn({"role": "hp_recovered", "text": str(DEFEAT_RECOVERY_HP)}, messages[-1].segments)
+        self.assertEqual(player.profile()["hp"], DEFEAT_RECOVERY_HP)
+
+    def test_lethal_attack_narrates_only_hp_removed_before_reward(self):
+        player = self.char1
+        self.enemy.engage(player, now=100)
+        self.enemy.hp = 8
+        before_xp = player.profile()["xp"]
+
+        def attack(_character, profile, _enemy_id, now, interval, *_args, **_kwargs):
+            from world.rules import consume_combat_opportunity
+
+            consume_combat_opportunity(profile, now, interval)
+            return 35, {"action": "attack"}
+
+        with (patch("world.firearm_service.player_attack", side_effect=attack),
+              patch.object(shared_combat, "deliver_combat_message") as deliver):
+            self.enemy.receive_attack(player, now=102.5, rng=Random(84))
+        messages = [call.args[1] for call in deliver.call_args_list]
+        self.assertIn({"role": "damage_dealt", "text": "8 피해"}, messages[0].segments)
+        self.assertEqual(messages[1], "능선의우두머리가 더는 버티지 못하고 바닥에 쓰러졌다.")
+        self.assertIn({"role": "hostile", "text": "능선의우두머리"}, messages[1].segments)
+        xp = player.profile()["xp"] - before_xp
+        self.assertGreater(xp, 0)
+        self.assertEqual(messages[2], f"이번 사냥으로 경험치 {xp}을 얻었다. 보급칩은 시체에서 회수할 수 있다.")
+        self.assertIn({"role": "reward", "text": f"경험치 {xp}"}, messages[2].segments)
+
+    def test_scaled_boss_uses_post_scaling_hp_for_attack_strength(self):
+        self.join()
+
+        def attack(_character, profile, _enemy_id, now, interval, *_args, **_kwargs):
+            from world.rules import consume_combat_opportunity
+
+            consume_combat_opportunity(profile, now, interval)
+            return 30, {"action": "attack"}
+
+        with (patch("world.firearm_service.player_attack", side_effect=attack),
+              patch.object(shared_combat, "deliver_combat_message") as deliver):
+            self.enemy.receive_attack(self.char1, now=102.5, rng=Random(84))
+            self.enemy.receive_attack(self.char2, now=102.5, rng=Random(84))
+        first, second = (call.args[1] for call in deliver.call_args_list)
+        self.assertEqual(self.enemy.max_hp, 297)
+        self.assertIn({"role": "combat_verb_outgoing", "text": "크게 베었다."}, first.segments)
+        self.assertIn({"role": "combat_verb_outgoing", "text": "베었다."}, second.segments)
+
+    def test_start_combat_only_announces_engagement(self):
+        with (patch.object(shared_combat, "time", return_value=100),
+              patch.object(shared_combat, "deliver_combat_message") as deliver):
+            shared_combat.start_combat(self.char1, self.enemy)
+        recipient, message = deliver.call_args.args
+        self.assertEqual(recipient, self.char1)
+        self.assertEqual(message, "능선의우두머리와 교전을 시작했다.")
+        self.assertIn({"role": "hostile", "text": "능선의우두머리"}, message.segments)
+        self.assertEqual(self.char1.profile()["next_attack_at"], 102.5)
+
+        from world.actions.global_actions import flee
+
+        result = flee(SimpleNamespace(caller=self.char1))
+        self.assertEqual(result.messages, ("교전을 끝냈습니다. 적은 일정 시간 아무도 싸우지 않으면 회복합니다.",))
+        self.assertIsNone(self.char1.combat_target())
+        with self.assertRaisesRegex(RuleError, "이곳에는 공격할 수 있는 상대가 없습니다."):
+            shared_combat.start_combat(self.char1, "unknown-actor")
 
     def test_flee_disconnect_and_idle_recovery(self):
         self.join()

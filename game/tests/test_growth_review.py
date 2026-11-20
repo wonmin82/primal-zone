@@ -109,7 +109,8 @@ class GrowthReviewTests(WorldCommandTest):
         self.char2.change(lambda p: (p["skills"].update(suppress=4), p.update(queued_action="suppress")))
         enemy.receive_attack(self.char2, now=102.5, rng=Random(1))
         other = deepcopy(deserialize(enemy.db.suppressions)[str(self.char2.id)])
-        for now, rank, phrase in ((102.5, 7, "다음 3회 공격력을"), (112.5, 7, "연장했다"), (122.5, 10, "강화했다"), (132.5, 7, "더 강한 견제 효과가 유지됐다")):
+        for now, rank, phrase in ((102.5, 7, "다음 3회 공격력이"), (112.5, 7, "연장했다"),
+                                  (122.5, 10, "강화했다"), (132.5, 7, "더 강한 견제 효과(")):
             self.char1.change(lambda p: (p["skills"].update(suppress=rank), p.update(queued_action="suppress")))
             with patch.object(self.char1, "msg") as output:
                 enemy.receive_attack(self.char1, now=now, rng=Random(1))

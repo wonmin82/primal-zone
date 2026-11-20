@@ -5,8 +5,9 @@ from time import time
 from evennia.utils import delay
 from evennia.utils.dbserialize import deserialize
 
+from world import combat_narration as narration
+from world import equipment, recovery, rules
 from world import presentation as view
-from world import recovery, rules
 from world import text as ft
 from world.combat_contracts import (
     Combatant,
@@ -312,6 +313,7 @@ def receive_attack(enemy, player, now=None, rng=None):
                     recipient.accrue_recovery(recipient_profile, now)
             except rules.RuleError as failure:
                 error = str(failure)
+        queued_item_id = profile.get("queued_item_id")
         if error:
             profile.update(queued_action="attack", next_attack_at=now + COMBAT_INTERVAL)
             profile["player_round"] += 1
@@ -324,10 +326,11 @@ def receive_attack(enemy, player, now=None, rng=None):
                 enemy_profile=enemy.combat_profile,
             )
         profile["heal_target"] = None
+        equipment_snapshot = equipment.context(profile)
         if recipient_profile is not None and outcome["action"] == "heal":
             recipient.save_profile(recipient_profile)
             outcome["recipient"] = recipient.key
-            deliver_combat_message(recipient, f"{player.key}의 치료로 HP {outcome['amount']}을 회복했다.")
+            deliver_combat_message(recipient, view.received_healing(player.key, outcome["amount"]))
         # 현재 공격의 기여를 먼저 등록해 late join의 증가분도 사망 판정 전에 적용한다.
         contribution = deserialize(enemy.db.contribution)
         previous = contribution.get(player.id, {"damage": 0})
@@ -335,11 +338,10 @@ def receive_attack(enemy, player, now=None, rng=None):
                                    "last_action_at": now, "group": group_for(player)}
         enemy.db.contribution = contribution
         scale_boss(enemy, now)
-        actual = min(enemy.hp, damage)
-        contribution[player.id]["damage"] = previous["damage"] + actual
+        applied_damage = min(enemy.hp, damage)
+        contribution[player.id]["damage"] = previous["damage"] + applied_damage
         enemy.db.contribution = contribution
-        damage = actual
-        Combatant(enemy).apply(lambda state: state.update(hp=state["hp"] - damage))
+        Combatant(enemy).apply(lambda state: state.update(hp=state["hp"] - applied_damage))
         if "suppression" in outcome:
             from world.progression import apply_suppression
 
@@ -353,14 +355,26 @@ def receive_attack(enemy, player, now=None, rng=None):
         enemy.db.last_activity = now
         enemy.db.claim_last_activity = now
         threat = deserialize(enemy.db.threat)
-        threat[player.id] = threat.get(player.id, 0) + damage
+        threat[player.id] = threat.get(player.id, 0) + applied_damage
         enemy.db.threat = threat
         player.save_profile(profile)
-        message = view.outgoing_attack(profile, enemy.key, outcome, damage)
+        message = _player_round_message(enemy, equipment_snapshot, outcome, applied_damage,
+                                        profile["player_round"], queued_item_id=queued_item_id)
         deliver_combat_message(player, message)
         if enemy.hp <= 0:
             _finish_death(enemy, now, rng)
     after_change(lambda: broadcast_state(enemy))
+
+
+def _player_round_message(actor, snapshot, outcome, applied_damage, round_index, *, queued_item_id=None, duel=False):
+    if outcome["action"] in ("heal", "breathing", "bandage"):
+        label = None
+        if outcome["action"] == "bandage" and queued_item_id is not None:
+            item = next(entry for entry in snapshot.carried if str(entry.identity) == queued_item_id)
+            label = snapshot.label(item)
+        return view.support_result(outcome, outcome.get("recipient"), bandage_label=label)
+    return narration.outgoing(actor.key, snapshot.active, outcome, applied_damage, actor.max_hp,
+                              round_index, duel=duel)
 
 
 def duel_round(actor, player, state, now, rng):
@@ -380,26 +394,35 @@ def duel_round(actor, player, state, now, rng):
     damage, outcome = player_attack(
         player, profile, actor.combat_definition_id, now, COMBAT_INTERVAL, rng, enemy_profile=enemy_profile,
     )
-    state["actor_hp"] -= min(state["actor_hp"], damage)
+    applied_damage = min(state["actor_hp"], damage)
+    state["actor_hp"] -= applied_damage
     state["queued_skill"] = "attack"
     state["insight"] = profile["insight"]
-    publish_attack = view.outgoing_attack(profile, actor.key, outcome, damage)
-    deliver_combat_message(player, publish_attack)
     effects = state["suppressions"]
     if "suppression" in outcome:
         effect = outcome["suppression"]
-        effects, _ = apply_suppression(effects, player.pk, effect["rank"], bool(enemy_profile.get("boss")),
-                                       effect=effect)
+        effects, status = apply_suppression(effects, player.pk, effect["rank"], bool(enemy_profile.get("boss")),
+                                            effect=effect)
+        outcome["suppression"] = effects[str(player.pk)]
+        outcome["suppression_status"] = status
+    message = _player_round_message(actor, equipment.context(profile), outcome, applied_damage,
+                                    state["enemy_round"] + 1, duel=True)
+    deliver_combat_message(player, message)
     kind = None
     if state["actor_hp"] <= 0:
         kind = "victory"
     else:
         state["enemy_round"] += 1
         reduction = combined_suppression(effects, bool(enemy_profile.get("boss")))
+        hp_before = profile["hp"]
         result = rules.enemy_attack(profile, actor.combat_definition_id, state["enemy_round"], now, rng,
                                     reduction, enemy_profile=enemy_profile)
         state["suppressions"] = consume_suppressions(effects)
-        deliver_combat_message(player, f"{actor.key}의 반격으로 대련 체력 {result['damage']}을 잃었습니다.")
+        applied_damage = max(0, hp_before) - max(0, profile["hp"])
+        deliver_combat_message(player, narration.incoming(
+            actor.key, actor.definition.combat_narration, result["charged"], applied_damage,
+            rules.stats(profile)["max_hp"], state["enemy_round"], duel=True,
+        ))
         if result["defeated"]:
             kind = "defeat"
     state["player_hp"] = max(0, profile["hp"])
@@ -479,41 +502,36 @@ def enemy_tick(enemy, now=None, rng=None):
         effects = deserialize(enemy.db.suppressions)
         reduction = combined_suppression(effects, bool(enemy.combat_profile.get("boss")))
         enemy.db.suppressions = consume_suppressions(effects)
+        hp_before = result_profile["hp"]
         result = rules.enemy_attack(
             result_profile, enemy.combat_definition_id, enemy.db.enemy_round, now, rng, reduction,
             enemy_profile=enemy.combat_profile,
         )
+        applied_damage = max(0, hp_before) - max(0, result_profile["hp"])
+        max_hp = rules.stats(result_profile)["max_hp"]
         lost = rules.apply_defeat(result_profile) if result["defeated"] else 0
         target.save_profile(result_profile)
-        message = ft.text(
-            ft.named("hostile", enemy.key, "이/가"),
-            f" {enemy.combat_profile.get('special_verb', '거세게 돌진해')} "
-            if result["charged"] else " 달려들어 ",
-            f"{result['damage']}의 피해를 입혔다.",
-        )
+        spec = enemy.definition.combat_narration
+        message = narration.incoming(enemy.key, spec, result["charged"], applied_damage,
+                                     max_hp, enemy.db.enemy_round)
         deliver_combat_message(target, message)
         if result["defeated"]:
             from world.bootstrap import get_room
 
             leave_combat(target, now=now)
             destination = get_room("infirmary")
-            rescue = (
+            rescue = ft.text(
                 "탐사대가 본부 3층 의무실로 구조했습니다.\n"
-                + (f"{format_currency(lost)}을 잃었습니다.\n" if lost else "")
-                + f"응급 처치로 체력 {rules.DEFEAT_RECOVERY_HP}을 회복했습니다. 추가 회복이 필요합니다."
+                + (f"{format_currency(lost)}을 잃었습니다.\n" if lost else ""),
+                view.emergency_recovery(rules.DEFEAT_RECOVERY_HP),
             )
             deliver_combat_message(target, rescue)
             if destination is None or not target.move_to(destination, quiet=True, move_type="defeat"):
                 raise RuntimeError("패배 후 의무실 이동을 완료하지 못했습니다.")
             after_change(target.request_prompt)
         if rules.boss_telegraph(enemy.combat_definition_id, enemy.db.enemy_round, enemy_profile=enemy.combat_profile):
+            message = narration.telegraph(enemy.key, spec)
             for player in active_players(enemy):
-                message = ft.text(
-                    ft.token("warning", "! "),
-                    ft.named("hostile", enemy.key, "이/가"),
-                    " ",
-                    enemy.combat_profile.get("telegraph", "몸을 낮추고 돌진할 자세를 취한다."),
-                )
                 deliver_combat_message(player, message)
     after_change(lambda: broadcast_state(enemy))
 
@@ -662,7 +680,7 @@ def start_combat(player, enemy_id):
     engage(enemy, player)
     message = ft.text(
         ft.named("hostile", enemy.key, "과/와"),
-        " 교전을 시작했다. 기본 공격은 2.5초마다 이어진다.",
+        " 교전을 시작했다.",
     )
     deliver_combat_message(player, message)
     after_change(player.push_state)

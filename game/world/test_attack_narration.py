@@ -1,9 +1,9 @@
-"""PR-A 정적 선언과 테스트 전용 한국어 문장 미리보기."""
+"""정적 선언과 공식 전투 Narration의 한국어 문장 계약."""
 
 from dataclasses import FrozenInstanceError, replace
 from unittest import TestCase
 
-from world import text as ft
+from world import combat_narration as narration
 from world.actions.schema import ArgumentDefinition
 from world.actors.hostile_content import HOSTILE_ACTORS
 from world.actors.schema import AttackPhrase, CapabilityDescriptor, CombatNarrationSpec
@@ -11,6 +11,7 @@ from world.actors.validation import ActorDefinitionError, validate_definitions
 from world.content import ITEMS
 from world.content.final_items import BAREHAND_NARRATION
 from world.content.integrity import item_attack_narration_errors
+from world.equipment import item_snapshot
 
 WEAPON_SENTENCES = {
     "explorer_machete": (
@@ -73,31 +74,6 @@ ACTOR_SENTENCES = {
 }
 
 
-def player_prefix(name, target, *, barehand=False):
-    return (
-        ("text" if barehand else "item", name),
-        ("text", f"{ft.particle(name, '으로/로')} "),
-        ("hostile", target),
-        ("text", f"{ft.particle(target, '을/를')} "),
-    )
-
-
-def actor_prefix(name, instrument):
-    return (
-        ("hostile", name),
-        ("text", f"{ft.particle(name, '이/가')} {instrument}{ft.particle(instrument, '으로/로')} 당신을 "),
-    )
-
-
-def attack_preview(prefix, verb, punctuation, damage, *, incoming):
-    """문장과 의미 범위를 고정하는 테스트 조합. 공식 Text 역할을 등록하지 않는다."""
-    verb_role = "combat_verb_incoming" if incoming else "combat_verb_outgoing"
-    damage_role = "damage_taken" if incoming else "damage_dealt"
-    outcome = "를 입었다." if incoming else "를 입혔다."
-    return (*prefix, (verb_role, verb + punctuation), ("text", " "),
-            (damage_role, f"{damage} 피해"), ("text", outcome))
-
-
 class AttackNarrationTests(TestCase):
     def test_actor_narration_is_required_and_immutable_for_combat(self):
         base = HOSTILE_ACTORS["scavenger"]
@@ -144,9 +120,10 @@ class AttackNarrationTests(TestCase):
         ):
             with self.subTest(valid=valid):
                 validate_definitions((replace(actor, combat_narration=CombatNarrationSpec((valid, phrase))),), caps)
-                self.assert_attack_preview(actor_prefix(actor.name, valid.instrument), (valid.verb, valid.strong_verb),
-                                           expected, damage=6, expected_damage="6 피해를 입었다.",
-                                           prefix_roles=("hostile", "text"), incoming=True)
+                self.assert_attack_messages(
+                    lambda damage: narration.incoming(actor.name, CombatNarrationSpec((valid,)), False, damage, 40, 1),
+                    expected, (valid.verb, valid.strong_verb), ("hostile", "text"), incoming=True,
+                )
 
     def test_invalid_item_declarations_are_rejected_by_role_and_shape(self):
         weapon = {"equipment_properties": {"slot": "hands", "role": "weapon"}}
@@ -172,55 +149,49 @@ class AttackNarrationTests(TestCase):
                 self.assertEqual(item_attack_narration_errors(identity, definition), [])
                 self.assertTrue(item_attack_narration_errors(identity, {**definition, "combat_narration": valid}))
 
-    def assert_attack_preview(self, prefix, verbs, expected, *, damage, expected_damage, prefix_roles,
-                              incoming=False):
+    def assert_attack_messages(self, render, expected, verbs, prefix_roles, *, incoming=False):
         normal, heavy = verbs
         expected_attacks = (*expected, expected[1].removesuffix(".") + "!")
-        expected_tail_roles = (("combat_verb_incoming", "text", "damage_taken", "text") if incoming else
-                               ("combat_verb_outgoing", "text", "damage_dealt", "text"))
-        for verb, punctuation, expected_attack in zip((normal, heavy, heavy), (".", ".", "!"),
-                                                      expected_attacks, strict=True):
-            preview = attack_preview(prefix, verb, punctuation, damage, incoming=incoming)
-            self.assertEqual("".join(value for _, value in preview), f"{expected_attack} {expected_damage}")
-            self.assertEqual(tuple(role for role, _ in preview), (*prefix_roles, *expected_tail_roles))
-            self.assertEqual(tuple(value for _, value in preview[-4:]),
-                             (verb + punctuation, " ", f"{damage} 피해",
-                              expected_damage.removeprefix(f"{damage} 피해")))
+        tail_roles = (("combat_verb_incoming", "text", "damage_taken", "text") if incoming else
+                      ("combat_verb_outgoing", "text", "damage_dealt", "text"))
+        ending = "를 입었다." if incoming else "를 입혔다."
+        for damage, expected_attack, verb, end in zip((5, 6, 12), expected_attacks, (normal, heavy, heavy),
+                                                     (".", ".", "!"), strict=True):
+            message = render(damage)
+            self.assertEqual(message, f"{expected_attack} {damage} 피해{ending}")
+            self.assertEqual(tuple(part["role"] for part in message.segments), (*prefix_roles, *tail_roles))
+            self.assertEqual(tuple(part["text"] for part in message.segments[-4:]),
+                             (verb + end, " ", f"{damage} 피해", ending))
 
     def test_weapon_and_barehand_sentence_snapshots(self):
         weapons = {identity: data for identity, data in ITEMS.items()
                    if data.get("equipment_properties", {}).get("role") == "weapon"}
         self.assertEqual(weapons.keys(), WEAPON_SENTENCES.keys())
         target = HOSTILE_ACTORS["scavenger"].name
-        cases = [(data["name"], data["combat_narration"], WEAPON_SENTENCES[identity])
+        cases = [(item_snapshot(identity, data), data["combat_narration"], WEAPON_SENTENCES[identity])
                  for identity, data in weapons.items()]
-        cases.append(("맨손", BAREHAND_NARRATION, (
+        cases.append((None, BAREHAND_NARRATION, (
             ("맨손으로 어린청소룡을 때렸다.", "맨손으로 어린청소룡을 세게 때렸다."),
             ("맨손으로 어린청소룡을 후려쳤다.", "맨손으로 어린청소룡을 힘껏 후려쳤다."),
         )))
-        for name, narration, expected in cases:
-            with self.subTest(name=name):
-                barehand = narration is BAREHAND_NARRATION
-                prefix = player_prefix(name, target, barehand=barehand)
-                for phrase, snapshot in zip(narration["normal"], expected, strict=True):
-                    self.assert_attack_preview(prefix, (phrase["verb"], phrase["strong_verb"]), snapshot,
-                                               damage=5, expected_damage="5 피해를 입혔다.",
-                                               prefix_roles=("text" if barehand else "item", "text", "hostile", "text"))
+        for weapon, spec, expected in cases:
+            with self.subTest(weapon=weapon):
+                prefix_roles = ("text" if weapon is None else "item", "text", "hostile", "text")
+                for index, (phrase, snapshot) in enumerate(zip(spec["normal"], expected, strict=True), 1):
+                    self.assert_attack_messages(
+                        lambda damage: narration.outgoing(target, weapon, {"action": "attack"}, damage, 40, index),
+                        snapshot, (phrase["verb"], phrase["strong_verb"]), prefix_roles,
+                    )
+                repeated_first = narration.outgoing(target, weapon, {"action": "attack"}, 5, 40, len(expected) + 1)
+                self.assertEqual(repeated_first, f"{expected[0][0]} 5 피해를 입혔다.")
 
-        name = weapons["guard_carbine"]["name"]
-        target = HOSTILE_ACTORS["sentinel"].name
-        phrase = weapons["guard_carbine"]["combat_narration"]["normal"][1]
-        prefix = player_prefix(name, target)
-        self.assert_attack_preview(
-            prefix, (phrase["verb"], phrase["strong_verb"]),
-            ("경비카빈으로 고장난경비기를 쏘았다.", "경비카빈으로 고장난경비기를 쏘았다."),
-            damage=8, expected_damage="8 피해를 입혔다.", prefix_roles=("item", "text", "hostile", "text"),
-        )
-        self.assertEqual(
-            attack_preview(prefix, phrase["strong_verb"], "!", 8, incoming=False),
-            (("item", "경비카빈"), ("text", "으로 "), ("hostile", "고장난경비기"), ("text", "를 "),
-             ("combat_verb_outgoing", "쏘았다!"), ("text", " "), ("damage_dealt", "8 피해"), ("text", "를 입혔다.")),
-        )
+        firearm = item_snapshot("guard_carbine", weapons["guard_carbine"])
+        message = narration.outgoing("고장난경비기", firearm, {"action": "attack"}, 10, 30, 2)
+        self.assertEqual(message, "경비카빈으로 고장난경비기를 쏘았다! 10 피해를 입혔다.")
+        self.assertEqual(tuple((part["role"], part["text"]) for part in message.segments),
+                         (("item", "경비카빈"), ("text", "으로 "), ("hostile", "고장난경비기"), ("text", "를 "),
+                          ("combat_verb_outgoing", "쏘았다!"), ("text", " "), ("damage_dealt", "10 피해"),
+                          ("text", "를 입혔다.")))
 
     def test_actor_sentence_snapshots_without_special_profile_duplication(self):
         self.assertEqual(HOSTILE_ACTORS.keys(), ACTOR_SENTENCES.keys())
@@ -228,17 +199,16 @@ class AttackNarrationTests(TestCase):
             with self.subTest(identity=identity):
                 spec = actor.combat_narration
                 phrase, = spec.normal_attacks
-                self.assertIsNone(spec.special_attack)
-                self.assertIsNone(spec.telegraph)
-                prefix = actor_prefix(actor.name, phrase.instrument)
-                self.assert_attack_preview(prefix, (phrase.verb, phrase.strong_verb), ACTOR_SENTENCES[identity],
-                                           damage=6, expected_damage="6 피해를 입었다.",
-                                           prefix_roles=("hostile", "text"), incoming=True)
+                self.assertNotIn("special_verb", actor.profiles["combat"])
+                self.assertNotIn("telegraph", actor.profiles["combat"])
+                self.assert_attack_messages(
+                    lambda damage: narration.incoming(actor.name, spec, False, damage, 40, 1),
+                    ACTOR_SENTENCES[identity], (phrase.verb, phrase.strong_verb), ("hostile", "text"), incoming=True,
+                )
 
         hunter = HOSTILE_ACTORS["hunter"]
-        phrase = hunter.combat_narration.normal_attacks[0]
-        self.assertEqual(
-            attack_preview(actor_prefix(hunter.name, phrase.instrument), phrase.verb, ".", 6, incoming=True),
-            (("hostile", "갈퀴사냥룡"), ("text", "이 날카로운 발톱으로 당신을 "),
-             ("combat_verb_incoming", "할퀴었다."), ("text", " "), ("damage_taken", "6 피해"), ("text", "를 입었다.")),
-        )
+        message = narration.incoming(hunter.name, hunter.combat_narration, False, 6, 60, 1)
+        self.assertEqual(tuple((part["role"], part["text"]) for part in message.segments),
+                         (("hostile", "갈퀴사냥룡"), ("text", "이 날카로운 발톱으로 당신을 "),
+                          ("combat_verb_incoming", "할퀴었다."), ("text", " "),
+                          ("damage_taken", "6 피해"), ("text", "를 입었다.")))

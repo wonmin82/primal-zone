@@ -49,20 +49,19 @@ def execute(context):
     if operation == "use":
         from world import skill_services
 
-        skill_services.use_support(context.caller, "bandage", item=item)
+        skill_services.use_support(context.caller, "bandage", item=item, bandage_label=label)
         return ActionResult(changed=True)
     if operation in ("eat", "drink"):
         from world.item_inventory import bind_consumption
+        from world.presentation import consumable_recovery
 
         def apply(profile):
             if not bind_consumption(context.caller, profile, item.definition_id, item.pk):
                 raise rules.RuleError("원래 선택한 아이템이 없어졌거나 위치가 바뀌었습니다.")
-            return rules.eat_or_drink(profile, item.definition_id, "먹어" if operation == "eat" else "마셔")
+            amount = rules.eat_or_drink(profile, item.definition_id, "먹어" if operation == "eat" else "마셔")
+            return consumable_recovery(label, operation, amount)
 
-        amount = context.caller.change(apply)
-        message = ft.text(ft.token("item", label), ft.particle(label, "을/를"),
-                          " 먹었다." if operation == "eat" else " 마셨다.", f" 체력이 {amount} 회복되었다.")
-        return ActionResult(messages=(message,), changed=True)
+        return ActionResult(messages=(context.caller.change(apply),), changed=True)
 
     definition = ITEMS[item.definition_id]
     particle = "을/를"
