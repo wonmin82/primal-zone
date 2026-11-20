@@ -17,7 +17,13 @@ from world.actions.schema import (
     VerbDefinition,
 )
 from world.actors import content
-from world.actors.schema import ActorSpawn, CapabilityDescriptor, Classification
+from world.actors.schema import (
+    ActorSpawn,
+    AttackPhrase,
+    CapabilityDescriptor,
+    Classification,
+    CombatNarrationSpec,
+)
 from world.actors.spawn import ensure_spawn
 
 INSTRUCTOR_ID = "fixture.duel_instructor"
@@ -34,6 +40,7 @@ def definitions():
             name="대련교관",
             aliases=(),
             capabilities=(*trainer.capabilities, "combat", "duel"),
+            combat_narration=CombatNarrationSpec((AttackPhrase("주먹", "때렸다", "세게 때렸다"),)),
             profiles={**trainer.profiles, "combat": content.ACTORS["scavenger"].profiles["combat"]},
             defaults={**trainer.defaults, "state": "alive", "combat_state": {"hp": 24}},
         ),

@@ -1,9 +1,12 @@
 """실제 동적 명령·웹 Gateway의 Root UUID 소비·장비 회귀."""
 
 from copy import deepcopy
+from dataclasses import replace
 from unittest.mock import patch
 
 from django.test import override_settings
+from world import equipment_service
+from world import text as ft
 from world.actions.gateway import ResultStatus, execute, from_web
 from world.actions.manifest import get_index
 from world.actions.presentation import action_controls
@@ -29,6 +32,25 @@ class ItemEquipmentActionsTests(NativeItemTest):
         self.output.reset_mock()
         self.char1.execute_cmd(value, session=self.session)
         return " ".join(str(call.args[0]) for call in self.output.call_args_list if call.args)
+
+    def equipment_action(self, query, verb, expected_item):
+        action, keyword = verb
+        invocation = dispatch_text(self.char1, self.index, f"game.{action}", query, keyword)
+        self.assertEqual(dict(invocation.roles)["subject"][0].identity, str(expected_item.pk))
+        return execute(self.char1, self.session, invocation, self.index)
+
+    def assert_equipment_message(self, result, sentence, label, description, verb):
+        self.assertEqual(result.status, ResultStatus.SUCCESS)
+        self.assertTrue(result.changed)
+        self.assertEqual(result.messages, (sentence,))
+        message = result.messages[0]
+        self.assertIsInstance(message, ft.Text)
+        self.assertEqual(message.segments, [
+            {"role": "item", "text": label},
+            {"role": "text", "text": description},
+            {"role": "success", "text": verb},
+            {"role": "text", "text": "."},
+        ])
 
     def test_bandage_number_consumes_selected_stack_only(self):
         first = self.create("bandage", quantity=2)
@@ -63,16 +85,51 @@ class ItemEquipmentActionsTests(NativeItemTest):
     def test_food_number_and_explicit_quantity_do_not_consume_other_stack(self):
         first = self.create("field_ration", quantity=2)
         second = self.create("field_ration", quantity=2)
+        second_id = second.pk
         self.char1.change(lambda p: p.update(hp=1))
-        self.assertIn("먹었다", self.raw("야전식량 2 1개 eat"))
+        invocation = dispatch_text(self.char1, self.index, "game.eat", "야전식량 2 1개", "eat")
+        self.assertEqual(dict(invocation.roles)["subject"][0].identity, str(second_id))
+        result = execute(self.char1, self.session, invocation, self.index)
+        self.assert_consumption_message(result, "야전식량 2", "를", " 먹었다.", 12)
+        self.assertEqual(self.char1.profile()["hp"], 13)
         first.refresh_from_db()
         second.refresh_from_db()
         self.assertEqual((first.quantity, second.quantity), (2, 1))
+        self.assertEqual(second.pk, second_id)
+        self.assertEqual(number_for(descriptor(second).reference), 2)
         before = self.atomic_state()
         self.raw("야전식량 2 2개 먹어")
         self.assertEqual(self.atomic_state(), before)
         self.raw("야전식량 모두 먹어")
         self.assertEqual(self.atomic_state(), before)
+
+    def test_drink_message_uses_selected_stack_label(self):
+        item = self.create("water", quantity=3)
+        identity = item.pk
+        self.char1.change(lambda p: p.update(hp=1))
+        control = next(c for c in action_controls(self.char1, self.index)
+                       if c["action"]["action_id"] == "item.water.drink")
+        invocation = from_web({**control["action"], "request_id": "drink-numbered-label"}, self.index)
+        self.assertEqual(dict(invocation.roles)["subject"][0].identity, str(identity))
+        result = execute(self.char1, self.session, invocation, self.index)
+        self.assert_consumption_message(result, "정제수 1", "을", " 마셨다.", 6)
+        self.assertEqual(self.char1.profile()["hp"], 7)
+        item.refresh_from_db()
+        self.assertEqual((item.pk, item.quantity, number_for(descriptor(item).reference)), (identity, 2, 1))
+
+    def assert_consumption_message(self, result, label, particle, action, amount):
+        self.assertEqual(result.status, ResultStatus.SUCCESS)
+        self.assertTrue(result.changed)
+        recovery = f" 체력이 {amount} 회복되었다."
+        self.assertEqual(result.messages, (f"{label}{particle}{action}{recovery}",))
+        message = result.messages[0]
+        self.assertIsInstance(message, ft.Text)
+        self.assertEqual(message.segments, [
+            {"role": "item", "text": label},
+            {"role": "text", "text": particle},
+            {"role": "text", "text": action},
+            {"role": "text", "text": recovery},
+        ])
 
     def test_stale_web_item_does_not_fall_back_to_same_definition(self):
         first = self.create("bandage", quantity=1)
@@ -101,8 +158,109 @@ class ItemEquipmentActionsTests(NativeItemTest):
         self.assertEqual(self.char1.db.active_weapon_item_id, str(weapon.pk))
         self.assertIn("해제했다", self.raw(name + " unwield"))
         # 표시 이름은 실제 콘텐츠 정의에 따라 선택한다.
-        self.assertIn("착용했다", self.raw(ITEMS[armor.definition_id]["name"] + " 입"))
+        self.assertIn("입었다", self.raw(ITEMS[armor.definition_id]["name"] + " 입"))
         self.assertIn("벗었다", self.raw(ITEMS[armor.definition_id]["name"] + " 벗"))
+
+    def test_equipment_slot_and_hand_role_golden_messages(self):
+        cases = (
+            ("folding_shield", "접이식방패 1", "들었다", "내려놓았다"),
+            ("portable_analyzer", "휴대분석기 1", "장착했다", "해제했다"),
+            ("security_goggles", "보안고글 1", "썼다", "벗었다"),
+            ("expedition_tag", "탐사인식표 1", "걸었다", "벗었다"),
+            ("light_protective_suit", "경량방호복 1", "입었다", "벗었다"),
+            ("shock_absorbing_gloves", "충격흡수장갑 1", "꼈다", "벗었다"),
+            ("emergency_belt", "응급벨트 1", "둘렀다", "풀었다"),
+            ("reinforced_explorer_pants", "보강탐사바지 1", "입었다", "벗었다"),
+            ("non_slip_boots", "미끄럼방지탐사화 1", "신었다", "벗었다"),
+            ("focus_ring", "집중링 1", "꼈다", "뺐다"),
+            ("survival_module", "생존모듈 1", "착용했다", "벗었다"),
+        )
+        weapon = self.create("explorer_machete")
+        self.equipment_action("탐사용 벌목도 1", ("wield", "무장"), weapon)
+        for identity, label, equip_verb, remove_verb in cases:
+            with self.subTest(item=identity):
+                row = self.create(identity)
+                before = self.atomic_state()
+                for command, location, verb in (
+                    (("equip", "착용"), "equipment", equip_verb),
+                    (("remove", "벗어"), "inventory", remove_verb),
+                ):
+                    result = self.equipment_action(label, command, row)
+                    self.assert_equipment_message(result, f"{label}을 {verb}.", label, "을 ", verb)
+                    row.refresh_from_db()
+                    self.assertEqual(row.location_kind, location)
+                    self.assertEqual(number_for(descriptor(row).reference), 1)
+                self.assertEqual(self.atomic_state(), before)
+
+    def test_numbered_weapon_messages_and_active_weapon_identity(self):
+        first, second, third = (self.create("scout_pistol") for _ in range(3))
+        identities = (first.pk, second.pk, third.pk)
+        result = self.equipment_action("정찰권총 1", ("wield", "무장"), first)
+        self.assert_equipment_message(result, "정찰권총 1로 무장했다.", "정찰권총 1", "로 ", "무장했다")
+        self.assertEqual(self.char1.db.active_weapon_item_id, str(first.pk))
+        for row, label, tool_particle, object_particle in (
+            (second, "정찰권총 2", "로", "를"),
+            (third, "정찰권총 3", "으로", "을"),
+        ):
+            with self.subTest(label=label):
+                result = self.equipment_action(label, ("wield", "무장"), row)
+                self.assert_equipment_message(result, f"{label}{tool_particle} 무장했다.",
+                                              label, f"{tool_particle} ", "무장했다")
+                self.assertEqual(equipment_service.hand_usage(self.char1), 2)
+                self.assertEqual(self.char1.db.active_weapon_item_id, str(first.pk))
+                row.refresh_from_db()
+                self.assertEqual(row.location_kind, "equipment")
+                self.assertEqual(equipment_service.selector_label(self.char1, row), label)
+                result = self.equipment_action(label, ("active_weapon", "주무기"), row)
+                self.assert_equipment_message(result, f"{label}{object_particle} 주무기로 지정했다.",
+                                              label, f"{object_particle} 주무기로 ", "지정했다")
+                self.assertEqual(self.char1.db.active_weapon_item_id, str(row.pk))
+                result = self.equipment_action(label, ("unwield", "해제"), row)
+                self.assert_equipment_message(result, f"{label}{object_particle} 해제했다.",
+                                              label, f"{object_particle} ", "해제했다")
+                self.assertEqual(self.char1.db.active_weapon_item_id, str(first.pk))
+        result = self.equipment_action("정찰권총 1", ("unwield", "해제"), first)
+        self.assert_equipment_message(result, "정찰권총 1을 해제했다.", "정찰권총 1", "을 ", "해제했다")
+        self.assertIsNone(self.char1.db.active_weapon_item_id)
+        for number, row, identity in zip(range(1, 4), (first, second, third), identities, strict=True):
+            row.refresh_from_db()
+            self.assertEqual((row.pk, row.location_kind, number_for(descriptor(row).reference)),
+                             (identity, "inventory", number))
+
+    def test_two_handed_weapon_refuses_shield_with_existing_error_and_no_mutation(self):
+        weapon, shield = self.create("pioneer_spear"), self.create("folding_shield")
+        result = self.equipment_action("개척창 1", ("wield", "무장"), weapon)
+        self.assert_equipment_message(result, "개척창 1로 무장했다.", "개척창 1", "로 ", "무장했다")
+        self.assertEqual(equipment_service.hand_usage(self.char1), 2)
+        before = self.atomic_state()
+        result = self.equipment_action("접이식방패 1", ("equip", "착용"), shield)
+        self.assertEqual(result.status, ResultStatus.REFUSED)
+        self.assertIn("손 장비 공간이 부족합니다. 먼저 기존 장비를 해제하세요.", result.messages[0])
+        self.assertEqual(self.atomic_state(), before)
+        result = self.equipment_action("개척창 1", ("unwield", "해제"), weapon)
+        self.assert_equipment_message(result, "개척창 1을 해제했다.", "개척창 1", "을 ", "해제했다")
+
+    def test_unsupported_equipment_operation_is_refused_before_changing_state(self):
+        self.create("light_protective_suit")
+        invocation = dispatch_text(self.char1, self.index, "game.equip", "경량방호복", "착용")
+        original = self.index.bindings[invocation.action_id + ".binding"]
+        invalid = replace(original, config=(("operation", "equipp"),))
+        provider = original.provider_definition
+        index = replace(
+            self.index,
+            bindings={**self.index.bindings, invalid.id: invalid},
+            bindings_for_provider={
+                **self.index.bindings_for_provider,
+                provider: tuple(invalid if row == original else row for row in self.index.bindings_for_provider[provider]),
+            },
+        )
+        before = self.atomic_state()
+        with patch.object(equipment_service, "equip_item", wraps=equipment_service.equip_item) as equip:
+            result = execute(self.char1, self.session, invocation, index)
+        equip.assert_not_called()
+        self.assertEqual(result.status, ResultStatus.REFUSED)
+        self.assertEqual(result.messages, ("지원하지 않는 장비 행동입니다.",))
+        self.assertEqual(self.atomic_state(), before)
 
     def test_information_has_no_state_change_and_uses_number(self):
         self.create("bandage", quantity=1)

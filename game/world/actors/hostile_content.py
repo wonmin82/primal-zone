@@ -2,7 +2,13 @@
 
 from types import MappingProxyType
 
-from .schema import ActorDefinition, ActorPresentation, Classification
+from .schema import (
+    ActorDefinition,
+    ActorPresentation,
+    AttackPhrase,
+    Classification,
+    CombatNarrationSpec,
+)
 
 HOSTILE_ACTORS = MappingProxyType({
     "scavenger": ActorDefinition(
@@ -13,6 +19,7 @@ HOSTILE_ACTORS = MappingProxyType({
             semantic_role="hostile", distant_visible=True, distant_presence="멀리 풀 사이를 오가고 있다.", unit="마리",
         ),
         level=1, capabilities=("combat",),
+        combat_narration=CombatNarrationSpec((AttackPhrase("날카로운 이빨", "물었다", "세게 물었다"),)),
         defaults={"state": "alive", "combat_state": {"hp": 24}},
         profiles={"combat": {
             "combat_mode": 'claimed',
@@ -31,6 +38,7 @@ HOSTILE_ACTORS = MappingProxyType({
             semantic_role="hostile", distant_visible=True, distant_presence="멀리 움직이고 있다.", unit="마리",
         ),
         level=2, capabilities=("combat",),
+        combat_narration=CombatNarrationSpec((AttackPhrase("날카로운 발톱", "할퀴었다", "깊게 할퀴었다"),)),
         defaults={"state": "alive", "combat_state": {"hp": 45}},
         profiles={"combat": {
             "combat_mode": 'claimed',
@@ -49,6 +57,7 @@ HOSTILE_ACTORS = MappingProxyType({
             semantic_role="hostile", distant_visible=True, distant_presence="멀리 감지기를 돌리고 있다.", unit="마리",
         ),
         level=3, capabilities=("combat",),
+        combat_narration=CombatNarrationSpec((AttackPhrase("금속 몸체", "들이받았다", "거칠게 들이받았다"),)),
         defaults={"state": "alive", "combat_state": {"hp": 65}},
         profiles={"combat": {
             "combat_mode": 'claimed',
@@ -68,6 +77,7 @@ HOSTILE_ACTORS = MappingProxyType({
             detectability="conspicuous",
         ),
         level=4, capabilities=("combat",),
+        combat_narration=CombatNarrationSpec((AttackPhrase("거대한 몸", "덮쳤다", "거세게 덮쳤다"),)),
         defaults={"state": "alive", "combat_state": {"hp": 170}},
         profiles={"combat": {
             "combat_mode": 'public',
@@ -89,6 +99,7 @@ HOSTILE_ACTORS = MappingProxyType({
             semantic_role="hostile", distant_visible=True, distant_presence="멀리 수풀 사이를 빠르게 오가고 있다.", unit="마리",
         ),
         level=5, capabilities=("combat",),
+        combat_narration=CombatNarrationSpec((AttackPhrase("날카로운 발톱", "할퀴었다", "거세게 할퀴었다"),)),
         defaults={"state": "alive", "combat_state": {"hp": 58}},
         profiles={"combat": {
             "combat_mode": 'claimed',
@@ -107,6 +118,7 @@ HOSTILE_ACTORS = MappingProxyType({
             semantic_role="hostile", distant_visible=True, distant_presence="멀리 천천히 움직이고 있다.", unit="마리",
         ),
         level=6, capabilities=("combat",),
+        combat_narration=CombatNarrationSpec((AttackPhrase("육중한 몸", "들이받았다", "강하게 들이받았다"),)),
         defaults={"state": "alive", "combat_state": {"hp": 105}},
         profiles={"combat": {
             "combat_mode": 'claimed',
@@ -125,6 +137,7 @@ HOSTILE_ACTORS = MappingProxyType({
             semantic_role="hostile", distant_visible=True, distant_presence="멀리 그늘 사이를 맴돌고 있다.", unit="마리",
         ),
         level=7, capabilities=("combat",),
+        combat_narration=CombatNarrationSpec((AttackPhrase("날카로운 이빨", "물었다", "깊게 물었다"),)),
         defaults={"state": "alive", "combat_state": {"hp": 110}},
         profiles={"combat": {
             "combat_mode": 'claimed',
@@ -144,6 +157,7 @@ HOSTILE_ACTORS = MappingProxyType({
             detectability="conspicuous",
         ),
         level=10, capabilities=("combat",),
+        combat_narration=CombatNarrationSpec((AttackPhrase("거대한 발톱", "할퀴었다", "깊게 할퀴었다"),)),
         defaults={"state": "alive", "combat_state": {"hp": 270}},
         profiles={"combat": {
             "combat_mode": 'public',

@@ -219,11 +219,24 @@ test('TEST-66B-01 아이템 행의 안정 UUID Action과 장비 해제·재장�
     await buttons.nth(index).click();
     await expect.poll(() => a.prompts).toBeGreaterThan(before);
   }
+  async function expectEquipmentMessage(verb) {
+    const log = a.page.locator('#log');
+    const entry = log.locator('.log-entry').filter({
+      has: a.page.locator('.semantic-success', { hasText: verb }),
+    }).last();
+    await expect(entry.locator('.semantic-item')).toContainText(weapon.name);
+    await expect(entry.locator('.semantic-success')).toHaveText(verb);
+    const colors = await entry.locator('span').evaluateAll(spans => spans.map(span => getComputedStyle(span).color));
+    expect(new Set(colors).size).toBe(3);
+    expect(await log.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+  }
   if (!weapon.equipped) await click('wield');
   await click('information');
   expect(a.state.inventory.find(item => item.identity === weapon.identity).equipped).toBe(true);
   await click('unwield');
   expect(a.state.inventory.find(item => item.identity === weapon.identity).equipped).toBe(false);
+  await expectEquipmentMessage('해제했다');
+  await a.page.setViewportSize({ width: 390, height: 844 });
   await a.page.evaluate(() => {
     const send = WebSocket.prototype.send;
     window.itemScopeReplay = { send };
@@ -239,6 +252,7 @@ test('TEST-66B-01 아이템 행의 안정 UUID Action과 장비 해제·재장�
   });
   await click('wield');
   expect(a.state.inventory.find(item => item.identity === weapon.identity).equipped).toBe(true);
+  await expectEquipmentMessage('무장했다');
   await click('unwield');
   await a.command(`${weapon.name} 버려`);
   expect(a.state.inventory.some(item => item.identity === weapon.identity)).toBe(false);

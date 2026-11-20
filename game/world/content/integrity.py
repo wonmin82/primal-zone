@@ -1,8 +1,10 @@
 """정적 월드 정의의 참조와 stable ID를 검사한다. DB를 읽지 않는다."""
 
+from collections.abc import Mapping
 from math import isfinite
 from numbers import Real
 
+from world.attack_phrase_validation import is_attack_verb
 from world.content import (
     ENEMIES,
     ITEMS,
@@ -16,6 +18,7 @@ from world.content.directions import OPPOSITE_DIRECTIONS
 from world.content.economy import SALVAGE_CREDIT_RATE
 from world.content.environment import EXPOSURES, LIGHT_PROFILES, WEATHER_ZONES, WEATHERS
 from world.content.facilities import FACILITIES
+from world.content.final_items import BAREHAND_NARRATION
 from world.content.headquarters import ELEVATOR_ROOM, HQ_LANDINGS, ROOF_ROOMS, ROOF_SIDES
 from world.item_entities.policy import definition_errors
 from world.quests import QUESTS
@@ -36,6 +39,34 @@ def alias_errors(items):
                 issues.append(f"{identity}: 정규화 이름/alias가 {seen[key]}와 충돌합니다: {name}")
             seen[key] = identity
     return issues
+
+
+def _attack_narration_errors(identity, narration):
+    if not isinstance(narration, Mapping) or set(narration) != {"normal"}:
+        return [f"{identity}: 공격 표현에는 normal 후보가 필요합니다."]
+    candidates = narration["normal"]
+    if not isinstance(candidates, tuple) or not candidates:
+        return [f"{identity}: 일반 공격 후보는 비어 있지 않은 tuple이어야 합니다."]
+    seen, issues = set(), []
+    for index, phrase in enumerate(candidates, 1):
+        if (not isinstance(phrase, Mapping) or set(phrase) != {"verb", "strong_verb"}
+                or not all(is_attack_verb(verb) for verb in phrase.values())):
+            issues.append(f"{identity}: 일반 공격 후보 {index}의 동사 형식 오류")
+            continue
+        pair = (phrase["verb"], phrase["strong_verb"])
+        if pair in seen:
+            issues.append(f"{identity}: 일반 공격 후보 {index} 중복")
+        seen.add(pair)
+    return issues
+
+
+def item_attack_narration_errors(identity, definition):
+    properties = definition.get("equipment_properties")
+    if isinstance(properties, Mapping) and properties.get("role") == "weapon":
+        return _attack_narration_errors(identity, definition.get("combat_narration"))
+    if "combat_narration" in definition:
+        return [f"{identity}: 무기만 일반 공격 표현을 선언할 수 있습니다."]
+    return []
 
 
 def recovery_errors(identity, definition, field):
@@ -202,6 +233,7 @@ def door_errors(interactables):
 
 def errors(interactables):
     issues = headquarters_errors() + elevator_errors() + shop_errors() + door_errors(interactables)
+    issues.extend(_attack_narration_errors("맨손", BAREHAND_NARRATION))
     from world.final_content import errors as final_errors
 
     issues.extend(final_errors())
@@ -337,6 +369,7 @@ def errors(interactables):
             issues.append(f"{enemy}: 임무 정의가 없습니다.")
     for key, data in ITEMS.items():
         issues.extend(definition_errors(key, data))
+        issues.extend(item_attack_narration_errors(key, data))
         issues.extend(recovery_errors(key, data, "recovery_bonus"))
         source = data.get("power_source")
         if source and (not isinstance(source.get("type"), str) or not source["type"].strip() or not positive_number(source.get("capacity_seconds"))):

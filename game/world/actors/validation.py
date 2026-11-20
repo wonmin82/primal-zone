@@ -6,13 +6,17 @@ from itertools import combinations
 
 from world.actions.registry import RegistryError, _arguments, _check_pair, validate_argument
 from world.actions.schema import ArgumentDefinition
+from world.attack_phrase_validation import is_attack_verb, is_instrument
 
 from .schema import (
     ActorDefinition,
     ActorPresentation,
     ActorSpawn,
+    AttackPhrase,
     CapabilityDescriptor,
     Classification,
+    CombatNarrationSpec,
+    SpecialAttackPhrase,
 )
 
 
@@ -45,6 +49,31 @@ def _presentation(value):
         "Presentation 문자열 오류")
     require(value.detectability in ("subtle", "normal", "conspicuous")
             and type(value.distant_visible) is bool, "Presentation 가시성 오류")
+
+
+def _combat_narration(actor):
+    spec = actor.combat_narration
+    if spec is None:
+        require("combat" not in actor.capabilities, f"{actor.id}: 전투 Actor의 공격 표현이 필요합니다.")
+        return
+    require(isinstance(spec, CombatNarrationSpec), f"{actor.id}: 공격 표현 자료형 오류")
+    attacks = spec.normal_attacks
+    require(isinstance(attacks, tuple) and bool(attacks),
+            f"{actor.id}: 일반 공격 후보는 비어 있지 않은 tuple이어야 합니다.")
+    for phrase in attacks:
+        require(type(phrase) is AttackPhrase, f"{actor.id}: 일반 공격 후보 자료형 오류")
+        require(is_instrument(phrase.instrument), f"{actor.id}: 공격 수단은 조사 없는 명사구여야 합니다.")
+        require(is_attack_verb(phrase.verb) and is_attack_verb(phrase.strong_verb),
+                f"{actor.id}: 일반 공격 동사 형식 오류")
+    require(len(set(attacks)) == len(attacks), f"{actor.id}: 일반 공격 후보 중복")
+    special = spec.special_attack
+    if special is not None:
+        require(isinstance(special, SpecialAttackPhrase), f"{actor.id}: 특수 공격 후보 자료형 오류")
+        require(isinstance(special.prelude, str) and special.prelude.strip()
+                and is_attack_verb(special.verb) and is_attack_verb(special.strong_verb),
+                f"{actor.id}: 특수 공격 문구 형식 오류")
+    require(spec.telegraph is None or isinstance(spec.telegraph, str) and spec.telegraph.strip(),
+            f"{actor.id}: 특수 공격 예고 문구 형식 오류")
 
 
 def validate_definitions(definitions, capabilities, spawns=(), *, index=None, room_ids=None):
@@ -85,6 +114,7 @@ def validate_definitions(definitions, capabilities, spawns=(), *, index=None, ro
                 "Actor Profile과 초기 상태는 Mapping이어야 합니다.")
         require(len(set(actor.capabilities)) == len(actor.capabilities)
                 and set(actor.capabilities) <= descriptors.keys(), "Capability 중복/미존재 참조")
+        _combat_narration(actor)
         require("duel" not in actor.capabilities or "combat" in actor.capabilities,
                 "대련에는 Combat Capability가 필요합니다.")
         require(not {"actor_id", "spawn_id", "definition_id", "action_provider_id",
