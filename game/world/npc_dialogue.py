@@ -230,7 +230,8 @@ def response(caller, npc, intent):
         if kind == "Pathfinder":
             return "밀림의 탐사로를 살펴 주세요. 〈임무〉와 〈지역〉을 안내하겠습니다."
         topic = intents_for(kind)[1]
-        return (npc.db.dialogue or description(npc)) + f" 〈{topic.keyword}〉을 물어보세요."
+        particle = ft.particle(topic.keyword, "을/를")
+        return (npc.db.dialogue or description(npc)) + f" 〈{topic.keyword}〉{particle} 물어보세요."
     if kind in QUEST_NPCS:
         quest_id, credential_id, _ = QUEST_NPCS[kind]
         from world.content import ITEMS

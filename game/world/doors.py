@@ -284,7 +284,13 @@ def description(target, now=None):
     state = effective_door_state(target.identity, now)
     if state == UNAVAILABLE:
         return "그 방향은 지금 이용할 수 없다."
-    return f"{target.direction}쪽 {target.name}" + {"OPEN": "이 열려 있다.", "CLOSED": "은 닫혀 있다.", "LOCKED": "은 잠겨 있다."}[state]
+    name = target.name
+    pair, status = {
+        "OPEN": ("이/가", "열려 있다."),
+        "CLOSED": ("은/는", "닫혀 있다."),
+        "LOCKED": ("은/는", "잠겨 있다."),
+    }[state]
+    return f"{target.direction}쪽 {name}{ft.particle(name, pair)} {status}"
 
 
 def actions_for(caller, target, now=None):
@@ -416,7 +422,13 @@ def operate_endpoint(caller, endpoint, action, now=None):
         door.state = following
         door.auto_close_at = now + AUTO_CLOSE_SECONDS if following == "OPEN" else None
         door.save(update_fields=["state", "auto_close_at"])
-        message = ft.text(ft.token("object", target.name), {"열어": "을 열었다.", "닫아": "을 닫았다.", "잠궈": "을 잠갔다.", "풀어": "의 잠금을 풀었다."}[action])
+        name = target.name
+        if action == "풀어":
+            suffix = "의 잠금을 풀었다."
+        else:
+            verb = {"열어": "열었다.", "닫아": "닫았다.", "잠궈": "잠갔다."}[action]
+            suffix = f"{ft.particle(name, '을/를')} {verb}"
+        message = ft.text(ft.token("object", name), suffix)
         publish(target.identity, caller, message)
         return True
 
