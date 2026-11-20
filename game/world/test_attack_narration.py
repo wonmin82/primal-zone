@@ -119,17 +119,34 @@ class AttackNarrationTests(TestCase):
                         CombatNarrationSpec((replace(phrase, instrument="날카로운 발톱으로"),)),
                         CombatNarrationSpec((replace(phrase, instrument="날카로운 이빨로"),)),
                         CombatNarrationSpec((replace(phrase, instrument="금속 몸체로"),)),
+                        CombatNarrationSpec((replace(phrase, instrument="쇠이빨로"),)),
+                        CombatNarrationSpec((replace(phrase, instrument="금속몸체로"),)),
+                        CombatNarrationSpec((replace(phrase, instrument="날카로운 꼬리로"),)),
+                        CombatNarrationSpec((replace(phrase, instrument="날카로운 꼬리 로"),)),
+                        CombatNarrationSpec((replace(phrase, instrument="등의 가시로"),)),
                         CombatNarrationSpec((replace(phrase, instrument="이빨!"),)),
                         CombatNarrationSpec((replace(phrase, verb=""),)),
+                        CombatNarrationSpec((replace(phrase, verb="달렸다"),)),
+                        CombatNarrationSpec((replace(phrase, verb="당신을 물었다"),)),
+                        CombatNarrationSpec((replace(phrase, verb="물었다!"),)),
                         CombatNarrationSpec((replace(phrase, verb="쓰러졌다"),)),
                         CombatNarrationSpec((replace(phrase, strong_verb="거세게 공격당했다"),)),
+                        CombatNarrationSpec((replace(phrase, verb="구타당했다"),)),
                         CombatNarrationSpec((replace(phrase, strong_verb=None),))):
             with self.subTest(invalid=invalid), self.assertRaises(ActorDefinitionError):
                 validate_definitions((replace(actor, combat_narration=invalid),), caps)
 
-        validate_definitions((replace(actor, combat_narration=CombatNarrationSpec(
-            (AttackPhrase("고압 회로", "지졌다", "지졌다"), phrase),
-        )),), caps)
+        for valid, expected in (
+            (AttackPhrase("고압 회로", "지졌다", "세게 지졌다"),
+             ("어린청소룡이 고압 회로로 당신을 지졌다.", "어린청소룡이 고압 회로로 당신을 세게 지졌다.")),
+            (AttackPhrase("휴대 화로", "그을렸다", "깊게 그을렸다"),
+             ("어린청소룡이 휴대 화로로 당신을 그을렸다.", "어린청소룡이 휴대 화로로 당신을 깊게 그을렸다.")),
+        ):
+            with self.subTest(valid=valid):
+                validate_definitions((replace(actor, combat_narration=CombatNarrationSpec((valid, phrase))),), caps)
+                self.assert_attack_preview(actor_prefix(actor.name, valid.instrument), (valid.verb, valid.strong_verb),
+                                           expected, damage=6, expected_damage="6 피해를 입었다.",
+                                           prefix_roles=("hostile", "text"), incoming=True)
 
     def test_invalid_item_declarations_are_rejected_by_role_and_shape(self):
         weapon = {"equipment_properties": {"slot": "hands", "role": "weapon"}}
@@ -143,7 +160,8 @@ class AttackNarrationTests(TestCase):
             {"normal": ({**phrase, "extra": "쏘았다"},)}, {**valid, "special": None},
             *({"normal": ({**phrase, "strong_verb": value},)} for value in (
                 1, "", " 쏘았다", "크게  쏘았다", "크게\t쏘았다", "쏘았다!", "쏜다",
-                "총탄을 발사했다", "방아쇠를 당겼다", "쏘았다 적을", "쓰러졌다", "공격당했다",
+                "총탄을 발사했다", "방아쇠를 당겼다", "쏘았다 적을", "쓰러졌다", "공격당했다", "빠르게 달렸다",
+                "거세게 제압당했다", "폭행당했다",
             )),
         ):
             with self.subTest(invalid=invalid):

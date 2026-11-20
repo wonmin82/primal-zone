@@ -84,6 +84,6 @@ def execute(context):
         (equipment.unequip_item if remove else equipment.equip_item)(context.caller, item, expected_slot)
     else:
         raise rules.RuleError("지원하지 않는 장비 행동입니다.")
-    message = ft.text(ft.token("item", label), f"{ft.particle(definition['name'], particle)} {description}",
+    message = ft.text(ft.token("item", label), f"{ft.particle(label, particle)} {description}",
                       ft.token("success", verb), ".")
     return ActionResult(messages=(message,), changed=True)
