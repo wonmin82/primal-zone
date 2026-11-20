@@ -389,14 +389,68 @@ class ExclusiveDuelTests(NativeItemTest):
         self.assertEqual(self.projection(due)["final_result"]["kind"], "victory")
 
     def test_restored_numeric_round_renders_without_losing_pending_tick(self):
-        identity = self.start()
-        self.actor.db.duel_state = {**self.actor.db.duel_state, "enemy_round": 0.0}
-        with patch.object(self.char1, "msg") as output:
-            self.assertTrue(self.step(identity, 100 + COMBAT_INTERVAL))
-        roles = {segment["role"] for call in output.call_args_list if call.args
-                 for segment in getattr(call.args[0], "segments", ())}
-        self.assertTrue({"damage_dealt", "damage_taken"}.issubset(roles))
-        self.assertEqual(self.actor.db.duel_state["enemy_round"], 1.0)
+        for round_index, verbs in ((0.0, {"때렸다.", "세게 때렸다.", "세게 때렸다!"}),
+                                   (1.0, {"후려쳤다.", "힘껏 후려쳤다.", "힘껏 후려쳤다!"})):
+            with self.subTest(round_index=round_index):
+                now = 100 + int(round_index) * 40
+                identity = self.start(now)
+                due_at = now + COMBAT_INTERVAL
+                self.actor.db.duel_state = {**self.actor.db.duel_state, "enemy_round": round_index}
+                self.actor.nattributes.clear()
+                self.actor.attributes.reset_cache()
+                duel.reconcile(self.actor, now=now + 1, restart=True)
+                with patch.object(self.char1, "msg") as output:
+                    self.assertTrue(self.step(identity, due_at))
+                    before = self.atomic_state()
+                    state = deepcopy(dict(self.actor.db.duel_state))
+                    self.assertFalse(self.step(identity, due_at))
+                    self.assertEqual(self.atomic_state(), before)
+                    self.assertEqual(dict(self.actor.db.duel_state), state)
+                segments = {segment["role"]: segment["text"] for call in output.call_args_list if call.args
+                            for segment in getattr(call.args[0], "segments", ())}
+                self.assertTrue({"damage_dealt", "damage_taken"}.issubset(segments))
+                self.assertIn(segments["combat_verb_outgoing"], verbs)
+                self.assertEqual(state["enemy_round"], round_index + 1)
+                self.assertEqual(state["pending"]["due_at"], due_at + COMBAT_INTERVAL)
+                duel.surrender(self.actor, self.char1, identity, now=now + 3)
+                result = self.projection(now + 3)["final_result"]
+                self.assertEqual(result["kind"], "surrender")
+                with self.assertRaisesRegex(rules.RuleError, "대련 재신청"):
+                    self.start(now + 4)
+
+    def test_invalid_restored_round_aborts_before_cost_or_attack_and_cannot_repeat(self):
+        gun = firearm_service.create_firearm("test_pistol", owner_object=self.char1, mode="full_standard")
+        equipment_service.equip_item(self.char1, gun)
+        equipment_service.set_active_weapon(self.char1, gun)
+        for index, (round_index, skill) in enumerate((
+            (1.5, "shooting"), (-1, "heal"), (float("nan"), "shooting"),
+            (float("inf"), "heal"), (True, "shooting"), ("1", "heal"),
+        )):
+            with self.subTest(round_index=round_index, skill=skill):
+                now = 100 + index * 10
+                identity = self.start(now)
+                duel.act(self.actor, self.char1, identity, skill=skill, now=now + 1)
+                self.actor.db.duel_state = {**self.actor.db.duel_state, "enemy_round": round_index, "player_hp": 1}
+                self.actor.attributes.reset_cache()
+                self.assertIsNone(self.projection(now + 1))
+                before = self.atomic_state()
+                due_at = now + COMBAT_INTERVAL
+                rng = Random(1)
+                rng_before = rng.getstate()
+                with patch("world.shared_combat.duel_round") as combat_round:
+                    self.assertFalse(duel.tick(self.actor, identity, due_at, now=due_at, rng=rng))
+                    state = deepcopy(dict(self.actor.db.duel_state))
+                    self.assertFalse(duel.tick(self.actor, identity, due_at, now=due_at, rng=rng))
+                    duel.reconcile(self.actor, now=due_at + 1, restart=True)
+                    combat_round.assert_not_called()
+                self.assertEqual(dict(self.actor.db.duel_state), state)
+                self.assertEqual(state["identity"], identity)
+                self.assertTrue(state["settled"])
+                self.assertEqual(state["final_result"], {"kind": "abort", "reason": "invalid", "finished_at": due_at})
+                self.assertIsNone(self.char1.db.active_duel_actor)
+                self.assertEqual(self.actor.hp, 24)
+                self.assertEqual(self.atomic_state(), before)
+                self.assertEqual(rng.getstate(), rng_before)
 
     def test_incomplete_pending_state_aborts_without_resetting_actor(self):
         identity = self.start()

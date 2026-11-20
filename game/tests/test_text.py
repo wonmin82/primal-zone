@@ -58,6 +58,7 @@ class NarrationSemanticTests(TestCase):
         allowlist = re.search(r"const roles = new Set\(\[([^]]+)\]\)", javascript)
         self.assertIsNotNone(allowlist)
         self.assertEqual(set(re.findall(r'"(\w+)"', allowlist[1])), set(ft.ANSI))
+        self.assertRegex(stylesheet, r"(?:^|\n)body\{font-synthesis:none[;\}]")
         for role, rgb, ansi, bold in (
             ("combat_verb_outgoing", "#EFB66D", "\033[22m\033[33m", False),
             ("damage_dealt", "#FFD098", "\033[1m\033[33m", True),
@@ -71,8 +72,10 @@ class NarrationSemanticTests(TestCase):
             with self.subTest(role=role):
                 rule = re.search(rf"\.semantic-{role}\{{([^}}]+)\}}", stylesheet)
                 self.assertIsNotNone(rule)
-                self.assertIn(f"color:{rgb}", rule[1].split(";"))
-                self.assertEqual("font-weight:700" in rule[1].split(";"), bold)
+                declarations = rule[1].split(";")
+                self.assertIn(f"color:{rgb}", declarations)
+                self.assertEqual("font-weight:700" in declarations, bold)
+                self.assertEqual("font-synthesis:weight" in declarations, bold)
                 output = ft.text(ft.token(role, "핵심"), " 기본색")
                 rendered = parse_ansi(output.ansi())
                 self.assertEqual(rendered, f"{ansi}핵심\033[0m 기본색\033[0m")

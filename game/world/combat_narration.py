@@ -6,7 +6,10 @@ from world.content.final_items import BAREHAND_NARRATION
 
 
 def _candidate(phrases, round_index):
-    # 대련 복구에서 허용하는 숫자 회차를 표시 인덱스로만 변환한다.
+    if not (type(round_index) is int or type(round_index) is float and round_index.is_integer()) or round_index < 1:
+        raise ValueError("공격 문구의 회차는 1 이상의 정수값이어야 합니다.")
+    if not phrases:
+        raise ValueError("공격 문구 후보가 없습니다.")
     return phrases[(int(round_index) - 1) % len(phrases)]
 
 

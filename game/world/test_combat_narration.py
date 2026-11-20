@@ -124,6 +124,32 @@ class CombatNarrationTests(TestCase):
             "개척창으로 능선의우두머리에게 강타를 가했다. 상대의 대련 체력에 12 피해를 입혔다.",
         )
 
+    def test_integral_rounds_keep_normal_attack_rotation_and_segments(self):
+        for round_index, verb in (
+            (1, "때렸다."), (1.0, "때렸다."),
+            (2, "후려쳤다."), (2.0, "후려쳤다."), (3, "때렸다."),
+        ):
+            with self.subTest(round_index=round_index):
+                self.assert_message(
+                    narration.outgoing("갈퀴사냥룡", None, {"action": "attack"}, 3, 60, round_index),
+                    f"맨손으로 갈퀴사냥룡을 {verb} 3 피해를 입혔다.",
+                    [("hostile", "갈퀴사냥룡"), ("combat_verb_outgoing", verb), ("damage_dealt", "3 피해")],
+                )
+                self.assert_message(
+                    narration.outgoing("갈퀴사냥룡", weapon("pioneer_spear"), {"action": "attack"},
+                                       5, 60, round_index),
+                    "개척창으로 갈퀴사냥룡을 찔렀다. 5 피해를 입혔다.",
+                    [("item", "개척창"), ("hostile", "갈퀴사냥룡"), ("combat_verb_outgoing", "찔렀다."),
+                     ("damage_dealt", "5 피해")],
+                )
+
+    def test_invalid_attack_rounds_and_empty_candidates_are_rejected(self):
+        for round_index in (0, 0.0, -1, 1.5, float("nan"), float("inf"), float("-inf"), True, "1"):
+            with self.subTest(round_index=round_index), self.assertRaisesRegex(ValueError, "1 이상의 정수값"):
+                narration.outgoing("갈퀴사냥룡", None, {"action": "attack"}, 3, 60, round_index)
+        with self.assertRaisesRegex(ValueError, "공격 문구 후보가 없습니다"):
+            narration._candidate((), 1)
+
     def test_errors_and_unknown_attack_data_cannot_fall_back(self):
         for warning in (
             "총기에 발사할 탄약이 없다. 재장전하세요.",
