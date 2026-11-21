@@ -86,7 +86,9 @@ def state_fields(viewer, session, visited, exits, doors, sees_doors):
     facts = (viewer.zone, frozenset(visited), tuple(
         exit["name"] for exit in exits if exit["exists"]
     ), tuple(doors) if sees_doors else ())
-    if (entry.facts is not None and facts != entry.facts) or entry.changed():
+    # push_state는 전투 등 지도와 무관한 변경에도 호출된다. 임의 view Lock의
+    # 재확인은 열린 지도의 타이머가 전담하고, 여기서는 지도 관련 상태만 비교한다.
+    if entry.facts is not None and facts != entry.facts:
         entry.invalidate()
     entry.facts = facts
     return {"minimap_revision": entry.revision, "minimap_owner": entry.owner}

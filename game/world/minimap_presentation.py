@@ -2,6 +2,7 @@
 
 from time import time
 
+from world import text as ft
 from world.content import ROOMS, ordered_directions
 from world.map_commands import (
     InvalidMapQuery,
@@ -105,4 +106,4 @@ def web_map(viewer, sheet=None, center=None, now=None, *, view_check=None):
         )
     except Exception as error:
         message = map_error(viewer, error)
-        return _payload(message, summary=str(message))
+        return _payload(ft.text(message, kind="error"), summary=str(message))

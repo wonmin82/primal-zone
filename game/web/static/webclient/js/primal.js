@@ -53,9 +53,11 @@
   const minimapPanel = byId("minimap-panel"), minimapSheet = byId("minimap-sheet");
   const minimapCenter = byId("minimap-center"), minimapCenters = byId("minimap-centers");
   const minimapOutput = byId("minimap-output"), minimapStatus = byId("minimap-status");
+  const minimapContent = byId("minimap-content");
   const minimapDescription = byId("minimap-description");
   let minimapRevision = "", minimapOwner = "", minimapSequence = 0;
   let minimapSelection = {}, minimapPending = null, minimapDisplayed = "", minimapTimer;
+  let minimapPublicSheet = "", minimapScroll = [0, 0];
 
   function setMinimapSheets(names) {
     const first = document.createElement("option");
@@ -66,39 +68,51 @@
       return option;
     });
     minimapSheet.replaceChildren(first, ...options);
-    minimapSheet.value = names.includes(minimapSelection.sheet) ? minimapSelection.sheet : "";
+    const selected = minimapSelection.sheet || (minimapSelection.center && minimapPublicSheet);
+    minimapSheet.value = names.includes(selected) ? selected : "";
   }
-  function clearMinimap({choices = false} = {}) {
+  function clearMinimap() {
     clearTimeout(minimapTimer);
     minimapPending = null;
     minimapDisplayed = "";
-    minimapOutput.replaceChildren(); minimapOutput.hidden = true;
-    minimapOutput.setAttribute("aria-busy", "false");
+    minimapContent.replaceChildren();
+    minimapContent.setAttribute("aria-busy", "false");
     minimapStatus.textContent = ""; minimapDescription.textContent = "";
-    if (choices) {
-      setMinimapSheets([]);
-      minimapCenters.replaceChildren();
-      minimapCenter.value = "";
-    }
+    minimapCenters.replaceChildren();
+  }
+  function clearMinimapChoices() {
+    minimapPublicSheet = "";
+    setMinimapSheets([]);
+  }
+  function clearMinimapSelection() {
+    clearMinimapChoices();
+    minimapSelection = {};
+    minimapCenter.value = "";
+    minimapScroll = [0, 0];
   }
   function resetMinimap() {
     minimapOwner = minimapRevision = "";
-    minimapSelection = {};
-    clearMinimap({choices:true});
+    clearMinimapSelection();
+    clearMinimap();
     minimapPanel.hidden = true; minimapPanel.open = true;
   }
-  function requestMinimap(force = false) {
+  function requestMinimap({force = false, keepScroll = true} = {}) {
     if (!playing || !minimapRevision || !minimapPanel.open || minimapPanel.hidden) return;
-    const key = JSON.stringify([minimapRevision, minimapSelection]);
+    const {sheet, center, centerSheet} = minimapSelection;
+    const scope = centerSheet || sheet;
+    const query = {...(scope ? {sheet:scope} : {}), ...(center ? {center} : {})};
+    const key = JSON.stringify([minimapRevision, query]);
     if (!force && (minimapPending?.key === key || minimapDisplayed === key)) return;
+    if (!keepScroll) minimapScroll = [0, 0];
+    else if (minimapDisplayed) minimapScroll = [minimapOutput.scrollLeft, minimapOutput.scrollTop];
     clearMinimap();
     const id = ++minimapSequence;
-    if (!send("pz_map", [{id, ...minimapSelection}])) {
+    if (!send("pz_map", [{id, ...query}])) {
       minimapStatus.textContent = "연결 후 지도를 다시 확인하세요.";
       return;
     }
     minimapPending = {id, key};
-    minimapOutput.setAttribute("aria-busy", "true");
+    minimapContent.setAttribute("aria-busy", "true");
     minimapStatus.textContent = "지도를 불러오는 중입니다.";
     minimapTimer = setTimeout(() => {
       if (minimapPending?.id !== id) return;
@@ -114,7 +128,7 @@
     if (owner !== minimapOwner) resetMinimap();
     if (revision === minimapRevision) return;
     // 지난 권한으로 받은 텍스트와 선택 후보부터 숨긴다.
-    clearMinimap({choices:true});
+    clearMinimapChoices();
     minimapOwner = owner; minimapRevision = revision;
     minimapPanel.hidden = false;
     requestMinimap();
@@ -127,50 +141,47 @@
     const key = minimapPending.key;
     clearMinimap();
     minimapDisplayed = key;
+    minimapPublicSheet = typeof response.sheet === "string" && response.sheets.includes(response.sheet) ? response.sheet : "";
     setMinimapSheets(response.sheets);
-    if (typeof response.sheet === "string" && response.sheets.includes(response.sheet) && (minimapSelection.sheet || minimapSelection.center)) {
-      minimapSheet.value = response.sheet;
-    }
     minimapCenters.replaceChildren(...response.centers.filter(name => typeof name === "string").map(name => {
       const option = document.createElement("option");
       option.value = name;
       return option;
     }));
     const elements = [];
-    for (const message of response.messages) {
+    const hasCanvas = response.messages.some(message => message?.kind === "map");
+    for (const [index, message] of response.messages.entries()) {
       if (!Array.isArray(message?.segments)) continue;
       const canvas = message.kind === "map";
       const row = document.createElement(canvas ? "div" : "p");
       row.className = canvas ? "minimap-map" : "minimap-message";
-      if (canvas) {
-        row.tabIndex = 0;
-        row.setAttribute("role", "region");
-        row.setAttribute("aria-label", "문자 지도, 방향키로 스크롤");
-        row.setAttribute("aria-describedby", "minimap-description");
-        const glyphs = document.createElement("div");
-        glyphs.setAttribute("aria-hidden", "true");
-        appendSegments(glyphs, message.segments);
-        row.append(glyphs);
-      } else appendSegments(row, message.segments);
+      if (canvas) row.setAttribute("aria-hidden", "true");
+      else if (hasCanvas && index === 0) row.classList.add("minimap-title");
+      if (message.kind === "error") {
+        appendSegments(minimapStatus, message.segments);
+        continue;
+      }
+      appendSegments(row, message.segments);
       elements.push(row);
     }
-    minimapOutput.replaceChildren(...elements);
-    minimapOutput.hidden = !elements.length;
+    minimapContent.replaceChildren(...elements);
     minimapDescription.textContent = typeof response.summary === "string" ? response.summary : "";
-    if (!elements.length) minimapStatus.textContent = "표시할 지도가 없습니다.";
+    if (!elements.length && !minimapStatus.textContent) minimapStatus.textContent = "표시할 지도가 없습니다.";
+    [minimapOutput.scrollLeft, minimapOutput.scrollTop] = minimapScroll;
   }
   minimapPanel.addEventListener("toggle", () => {
     if (minimapPanel.open) requestMinimap();
     else {
       if (minimapOwner && playing) send("pz_map", [{subscribe:false}]);
-      minimapSelection = {};
-      clearMinimap({choices:true});
+      clearMinimapSelection();
+      clearMinimap();
     }
   });
   minimapSheet.addEventListener("change", () => {
     minimapSelection = minimapSheet.value ? {sheet:minimapSheet.value} : {};
-    minimapCenter.value = ""; minimapCenters.replaceChildren();
-    requestMinimap();
+    minimapPublicSheet = "";
+    minimapCenter.value = "";
+    requestMinimap({keepScroll:false});
   });
   minimapCenter.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && (event.isComposing || event.keyCode === 229)) event.preventDefault();
@@ -179,17 +190,21 @@
     event.preventDefault();
     const center = minimapCenter.value.trim();
     if (!center || center.length > 120) return;
-    const sheet = minimapSheet.value || minimapSelection.sheet;
-    minimapSelection = sheet ? {sheet, center} : {center};
-    requestMinimap();
+    const {sheet, centerSheet} = minimapSelection;
+    minimapSelection = {sheet, center, centerSheet:sheet || minimapPublicSheet || centerSheet};
+    minimapCenter.value = "";
+    requestMinimap({keepScroll:false});
   });
   byId("minimap-current").addEventListener("click", () => {
-    if (!minimapSelection.sheet && !minimapSelection.center) return;
+    const returnToCurrent = minimapSelection.sheet || minimapSelection.center;
+    minimapCenter.value = "";
+    if (!returnToCurrent) return;
     minimapSelection = {};
-    minimapSheet.value = ""; minimapCenter.value = ""; minimapCenters.replaceChildren();
-    requestMinimap();
+    minimapPublicSheet = "";
+    minimapSheet.value = "";
+    requestMinimap({keepScroll:false});
   });
-  byId("minimap-refresh").addEventListener("click", () => requestMinimap(true));
+  byId("minimap-refresh").addEventListener("click", () => requestMinimap({force:true}));
 
   let actionSequence = 0;
   function actionButton(label, invocation) {
@@ -228,17 +243,13 @@
     const key = JSON.stringify(exits);
     if (key === exitsKey) return;
     exitsKey = key;
-    const grid = document.createElement("div"), center = document.createElement("span");
-    grid.className = "direction-grid";
+    const center = document.createElement("span");
     center.className = "direction-center";
-
-    grid.append(center);
+    const primary = [center], special = [];
     const positions = new Map([
       ["북", "north"], ["북동", "northeast"], ["동", "east"], ["남동", "southeast"],
       ["남", "south"], ["남서", "southwest"], ["서", "west"], ["북서", "northwest"],
     ]);
-    const other = document.createElement("div");
-    other.className = "other-exits";
     const vertical = exits.filter((exit) => exit.exists && ["위", "아래"].includes(exit.name));
     const up = vertical.some((exit) => exit.name === "위"), down = vertical.some((exit) => exit.name === "아래");
     center.replaceChildren(semantic(vertical.length ? (vertical.every((exit) => exit.can_move) ? "direction" : "warning") : "object", up && down ? "X" : up ? "^" : down ? "v" : "o"));
@@ -250,16 +261,12 @@
       el.setAttribute("aria-label", `${direction} · ${exit.status}`);
       if (position) {
         el.className = "direction-" + position;
-        grid.append(el);
-      } else other.append(el);
+        primary.push(el);
+      } else special.push(el);
     }
-    const children = [grid];
-    if (other.childElementCount) {
-      const label = document.createElement("p");
-      label.textContent = "출구";
-      children.push(label, other);
-    }
-    byId("exits").replaceChildren(...children);
+    byId("exits").replaceChildren(...primary);
+    byId("other-exit-buttons").replaceChildren(...special);
+    byId("other-exits").hidden = !special.length;
   }
   function authBusy(busy) {
     byId("auth-form").querySelectorAll("button").forEach((el) => { el.disabled = busy; });

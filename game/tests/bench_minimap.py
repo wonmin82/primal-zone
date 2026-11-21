@@ -5,6 +5,7 @@ from json import dumps
 from os import environ
 from pathlib import Path
 from statistics import median
+from sys import getsizeof
 from time import perf_counter
 from tracemalloc import get_traced_memory, start, stop
 from unittest.mock import patch
@@ -62,3 +63,48 @@ class WebMapBenchmark(MinimapTests):
             "json_bytes": len(dumps(frame).encode()), "python_peak_bytes": peak,
         }), flush=True)
         return frame
+
+    def test_benchmark_map_revalidation(self):
+        from world import minimap_sessions as sessions
+
+        for size in (10, 100, 1000):
+            self.measure_revalidation(size, sessions)
+
+    def measure_revalidation(self, size, sessions):
+        rooms, zones, index, sheet = MapBenchmark.fixture(size)
+        for rate in (10, 100):
+            visited = zones[:max(1, size * rate // 100)]
+            with ExitStack() as stack:
+                for module in (map_commands, map_projection, minimap_presentation):
+                    stack.enter_context(patch.object(module, "ROOMS", {**ROOMS, **rooms}))
+                stack.enter_context(patch.object(minimap_presentation, "map_context",
+                                                return_value=(index, self.char1.zone, set(visited))))
+                stack.enter_context(patch.object(sessions, "require_session"))
+                entry = getattr(self.session, "primal_minimap", None)
+                next_id = entry.request_id + 1 if entry else 1
+                sessions.state_fields(self.char1, self.session, visited, [], [], True)
+                self.send_map(id=next_id, sheet=sheet.name, center=rooms[visited[0]]["name"])
+                entry = self.session.primal_minimap
+                self.assertTrue(entry.checks)
+                samples = {}
+                for label, callback in (
+                    ("state", lambda: sessions.state_fields(self.char1, self.session, visited, [], [], True)),
+                    ("watch", lambda: sessions._watch(self.session, entry)),
+                ):
+                    timings = []
+                    with CaptureQueriesContext(connection) as queries, patch.object(
+                        sessions, "_public_access", wraps=sessions._public_access,
+                    ) as check, patch.object(minimap_presentation, "project") as project:
+                        for _ in range(20):
+                            begin = perf_counter()
+                            callback()
+                            timings.append((perf_counter() - begin) * 1000)
+                        project.assert_not_called()
+                    samples[label] = {"median_ms": round(median(timings), 3),
+                                      "room_checks": sum(not call.args[0].db_location_id for call in check.call_args_list),
+                                      "exit_checks": sum(bool(call.args[0].db_location_id) for call in check.call_args_list),
+                                      "sql": len(queries)}
+                print(dumps({"rooms": size, "visit_pct": rate,
+                            "watched_objects": len(entry.checks),
+                            "watch_container_bytes": getsizeof(entry.checks)
+                            + sum(map(getsizeof, entry.checks.values())), **samples}), flush=True)

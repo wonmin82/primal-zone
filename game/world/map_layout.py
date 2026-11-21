@@ -13,7 +13,7 @@ VECTORS = {
 }
 _DIRECTION_INDEX = {name: index for index, name in enumerate(VECTORS)}
 _WIDTH, _HEIGHT = 60, 24
-_BOUNDARY_ROLES = {"?": "muted", "+": "npc", "×": "warning", "…": "muted"}
+_BOUNDARY_ROLES = {"?": "muted", "+": "npc", "×": "warning"}
 
 
 class LayoutUnrepresentable(ValueError):
@@ -36,6 +36,7 @@ class Path:
 class Layout:
     rooms: dict[str, tuple[int, int]]
     paths: tuple[Path, ...]
+    exit_directions: frozenset[tuple[str, str]]
 
 
 @dataclass(frozen=True)
@@ -258,10 +259,11 @@ def _find_conflicts(placed, paths):
 def layout(nodes, edges, positions, routes, anchors):
     """공개 노드와 통로만 사용하여 연결 성분별 좌표와 경로를 만든다."""
     nodes = set(nodes)
-    edges = tuple(_logical_edges(edges))
+    edges = set(edges)
+    exit_directions = frozenset((source, direction) for source, direction, _ in edges)
     adjacency = defaultdict(list)
     adjacent = defaultdict(set)
-    for source, direction, target in edges:
+    for source, direction, target in _logical_edges(edges):
         vector = VECTORS[direction]
         via = routes.get((source, direction))
         reverse_direction = OPPOSITE_DIRECTIONS[direction]
@@ -361,7 +363,7 @@ def layout(nodes, edges, positions, routes, anchors):
             for path in paths
         )
         next_x += max(p[0] for p in points) - left + 3
-    return Layout(placed, tuple(all_paths))
+    return Layout(placed, tuple(all_paths), exit_directions)
 
 
 def _crop(lo, hi, center, limit):
@@ -415,6 +417,12 @@ def _stroke(vector, ascii_only):
     return "/" if ascii_only else "╱"
 
 
+def _diagonal_cell(a, b):
+    """한 셀 정사각형 안에서 선분을 식별해 반 셀 교차를 검사한다."""
+    dx, dy = _subtract(b, a)
+    return min(a[0], b[0]), min(a[1], b[1]), dx * dy
+
+
 def _cut_marker(cells, point, vector, crop, ascii_only):
     x, y = point
     if point in cells and cells[point][0] != "direction":
@@ -456,9 +464,16 @@ def render(layout_result, boundaries=(), *, current=None, center=None, ascii_onl
     bounds = sorted(
         boundaries, key=lambda entry: (entry[0], _DIRECTION_INDEX[entry[1]], entry[2])
     )
-    boundary_cells = [(entry, _add(rooms[entry[0]], VECTORS[entry[1]])) for entry in bounds]
+    markers = []
+    for entry in bounds:
+        source, direction, symbol = entry
+        start, vector = rooms[source], VECTORS[direction]
+        stroke = _add(start, vector)
+        blocked_path = symbol == "×" and (source, direction) in layout_result.exit_directions
+        end = stroke if blocked_path else _add(stroke, vector)
+        markers.append((entry, start, stroke, end, vector))
     points = [*rooms.values(), *(p for _, path in scaled_paths for p in path),
-              *(p for _, p in boundary_cells)]
+              *(end for _, _, _, end, _ in markers)]
     focus = rooms.get(center, rooms.get(current, next(iter(rooms.values()))))
     all_axes = tuple(zip(*points))
     raw_bounds = tuple((min(axis), max(axis)) for axis in all_axes)
@@ -479,16 +494,17 @@ def render(layout_result, boundaries=(), *, current=None, center=None, ascii_onl
         return crop[0][0] <= point[0] <= crop[0][1] and crop[1][0] <= point[1] <= crop[1][1]
 
     cells = {}
-    exits = {}
+    diagonals = set()
     cut_cells = []
     visible_rooms = []
     for path, locations in scaled_paths:
-        exits[path.source, path.direction] = True
-        exits[path.target, OPPOSITE_DIRECTIONS[path.direction]] = True
         for a, b in zip(locations, locations[1:]):
             visible, cuts = _visible_segment(a, b, crop)
-            line = _stroke(_direction(a, b), ascii_only)
+            vector = _direction(a, b)
+            line = _stroke(vector, ascii_only)
             cells.update((p, ("direction", line)) for p in visible)
+            if markers and all(vector):
+                diagonals.update(_diagonal_cell(p, q) for p, q in zip(visible, visible[1:]))
             cut_cells.extend((point, vector, path) for point, vector in cuts)
         for point in locations[1:-1]:
             if inside(point):
@@ -499,19 +515,32 @@ def render(layout_result, boundaries=(), *, current=None, center=None, ascii_onl
             cells[point] = ("player", "@") if key == current else ("text", "o")
 
     omitted = []
-    for entry, point in boundary_cells:
-        source, direction, symbol = entry
-        if not inside(point):
+    independent = []
+    for entry, start, stroke, end, vector in markers:
+        if not inside(start):
             continue
-        if point in cells and not (symbol == "×" and (source, direction) in exits):
-            omitted.append(entry)
+        if stroke != end:
+            independent.append((entry, start, stroke, end, vector))
+        elif stroke in cells and cells[stroke][0] == "direction":
+            cells[stroke] = ("warning", "x" if ascii_only else "×")
         else:
-            displayed = "x" if ascii_only and symbol == "×" else symbol
-            cells[point] = (_BOUNDARY_ROLES[symbol], displayed)
+            omitted.append(entry)
 
     for point, vector, path in cut_cells:
         if not _cut_marker(cells, point, vector, output_crop, ascii_only):
             omitted.append((path.source, path.direction, "…"))
+
+    for entry, start, stroke, end, vector in independent:
+        halves = (_diagonal_cell(start, stroke), _diagonal_cell(stroke, end)) if all(vector) else ()
+        if (not inside(end) or stroke in cells or end in cells
+                or any((x, y, -slope) in diagonals for x, y, slope in halves)):
+            omitted.append(entry)
+            continue
+        symbol = entry[2]
+        displayed = "x" if ascii_only and symbol == "×" else symbol
+        cells[stroke] = ("direction", _stroke(vector, ascii_only))
+        cells[end] = (_BOUNDARY_ROLES[symbol], displayed)
+        diagonals.update(halves)
 
     lines = []
     for row in range(y_range[0], y_range[1] + 1):

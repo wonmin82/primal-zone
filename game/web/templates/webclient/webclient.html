@@ -7,8 +7,8 @@
   <meta name="theme-color" content="#101b17">
   <title>원시구역 — 탐사 기록</title>
   <link rel="icon" type="image/x-icon" href="{% static 'website/images/favicon.ico' %}">
-  <link rel="stylesheet" href="{% static 'webclient/css/primal.css' %}?v=npc-dialogue-phase47">
-  <script defer src="{% static 'webclient/js/primal.js' %}?v=npc-dialogue-phase47"></script>
+  <link rel="stylesheet" href="{% static 'webclient/css/primal.css' %}?v=exploration-map-phase2">
+  <script defer src="{% static 'webclient/js/primal.js' %}?v=exploration-map-phase2"></script>
 </head>
 <body data-ws-url="{{ websocket_url|default:'' }}" data-ws-port="{{ websocket_port }}">
   <header class="masthead">
@@ -64,11 +64,19 @@
       </div>
     </section>
     <aside class="right-column">
-      <section class="panel surroundings-panel">
-        <p class="eyebrow">SURROUNDINGS</p><h2>주변 행동</h2>
-        <div id="exits" class="exits" role="group" aria-label="이동 방향"></div>
-        <div class="surroundings-context"><p id="room-hint" class="muted">주변을 확인하고 이동할 방향을 선택하세요.</p><div id="context-actions" class="context-actions"></div></div>
-        <details id="minimap-panel" class="minimap" open hidden>
+      <div class="exploration-panels">
+        <section class="panel surroundings-panel">
+          <div class="surroundings-fixed">
+            <p class="eyebrow">SURROUNDINGS</p><h2>주변 행동</h2>
+            <div id="exits" class="direction-grid" role="group" aria-label="이동 방향"></div>
+          </div>
+          <div class="surroundings-scroll" tabindex="0" role="region" aria-label="특수 출구와 주변 대상">
+            <p id="room-hint" class="muted">주변을 확인하고 이동할 방향을 선택하세요.</p>
+            <div id="other-exits" hidden><p class="muted">특수 출구</p><div id="other-exit-buttons" class="other-exits"></div></div>
+            <div id="context-actions" class="context-actions"></div>
+          </div>
+        </section>
+        <details id="minimap-panel" class="panel minimap" open hidden>
           <summary>탐사 지도</summary>
           <label for="minimap-sheet">지도</label>
           <select id="minimap-sheet"><option value="">현재 위치 지도</option></select>
@@ -84,15 +92,18 @@
             <button type="button" id="minimap-current">현재 위치</button>
             <button type="button" id="minimap-refresh">새로고침</button>
           </div>
-          <p id="minimap-status" role="status" aria-atomic="true"></p>
-          <p id="minimap-description" class="minimap-description" aria-live="polite" aria-atomic="true"></p>
-          <div id="minimap-output" role="region" aria-label="탐사 지도 결과" hidden></div>
+          <div id="minimap-output" class="minimap-viewport" tabindex="0" role="region" aria-label="탐사 지도 결과" aria-describedby="minimap-description">
+            <p id="minimap-status" role="status" aria-atomic="true"></p>
+            <div id="minimap-content"></div>
+          </div>
+          <p id="minimap-description" class="minimap-description"></p>
           <details class="minimap-legend">
             <summary>지도 기호</summary>
             <p>@ 현재 위치 · o 방문 장소 · ? 목적지 미표시 · + 다른 지도 경계 · × 폐쇄·차단 · … 화면 밖 연결</p>
+            <p>경계까지의 선은 출구 방향을 표시합니다.</p>
           </details>
         </details>
-      </section>
+      </div>
       <section class="panel party-panel">
         <p class="eyebrow">일행</p><h2>탐사 일행</h2>
         <p id="party-state">접속 후 일행을 구성할 수 있습니다.</p><p id="party-tactics"></p>

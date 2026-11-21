@@ -106,10 +106,13 @@ class MinimapTests(WorldCommandTest):
         baseline = state_fields(self.char1, self.session, visited, [], [], True)
         first = self.send_map(id=1)
         self.assertIn(self.rooms[visited[0]].key, first["centers"])
-        with patch("world.minimap_presentation.project") as projection:
+        with patch("world.minimap_presentation.project") as projection, patch(
+            "world.minimap_sessions._public_access",
+        ) as access:
             for _ in range(8):
                 self.assertEqual(baseline, state_fields(self.char1, self.session, visited, [], [], True))
             projection.assert_not_called()
+            access.assert_not_called()
         self.rooms[visited[0]].locks.add("view:false()")
         _watch(self.session, self.session.primal_minimap)
         revision = self.send.call_args.kwargs["pz_map_state"][0][0]["revision"]
@@ -117,8 +120,54 @@ class MinimapTests(WorldCommandTest):
         second = self.send_map(id=2)
         self.assertEqual(second["revision"], revision)
         self.assertNotIn(self.rooms[visited[0]].key, second["centers"])
+        self.rooms[visited[0]].locks.add("view:all()")
+        _watch(self.session, self.session.primal_minimap)
+        restored = self.send_map(id=3)
+        self.assertNotEqual(restored["revision"], second["revision"])
+        self.assertIn(self.rooms[visited[0]].key, restored["centers"])
         door_change = state_fields(self.char1, self.session, visited, [], ["동"], True)
-        self.assertNotEqual(door_change["minimap_revision"], revision)
+        self.assertNotEqual(door_change["minimap_revision"], restored["revision"])
+
+    def test_center_names_are_disambiguated_only_in_the_requested_sheet(self):
+        roof = "support_roof_ne"
+        floor = "support_5f_c"
+        self.char1.change(lambda profile: profile.update(visited=[roof, floor]))
+        with patch.dict(ROOMS[roof], name="중앙 복도"), patch.dict(ROOMS[floor], name="중앙 복도"):
+            automatic = self.send_map(id=1)
+            ambiguous = self.send_map(id=2, center="중앙 복도")
+            self.assertIn("여러 곳", ambiguous["summary"])
+            scoped = self.send_map(id=3, sheet=automatic["sheet"], center="중앙 복도")
+        self.assertEqual(scoped["sheet"], automatic["sheet"])
+        self.assertTrue(any(message["kind"] == "map" for message in scoped["messages"]))
+
+    def test_unsubscribe_cancels_permission_watch_and_pending_request(self):
+        from server.conf.primal_inputfuncs import pz_map
+
+        self.send_map(id=1)
+        entry = self.session.primal_minimap
+        self.assertTrue(entry.checks)
+        timer = entry.timer
+        with patch("world.minimap_sessions.REQUEST_INTERVAL", 1):
+            pz_map(self.session, {"id": 2})
+        pending = entry.pending
+        pz_map(self.session, {"subscribe": False})
+        timer.cancel.assert_called()
+        pending.cancel.assert_called()
+        self.assertIsNone(entry.timer)
+        self.assertIsNone(entry.pending)
+        self.assertFalse(entry.checks)
+
+    def test_failed_permission_recheck_invalidates_display_without_error_details(self):
+        first = self.send_map(id=1)
+        entry = self.session.primal_minimap
+        self.assertTrue(entry.checks)
+        with patch("world.minimap_sessions._public_access", side_effect=RuntimeError("서버 내부 정보")):
+            with self.assertLogs("world.minimap_sessions", level="ERROR"):
+                _watch(self.session, entry)
+        signal = self.send.call_args.kwargs["pz_map_state"][0][0]
+        self.assertEqual(set(signal), {"owner", "revision"})
+        self.assertNotEqual(signal["revision"], first["revision"])
+        self.assertFalse(entry.checks)
 
     def test_fast_requests_coalesce_and_deliver_only_latest(self):
         from server.conf.primal_inputfuncs import pz_map
@@ -155,6 +204,7 @@ class MinimapTests(WorldCommandTest):
     def test_error_payload_uses_existing_safe_failures(self):
         with patch("world.map_commands.layout", side_effect=LayoutUnrepresentable("내부 식별자")):
             result = self.send_map(id=1)
+        self.assertEqual(result["messages"][0]["kind"], "error")
         self.assertIn("정확하게 표시할 수 없습니다", result["summary"])
         self.assertNotIn("내부 식별자", result["summary"])
         door = next(exit for exit in self.char1.location.exits if exit.key == "북동")

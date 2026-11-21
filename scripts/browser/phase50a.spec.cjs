@@ -145,7 +145,7 @@ async function watchMinimap(player) {
     let active;
     window.minimapEvidence = {requests: 0, bytes: 0, received: 0, leaks: 0, latest: null};
     window.minimapTimings = [];
-    const output = document.getElementById('minimap-output'), replaceChildren = output.replaceChildren;
+    const output = document.getElementById('minimap-content'), replaceChildren = output.replaceChildren;
     function publish(sample) {
       if (sample.bytes && sample.finished !== undefined) {
         window.minimapTimings.push({
@@ -309,7 +309,8 @@ test('TEST-104-02 본부 층·Connector·중심 이동과 반응형 지도 접�
   await center.fill('본부 옥상');
   await center.press('Enter');
   await expect(a.page.locator('#minimap-output .minimap-message').first()).toContainText('본부 옥상');
-  await expect(canvas).toHaveAttribute('aria-describedby', 'minimap-description');
+  const viewport = a.page.locator('#minimap-output');
+  await expect(viewport).toHaveAttribute('aria-describedby', 'minimap-description');
   await expect(summary).toContainText('공개 연결');
   const current = a.page.getByRole('button', {name: '현재 위치', exact: true});
   await current.focus();
@@ -321,7 +322,7 @@ test('TEST-104-02 본부 층·Connector·중심 이동과 반응형 지도 접�
   for (const width of [1366, 1024, 375]) {
     await a.page.setViewportSize({width, height: 840});
     await expect(canvas).toHaveCSS('white-space', 'pre');
-    await expect(canvas).toHaveCSS('overflow-x', 'auto');
+    await expect(viewport).toHaveCSS('overflow-x', 'auto');
     expect(await a.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     await expect(a.page.locator('#command')).toBeEnabled();
   }
@@ -339,6 +340,137 @@ test('TEST-104-02 본부 층·Connector·중심 이동과 반응형 지도 접�
   await a.command('출구');
   await expect(a.page.locator('#log .sheet').last()).toContainText('출구');
   expect(a.errors).toEqual([]);
+});
+
+test('TEST-104-03 주변 행동과 지도 뷰포트의 위치·크기 및 키보드 초점', async ({ page }) => {
+  // 게임 서버 HTML·정적 파일을 사용하며, 지연·긴 지도·권한 철회 시점만 격리 WebSocket으로 제어한다.
+  let wire;
+  let pageErrors = 0;
+  page.on('pageerror', () => { pageErrors++; });
+  const requests = [];
+  await page.routeWebSocket(url => ['ws:', 'wss:'].includes(url.protocol), ws => {
+    wire = ws;
+    ws.onMessage(data => {
+      const [kind, [request]] = JSON.parse(String(data));
+      if (kind === 'pz_map') requests.push(request);
+    });
+  });
+  await page.goto('/webclient/');
+  await expect(page.locator('#connection-label')).toHaveText('연결됨');
+  const send = (kind, payload) => wire.send(JSON.stringify([kind, [payload], {}]));
+  const direction = name => ({name, exists:true, can_move:true, status:'이동 가능', destination_name:'공개 출구'});
+  const state = (revision, more = false) => send('pz_state', {
+    name:'검증 탐사자', currency:{}, growth:{attributes:[], skills:[]}, minimap_owner:'fixture', minimap_revision:revision,
+    level:1, max_level:10, hp:60, max_hp:60, mental:40, max_mental:40, xp:0, xp_floor:0, xp_next:100,
+    exit_details:(more ? ['북', '동', '계단', '승강기'] : ['북']).map(direction),
+    enemies:more ? [{label:'적', hp:4, max_hp:4, can_attack:true}] : [],
+    corpses:[], ground_loot:more ? [{loot:[{display_label:'전리품'}]}] : [], inventory:[],
+    interactables:more ? Array.from({length:16}, (_, i) => ({
+      role:'npc', label:'주변 인물 ' + i, actions:[{label:'봐', command:'주변 인물 봐'}],
+    })) : [],
+  });
+  const receive = async (revision, count, messages, selected = true) => {
+    await expect.poll(() => requests.length).toBe(count);
+    send('pz_map', {
+      id:requests[count - 1].id, owner:'fixture', revision, messages,
+      sheet:selected ? '본부' : '', sheets:selected ? ['본부', '다른 층'] : [],
+      centers:selected ? ['중앙 복도'] : [], summary:selected ? '현재 위치 중앙 복도' : '',
+    });
+  };
+  const message = (kind, text) => ({kind, segments:[{role:'text', text}]});
+  const small = [message('event', '본부'), message('map', '@─?')];
+  const big = [message('event', '공개 지도 제목 '.repeat(35)),
+    message('map', Array(24).fill('@'.repeat(60)).join('\n'))];
+  const viewport = page.locator('#minimap-output'), canvas = viewport.locator('.minimap-map');
+  const scroll = page.locator('.surroundings-scroll'), mapSheet = page.locator('#minimap-sheet');
+  const center = page.locator('#minimap-center'), command = page.locator('#command');
+  const geometry = () => page.evaluate(() => {
+    const rect = s => document.querySelector(s).getBoundingClientRect();
+    const surrounding = rect('.surroundings-panel'), grid = rect('#exits');
+    const map = rect('#minimap-panel'), viewport = rect('#minimap-output'), party = rect('.party-panel');
+    return {
+      surroundingTop:surrounding.top, surroundingHeight:surrounding.height, gridHeight:grid.height,
+      mapTop:map.top, viewportTop:viewport.top, viewportHeight:viewport.height, partyTop:party.top, scrollY,
+    };
+  });
+  let requestCount = 0;
+  const results = [];
+  for (const [width, zoom] of [[1600, 1], [1024, 1], [375, 1], [375, 1.25]]) {
+    await page.setViewportSize({width, height:840});
+    if (zoom !== 1) await page.addStyleTag({content:'html { zoom:1.25; } body,.minimap-map { font-family:monospace !important; }'});
+    await page.evaluate(() => window.scrollTo(0, 0));
+    const revision = `${width}/${zoom}`;
+    state(revision);
+    await receive(revision, ++requestCount, small);
+    await expect(canvas).toHaveText('@─?');
+    expect(await page.locator('.right-column > :first-child > :first-child').getAttribute('class')).toContain('surroundings-panel');
+    const start = await geometry();
+    expect(start.mapTop).toBeGreaterThan(start.surroundingTop);
+    expect(start.partyTop).toBeGreaterThan(start.mapTop);
+    const measured = {};
+    const stable = async stage => {
+      const current = await geometry();
+      expect(current.scrollY).toBe(start.scrollY);
+      for (const key of ['surroundingTop', 'surroundingHeight', 'gridHeight', 'mapTop', 'viewportTop', 'viewportHeight']) {
+        expect(Math.abs(current[key] - start[key]), stage + ' ' + key).toBeLessThanOrEqual(1);
+      }
+      measured[stage] = current;
+    };
+    await expect(page.locator('#other-exits')).toBeHidden();
+    state(revision, true);
+    await expect(scroll.getByText('주변 인물 15')).toHaveCount(1);
+    await expect(scroll.getByRole('button', {name:/^승강기/})).toBeEnabled();
+    await expect(page.locator('#exits [data-command="승강기"]')).toHaveCount(0);
+    await stable('주변 대상·특수 출구');
+    await scroll.evaluate(el => { el.scrollTop = 90; });
+    expect(await scroll.evaluate(el => el.scrollTop)).toBeGreaterThan(0);
+    await stable('주변 행동 스크롤');
+    await viewport.evaluate(el => el.focus({preventScroll:true}));
+    const pending = revision + '-loading';
+    state(pending);
+    await expect(viewport.getByRole('status')).toHaveText('지도를 불러오는 중입니다.');
+    await expect(canvas).toHaveCount(0);
+    await expect(viewport).toBeFocused();
+    await stable('로딩');
+    await receive(pending, ++requestCount, big);
+    await expect(canvas).toContainText('@@@@@@@@');
+    expect(await viewport.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
+    expect(await viewport.evaluate(el => el.scrollWidth > el.clientWidth)).toBe(width !== 1024);
+    await stable('큰 지도');
+    await viewport.evaluate(el => { el.scrollTop = 40; });
+    const offset = await viewport.evaluate(el => el.scrollTop);
+    await page.locator('#minimap-refresh').evaluate(el => el.click());
+    await receive(pending, ++requestCount, big);
+    await expect(canvas).toContainText('@@@@@@@@');
+    await expect(viewport).toBeFocused();
+    expect(await viewport.evaluate(el => el.scrollTop)).toBe(offset);
+    state(revision + '-connector');
+    await receive(revision + '-connector', ++requestCount, [message('sheet', '승강기\n나가기')], false);
+    await expect(viewport).toContainText('나가기');
+    await expect(viewport).toBeFocused();
+    await stable('Connector');
+    await center.evaluate(el => { el.value = '작성 중'; el.focus({preventScroll:true}); });
+    state(revision + '-revoked');
+    await expect(center).toBeFocused();
+    await expect(center).toHaveValue('작성 중');
+    await expect(mapSheet.locator('option')).toHaveCount(1);
+    await expect(page.locator('#minimap-centers option')).toHaveCount(0);
+    await expect(page.locator('#minimap-description')).toBeEmpty();
+    await expect(viewport).not.toContainText('나가기');
+    await receive(revision + '-revoked', ++requestCount, [message('error', '조회할 수 없는 지도')], false);
+    await expect(viewport.getByRole('status')).toHaveText('조회할 수 없는 지도');
+    await stable('권한 철회·오류');
+    await command.evaluate(el => el.focus({preventScroll:true}));
+    state(revision + '-restored');
+    await receive(revision + '-restored', ++requestCount, small);
+    await expect(canvas).toHaveText('@─?');
+    await expect(command).toBeFocused();
+    await stable('권한 복구');
+    results.push({width, zoom, start, measured});
+  }
+  expect(pageErrors).toBe(0);
+  require('node:fs').writeFileSync(require('node:path').join(process.env.PRIMAL_BROWSER_RESULTS, 'minimap-106-layout.json'),
+    JSON.stringify(results, null, 2));
 });
 
 test('TEST-P2-02-A 개인 메시지는 실제 전달하되 진단에 원문 비수집', async ({ actors }) => {
