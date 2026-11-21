@@ -12,7 +12,7 @@ from world.content import REGIONS, ROOM_REGION, ROOMS
 from world.exit_presentation import exit_entries
 from world.map_commands import map_text
 from world.map_metadata import catalog
-from world.map_projection import project
+from world.map_projection import RuntimeGraphMismatch, project
 from world.text import display_width
 
 from tests.base import WorldCommandTest
@@ -159,20 +159,102 @@ class ExplorationMapTests(WorldCommandTest):
         self.assertEqual(graph.edges, ())
         self.assertNotIn(ROOMS["dock"]["name"], str(graph))
 
-    def test_mismatched_public_exit_fails_without_rendering_or_automatic_list(self):
-        self.char1.change(lambda p: p.update(visited=["support_roof_ne"]))
+    def test_mismatched_public_exit_fails_for_visited_and_unvisited(self):
+        target = "support_roof_ne"
         exit_obj = next(obj for obj in self.char1.location.exits if obj.key == "북동")
-        exit_obj.destination = self.rooms["dock"]
+        for destination in (self.rooms["dock"], None):
+            exit_obj.destination = destination
+            for visited in ([], [target]):
+                with self.subTest(destination=destination, visited=visited):
+                    with self.assertRaises(RuntimeGraphMismatch):
+                        self.graph(visited)
+                    self.char1.change(lambda profile: profile.update(visited=visited))
+                    with self.assertLogs("world.map_projection", level="WARNING") as log:
+                        result = map_text(self.char1, "")
+                    self.assertIn("RuntimeGraphMismatch", str(log.output))
+                    self.assertIn("정확하게 표시할 수 없습니다", result)
+                    self.assertNotIn("support_roof", result)
+                    self.assertNotIn("방문한 장소만 표시됩니다", result)
+
+    def test_hidden_exit_damage_and_absence_preserve_public_output(self):
+        exit_obj = next(obj for obj in self.char1.location.exits if obj.key == "북동")
+        exit_obj.locks.add("view:false()")
+        visited = ["support_roof_ne"]
+        before = self.graph(visited)
+        for destination in (self.rooms["dock"], None):
+            exit_obj.destination = destination
+            with self.assertLogs("world.map_projection", level="WARNING") as log:
+                self.assertEqual(before, self.graph(visited))
+            self.assertIn("RuntimeGraphMismatch", str(log.output))
+        exit_obj.delete()
         with self.assertLogs("world.map_projection", level="WARNING") as log:
-            result = map_text(self.char1, "")
-        self.assertIn("RuntimeGraphMismatch", str(log.output))
-        self.assertIn("정확하게 표시할 수 없습니다", result)
-        self.assertNotIn("support_roof", result)
-        self.assertNotIn("방문한 장소만 표시됩니다", result)
-        exit_obj.destination = None
+            self.assertEqual(before, self.graph(visited))
+        self.assertIn("누락", str(log.output))
+
+    def test_management_tag_and_public_duplicate_integrity(self):
+        from world.bootstrap import EXIT_CATEGORY
+
+        source, target = self.char1.zone, "support_roof_ne"
+        direction = "북동"
+        identity = f"{source}:{direction}"
+        original = next(obj for obj in self.char1.location.exits if obj.key == direction)
+        before = self.graph([target])
+        duplicate = create_object("typeclasses.exits.Exit", key=direction,
+                                  location=self.char1.location, destination=self.rooms[target])
+        duplicate.tags.add(identity, category=EXIT_CATEGORY)
+        with self.assertRaisesRegex(RuntimeGraphMismatch, "중복"):
+            self.graph([target])
+        duplicate.locks.add("view:false()")
         with self.assertLogs("world.map_projection", level="WARNING"):
+            self.assertEqual(before, self.graph([target]))
+        duplicate.delete()
+        original.tags.add("damaged", category=EXIT_CATEGORY)
+        with self.assertRaisesRegex(RuntimeGraphMismatch, "정체성"):
+            self.graph([target])
+        self.assertTrue(any(entry["name"] == direction and entry["exists"]
+                            for entry in exit_entries(self.char1)))
+
+    def test_unobservable_non_exit_with_management_tag_is_diagnostic_only(self):
+        from dataclasses import replace
+
+        from world.bootstrap import EXIT_CATEGORY
+        from world.observation import context_for
+
+        context = context_for(self.char1)
+        context = replace(context, snapshot=replace(context.snapshot, effective_visibility="poor"))
+        before = self.graph([])
+        prop = create_object("typeclasses.objects.Object", key="숨은 물체", location=self.char1.location)
+        prop.locks.add("view:all()")
+        prop.tags.add(f"{self.char1.zone}:북동", category=EXIT_CATEGORY)
+        with patch("world.observation.context_for", return_value=context):
+            with self.assertLogs("world.map_projection", level="WARNING"):
+                self.assertEqual(before, self.graph([]))
+
+    def test_room_lookup_rejects_extra_tags_and_zone_attribute_damage(self):
+        from world.bootstrap import CATEGORY
+        from world.map_projection import load_rooms
+
+        zone = "support_roof_ne"
+        room = self.rooms[zone]
+        self.assertEqual(load_rooms({zone}), {zone: room})
+        room.tags.add("extra_zone_identity", category=CATEGORY)
+        with self.assertLogs("world.map_projection", level="WARNING"):
+            self.assertEqual(load_rooms({zone}), {})
+        room.tags.remove("extra_zone_identity", category=CATEGORY)
+        room.db.zone_id = ("not", "a", "zone")
+        with self.assertLogs("world.map_projection", level="WARNING"):
+            self.assertEqual(load_rooms({zone}), {})
+
+    def test_wrong_origin_does_not_expose_the_missing_direction(self):
+        source = self.char1.zone
+        exit_obj = next(obj for obj in self.char1.location.exits if obj.key == "북동")
+        exit_obj.location = self.rooms["support_roof_ne"]
+        with self.assertLogs("world.map_projection", level="WARNING") as log:
             graph = self.graph([])
+        self.assertIn(f"{source}/북동", str(log.output))
         self.assertFalse(any(direction == "북동" for _, direction, _ in graph.boundaries))
+        with self.assertRaisesRegex(RuntimeGraphMismatch, "정체성"):
+            self.graph(["support_roof_ne"])
 
     def test_query_writes_no_state_and_dispatch_preserves_recovery_and_prompt(self):
         self.char1.change(lambda p: p.update(visited=[self.char1.zone]))

@@ -61,6 +61,7 @@ def _point(value, scope):
 
 def _sheets(regions):
     declarations, defaults, public_names = {}, {}, {}
+    sheet_ids = set()
     for region_id, region in sorted(regions.items()):
         metadata = _fields(region.get("map", {}), region_id, {"sheets"})
         explicit = "sheets" in metadata
@@ -74,8 +75,10 @@ def _sheets(regions):
 
         for sheet_id, value in definitions.items():
             if (not isinstance(sheet_id, str) or not sheet_id.isprintable()
-                    or any(char.isspace() for char in sheet_id) or sheet_id in declarations):
+                    or any(char.isspace() for char in sheet_id)
+                    or not (identity := normalized(sheet_id)) or identity in sheet_ids):
                 raise MapDeclarationInvalid(f"{region_id}: Sheet ID가 잘못되었거나 중복됩니다.")
+            sheet_ids.add(identity)
             definition = _fields(value, sheet_id, {"name", "aliases", "anchor"}, {"name"})
             name = _label(definition["name"], sheet_id)
             aliases = _aliases(definition.get("aliases", ()), sheet_id)

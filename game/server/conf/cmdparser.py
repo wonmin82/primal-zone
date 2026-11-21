@@ -39,26 +39,28 @@ def _actual(text, cmdset, caller, match_index, session):
         if suffix:
             action, args = suffix, text[:-len(suffix)].rstrip()
     candidates = [cmd for cmd in game if action in {name.casefold() for name in (cmd.key, *cmd.aliases)}]
+    postfix = [cmd for cmd in candidates if not args or cmd.input_style in ("target", "chat")]
     bundle = action == "해" and "," in text
     chat = any(cmd.input_style == "chat" for cmd in candidates)
     if not quoted and not bundle and not chat:
+        matches, engine_syntax = _engine_matches(text, cmdset, caller, match_index, session)
+        if engine_syntax:
+            return matches, True  # 접근 거부가 개인 fallback의 이유가 되어서는 안 된다.
         head, *tail = text.split(maxsplit=1)
+        query = tail[0].casefold() if tail else ""
+        # 명시된 접두 옵션만 후치형 문법보다 우선한다. 접근 거절도 문법 선택을 바꾸지 않는다.
         prefix = [cmd for cmd in game if cmd.input_style == "prefix"
-                  and head.casefold() in {name.casefold() for name in (cmd.key, *cmd.aliases)}]
-        if prefix and not (action == "도움" and len(tail) == 1 and tail[0] == "도움"):
+                  and head.casefold() in {name.casefold() for name in (cmd.key, *cmd.aliases)}
+                  and (not postfix or query in getattr(cmd, "prefix_options", ()))]
+        if prefix:
             matches = [(head, tail[0] if tail else "", cmd, len(head), len(head) / len(text), head)
                        for cmd in prefix if cmd.access(caller, "cmd", session=session)]
             if len(matches) > 1 and match_index is not None:
                 matches = matches[match_index - 1:match_index] if match_index > 0 else []
             return matches, True
-    if not quoted and not bundle and not chat:
-        matches, engine_syntax = _engine_matches(text, cmdset, caller, match_index, session)
-        if engine_syntax:
-            return matches, True  # 접근 거부가 개인 fallback의 이유가 되어서는 안 된다.
     if candidates:
         matches = [(action, args, cmd, len(action), len(action) / len(text), action)
-                   for cmd in candidates if (not args or cmd.input_style in ("target", "chat"))
-                   and cmd.access(caller, "cmd", session=session)]
+                   for cmd in postfix if cmd.access(caller, "cmd", session=session)]
         if len(matches) > 1 and match_index is not None:
             matches = matches[match_index - 1:match_index] if match_index > 0 else []
         return matches, True

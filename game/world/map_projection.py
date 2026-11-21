@@ -38,38 +38,44 @@ class PublicMap:
 
 def load_rooms(zones):
     """기존 월드 태그로 범위 안의 Room을 묶어서 해석한다."""
+    from django.db.models import Exists, OuterRef
     from evennia.objects.models import ObjectDB
+    from evennia.typeclasses.attributes import Attribute
 
     from world.bootstrap import CATEGORY
 
     if not zones:
         return {}
-    tags = defaultdict(list)
-    matching = ObjectDB.objects.filter(db_tags__db_category=CATEGORY, db_tags__db_key__in=zones)
-    scoped = ObjectDB.objects.filter(pk__in=matching.values("pk"), db_tags__db_category=CATEGORY)
-    for pk, zone in scoped.values_list("pk", "db_tags__db_key"):
-        tags[pk].append(zone)
-    if not tags:
-        return {}
+    links = ObjectDB.db_tags.through.objects
+    extra = links.filter(objectdb_id=OuterRef("objectdb_id"), tag__db_category=CATEGORY).exclude(
+        tag_id=OuterRef("tag_id"),
+    )
+    matching = links.filter(tag__db_category=CATEGORY, tag__db_key__in=zones).annotate(
+        extra_tag=Exists(extra),
+    )
+    identities, invalid = {}, set()
+    for pk, zone, extra_tag in matching.values_list("objectdb_id", "tag__db_key", "extra_tag"):
+        if extra_tag:
+            invalid.add(zone)
+        else:
+            identities[pk] = zone
+    attrs = Attribute.objects.filter(db_key="zone_id", db_category__isnull=True)
     zone_attrs = defaultdict(list)
     memberships = ObjectDB.db_attributes.through.objects.filter(
-        objectdb_id__in=tags, attribute__db_key="zone_id", attribute__db_category__isnull=True,
-    ).select_related("attribute")
-    for membership in memberships:
-        # Use the stored value rather than attaching request data to Evennia's shared model.
-        zone_attrs[membership.objectdb_id].append(membership.attribute.value)
-    result, invalid = {}, set()
-    for pk, room in ObjectDB.objects.in_bulk(tags).items():
-        identities = tags[pk]
-        if (len(identities) != 1 or zone_attrs[pk] != identities
-                or room.db_typeclass_path != "typeclasses.zone_rooms.ZoneRoom"):
-            invalid.update(identities)
+        Exists(attrs.filter(pk=OuterRef("attribute_id"))), objectdb_id__in=identities,
+    )
+    for pk, value in memberships.values_list("objectdb_id", "attribute__db_value"):
+        # zone_id의 권위 값은 문자열이다. 다른 Attribute 형식은 잘못된 Room으로 판정한다.
+        zone_attrs[pk].append(value if isinstance(value, str) else None)
+    result = {}
+    for pk, room in ObjectDB.objects.in_bulk(identities).items():
+        zone = identities[pk]
+        if zone_attrs[pk] != [zone] or room.db_typeclass_path != "typeclasses.zone_rooms.ZoneRoom":
+            invalid.add(zone)
+        elif zone in result:
+            invalid.add(zone)
         else:
-            zone = identities[0]
-            if zone in result:
-                invalid.add(zone)
-            else:
-                result[zone] = room
+            result[zone] = room
     if invalid:
         logger.warning("RuntimeGraphMismatch: Room 정체성 %s", sorted(invalid))
     return {zone: room for zone, room in result.items() if zone not in invalid}
@@ -106,12 +112,38 @@ def visible_rooms(viewer, zones, current, visited):
             if zone == current or room.access(viewer, "view")}
 
 
+def _exit_mismatch(zone, direction, pk, problem, visible):
+    if visible:
+        raise RuntimeGraphMismatch(f"{problem}: {zone}/{direction} (Exit #{pk})")
+    logger.warning("RuntimeGraphMismatch: %s: %s/%s (Exit #%s)", problem, zone, direction, pk)
+
+
+def _diagnose_missing_exits(missing):
+    """공개 권한의 근거가 없는 누락과 실제 출발지 이탈을 서버에서만 구별한다."""
+    from evennia.objects.models import ObjectDB
+
+    from world.bootstrap import EXIT_CATEGORY
+
+    rows = ObjectDB.objects.filter(db_tags__db_category=EXIT_CATEGORY, db_tags__db_key__in=missing)
+    located = defaultdict(list)
+    for identity, pk, location in rows.values_list("db_tags__db_key", "pk", "db_location_id"):
+        located[identity].append((pk, location))
+    for identity, (zone, direction) in missing.items():
+        if displaced := located.get(identity):
+            logger.warning("RuntimeGraphMismatch: 관리 Exit 출발 위치 불일치 %s/%s: %s",
+                           zone, direction, displaced)
+        else:
+            _exit_mismatch(zone, direction, None, "관리 Exit 누락", False)
+
+
 def project(viewer, catalog, sheet, *, current, visited, now, center=None, near=False):
     from world.doors import current_door_overlays
-    from world.observation import can_perceive, context_for
+    from world.observation import can_perceive, can_view_in_room, context_for
 
     candidates = ({current} if near or sheet is None else set(sheet.rooms)) & (visited | {current})
-    origins = visible_rooms(viewer, candidates, current, visited)
+    candidate_rooms = load_rooms(candidates)
+    origins = {zone: room for zone, room in candidate_rooms.items()
+               if zone == current or room.access(viewer, "view")}
     if current in candidates and (current not in origins or origins[current].pk != viewer.location.pk):
         raise RuntimeGraphMismatch(f"현재 Room 정체성 {current}")
     if not origins or (center is not None and center not in origins):
@@ -120,61 +152,73 @@ def project(viewer, catalog, sheet, *, current, visited, now, center=None, near=
     grouped = load_exits(origins, viewer.location.pk)
     context = context_for(viewer, observed_at=now) if current in origins else None
 
-    public_exits, bounds, notices = {}, [], []
+    public_exits, managed_exits, bounds, notices = {}, [], [], []
+    missing = {}
     for zone, room in sorted(origins.items()):
         here = zone == current
         declared = ROOMS[zone]["exits"]
         blocked = ROOMS[zone].get("blocked_exits", {})
-        exits, observed_static = defaultdict(list), set()
+        managed_counts, exits = defaultdict(int), defaultdict(list)
         for obj, identities in grouped[room.pk]:
-            static = bool(identities)
-            if static:
-                observed_static.add(obj.key)
-                if not obj.db_destination_id:
-                    logger.warning("RuntimeGraphMismatch: 목적지 누락 %s/%s #%s", zone, obj.key, obj.pk)
-                    continue
-            visible = can_perceive(obj, context) if here else obj.access(viewer, "view")
-            if not visible:
+            if not identities:
+                if here and obj.db_destination_id and can_perceive(obj, context):
+                    notices.append((obj.key, "지도에 배치되지 않은 출구"))
                 continue
-            if static:
-                if (identities != [f"{zone}:{obj.key}"]
-                        or obj.db_typeclass_path != "typeclasses.exits.Exit"
-                        or obj.key not in declared):
-                    raise RuntimeGraphMismatch(f"관리 Exit 정체성 {zone}/{obj.key} #{obj.pk}")
-                exits[obj.key].append(obj)
-            elif here and obj.db_destination_id:
-                notices.append((obj.key, "지도에 배치되지 않은 출구"))
+            direction = obj.key
+            managed_counts[direction] += 1
+            target = declared.get(direction)
+            invalid_identity = (identities != [f"{zone}:{direction}"] or target is None
+                                or obj.db_typeclass_path != "typeclasses.exits.Exit")
+            if not here:
+                visible = (obj.db_destination_id or not invalid_identity) and obj.access(viewer, "view")
+            elif not invalid_identity and not obj.db_destination_id:
+                # 목적지가 손상된 정상 정체성의 Exit도 방향의 view 정책을 적용한다.
+                visible = can_view_in_room(obj, context)
+            else:
+                visible = can_perceive(obj, context)
+            problem = None
+            if invalid_identity:
+                problem = "관리 Exit 정체성 불일치"
+            elif not obj.db_destination_id:
+                problem = "관리 Exit 목적지 없음"
+            if problem:
+                _exit_mismatch(zone, direction, obj.pk, problem, visible)
+                continue
+            managed_exits.append((zone, direction, obj, target, visible))
+            if visible:
+                exits[direction].append(obj)
         for direction in ordered_directions(dict.fromkeys([*declared, *blocked, *sorted(exits)])):
             objects = exits[direction]
+            if managed_counts.get(direction, 0) > 1:
+                _exit_mismatch(zone, direction, None, "관리 Exit 중복", len(objects) > 1)
             if direction in blocked:
-                if objects:
-                    raise RuntimeGraphMismatch(f"폐쇄 방향에 실제 출구 {zone}/{direction}")
                 if sheet is not None and direction in PLANAR:
                     bounds.append((zone, direction, "×"))
                 else:
                     name = direction if here else f"{ROOMS[zone]['name']} {direction}"
                     notices.append((name, "×"))
-            elif len(objects) > 1:
-                raise RuntimeGraphMismatch(f"공개 Exit 중복 {zone}/{direction}")
             elif objects:
                 public_exits[zone, direction] = (objects[0], declared[direction])
-            elif direction not in observed_static:
-                logger.warning("RuntimeGraphMismatch: Exit 누락 %s/%s", zone, direction)
+            elif direction not in managed_counts:
+                missing[f"{zone}:{direction}"] = (zone, direction)
+
+    if missing:
+        _diagnose_missing_exits(missing)
+    targets = {target for _, _, _, target, _ in managed_exits}
+    actual_rooms = candidate_rooms | load_rooms(targets - candidates)
+    for zone, direction, obj, target, visible in managed_exits:
+        destination = actual_rooms.get(target)
+        if destination is None or obj.db_destination_id != destination.pk:
+            _exit_mismatch(zone, direction, obj.pk, f"관리 Exit 목적지 불일치 → {target}", visible)
 
     current_exits = {direction: obj for (zone, direction), (obj, _) in public_exits.items() if zone == current}
     public_doors = current_door_overlays(context, current, current_exits) if context else set()
-    targets = {target for _, target in public_exits.values()}
-    actual_rooms = origins | load_rooms(targets - origins.keys())
-    disclosed = origins.keys() | {zone for zone in targets & visited if zone in actual_rooms
-                                  and actual_rooms[zone].access(viewer, "view")}
+    public_targets = {target for _, target in public_exits.values()}
+    disclosed = origins.keys() | {zone for zone in (public_targets & visited) - candidates
+                                  if zone in actual_rooms and actual_rooms[zone].access(viewer, "view")}
     nodes, edges = set(origins), set()
     for (zone, direction), (obj, target) in public_exits.items():
-        destination = actual_rooms.get(target)
         known = target in disclosed
-        if destination is None or obj.db_destination_id != destination.pk:
-            logger.warning("RuntimeGraphMismatch: %s/%s → %s (Exit #%s)", zone, direction, target, obj.pk)
-            if known:
-                raise RuntimeGraphMismatch(f"{zone}/{direction} → {target}")
         closed = obj.pk in public_doors
         directional = sheet is not None and direction in PLANAR
         if not known:

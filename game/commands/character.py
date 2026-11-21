@@ -7,6 +7,7 @@ from world import presentation as view
 from world import rules
 from world import text as ft
 from world.content import REGIONS, ROOMS
+from world.map_metadata import RESERVED_ARGUMENTS
 
 from commands.base import GameCommand
 from commands.help_contracts import command_sections
@@ -125,6 +126,7 @@ class Map(GameCommand):
     usage = "지도 · 지도 근처 · 지도 전체 · 지도 목록 · 지도 <지도명> · 지도 중심 <방문 장소> · 지도 ascii · 지도 도움말"
     summary = "공개 가능한 방문 장소의 연결을 문자 지도로 확인합니다."
     input_style = "prefix"
+    prefix_options = RESERVED_ARGUMENTS - {"도움"}
     key = "지도"
     aliases = ["지"]
 

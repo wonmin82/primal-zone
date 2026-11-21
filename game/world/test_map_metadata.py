@@ -114,6 +114,29 @@ class MapMetadataTests(TestCase):
         metadata = build_catalog(rooms, regions, association)
         self.assertEqual(metadata.room_aliases, {"b": ("동쪽 창고",), "c": ("남쪽 창고",)})
 
+    def test_sheet_ids_reject_empty_whitespace_control_and_normalized_collisions(self):
+        for sheet_id in ("", " ", "west wing", "west\t", "west\x00", "_"):
+            with self.subTest(sheet_id=sheet_id), self.assertRaises(MapDeclarationInvalid):
+                rooms, regions, association = sample()
+                regions["sample"]["map"] = {"sheets": {sheet_id: {"name": "폐허 지도"}}}
+                build_catalog(rooms, regions, association)
+
+        for duplicate in ("west_wing", "West-Wing"):
+            with self.subTest(duplicate=duplicate), self.assertRaises(MapDeclarationInvalid):
+                rooms, regions, association = sample()
+                regions["sample"]["map"] = {"sheets": {"west_wing": {"name": "폐허 지도"}}}
+                regions["other"] = {"name": "다른 구역", "entry": "d", "rooms": ("d",),
+                                    "map": {"sheets": {duplicate: {"name": "다른 지도"}}}}
+                rooms["d"] = {"name": "다른 장소", "exits": {}}
+                association["d"] = "other"
+                build_catalog(rooms, regions, association)
+
+        rooms, regions, association = sample()
+        self.assertEqual(build_catalog(rooms, regions, association).sheets["sample"].id, "sample")
+        regions["sample"]["map"] = {"sheets": {"west_wing": {"name": "폐허 지도"}}}
+        self.assertEqual(build_catalog(rooms, regions, association).room_sheet,
+                         dict.fromkeys(rooms, "west_wing"))
+
     def test_position_and_route_hint_types_references_ownership_and_cycles(self):
         rooms, regions, association = sample()
         rooms["b"]["map"] = {"layout": {"position": {"relative_to": "a", "offset": [6, 2]}}}
