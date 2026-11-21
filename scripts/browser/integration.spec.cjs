@@ -71,6 +71,13 @@ test('TEST-E2E-02 실제 NPC 임무·수리·보고·출입증 재발급', async
   await command(b, '윤대장에게 재발급 말');
   expect(snapshot().items).toEqual(reissued.items);
   await travel(b, 'jungle_edge');
+  const minimap = b.page.locator('#minimap-output');
+  await expect(minimap).toContainText('깊은 밀림');
+  const map = minimap.locator('.minimap-map');
+  await expect(map).toContainText('@');
+  await expect(map).toContainText('+');
+  await expect(map).toContainText('?');
+  await expect(b.page.locator('#minimap-description')).toContainText('밀림 입구');
   await command(b, '선발대 길잡이에게 임무 말');
   await command(b, '선발대 길잡이에게 수락 말');
   expect(snapshot().players[b.name].profile.quests.deep_jungle.started).toBe(true);
@@ -379,6 +386,11 @@ test('TEST-E2E-12 정상 Portal/Server 재시작·같은 DB·재인증', async (
     for (const field of ['leader', 'members', 'tactics', 'leader_offline_since']) expect(stopped.parties[id][field]).toEqual(before.parties[id][field]);
   }
   const again = await actors.create(0), member = await actors.create(1);
+  for (const player of [again, member]) {
+    await expect(player.page.locator('#minimap-output .minimap-map')).toContainText('@');
+    await expect(player.page.locator('#minimap-description')).toContainText(player.state.room);
+    await expect(player.page.locator('#minimap-sheet')).toHaveValue('');
+  }
   await command(again, '영속조회', '체력');
   expect(again.state.party.id).toBe(member.state.party.id);
   expect(snapshot().parties[again.state.party.id].tactics).toEqual(before.parties[again.state.party.id].tactics);

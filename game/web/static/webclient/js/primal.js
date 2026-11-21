@@ -4,33 +4,35 @@
   const log = byId("log"), dialog = byId("auth-dialog"), input = byId("command");
   let socket, playing = false, history = [], historyIndex = 0, authTimer, growthKey = "", exitsKey = "";
   let latestPrompt = [];
+  const semanticRoles = new Set([
+    "text", "muted", "title", "hostile", "npc", "player", "object", "remains", "item", "command",
+    "direction", "reward", "warning", "success", "error", "critical", "dialogue_topic", "dialogue_action",
+    "combat_verb_outgoing", "damage_dealt", "combat_verb_incoming", "damage_taken",
+    "hp_recovered", "mental_recovered", "status_buff", "status_debuff",
+  ]);
+  function appendSegments(entry, segments, allowDialogue = false) {
+    for (const part of segments) {
+      if (!part || typeof part.text !== "string") continue;
+      const selectable = allowDialogue && ["dialogue_topic", "dialogue_action"].includes(part.role) &&
+        typeof part.dialogue_selection === "string" && part.dialogue_selection.length <= 128;
+      const span = document.createElement(selectable ? "button" : "span");
+      if (selectable) {
+        span.type = "button";
+        span.dataset.dialogueSelection = part.dialogue_selection;
+        span.setAttribute("aria-label", (part.role === "dialogue_action" ? "NPC 행동 실행: " : "NPC 화제 질문: ") + part.text);
+      }
+      span.textContent = part.text;
+      if (semanticRoles.has(part.role)) span.className = "semantic-" + part.role;
+      entry.append(span);
+    }
+  }
   function append(text, kind = "", segments = null) {
     const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 70;
     const entry = document.createElement("article");
     entry.className = "log-entry " + kind;
     if (kind === "prompt") entry.dataset.awaitingInput = "true";
-    if (segments) {
-      const roles = new Set([
-        "text", "muted", "title", "hostile", "npc", "player", "object", "remains", "item", "command",
-        "direction", "reward", "warning", "success", "error", "critical", "dialogue_topic", "dialogue_action",
-        "combat_verb_outgoing", "damage_dealt", "combat_verb_incoming", "damage_taken",
-        "hp_recovered", "mental_recovered", "status_buff", "status_debuff",
-      ]);
-      for (const part of segments) {
-        if (!part || typeof part.text !== "string") continue;
-        const selectable = ["dialogue_topic", "dialogue_action"].includes(part.role) &&
-          typeof part.dialogue_selection === "string" && part.dialogue_selection.length <= 128;
-        const span = document.createElement(selectable ? "button" : "span");
-        if (selectable) {
-          span.type = "button";
-          span.dataset.dialogueSelection = part.dialogue_selection;
-          span.setAttribute("aria-label", (part.role === "dialogue_action" ? "NPC 행동 실행: " : "NPC 화제 질문: ") + part.text);
-        }
-        span.textContent = part.text;
-        if (roles.has(part.role)) span.className = "semantic-" + part.role;
-        entry.append(span);
-      }
-    } else entry.textContent = text;
+    if (segments) appendSegments(entry, segments, true);
+    else entry.textContent = text;
     log.append(entry);
     while (log.children.length > 400) log.firstElementChild.remove();
     if (nearBottom) log.scrollTop = log.scrollHeight;
@@ -48,6 +50,146 @@
     socket.send(JSON.stringify([name, args, {}]));
     return true;
   }
+  const minimapPanel = byId("minimap-panel"), minimapSheet = byId("minimap-sheet");
+  const minimapCenter = byId("minimap-center"), minimapCenters = byId("minimap-centers");
+  const minimapOutput = byId("minimap-output"), minimapStatus = byId("minimap-status");
+  const minimapDescription = byId("minimap-description");
+  let minimapRevision = "", minimapOwner = "", minimapSequence = 0;
+  let minimapSelection = {}, minimapPending = null, minimapDisplayed = "", minimapTimer;
+
+  function setMinimapSheets(names) {
+    const first = document.createElement("option");
+    first.value = ""; first.textContent = "현재 위치 지도";
+    const options = names.filter(name => typeof name === "string" && name).map(name => {
+      const option = document.createElement("option");
+      option.value = name; option.textContent = name;
+      return option;
+    });
+    minimapSheet.replaceChildren(first, ...options);
+    minimapSheet.value = names.includes(minimapSelection.sheet) ? minimapSelection.sheet : "";
+  }
+  function clearMinimap({choices = false} = {}) {
+    clearTimeout(minimapTimer);
+    minimapPending = null;
+    minimapDisplayed = "";
+    minimapOutput.replaceChildren(); minimapOutput.hidden = true;
+    minimapOutput.setAttribute("aria-busy", "false");
+    minimapStatus.textContent = ""; minimapDescription.textContent = "";
+    if (choices) {
+      setMinimapSheets([]);
+      minimapCenters.replaceChildren();
+      minimapCenter.value = "";
+    }
+  }
+  function resetMinimap() {
+    minimapOwner = minimapRevision = "";
+    minimapSelection = {};
+    clearMinimap({choices:true});
+    minimapPanel.hidden = true; minimapPanel.open = true;
+  }
+  function requestMinimap(force = false) {
+    if (!playing || !minimapRevision || !minimapPanel.open || minimapPanel.hidden) return;
+    const key = JSON.stringify([minimapRevision, minimapSelection]);
+    if (!force && (minimapPending?.key === key || minimapDisplayed === key)) return;
+    clearMinimap();
+    const id = ++minimapSequence;
+    if (!send("pz_map", [{id, ...minimapSelection}])) {
+      minimapStatus.textContent = "연결 후 지도를 다시 확인하세요.";
+      return;
+    }
+    minimapPending = {id, key};
+    minimapOutput.setAttribute("aria-busy", "true");
+    minimapStatus.textContent = "지도를 불러오는 중입니다.";
+    minimapTimer = setTimeout(() => {
+      if (minimapPending?.id !== id) return;
+      clearMinimap();
+      minimapStatus.textContent = "지도 응답이 지연되었습니다. 새로고침하세요.";
+    }, 10000);
+  }
+  function syncMinimap(revision, owner) {
+    if (typeof revision !== "string" || !revision || typeof owner !== "string" || !owner) {
+      resetMinimap();
+      return;
+    }
+    if (owner !== minimapOwner) resetMinimap();
+    if (revision === minimapRevision) return;
+    // 지난 권한으로 받은 텍스트와 선택 후보부터 숨긴다.
+    clearMinimap({choices:true});
+    minimapOwner = owner; minimapRevision = revision;
+    minimapPanel.hidden = false;
+    requestMinimap();
+  }
+  function renderMinimap(response) {
+    if (!playing || minimapPanel.hidden || !minimapPanel.open ||
+        !minimapPending || response?.id !== minimapPending.id || response.revision !== minimapRevision ||
+        response.owner !== minimapOwner) return;
+    if (!Array.isArray(response.messages) || !Array.isArray(response.sheets) || !Array.isArray(response.centers)) return;
+    const key = minimapPending.key;
+    clearMinimap();
+    minimapDisplayed = key;
+    setMinimapSheets(response.sheets);
+    if (typeof response.sheet === "string" && response.sheets.includes(response.sheet) && (minimapSelection.sheet || minimapSelection.center)) {
+      minimapSheet.value = response.sheet;
+    }
+    minimapCenters.replaceChildren(...response.centers.filter(name => typeof name === "string").map(name => {
+      const option = document.createElement("option");
+      option.value = name;
+      return option;
+    }));
+    const elements = [];
+    for (const message of response.messages) {
+      if (!Array.isArray(message?.segments)) continue;
+      const canvas = message.kind === "map";
+      const row = document.createElement(canvas ? "div" : "p");
+      row.className = canvas ? "minimap-map" : "minimap-message";
+      if (canvas) {
+        row.tabIndex = 0;
+        row.setAttribute("role", "region");
+        row.setAttribute("aria-label", "문자 지도, 방향키로 스크롤");
+        row.setAttribute("aria-describedby", "minimap-description");
+        const glyphs = document.createElement("div");
+        glyphs.setAttribute("aria-hidden", "true");
+        appendSegments(glyphs, message.segments);
+        row.append(glyphs);
+      } else appendSegments(row, message.segments);
+      elements.push(row);
+    }
+    minimapOutput.replaceChildren(...elements);
+    minimapOutput.hidden = !elements.length;
+    minimapDescription.textContent = typeof response.summary === "string" ? response.summary : "";
+    if (!elements.length) minimapStatus.textContent = "표시할 지도가 없습니다.";
+  }
+  minimapPanel.addEventListener("toggle", () => {
+    if (minimapPanel.open) requestMinimap();
+    else {
+      if (minimapOwner && playing) send("pz_map", [{subscribe:false}]);
+      minimapSelection = {};
+      clearMinimap({choices:true});
+    }
+  });
+  minimapSheet.addEventListener("change", () => {
+    minimapSelection = minimapSheet.value ? {sheet:minimapSheet.value} : {};
+    minimapCenter.value = ""; minimapCenters.replaceChildren();
+    requestMinimap();
+  });
+  minimapCenter.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && (event.isComposing || event.keyCode === 229)) event.preventDefault();
+  });
+  byId("minimap-center-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const center = minimapCenter.value.trim();
+    if (!center || center.length > 120) return;
+    minimapSelection = {...minimapSelection, center};
+    requestMinimap();
+  });
+  byId("minimap-current").addEventListener("click", () => {
+    if (!minimapSelection.sheet && !minimapSelection.center) return;
+    minimapSelection = {};
+    minimapSheet.value = ""; minimapCenter.value = ""; minimapCenters.replaceChildren();
+    requestMinimap();
+  });
+  byId("minimap-refresh").addEventListener("click", () => requestMinimap(true));
+
   let actionSequence = 0;
   function actionButton(label, invocation) {
     const el = document.createElement("button");
@@ -215,6 +357,7 @@
   function render(state) {
     if (Array.isArray(state.resource_prompt?.segments)) latestPrompt = state.resource_prompt.segments;
     playing = true;
+    syncMinimap(state.minimap_revision, state.minimap_owner);
     authBusy(false);
     if (dialog.open) dialog.close();
     input.disabled = false;
@@ -369,14 +512,18 @@
     byId("reconnect").hidden = true;
     const configured = document.body.dataset.wsUrl;
     const url = configured || ((location.protocol === "https:" ? "wss://" : "ws://") + location.hostname + ":" + document.body.dataset.wsPort);
-    socket = new WebSocket(url, "v1.evennia.com");
-    socket.addEventListener("open", () => {
+    const connection = new WebSocket(url, "v1.evennia.com");
+    socket = connection;
+    resetMinimap();
+    connection.addEventListener("open", () => {
+      if (connection !== socket) return;
       byId("connection-label").textContent = "연결됨";
       byId("connection-dot").classList.add("connected");
       byId("auth-error").textContent = "";
       if (!playing && !dialog.open) dialog.showModal();
     });
-    socket.addEventListener("message", (event) => {
+    connection.addEventListener("message", (event) => {
+      if (connection !== socket || connection.readyState !== WebSocket.OPEN) return;
       let frame;
       try { frame = JSON.parse(event.data); } catch { return; }
       if (!Array.isArray(frame)) return;
@@ -389,16 +536,26 @@
         if (message.kind === "prompt") latestPrompt = message.segments;
         append("", ["sheet", "event", "error", "chat", "prompt", "map"].includes(message.kind) ? message.kind : "", message.segments);
       } else if (kind === "pz_state" && args?.[0]) render(args[0]);
+      else if (kind === "pz_map") renderMinimap(args?.[0]);
+      else if (kind === "pz_map_state" && minimapOwner && args?.[0]?.owner === minimapOwner) {
+        syncMinimap(args[0].revision, minimapOwner);
+      }
+      else if (kind === "pz_map_reset") resetMinimap();
       else if (kind === "pz_action_result" && args?.[0]?.action) {
         byId("context-actions").append(actionButton("확정", args[0].action));
       }
       else if (kind === "pz_auth") {
         authBusy(false);
         byId("auth-error").textContent = args?.[0]?.ok ? "" : (args?.[0]?.message || "접속에 실패했습니다.");
-        if (args?.[0]?.ok) byId("password").value = "";
+        if (args?.[0]?.ok) {
+          resetMinimap();
+          byId("password").value = "";
+        }
       }
     });
-    socket.addEventListener("close", () => {
+    connection.addEventListener("close", () => {
+      if (connection !== socket) return;
+      resetMinimap();
       playing = false; latestPrompt = []; authBusy(false);
       input.disabled = true; byId("send-command").disabled = true;
       byId("connection-label").textContent = "연결 끊김";
@@ -406,7 +563,9 @@
       byId("reconnect").hidden = false; byId("logout").hidden = true;
       append("연결이 종료되었습니다. 재연결 후 같은 계정으로 접속하면 저장된 탐사를 이어갑니다.", "event");
     });
-    socket.addEventListener("error", () => { byId("auth-error").textContent = "서버에 연결할 수 없습니다. 서버 실행 상태를 확인하세요."; });
+    connection.addEventListener("error", () => {
+      if (connection === socket) byId("auth-error").textContent = "서버에 연결할 수 없습니다. 서버 실행 상태를 확인하세요.";
+    });
   }
   document.addEventListener("click", (event) => {
     const action = event.target.closest("[data-action-invocation]");

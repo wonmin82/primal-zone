@@ -68,6 +68,30 @@
         <p class="eyebrow">SURROUNDINGS</p><h2>주변 행동</h2>
         <div id="exits" class="exits" role="group" aria-label="이동 방향"></div>
         <div class="surroundings-context"><p id="room-hint" class="muted">주변을 확인하고 이동할 방향을 선택하세요.</p><div id="context-actions" class="context-actions"></div></div>
+        <details id="minimap-panel" class="minimap" open hidden>
+          <summary>탐사 지도</summary>
+          <label for="minimap-sheet">지도</label>
+          <select id="minimap-sheet"><option value="">현재 위치 지도</option></select>
+          <form id="minimap-center-form">
+            <label for="minimap-center">중심 방문 장소 또는 별칭</label>
+            <div class="minimap-center-row">
+              <input id="minimap-center" list="minimap-centers" maxlength="120" autocomplete="off" required>
+              <datalist id="minimap-centers"></datalist>
+              <button id="minimap-center-submit" type="submit">중심 이동</button>
+            </div>
+          </form>
+          <div class="minimap-actions">
+            <button type="button" id="minimap-current">현재 위치</button>
+            <button type="button" id="minimap-refresh">새로고침</button>
+          </div>
+          <p id="minimap-status" role="status" aria-atomic="true"></p>
+          <p id="minimap-description" class="minimap-description" aria-live="polite" aria-atomic="true"></p>
+          <div id="minimap-output" role="region" aria-label="탐사 지도 결과" hidden></div>
+          <details class="minimap-legend">
+            <summary>지도 기호</summary>
+            <p>@ 현재 위치 · o 방문 장소 · ? 목적지 미표시 · + 다른 지도 경계 · × 폐쇄·차단 · … 화면 밖 연결</p>
+          </details>
+        </details>
       </section>
       <section class="panel party-panel">
         <p class="eyebrow">일행</p><h2>탐사 일행</h2>

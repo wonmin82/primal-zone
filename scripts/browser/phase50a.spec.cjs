@@ -137,6 +137,210 @@ test('TEST-103-01 문자 지도 웹 로그와 좁은 화면', async ({ actors })
   }
 });
 
+async function watchMinimap(player) {
+  await player.page.evaluate(() => {
+    const original = WebSocket.prototype.send;
+    const observed = new WeakSet();
+    const samples = new Map();
+    let active;
+    window.minimapEvidence = {requests: 0, bytes: 0, received: 0, leaks: 0, latest: null};
+    window.minimapTimings = [];
+    const output = document.getElementById('minimap-output'), replaceChildren = output.replaceChildren;
+    function publish(sample) {
+      if (sample.bytes && sample.finished !== undefined) {
+        window.minimapTimings.push({
+          bytes: sample.bytes,
+          requestToDomMs: sample.finished - sample.started,
+          domUpdateMs: sample.finished - sample.update,
+        });
+      }
+    }
+    output.replaceChildren = function(...children) {
+      if (active && !children.length) active.update = performance.now();
+      const result = replaceChildren.apply(this, children);
+      if (active && children.length && active.update !== undefined) {
+        active.finished = performance.now();
+        publish(active);
+        active = null;
+      }
+      return result;
+    };
+    WebSocket.prototype.send = function(frame) {
+      const [kind, args] = JSON.parse(frame);
+      if (kind === 'pz_map' && Number.isInteger(args[0]?.id)) {
+        window.minimapEvidence.requests++;
+        active = {started: performance.now()};
+        samples.set(args[0].id, active);
+        if (!observed.has(this)) {
+          observed.add(this);
+          this.addEventListener('message', ({data}) => {
+            const [responseKind, values] = JSON.parse(data);
+            if (responseKind !== 'pz_map') return;
+            const result = values[0];
+            const wire = JSON.stringify(result);
+            window.minimapEvidence.bytes = new TextEncoder().encode(data).length;
+            if (samples.has(result.id)) {
+              const sample = samples.get(result.id);
+              sample.bytes = window.minimapEvidence.bytes;
+              publish(sample);
+              samples.delete(result.id);
+            }
+            window.minimapEvidence.received++;
+            const forbidden = /staging_room|hq_concourse|support_roof|jungle_edge|"position"|"route"|"edges"|"visited"|"destination_id"/;
+            if (forbidden.test(wire)) window.minimapEvidence.leaks++;
+            window.minimapEvidence.latest = result;
+          }, {capture: true});
+        }
+      }
+      return original.call(this, frame);
+    };
+  });
+}
+
+test('TEST-104-01 실제 미니맵 세션 격리·공개 정보·이동 외 상태 갱신', async ({ actors }) => {
+  const a = await actors.create(0), b = await actors.create(1);
+  const canvas = player => player.page.locator('#minimap-output .minimap-map');
+  for (const player of [a, b]) {
+    await expect(canvas(player)).toContainText('@');
+    await watchMinimap(player);
+  }
+  const concurrentStart = performance.now();
+  await Promise.all([a, b].map(async player => {
+    await player.page.locator('#minimap-refresh').click();
+    await expect.poll(() => player.page.evaluate(() => window.minimapEvidence.received)).toBe(1);
+    await expect(canvas(player)).toContainText('?');
+    await expect(canvas(player)).toContainText('@');
+  }));
+  const concurrentWallMs = performance.now() - concurrentStart;
+  await a.command('지도');
+  const log = a.page.locator('#log .log-entry.map').last();
+  expect(await log.textContent()).toBe(await canvas(a).textContent());
+  const aGrid = await canvas(a).textContent(), bGrid = await canvas(b).textContent();
+  expect(aGrid).toBe(bGrid);
+
+  const before = a.revision;
+  await a.command('점수');
+  await expect.poll(() => a.revision).toBeGreaterThan(before);
+  expect(await a.page.evaluate(() => window.minimapEvidence.requests)).toBe(1);
+  expect(await b.page.evaluate(() => window.minimapEvidence.requests)).toBe(1);
+
+  const south = a.page.locator('#exits .direction-south');
+  await expect(south).toBeEnabled();
+  await south.click();
+  await expect.poll(() => a.state.zone).toBe('hq_concourse');
+  await expect(canvas(a)).toContainText('×');
+  await a.command('서');
+  await expect.poll(() => a.state.zone).toBe('dock');
+  await expect(canvas(a)).toContainText('+');
+  await a.command('동');
+  await expect.poll(() => a.state.zone).toBe('hq_concourse');
+  await b.command('남');
+  await expect.poll(() => b.state.zone).toBe('hq_concourse');
+  await expect(canvas(a)).toContainText('+');
+  await expect(canvas(b)).not.toContainText('+');
+  await expect(canvas(b)).toContainText('?');
+  const sheets = a.page.locator('#minimap-sheet');
+  const outpost = sheets.locator('option').filter({hasText: '전초구역'});
+  await expect(outpost).toHaveCount(1);
+  await sheets.selectOption(await outpost.getAttribute('value'));
+  await expect(canvas(a)).toContainText('o');
+  await expect(canvas(a)).not.toContainText('@');
+  await expect(b.page.locator('#minimap-sheet option').filter({hasText: '전초구역'})).toHaveCount(0);
+  const evidence = await a.page.evaluate(() => window.minimapEvidence);
+  expect(evidence.leaks).toBe(0);
+  expect(evidence.bytes).toBeGreaterThan(0);
+  expect(evidence.latest.messages.some(message => message.kind === 'map')).toBe(true);
+  expect(evidence.latest.centers).toContain('탐사대 부두');
+  expect(await b.page.evaluate(() => window.minimapEvidence.leaks)).toBe(0);
+  const timings = await a.page.evaluate(() => window.minimapTimings);
+  expect(timings.length).toBeGreaterThan(0);
+  // 격리 브라우저 결과 폴더의 로컬 근거에는 숫자만 저장한다.
+  require('node:fs').writeFileSync(
+    require('node:path').join(process.env.PRIMAL_BROWSER_RESULTS, 'minimap-104-metrics.json'),
+    JSON.stringify({timings, concurrentWallMs}),
+  );
+
+  await a.page.getByRole('button', {name: '접속 종료', exact: true}).click();
+  await expect(a.page.locator('#minimap-panel')).toBeHidden();
+  await expect(canvas(a)).toHaveCount(0);
+  await expect(a.page.locator('#minimap-sheet option')).toHaveCount(1);
+  await a.page.getByRole('button', {name: '재연결', exact: true}).click();
+  await a.login(false);
+  await expect(canvas(a)).toContainText('@');
+  await expect(a.page.locator('#minimap-sheet')).toHaveValue('');
+  expect(a.errors.concat(b.errors)).toEqual([]);
+});
+
+test('TEST-104-02 본부 층·Connector·중심 이동과 반응형 지도 접근성', async ({ actors }) => {
+  const a = await actors.create(0);
+  const panel = a.page.locator('#minimap-panel');
+  const canvas = a.page.locator('#minimap-output .minimap-map');
+  const summary = a.page.locator('#minimap-description');
+  const go = async (command, zone, connector = false) => {
+    await a.command(command);
+    await expect.poll(() => a.state.zone).toBe(zone);
+    await expect(summary).toContainText(a.state.room);
+    if (connector) await expect(canvas).toHaveCount(0);
+    else await expect(canvas).toContainText('@');
+  };
+  await go('남', 'hq_concourse');
+  await go('계단', 'hq_stairs_1f', true);
+  await expect(a.page.locator('#minimap-output')).toContainText('나가기');
+  await go('나가기', 'hq_concourse');
+  await go('승강기', 'support_elevator', true);
+  for (const [floor, zone] of [
+    ['2층', 'support_2f_c'], ['3층', 'support_3f_c'], ['4층', 'support_4f_c'], ['5층', 'support_5f_c'],
+  ]) {
+    await go(floor, zone);
+    if (floor === '3층') {
+      await go('동', 'support_3f_e1');
+      await a.command('회복실 문 닫아');
+      await expect(canvas).toContainText('×');
+      await a.command('회복실 문 열어');
+      await expect(canvas).toContainText('?');
+      await go('서', zone);
+    }
+    await go('승강기', 'support_elevator', true);
+  }
+  await go('옥상', 'support_roof');
+  await go('북동', 'support_roof_ne');
+  await expect(canvas).toContainText('╱');
+  const center = a.page.getByLabel('중심 방문 장소 또는 별칭');
+  await center.fill('본부 옥상');
+  await center.press('Enter');
+  await expect(a.page.locator('#minimap-output .minimap-message').first()).toContainText('본부 옥상');
+  await expect(canvas).toHaveAttribute('aria-describedby', 'minimap-description');
+  await expect(summary).toContainText('공개 연결');
+  const current = a.page.getByRole('button', {name: '현재 위치', exact: true});
+  await current.focus();
+  await expect(current).toBeFocused();
+  await current.press('Enter');
+  await expect(center).toHaveValue('');
+
+  // 기존 로그와 미니맵의 줄바꿈 정책은 독립적이다.
+  for (const width of [1366, 1024, 375]) {
+    await a.page.setViewportSize({width, height: 840});
+    await expect(canvas).toHaveCSS('white-space', 'pre');
+    await expect(canvas).toHaveCSS('overflow-x', 'auto');
+    expect(await a.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    await expect(a.page.locator('#command')).toBeEnabled();
+  }
+  await a.page.addStyleTag({content: 'html { zoom: 1.25; } #minimap-output .minimap-map { font-family: monospace !important; }'});
+  await expect(canvas).toHaveCSS('font-family', 'monospace');
+  await expect(canvas).toContainText('╱');
+  const toggle = panel.locator(':scope > summary');
+  await toggle.focus();
+  await toggle.press('Enter');
+  await expect(canvas).toHaveCount(0);
+  await toggle.press('Enter');
+  await expect(canvas).toContainText('@');
+  await a.command('지도 목록');
+  await expect(a.page.locator('#log .sheet').last()).toHaveCSS('white-space', 'pre-wrap');
+  await a.command('출구');
+  await expect(a.page.locator('#log .sheet').last()).toContainText('출구');
+  expect(a.errors).toEqual([]);
+});
+
 test('TEST-P2-02-A 개인 메시지는 실제 전달하되 진단에 원문 비수집', async ({ actors }) => {
   const a = await actors.create(0), b = await actors.create(1);
   const privateText = 'PRIVATE-FIXTURE-' + Date.now();

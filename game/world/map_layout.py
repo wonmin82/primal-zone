@@ -43,6 +43,7 @@ class RenderedMap:
     lines: tuple[Text, ...]
     partial: bool
     omitted: tuple[tuple[str, str, str], ...]
+    visible: tuple[str, ...] = ()
 
 
 def _add(a, b):
@@ -480,6 +481,7 @@ def render(layout_result, boundaries=(), *, current=None, center=None, ascii_onl
     cells = {}
     exits = {}
     cut_cells = []
+    visible_rooms = []
     for path, locations in scaled_paths:
         exits[path.source, path.direction] = True
         exits[path.target, OPPOSITE_DIRECTIONS[path.direction]] = True
@@ -493,6 +495,7 @@ def render(layout_result, boundaries=(), *, current=None, center=None, ascii_onl
                 cells[point] = ("direction", "." if ascii_only else "·")
     for key, point in rooms.items():
         if inside(point):
+            visible_rooms.append(key)
             cells[point] = ("player", "@") if key == current else ("text", "o")
 
     omitted = []
@@ -527,4 +530,4 @@ def render(layout_result, boundaries=(), *, current=None, center=None, ascii_onl
         if display_width(result) > _WIDTH:
             raise LayoutUnrepresentable("지도 표시 셀 한도를 초과했습니다.")
         lines.append(result)
-    return RenderedMap(tuple(lines), partial, tuple(omitted))
+    return RenderedMap(tuple(lines), partial, tuple(omitted), tuple(visible_rooms))

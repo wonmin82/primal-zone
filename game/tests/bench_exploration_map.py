@@ -157,7 +157,8 @@ class MapBenchmark(TransactionTestCase):
         for size in (10, 100, 1000):
             self.measure(size)
 
-    def measure(self, size):
+    @staticmethod
+    def fixture(size):
         region = f"bench_{size}"
         zones = [f"{region}_{i:04d}" for i in range(size)]
         rooms = {}
@@ -197,6 +198,10 @@ class MapBenchmark(TransactionTestCase):
         membership = ObjectDB.db_tags.through
         membership.objects.bulk_create([membership(objectdb_id=obj.pk, tag_id=tag.pk)
                                        for obj, tag in zip(exit_models, exit_tags, strict=True)])
+        return rooms, zones, catalog, sheet
+
+    def measure(self, size):
+        rooms, zones, catalog, sheet = self.fixture(size)
         viewer = SimpleNamespace(location=SimpleNamespace(pk=-1), is_superuser=False)
         with patch.object(map_projection, "ROOMS", rooms):
             for ratio in (10, 50, 100):

@@ -36,4 +36,19 @@ body{font-synthesis:none;font-variant-ligatures:none}h1,h2,b,strong,.brand,.eyeb
 #inventory .stateful-item{flex-wrap:wrap;justify-content:flex-start}#inventory .stateful-item>span{flex:1 1 100%;overflow-wrap:anywhere}#inventory .stateful-item button{flex-shrink:0;white-space:nowrap}
 #mental{accent-color:#86bdd1}#mental::-webkit-progress-value{background:#86bdd1}.semantic-critical{color:#ff6b6b;font-weight:700}.log-entry.prompt{margin:4px 0 12px;line-height:1.5}
 @media(max-width:700px){.explorer .meter-label,.explorer progress,.explorer #resources{grid-column:1/-1;grid-row:auto}}
-.log-entry.map{white-space:pre;overflow-wrap:normal;overflow-x:auto;font-family:ui-monospace,monospace}
+.log-entry.map,.minimap-map{white-space:pre;overflow-wrap:normal;overflow-x:auto;font-family:ui-monospace,monospace}
+.surroundings-panel{min-width:0}
+.minimap{margin-top:16px;padding-top:12px;border-top:1px solid var(--line);font-size:var(--font-size-min)}
+.minimap summary{cursor:pointer;color:var(--accent);min-height:32px}
+.minimap label{display:block;margin:8px 0 4px}
+.minimap select{width:100%;min-width:0;min-height:36px;padding:4px;background:var(--bg);color:var(--text);border:1px solid #687d6a;border-radius:4px;font:inherit}
+.minimap-center-row,.minimap-actions{display:flex;gap:6px;flex-wrap:wrap}
+.minimap-center-row input{min-width:6ch;flex:1 1 6ch;padding:6px;border-color:#687d6a}
+.minimap button{min-height:36px;padding:4px 8px}
+.minimap-actions{margin:8px 0}
+.minimap :focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+#minimap-status,.minimap-legend{color:var(--muted)}
+.minimap-description{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.minimap-message{overflow-wrap:anywhere}
+.minimap-map{max-width:100%;max-height:12rem;margin:6px 0;padding:8px;background:var(--bg);border:1px solid var(--line);font-size:.875rem;font-variant-ligatures:none}
+@media(max-width:700px){.minimap button,.minimap select,.minimap-center-row input,.minimap summary{min-height:44px}.minimap summary{align-content:center}}

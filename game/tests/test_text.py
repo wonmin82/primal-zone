@@ -55,7 +55,7 @@ class NarrationSemanticTests(TestCase):
         static = Path(__file__).resolve().parents[1] / "web" / "static" / "webclient"
         javascript = (static / "js" / "primal.js").read_text(encoding="utf-8")
         stylesheet = (static / "css" / "primal.css").read_text(encoding="utf-8")
-        allowlist = re.search(r"const roles = new Set\(\[([^]]+)\]\)", javascript)
+        allowlist = re.search(r"const semanticRoles = new Set\(\[([^]]+)\]\)", javascript)
         self.assertIsNotNone(allowlist)
         self.assertEqual(set(re.findall(r'"(\w+)"', allowlist[1])), set(ft.ANSI))
         self.assertRegex(stylesheet, r"(?:^|\n)body\{font-synthesis:none[;\}]")

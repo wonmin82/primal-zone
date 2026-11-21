@@ -76,7 +76,7 @@ function client(localNow = 0) {
   const click = command => document.fire("click", {target:{closest:selector => selector === "[data-command]" ? ({dataset:{command}}) : null}});
   const arrow = key => { byId("command").fire("keydown", {key}); return byId("command").value; };
   state(full); prompt(full);
-  return {byId, log:byId("log"), socket, state, prompt, event, submit, click, arrow, intervals, receive, document};
+  return {byId, log:byId("log"), get socket() { return socket; }, state, prompt, event, submit, click, arrow, intervals, receive, document};
 }
 
 test("Action 버튼은 표시 문자열을 재파싱하지 않고 안정 참조를 구조화 전송", () => {
@@ -483,4 +483,137 @@ test("전체 회수가 차단되어도 유효한 개별 전리품을 빈 전리�
   assert.ok(context.textContent.includes("회수 가능한 전리품 없음"));
   assert.equal(JSON.parse(context.lastElementChild.dataset.actionInvocation),null);
   assert.equal(context.lastElementChild.disabled,true);
+});
+
+function mapState(c, revision, owner = "explorer-a", state = {}) {
+  c.receive("pz_state", partyState(null, {minimap_revision:revision, minimap_owner:owner, ...state}));
+}
+function mapFrames(socket) {
+  return socket.sent.filter(frame => frame[0] === "pz_map").map(frame => frame[1][0]);
+}
+function mapReply(c, revision, request, label) {
+  c.receive("pz_map", {id:request.id, revision, owner:"explorer-a", sheets:["본부", "전초구역"], centers:["중앙 복도"],
+    summary:"현재 위치 중앙 복도. 동쪽은 다른 지도 경계입니다.", messages:[
+      {kind:"sheet", segments:[{role:"title", text:label}]},
+      {kind:"map", segments:[{role:"player", text:"@"}, {role:"text", text:"─+"}]},
+      {kind:"event", segments:[{role:"dialogue_action", dialogue_selection:"ignored", text:"<문>"}]},
+    ]});
+}
+
+test("미니맵은 지도가 필요한 공개 revision에서만 요청하고 Semantic Text를 조작 없이 표시", () => {
+  const c = client();
+  c.receive("pz_map_state", {revision:"r0", owner:"explorer-a"});
+  assert.deepEqual(mapFrames(c.socket), []);
+  assert.equal(c.byId("minimap-panel").hidden, true);
+  mapState(c, "r1");
+  const [first] = mapFrames(c.socket);
+  assert.deepEqual(first, {id:1});
+  assert.equal(c.byId("minimap-panel").hidden, false);
+  for (let i=1; i<=20; i++) mapState(c, "r1", "explorer-a", {hp:60-i, mental:20+i, player_round:i});
+  assert.equal(mapFrames(c.socket).length, 1);
+  mapReply(c, "r1", first, "본부 지도");
+  const output = c.byId("minimap-output");
+  assert.equal(output.hidden, false);
+  assert.equal(output.textContent, "본부 지도@─+<문>");
+  const grid = output.children[1], glyphs = grid.firstElementChild;
+  assert.equal(grid.tabIndex, 0);
+  assert.equal(grid.attributes["aria-describedby"], "minimap-description");
+  assert.equal(glyphs.attributes["aria-hidden"], "true");
+  assert.equal(glyphs.firstElementChild.className, "semantic-player");
+  assert.equal(output.children[2].firstElementChild.tagName, "span");
+  assert.equal(output.children[2].firstElementChild.dataset.dialogueSelection, undefined);
+  assert.match(c.byId("minimap-description").textContent, /현재 위치 중앙 복도/);
+  for (let i=1; i<=20; i++) mapState(c, "r1", "explorer-a", {hp:i, xp:i, player_round:i});
+  assert.equal(mapFrames(c.socket).length, 1);
+  assert.equal(output.children[1], grid);
+});
+
+test("시트·중심 전환의 늦은 응답을 폐기하고 revision이 바뀌면 이전 공개 지도를 먼저 숨김", () => {
+  const c = client();
+  const requests = () => mapFrames(c.socket);
+  const last = () => requests().at(-1);
+  mapState(c, "r1");
+  mapReply(c, "r1", last(), "첫 지도");
+  c.byId("minimap-sheet").value = "전초구역";
+  c.byId("minimap-sheet").fire("change");
+  const switched = last();
+  assert.equal(switched.sheet, "전초구역");
+  c.byId("minimap-center").value = "화면 밖 부두";
+  c.byId("minimap-center-form").fire("submit");
+  const centered = last();
+  assert.deepEqual(centered, {id:3, sheet:"전초구역", center:"화면 밖 부두"});
+  mapReply(c, "r1", centered, "부두 중심");
+  mapReply(c, "r1", switched, "늦은 시트");
+  assert.match(c.byId("minimap-output").textContent, /^부두 중심/);
+  c.receive("pz_map_state", {revision:"r2", owner:"explorer-a"});
+  assert.equal(c.byId("minimap-output").hidden, true);
+  assert.equal(c.byId("minimap-description").textContent, "");
+  assert.deepEqual(c.byId("minimap-sheet").children.map(e=>e.value), [""]);
+  const changed = last();
+  mapReply(c, "r1", changed, "권한 철회 전 응답");
+  assert.equal(c.byId("minimap-output").hidden, true);
+  c.receive("pz_map", {id:changed.id, revision:"r2", owner:"explorer-a", messages:[{kind:"error",
+    segments:[{role:"warning", text:"조회할 수 있는 지도가 없습니다."}]}], sheets:[], centers:[], summary:""});
+  mapState(c, "r2");
+  assert.equal(last(), changed);
+  assert.equal(c.byId("minimap-output").textContent, "조회할 수 있는 지도가 없습니다.");
+  c.byId("minimap-current").fire("click");
+  assert.deepEqual(last(), {id:5});
+  c.byId("minimap-refresh").fire("click");
+  assert.deepEqual(last(), {id:6});
+});
+
+test("미니맵 닫기·제어 해제·다른 캐릭터·재접속에서 지난 요청과 선택을 폐기", () => {
+  const c = client();
+  const panel = c.byId("minimap-panel"), output = c.byId("minimap-output");
+  mapState(c, "r1");
+  const first = mapFrames(c.socket).at(-1);
+  panel.open = false; panel.fire("toggle");
+  assert.deepEqual(mapFrames(c.socket).at(-1), {subscribe:false});
+  mapReply(c, "r1", first, "이미 닫은 지도");
+  mapState(c, "r2");
+  assert.equal(output.hidden, true);
+  assert.equal(mapFrames(c.socket).length, 2);
+  panel.open = true; panel.fire("toggle");
+  const reopened = mapFrames(c.socket).at(-1);
+  assert.deepEqual(reopened, {id:2});
+  mapReply(c, "r2", reopened, "기존 캐릭터 지도");
+  c.byId("minimap-sheet").value = "전초구역";
+  c.byId("minimap-sheet").fire("change");
+  const previousOwner = mapFrames(c.socket).at(-1);
+  c.receive("pz_map_reset", {});
+  c.receive("pz_map_state", {revision:"r3", owner:"explorer-a"});
+  assert.equal(panel.hidden, true);
+  assert.equal(output.textContent, "");
+  mapState(c, "r3", "explorer-b");
+  const secondOwner = mapFrames(c.socket).at(-1);
+  assert.deepEqual(secondOwner, {id:4});
+  mapReply(c, "r3", previousOwner, "이전 캐릭터의 늦은 응답");
+  assert.equal(output.hidden, true);
+  mapReply(c, "r3", secondOwner, "새 캐릭터 지도");
+  const oldSocket = c.socket;
+  oldSocket.readyState = 3; oldSocket.fire("close");
+  assert.equal(panel.hidden, true);
+  c.byId("reconnect").fire("click");
+  const newSocket = c.socket;
+  assert.notEqual(oldSocket, newSocket);
+  oldSocket.fire("message", {data:JSON.stringify(["pz_state", [
+    partyState(null,{minimap_revision:"late", minimap_owner:"explorer-b"}),
+  ], {}])});
+  assert.equal(panel.hidden, true);
+  assert.deepEqual(mapFrames(newSocket), []);
+  mapState(c,"r4","explorer-c");
+  assert.deepEqual(mapFrames(newSocket), [{id:5}]);
+});
+
+test("지도 중심 입력의 한글 조합 Enter는 제출과 분리", () => {
+  const c = client();
+  mapState(c, "r1");
+  let blocked = 0;
+  const event = {key:"Enter", preventDefault() { blocked++; }};
+  c.byId("minimap-center").fire("keydown", {...event,isComposing:true});
+  c.byId("minimap-center").fire("keydown", {...event,keyCode:229});
+  c.byId("minimap-center").fire("keydown", event);
+  assert.equal(blocked, 2);
+  assert.equal(mapFrames(c.socket).length, 1);
 });
