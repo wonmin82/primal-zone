@@ -12,6 +12,15 @@ ROOF_SIDES = {
 }
 ROOF_ROOMS = {"support_roof", *ROOF_SIDES.values()}
 
+MAP_SHEETS = {
+    "headquarters_1f": {"name": "본부 1층", "aliases": ("1층",)},
+    "headquarters_2f": {"name": "본부 2층", "aliases": ("2층",), "anchor": "support_2f_c"},
+    "headquarters_3f": {"name": "본부 3층", "aliases": ("3층",), "anchor": "support_3f_c"},
+    "headquarters_4f": {"name": "본부 4층", "aliases": ("4층",), "anchor": "support_4f_c"},
+    "headquarters_5f": {"name": "본부 5층", "aliases": ("5층",), "anchor": "support_5f_c"},
+    "headquarters_roof": {"name": "본부 옥상", "aliases": ("옥상",), "anchor": "support_roof"},
+}
+
 RETIRED_ROOMS = {
     "support_1f_w2": "hq_concourse",
     "support_1f_w1": "hq_concourse",
@@ -26,6 +35,7 @@ RETIRED_ROOMS = {
 
 ROOMS = {
     "staging_room": {
+        "map": {"sheet": "headquarters_1f"},
         "name": "출정 대기실",
         "desc": "출정을 기다리는 탐사자들을 위한 대기실이다. 벽을 따라 낡은 의자와 보급 상자가 놓여 있다.\n남쪽 문 너머로 본부의 분주한 소리가 들려온다.",
         "exits": {"남": "hq_concourse"},
@@ -35,6 +45,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "hq_concourse": {
+        "map": {"sheet": "headquarters_1f"},
         "name": "본부 중앙 로비",
         "desc": "높은 천장 아래로 본부의 넓은 로비가 펼쳐진다. 북쪽은 출정 대기실, 서쪽은 부두로 이어진다. 동쪽에는 관리실, 남쪽에는 휴게실이 있다. 중앙의 "
         "계단과 승강기로 각 층에 오갈 수 있다.",
@@ -46,6 +57,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "hq_admin_office": {
+        "map": {"sheet": "headquarters_1f"},
         "name": "본부 관리실",
         "desc": "본부의 안내 문서와 시설 배치도가 책상 위에 정리되어 있다. 서쪽 문은 중앙 로비로 이어진다.",
         "exits": {"서": "hq_concourse"},
@@ -55,6 +67,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "hq_lounge": {
+        "map": {"sheet": "headquarters_1f"},
         "name": "본부 휴게실",
         "desc": "낡은 소파와 의자가 탐사자를 기다린다. 북쪽 문 너머로 중앙 로비의 분주한 소리가 들린다.",
         "exits": {"북": "hq_concourse"},
@@ -64,6 +77,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "support_2f_w1": {
+        "map": {"sheet": "headquarters_2f"},
         "name": "본부 2층 서쪽 복도",
         "desc": "본부 2층 서쪽 복도다. 벽의 안내판이 이 층의 시설을 가리킨다. 북쪽 문에는 보관실 표지가 붙어 있다.",
         "exits": {"동": "support_2f_c", "북": "storage_room"},
@@ -74,6 +88,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "support_2f_c": {
+        "map": {"sheet": "headquarters_2f"},
         "name": "본부 2층 중앙 복도",
         "desc": "본부 2층 중앙 복도다. 벽의 안내판이 이 층의 시설을 가리킨다. 중앙에 계단과 승강기가 있다. 북쪽 문에는 보급품 상점 표지가 붙어 있다.",
         "exits": {"서": "support_2f_w1", "동": "support_2f_e1", "북": "supply_shop"},
@@ -84,6 +99,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "support_2f_e1": {
+        "map": {"sheet": "headquarters_2f"},
         "name": "본부 2층 동쪽 복도",
         "desc": "본부 2층 동쪽 복도다. 벽의 안내판이 이 층의 시설을 가리킨다. 북쪽 문에는 자원 정산소 표지가 붙어 있다.",
         "exits": {"서": "support_2f_c", "북": "salvage_office"},
@@ -94,6 +110,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "support_3f_w1": {
+        "map": {"sheet": "headquarters_3f"},
         "name": "본부 3층 서쪽 복도",
         "desc": "본부 3층 서쪽 복도다. 벽의 안내판이 이 층의 시설을 가리킨다. 북쪽 문에는 의료 대기실 표지가 붙어 있다.",
         "exits": {"동": "support_3f_c", "북": "medical_waiting"},
@@ -104,6 +121,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "support_3f_c": {
+        "map": {"sheet": "headquarters_3f"},
         "name": "본부 3층 중앙 복도",
         "desc": "본부 3층 중앙 복도다. 벽의 안내판이 이 층의 시설을 가리킨다. 중앙에 계단과 승강기가 있다. 북쪽 문에는 의무실 표지가 붙어 있다.",
         "exits": {"서": "support_3f_w1", "동": "support_3f_e1", "북": "infirmary"},
@@ -114,6 +132,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "support_3f_e1": {
+        "map": {"sheet": "headquarters_3f"},
         "name": "본부 3층 동쪽 복도",
         "desc": "본부 3층 동쪽 복도다. 벽의 안내판이 이 층의 시설을 가리킨다. 북쪽 문에는 회복실 표지가 붙어 있다.",
         "exits": {"서": "support_3f_c", "북": "recovery_room"},
@@ -124,6 +143,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "support_4f_w1": {
+        "map": {"sheet": "headquarters_4f"},
         "name": "본부 4층 서쪽 복도",
         "desc": "본부 4층 서쪽 복도다. 벽의 안내판이 이 층의 시설을 가리킨다. 북쪽 문에는 전투훈련실 표지가 붙어 있다. 남쪽 문에는 생존훈련실 표지가 붙어 "
         "있다.",
@@ -135,6 +155,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "support_4f_c": {
+        "map": {"sheet": "headquarters_4f"},
         "name": "본부 4층 중앙 복도",
         "desc": "본부 4층 중앙 복도다. 벽의 안내판이 이 층의 시설을 가리킨다. 중앙에 계단과 승강기가 있다. 북쪽 문에는 훈련관리실 표지가 붙어 있다. 남쪽 "
         "문에는 전술훈련실 표지가 붙어 있다.",
@@ -151,6 +172,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "support_4f_e1": {
+        "map": {"sheet": "headquarters_4f"},
         "name": "본부 4층 동쪽 복도",
         "desc": "본부 4층 동쪽 복도다. 벽의 안내판이 이 층의 시설을 가리킨다. 북쪽 문에는 사격장 표지가 붙어 있다. 남쪽 문에는 의료훈련실 표지가 붙어 "
         "있다.",
@@ -162,6 +184,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "support_5f_w2": {
+        "map": {"sheet": "headquarters_5f"},
         "name": "본부 5층 서쪽 끝 복도",
         "desc": "본부 5층 서쪽 끝 복도다. 벽의 안내판이 이 층의 시설을 가리킨다. 북쪽 문에는 전초 장비고 표지가 붙어 있다. 남쪽 문에는 다음 단계 장비고 "
         "표지가 붙어 있다.",
@@ -173,6 +196,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "support_5f_w1": {
+        "map": {"sheet": "headquarters_5f"},
         "name": "본부 5층 서쪽 복도",
         "desc": "본부 5층 서쪽 복도다. 벽의 안내판이 이 층의 시설을 가리킨다. 북쪽 문에는 기본 장비점 표지가 붙어 있다.",
         "exits": {"서": "support_5f_w2", "동": "support_5f_c", "북": "armor_shop"},
@@ -183,6 +207,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "support_5f_c": {
+        "map": {"sheet": "headquarters_5f"},
         "name": "본부 5층 중앙 복도",
         "desc": "본부 5층 중앙 복도다. 벽의 안내판이 이 층의 시설을 가리킨다. 중앙에 계단과 승강기가 있다.",
         "exits": {"서": "support_5f_w1", "동": "support_5f_e1"},
@@ -196,6 +221,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "support_5f_e1": {
+        "map": {"sheet": "headquarters_5f"},
         "name": "본부 5층 동쪽 복도",
         "desc": "본부 5층 동쪽 복도다. 벽의 안내판이 이 층의 시설을 가리킨다. 북쪽 문에는 기본 병기점 표지가 붙어 있다.",
         "exits": {"서": "support_5f_c", "동": "support_5f_e2", "북": "weapon_shop"},
@@ -206,6 +232,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "support_5f_e2": {
+        "map": {"sheet": "headquarters_5f"},
         "name": "본부 5층 동쪽 끝 복도",
         "desc": "본부 5층 동쪽 끝 복도다. 벽의 안내판이 이 층의 시설을 가리킨다. 북쪽 문에는 전초 병기고 표지가 붙어 있다. 남쪽 문에는 다음 단계 병기고 "
         "표지가 붙어 있다.",
@@ -217,6 +244,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "storage_room": {
+        "map": {"sheet": "headquarters_2f"},
         "name": "보관실",
         "desc": "두꺼운 벽으로 둘러싸인 보관 공간이다. 벽을 따라 빈 선반이 줄지어 있고 남쪽 문은 본부 2층 복도로 이어진다.",
         "exits": {"남": "support_2f_w1"},
@@ -226,6 +254,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "supply_shop": {
+        "map": {"sheet": "headquarters_2f"},
         "name": "보급품 상점",
         "desc": "낮은 진열대와 비어 있는 판매대가 놓인 공간이다. 남쪽 문은 본부 2층 복도로 이어진다.",
         "exits": {"남": "support_2f_c"},
@@ -236,6 +265,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "salvage_office": {
+        "map": {"sheet": "headquarters_2f"},
         "name": "자원 정산소",
         "desc": "넓은 작업대와 비어 있는 금속 선반이 놓인 업무 공간이다. 남쪽 문은 본부 2층 복도로 이어진다.",
         "exits": {"남": "support_2f_e1"},
@@ -246,6 +276,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "medical_waiting": {
+        "map": {"sheet": "headquarters_3f"},
         "name": "의료 대기실",
         "desc": "의무실을 기다리는 탐사자들을 위한 의자가 벽을 따라 놓여 있다. 남쪽 문은 본부 3층 복도로 이어진다.",
         "exits": {"남": "support_3f_w1"},
@@ -255,6 +286,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "infirmary": {
+        "map": {"sheet": "headquarters_3f"},
         "name": "의무실",
         "desc": "밝은 타일로 마감된 넓은 공간이다. 벽의 수납장은 비어 있고 남쪽 문은 본부 3층 복도로 이어진다.",
         "exits": {"남": "support_3f_c"},
@@ -268,6 +300,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "recovery_room": {
+        "map": {"sheet": "headquarters_3f"},
         "name": "회복실",
         "hints": [{"target": "infirmary_bed", "action": "휴식"}],
         "desc": "조용한 방 안에 무료로 몸을 눕히고 체력과 정신력을 회복할 침대가 마련되어 있다. 남쪽 문은 본부 3층 복도로 이어진다.",
@@ -278,6 +311,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "training_room": {
+        "map": {"sheet": "headquarters_4f"},
         "name": "전투훈련실",
         "desc": "단단한 바닥의 대련 구획 옆으로 무기 연습대와 중량 훈련 장비가 놓여 있다. 남쪽 문은 본부 4층 복도로 이어진다.",
         "exits": {"남": "support_4f_w1"},
@@ -287,6 +321,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "survival_training_room": {
+        "map": {"sheet": "headquarters_4f"},
         "name": "생존훈련실",
         "desc": "벽을 따라 방호 장비와 체력 단련 기구가 놓여 있다. 바닥 매트를 깐 한쪽 구획은 호흡 훈련 공간이다. 북쪽 문은 본부 4층 복도로 이어진다.",
         "exits": {"북": "support_4f_w1"},
@@ -296,6 +331,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "training_office": {
+        "map": {"sheet": "headquarters_4f"},
         "name": "훈련관리실",
         "desc": "훈련 기록을 보관하는 수납장 앞에 상담용 책상과 의자가 놓여 있다. 벽의 안내판에는 재훈련 절차가 적혀 있다. 남쪽 문은 본부 4층 복도로 이어진다.",
         "exits": {"남": "support_4f_c"},
@@ -305,6 +341,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "tactics_room": {
+        "map": {"sheet": "headquarters_4f"},
         "name": "전술훈련실",
         "desc": "작전 지도와 지형 모형이 낮은 탁자 위에 놓여 있다. 벽의 분석판에는 전투 상황과 이동 경로를 표시할 수 있는 격자가 그려져 있다. 북쪽 문은 본부 4층 복도로 이어진다.",
         "exits": {"북": "support_4f_c"},
@@ -314,6 +351,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "shooting_range": {
+        "map": {"sheet": "headquarters_4f"},
         "name": "사격장",
         "desc": "두꺼운 방음벽 안쪽에 사격선과 이동 표적용 레일이 놓여 있다. 표적 뒤는 모래 둔덕으로 막혀 있고 옆 구획에는 기동 훈련용 장애물이 배치되어 있다. 남쪽 문은 본부 4층 복도로 이어진다.",
         "exits": {"남": "support_4f_e1"},
@@ -323,6 +361,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "medical_training_room": {
+        "map": {"sheet": "headquarters_4f"},
         "name": "의료훈련실",
         "desc": "실습대 위에 처치 모형과 응급 실습 장비가 정돈되어 있다. 벽의 선반에는 연습용 붕대와 고정구가 놓여 있다. 북쪽 문은 본부 4층 복도로 이어진다.",
         "exits": {"북": "support_4f_e1"},
@@ -332,6 +371,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "armor_shop": {
+        "map": {"sheet": "headquarters_5f"},
         "name": "기본 장비점",
         "desc": "빈 진열대가 벽을 따라 놓여 있다. 남쪽 문은 본부 5층 복도로 이어진다.",
         "exits": {"남": "support_5f_w1"},
@@ -342,6 +382,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "weapon_shop": {
+        "map": {"sheet": "headquarters_5f"},
         "name": "기본 병기점",
         "desc": "튼튼한 판매대와 비어 있는 장비 걸이가 놓인 공간이다. 남쪽 문은 본부 5층 복도로 이어진다.",
         "exits": {"남": "support_5f_e1"},
@@ -352,6 +393,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "outpost_equipment": {
+        "map": {"sheet": "headquarters_5f"},
         "name": "전초 장비고",
         "desc": "전초 장비고의 출입문 너머로 장비 보급 시설이 보인다. 남쪽 문은 본부 5층 복도로 이어진다.",
         "exits": {"남": "support_5f_w2"},
@@ -363,6 +405,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "outpost_weapon": {
+        "map": {"sheet": "headquarters_5f"},
         "name": "전초 병기고",
         "desc": "전초 병기고의 출입문 너머로 장비 보급 시설이 보인다. 남쪽 문은 본부 5층 복도로 이어진다.",
         "exits": {"남": "support_5f_e2"},
@@ -374,6 +417,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "reserved_equipment": {
+        "map": {"sheet": "headquarters_5f"},
         "name": "다음 단계 장비고",
         "desc": "다음 단계 장비고의 출입문 너머로 장비 보급 시설이 보인다. 북쪽 문은 본부 5층 복도로 이어진다.",
         "exits": {"북": "support_5f_w2"},
@@ -384,6 +428,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "reserved_weapon": {
+        "map": {"sheet": "headquarters_5f"},
         "name": "다음 단계 병기고",
         "desc": "다음 단계 병기고의 출입문 너머로 장비 보급 시설이 보인다. 북쪽 문은 본부 5층 복도로 이어진다.",
         "exits": {"북": "support_5f_e2"},
@@ -394,6 +439,7 @@ ROOMS = {
         "light_profile": "artificial",
     },
     "support_roof": {
+        "map": {"sheet": "headquarters_roof"},
         "name": "본부 옥상",
         "desc": "콘크리트 난간이 본부의 옥상을 둘러싸고 있다. 낡은 바닥 너머로 본부의 지붕과 섬의 숲이 보인다.",
         "exits": {
@@ -413,6 +459,7 @@ ROOMS = {
         "recovery": {"mental_per_minute": 2},
     },
     "support_roof_n": {
+        "map": {"sheet": "headquarters_roof"},
         "name": "북쪽 전망 구역",
         "desc": "난간 너머로 본부 진입로가 내려다보인다. 바닥의 마모된 선을 따라 옥상 중앙으로 돌아갈 수 있다.",
         "exits": {"남": "support_roof"},
@@ -423,6 +470,7 @@ ROOMS = {
         "recovery": {"mental_per_minute": 2},
     },
     "support_roof_ne": {
+        "map": {"sheet": "headquarters_roof"},
         "name": "북동쪽 설비 구역",
         "desc": "낡은 설비 덮개가 콘크리트 받침 위에 놓여 있다. 배관 사이로 옥상 중앙이 보인다.",
         "exits": {"남서": "support_roof"},
@@ -433,6 +481,7 @@ ROOMS = {
         "recovery": {"mental_per_minute": 2},
     },
     "support_roof_e": {
+        "map": {"sheet": "headquarters_roof"},
         "name": "동쪽 난간",
         "desc": "높은 난간 너머로 숲의 가장자리가 펼쳐진다. 탁 트인 바닥이 옥상 중앙으로 이어진다.",
         "exits": {"서": "support_roof"},
@@ -443,6 +492,7 @@ ROOMS = {
         "recovery": {"mental_per_minute": 2},
     },
     "support_roof_se": {
+        "map": {"sheet": "headquarters_roof"},
         "name": "남동쪽 급수 설비",
         "desc": "두꺼운 급수관이 물탱크 아래로 이어진다. 설비 옆의 넓은 공간을 통해 중앙으로 돌아갈 수 있다.",
         "exits": {"북서": "support_roof"},
@@ -453,6 +503,7 @@ ROOMS = {
         "recovery": {"mental_per_minute": 2},
     },
     "support_roof_s": {
+        "map": {"sheet": "headquarters_roof"},
         "name": "남쪽 전망 구역",
         "desc": "섬의 남쪽 수평선이 본부 지붕 너머로 보인다. 옥상 중앙까지 평평한 바닥이 이어진다.",
         "exits": {"북": "support_roof"},
@@ -463,6 +514,7 @@ ROOMS = {
         "recovery": {"mental_per_minute": 2},
     },
     "support_roof_sw": {
+        "map": {"sheet": "headquarters_roof"},
         "name": "남서쪽 환기 구역",
         "desc": "금속 환기구가 낮은 받침 위에 줄지어 있다. 그 사이로 중앙에 이르는 빈 공간이 남아 있다.",
         "exits": {"북동": "support_roof"},
@@ -473,6 +525,7 @@ ROOMS = {
         "recovery": {"mental_per_minute": 2},
     },
     "support_roof_w": {
+        "map": {"sheet": "headquarters_roof"},
         "name": "서쪽 난간",
         "desc": "난간 아래로 부두의 윤곽이 보인다. 낡은 바닥을 따라 옥상 중앙으로 돌아갈 수 있다.",
         "exits": {"동": "support_roof"},
@@ -483,6 +536,7 @@ ROOMS = {
         "recovery": {"mental_per_minute": 2},
     },
     "support_roof_nw": {
+        "map": {"sheet": "headquarters_roof"},
         "name": "북서쪽 통신 설비",
         "desc": "짧은 안테나와 밀폐된 통신함이 놓여 있다. 케이블 덮개 옆으로 중앙에 이르는 공간이 열려 있다.",
         "exits": {"남동": "support_roof"},
@@ -493,6 +547,7 @@ ROOMS = {
         "recovery": {"mental_per_minute": 2},
     },
     "support_elevator": {
+        "map": {"presentation": "connector"},
         "name": "본부 승강기",
         "desc": "금속 벽으로 둘러싸인 공용 승강기다. 조작반에는 1층, 2층, 3층, 4층, 5층, 옥상 버튼이 있다.",
         "exits": {},
@@ -523,6 +578,7 @@ for index, (label, landing, stairs) in enumerate(HQ_LANDINGS):
         exits["아래"] = HQ_LANDINGS[index - 1][2]
     exits["나가기"] = landing
     ROOMS[stairs] = {
+        "map": {"presentation": "connector"},
         "name": f"본부 {label} 계단",
         "desc": (f"본부 {label}의 계단참이다. 콘크리트 계단 가장자리에 금속 난간이 이어지고 "
                  f"층 표지가 벽에 붙어 있다. 문 너머는 {ROOMS[landing]['name']}이다."),

@@ -215,7 +215,7 @@ class HeadquartersTests(GameCommandTest):
         self.char1.location = self.rooms["hq_concourse"]
         self.char1.db.profile = {**self.char1.profile(), "visited": list(HQ_ROOMS)}
         with patch.object(self.char1, "msg") as output:
-            self.char1.execute_cmd("지도")
+            self.char1.execute_cmd("지도 목록")
         text = str(output.call_args_list)
         self.assertIn("본부 중앙 로비", text)
         self.assertIn("본부 5층 중앙 복도", text)

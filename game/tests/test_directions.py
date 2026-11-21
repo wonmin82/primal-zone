@@ -75,7 +75,7 @@ class DirectionIntegrationTests(WorldCommandTest):
     def test_map_orders_directions_preserving_unvisited_and_current(self):
         self.char1.change(lambda p: p.update(visited=["support_roof", "support_roof_ne"]))
         with patch.dict(ROOMS["support_roof"], exits=dict(reversed(list(ROOMS["support_roof"]["exits"].items())))):
-            output = "\n".join(map(str, self.raw("지도")))
+            output = "\n".join(map(str, self.raw("지도 목록")))
         hub = next(line for line in output.splitlines() if "본부 옥상 ← 현재" in line)
         positions = [hub.index(direction + ":") for direction in PLANAR_DIRECTIONS]
         self.assertEqual(positions, sorted(positions))
@@ -102,7 +102,7 @@ class DirectionIntegrationTests(WorldCommandTest):
     def test_map_merges_actual_and_blocked_directions_in_one_order(self):
         self.char1.location = self.rooms["support_5f_c"]
         self.char1.change(lambda p: p.update(visited=["support_5f_c", "support_5f_w1", "support_2f_w1"]))
-        output = self.raw("지도")[-1]
+        output = self.raw("지도 목록")[-1]
         lines = output.splitlines()
         east = next(line for line in lines if "본부 5층 중앙 복도 ← 현재" in line)
         west = next(line for line in lines if "본부 2층 서쪽 복도 /" in line)
@@ -123,7 +123,7 @@ class DirectionIntegrationTests(WorldCommandTest):
 
         self.char1.change(lambda p: p.update(visited=["support_roof"]))
         create_object(Exit, key="문", location=self.rooms["support_roof"], destination=self.rooms["dock"])
-        output = self.raw("지도")[-1]
+        output = self.raw("지도 목록")[-1]
         self.assertEqual([part["text"] for part in output.segments if part["role"] == "direction"],
                          [*PLANAR_DIRECTIONS, "계단", "승강기", "문"])
         self.assertIn("문: 미탐사", output)

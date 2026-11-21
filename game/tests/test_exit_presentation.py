@@ -142,7 +142,7 @@ class ExitPresentationTests(WorldCommandTest):
         self.assertEqual(entry["destination_name"], self.rooms["outpost_equipment"].key)
         self.assertEqual(entry["status"], "출입증 필요")
         self.assertIn(self.rooms["outpost_equipment"].key, self.output("출구"))
-        self.assertIn("북: " + self.rooms["outpost_equipment"].key, self.output("지도"))
+        self.assertIn("북: " + self.rooms["outpost_equipment"].key, self.output("지도 목록"))
         self.assertEqual(self.snapshot(), before)
 
         zone, name, target = next((zone, name, target) for zone, data in ROOMS.items()
@@ -153,7 +153,7 @@ class ExitPresentationTests(WorldCommandTest):
         entry = next(entry for entry in exit_entries(self.char1) if entry["name"] == name)
         self.assertEqual(entry["destination_name"], self.rooms[target].key)
         self.assertEqual(entry["status"], "임무 조건 미충족")
-        self.assertIn(name + ": " + self.rooms[target].key, self.output("지도"))
+        self.assertIn(name + ": " + self.rooms[target].key, self.output("지도 목록"))
         self.output("출구")
         self.assertEqual(self.snapshot(), before)
 
