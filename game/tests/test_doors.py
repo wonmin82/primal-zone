@@ -806,7 +806,7 @@ class DoorTest(WorldCommandTest):
         with self.assertRaises(rules.RuleError):
             doors.operate(self.char1, "북 문", "닫아", 100)
 
-    def test_visited_map_list_is_structural_unchanged_across_door_states(self):
+    def test_visited_map_is_structural_unchanged_across_door_states(self):
         from commands.character import Map
         from world.exit_presentation import exit_entries
         self.char1.db.profile = {**self.char1.profile_snapshot(), "visited": ["hq_concourse", "hq_admin_office"]}
