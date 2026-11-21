@@ -10,6 +10,7 @@ from evennia.objects.models import ObjectDB
 from evennia.server.signals import SIGNAL_EXIT_TRAVERSED
 from typeclasses.explorers import Explorer
 from world import doors, rules
+from world import text as ft
 from world.actions.gateway import ResultStatus
 from world.actions.global_actions import invoke
 from world.bootstrap import build_world
@@ -428,6 +429,52 @@ class DoorTest(WorldCommandTest):
         for action in ("잠궈", "풀어"):
             with self.assertRaises(rules.RuleError):
                 doors.operate(self.char1, "문", action, 100)
+
+    def test_door_particles_in_text_command_and_web_action(self):
+        from server.conf.primal_inputfuncs import pz_action
+        from world.state import multiplayer_state
+
+        self.key_for(self.char1)
+        door = self.door()
+        definition = doors.DOORS[door.door_id]
+        cases = (
+            ("관리실 문", ("이 열려 있다.", "은 닫혀 있다.", "은 잠겨 있다."),
+             ("의 잠금을 풀었다.", "을 열었다.", "을 닫았다.", "을 잠갔다.")),
+            ("비상 출입구", ("가 열려 있다.", "는 닫혀 있다.", "는 잠겨 있다."),
+             ("의 잠금을 풀었다.", "를 열었다.", "를 닫았다.", "를 잠갔다.")),
+        )
+        for name, descriptions, messages in cases:
+            # 표시 이름만 바꿔 동일 Door와 양쪽 Exit의 원래 설치 증거를 사용한다.
+            with patch.dict(definition, {"name": name}):
+                expected_descriptions = dict(zip(("OPEN", "CLOSED", "LOCKED"), descriptions))
+                target = doors.DoorTarget(door.door_id, door.direction_a, door.exit_a_id)
+                for channel in ("command", "web"):
+                    self.assertEqual(doors.description(target, 100), f"동쪽 {name}{expected_descriptions['LOCKED']}")
+                    for (action, state), suffix in zip(
+                            (("풀어", "CLOSED"), ("열어", "OPEN"), ("닫아", "CLOSED"), ("잠궈", "LOCKED")),
+                            messages):
+                        with self.subTest(name=name, channel=channel, action=action):
+                            self.char1.msg.reset_mock()
+                            if channel == "command":
+                                self.raw(f"문 1 {action}")
+                            else:
+                                row = next(row for row in multiplayer_state(self.char1, 100)["interactables"]
+                                           if row["name"] == name)
+                                button = next(button for button in row["actions"] if button["label"] == action)
+                                pz_action(self.session, {**button["action"], "request_id": f"door-{name}-{action}"})
+                            outputs = [call.args[0] for call in self.char1.msg.call_args_list
+                                       if call.args and isinstance(call.args[0], ft.Text)
+                                       and call.args[0].startswith(name)]
+                            self.assertEqual(outputs, [name + suffix])
+                            self.assertEqual(outputs[0].segments, [
+                                {"role": "object", "text": name},
+                                {"role": "text", "text": suffix},
+                            ])
+                            self.assertEqual(outputs[0].kind, "event")
+                            self.assertEqual(doors.description(target, 100), f"동쪽 {name}{expected_descriptions[state]}")
+                            self.assertEqual([doors.state_for_exit(endpoint, 100) for endpoint in (door.exit_a, door.exit_b)],
+                                             [state, state])
+                            self.assertEqual(self.door().auto_close_at, 160 if state == "OPEN" else None)
 
     def test_idempotence_failed_commands_and_peace_leave_timer_and_key_unchanged(self):
         key = self.key_for(self.char1)
@@ -848,9 +895,11 @@ class DoorTest(WorldCommandTest):
         original = bed.pk, bed.location.pk
         self.char1.location = self.rooms["support_3f_e1"]
         doors.operate(self.char1, "북 문", "닫아", 100)
+        self.assertEqual(str(self.char1.msg.call_args.args[0]), "회복실 문을 닫았다.")
         for origin, direction, target in (("support_3f_e1", "북", "recovery_room"), ("recovery_room", "남", "support_3f_e1")):
             self.char1.location = self.rooms[origin]
             doors.operate(self.char1, direction + " 문", "열어", 100)
+            self.assertEqual(str(self.char1.msg.call_args.args[0]), "회복실 문을 열었다.")
             self.char1.present_destination = Mock()
             obj = next(obj for obj in self.char1.location.exits if obj.key == direction)
             self.assertTrue(obj.at_traverse(self.char1, self.rooms[target]))

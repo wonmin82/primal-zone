@@ -216,6 +216,43 @@ class NPCDialogueTests(NativeItemTest):
             self.assertLessEqual(len(offered), 3)
             self.assertNotIn("〈키워드〉", raw)
 
+    def test_service_greeting_inflects_topic_and_keeps_selection(self):
+        cases = (
+            ("infirmary", "의무관", "의료", "를", "medical"),
+            ("training_office", "훈련관리관", "훈련", "을", "training"),
+            ("supply_shop", "보급관", "보급", "을", "supply"),
+            ("salvage_office", "자원 정산관", "정산", "을", "settlement"),
+        )
+        for room, name, keyword, particle, intent_id in cases:
+            with self.subTest(keyword=keyword):
+                npc = next(obj for obj in self.rooms[room].contents if obj.key == name)
+                self.char1.location = self.char2.location = npc.location
+                self.char1.msg.reset_mock()
+                self.char2.msg.reset_mock()
+                self.command(f"{name}에게 안녕 말")
+
+                topic = f"〈{keyword}〉"
+                instruction = f"{particle} 물어보세요."
+                replies = []
+                tokens = []
+                for character, session in ((self.char1, self.session1), (self.char2, self.session2)):
+                    reply, = self.npc_messages(character, npc)
+                    self.assertEqual(reply.kind, "chat")
+                    self.assertTrue(str(reply).endswith(topic + instruction))
+                    self.assertEqual(re.findall(r"〈([^〉]+)〉", reply), [keyword])
+                    segment = reply.segments[-2]
+                    self.assertEqual((segment["role"], segment["text"]), ("dialogue_topic", topic))
+                    self.assertEqual(reply.segments[-1], {"role": "text", "text": instruction})
+                    token = segment["dialogue_selection"]
+                    selected_npc, selected_intent = dialogue.resolve_keyword(character, token, session)
+                    self.assertEqual((selected_npc.id, selected_intent.intent_id), (npc.id, intent_id))
+                    replies.append(str(reply))
+                    tokens.append(token)
+                self.assertEqual(*replies)
+                self.assertNotEqual(*tokens)
+                self.assertEqual(dialogue.current_context(self.char1)["intent_id"], "greeting")
+                self.assertIsNone(dialogue.current_context(self.char2))
+
     def test_help_guide_request_matches_say_alias(self):
         first = self.command("말 도움")
         self.char1.msg.reset_mock()

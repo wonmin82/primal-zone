@@ -100,6 +100,7 @@ class AttackNarrationTests(TestCase):
                         CombatNarrationSpec((replace(phrase, instrument="날카로운 꼬리로"),)),
                         CombatNarrationSpec((replace(phrase, instrument="날카로운 꼬리 로"),)),
                         CombatNarrationSpec((replace(phrase, instrument="등의 가시로"),)),
+                        CombatNarrationSpec((replace(phrase, instrument="무거운 팔로"),)),
                         CombatNarrationSpec((replace(phrase, instrument="이빨!"),)),
                         CombatNarrationSpec((replace(phrase, verb=""),)),
                         CombatNarrationSpec((replace(phrase, verb="달렸다"),)),
@@ -117,6 +118,8 @@ class AttackNarrationTests(TestCase):
              ("어린청소룡이 고압 회로로 당신을 지졌다.", "어린청소룡이 고압 회로로 당신을 세게 지졌다.")),
             (AttackPhrase("휴대 화로", "그을렸다", "깊게 그을렸다"),
              ("어린청소룡이 휴대 화로로 당신을 그을렸다.", "어린청소룡이 휴대 화로로 당신을 깊게 그을렸다.")),
+            (AttackPhrase("무거운 팔", "후려쳤다", "힘껏 후려쳤다"),
+             ("어린청소룡이 무거운 팔로 당신을 후려쳤다.", "어린청소룡이 무거운 팔로 당신을 힘껏 후려쳤다.")),
         ):
             with self.subTest(valid=valid):
                 validate_definitions((replace(actor, combat_narration=CombatNarrationSpec((valid, phrase))),), caps)

@@ -102,6 +102,8 @@ test('TEST-E2E-03 상점 구매·정보 읽기·장착·해제·판매', async (
 
 test('TEST-E2E-04 유료 회복·회복실 Door·무료 침대', async ({ actors }) => {
   const a = await actors.create(0);
+  await command(a, '의무관에게 안녕 말', '〈의료〉를 물어보세요.');
+  await expect(a.page.locator('#log [data-dialogue-selection]').filter({ hasText: '의료' }).last()).toBeVisible();
   const before = snapshot().players[a.name].profile;
   await command(a, '20 회복');
   const after = snapshot().players[a.name].profile;
@@ -111,10 +113,10 @@ test('TEST-E2E-04 유료 회복·회복실 Door·무료 침대', async ({ actors
   await expect(a.page.locator('#log .semantic-hp_recovered').last()).toHaveCSS('color', 'rgb(145, 219, 165)');
   await expect(a.page.locator('#log .semantic-hp_recovered').last()).toHaveCSS('font-synthesis-weight', 'auto');
   await travel(a, 'support_3f_e1');
-  await command(a, '회복실 문 닫아');
+  await command(a, '회복실 문 닫아', '회복실 문을 닫았다.');
   await command(a, '북');
   expect(snapshot().players[a.name].zone).toBe('support_3f_e1');
-  await command(a, '회복실 문 열어');
+  await command(a, '회복실 문 열어', '회복실 문을 열었다.');
   await a.command('북', { prepare: async () => {},
     submit: () => a.page.locator('#exits [data-command="북"]').click() });
   await expect.poll(() => a.state.zone).toBe('recovery_room');

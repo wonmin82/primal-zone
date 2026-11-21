@@ -3,7 +3,7 @@
 import re
 
 # '회로'처럼 명사 자체가 '로'로 끝날 수 있으므로 알려진 수단 명사의 조사 결합만 검사한다.
-_INSTRUMENT_HEADS = ("가시", "꼬리", "몸체", "발톱", "이빨")
+_INSTRUMENT_HEADS = ("가시", "꼬리", "몸체", "발톱", "이빨", "팔")
 
 
 def is_instrument(value):
