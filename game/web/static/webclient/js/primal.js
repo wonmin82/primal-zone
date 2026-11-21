@@ -179,7 +179,8 @@
     event.preventDefault();
     const center = minimapCenter.value.trim();
     if (!center || center.length > 120) return;
-    minimapSelection = {...minimapSelection, center};
+    const sheet = minimapSheet.value || minimapSelection.sheet;
+    minimapSelection = sheet ? {sheet, center} : {center};
     requestMinimap();
   });
   byId("minimap-current").addEventListener("click", () => {

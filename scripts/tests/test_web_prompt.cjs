@@ -528,6 +528,22 @@ test("미니맵은 지도가 필요한 공개 revision에서만 요청하고 Sem
   assert.equal(output.children[1], grid);
 });
 
+test("전역 중심 검색으로 확인한 지도는 다음 중심 이름의 범위에 사용", () => {
+  const c = client();
+  mapState(c, "r1");
+  const last = () => mapFrames(c.socket).at(-1);
+  c.byId("minimap-center").value = "탐사대 부두";
+  c.byId("minimap-center-form").fire("submit");
+  assert.equal(last().sheet, undefined);
+  c.receive("pz_map", {id:last().id, revision:"r1", owner:"explorer-a",
+    sheet:"전초구역", sheets:["본부", "전초구역"], centers:["부두"],
+    messages:[{kind:"map", segments:[{text:"o", role:"text"}]}], summary:"탐사대 부두"});
+  assert.equal(c.byId("minimap-sheet").value, "전초구역");
+  c.byId("minimap-center").value = "다음 장소";
+  c.byId("minimap-center-form").fire("submit");
+  assert.equal(last().sheet, "전초구역");
+});
+
 test("시트·중심 전환의 늦은 응답을 폐기하고 revision이 바뀌면 이전 공개 지도를 먼저 숨김", () => {
   const c = client();
   const requests = () => mapFrames(c.socket);
