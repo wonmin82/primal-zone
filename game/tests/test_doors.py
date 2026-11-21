@@ -812,12 +812,12 @@ class DoorTest(WorldCommandTest):
         self.char1.db.profile = {**self.char1.profile_snapshot(), "visited": ["hq_concourse", "hq_admin_office"]}
         command = Map()
         command.caller = self.char1
+        command.args = "목록"
         outputs = []
         for state, deadline in (("LOCKED", None), ("OPEN", 300), ("CLOSED", None)):
             Door.objects.filter(door_id="hq_admin_door").update(state=state, auto_close_at=deadline)
             self.char1.msg.reset_mock()
-            with patch("commands.character.time", return_value=100):
-                command.run()
+            command.func()
             outputs.append(str(self.char1.msg.call_args.args[0]))
             self.assertEqual(next(e for e in exit_entries(self.char1, observed_at=100) if e["name"] == "동")["destination_name"], "본부 관리실")
         self.assertEqual(outputs[0], outputs[1])

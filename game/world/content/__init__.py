@@ -11,6 +11,7 @@ from .directions import (
     ordered_directions,
 )
 from .economy import SALVAGE_CREDIT_RATE
+from .headquarters import MAP_SHEETS as HEADQUARTERS_SHEETS
 from .headquarters import ROOMS as HEADQUARTERS_ROOMS
 from .items import EQUIPMENT_ACTIONS, ITEMS, UNEQUIP_ACTIONS, find_id
 from .shops import SHOP_CATALOGS
@@ -32,6 +33,7 @@ REGIONS = {
         "recommended_level": (1, 1),
         "entry": "staging_room",
         "rooms": tuple(HEADQUARTERS_ROOMS),
+        "map": {"sheets": HEADQUARTERS_SHEETS},
     },
     "outpost": {
         "name": "탐사대 전초구역",

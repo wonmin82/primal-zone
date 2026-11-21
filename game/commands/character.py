@@ -7,6 +7,7 @@ from world import presentation as view
 from world import rules
 from world import text as ft
 from world.content import REGIONS, ROOMS
+from world.map_metadata import RESERVED_ARGUMENTS
 
 from commands.base import GameCommand
 from commands.help_contracts import command_sections
@@ -122,12 +123,29 @@ class Quest(GameCommand):
 class Map(GameCommand):
     help_sections = command_sections('지도')
     category = "이동·탐사"
-    usage = "지도"
-    summary = "방문한 지역과 출구를 확인합니다."
+    usage = "지도 · 지도 근처 · 지도 전체 · 지도 목록 · 지도 <지도명> · 지도 중심 <방문 장소> · 지도 ascii · 지도 도움말"
+    summary = "공개 가능한 방문 장소의 연결을 문자 지도로 확인합니다."
+    input_style = "prefix"
+    prefix_options = RESERVED_ARGUMENTS - {"도움"}
     key = "지도"
     aliases = ["지"]
 
-    def run(self):
+    def func(self):
+        # 명령 출력과 자연회복은 기존 dispatcher가 처리한다. 조회는 전역 갱신을 예약하지 않는다.
+        query = self.args.strip()
+        if query == "목록":
+            try:
+                self.show_list()
+            except rules.RuleError as error:
+                self.caller.msg(ft.text(ft.token("error", str(error)), kind="error"))
+            return
+        from world.map_commands import map_text
+
+        result = map_text(self.caller, query)
+        for message in result if isinstance(result, list) else (result,):
+            self.caller.msg(message)
+
+    def show_list(self):
         visited = set(self.caller.profile_snapshot()["visited"])
         lines = ["방문한 장소만 표시됩니다.", ""]
         for region in REGIONS.values():

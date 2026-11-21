@@ -10,6 +10,7 @@ from world.content import (
     ITEMS,
     REGION_ENEMIES,
     REGIONS,
+    ROOM_REGION,
     ROOMS,
     SHOP_CATALOGS,
     spawn_id_for,
@@ -21,6 +22,8 @@ from world.content.facilities import FACILITIES
 from world.content.final_items import BAREHAND_NARRATION
 from world.content.headquarters import ELEVATOR_ROOM, HQ_LANDINGS, ROOF_ROOMS, ROOF_SIDES
 from world.item_entities.policy import definition_errors
+from world.map_layout import MapDeclarationInvalid
+from world.map_metadata import build_catalog, validate_geometry
 from world.quests import QUESTS
 
 
@@ -274,6 +277,10 @@ def errors(interactables):
         issues.append("모든 Room은 정확히 하나의 Region에 속해야 합니다.")
     if len(ROOMS) != sum(len(region["rooms"]) for region in REGIONS.values()):
         issues.append("Room ID가 중복되었습니다.")
+    try:
+        validate_geometry(ROOMS, build_catalog(ROOMS, REGIONS, ROOM_REGION))
+    except MapDeclarationInvalid as error:
+        issues.append(f"MapDeclarationInvalid: {error}")
     for region_id, region in REGIONS.items():
         if region.get("weather_zone") not in WEATHER_ZONES:
             issues.append(f"{region_id}: Weather Zone이 없습니다.")

@@ -266,6 +266,21 @@ def current_doors(caller, now=None):
     return sorted(result, key=lambda t: (order.index(t.direction), t.identity))
 
 
+def current_door_overlays(context, zone, public_exits):
+    """지도용 현재 위치의 공개 정적 Door 중 잠기거나 닫힌 실제 Exit."""
+    from world.observation import can_perceive, perceives
+
+    if not perceives(context.snapshot, "normal"):
+        return set()
+    blocked = set()
+    for definition in DOORS.values():
+        for source, direction, _ in definition["endpoints"]:
+            obj = public_exits.get(direction) if source == zone else None
+            if obj and can_perceive(obj, context) and state_for_exit(obj, context.observed_at) in ("CLOSED", "LOCKED"):
+                blocked.add(obj.pk)
+    return blocked
+
+
 def resolve_door(caller, value, action, now=None):
     from world.actions.resolver import select_role
     from world.actions.schema import ReferenceKind, RoleDefinition

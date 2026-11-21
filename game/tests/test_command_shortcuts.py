@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 
 from commands.default_cmdsets import CharacterCmdSet, UnloggedinCmdSet
 from commands.shortcuts import DELETE_ALL_CONFIRM_TTL_SECONDS
-from evennia import CmdSet, Command
+from evennia import CmdSet, Command, search_tag
 from evennia.commands.cmdparser import cmdparser as default_parser
 from evennia.utils.dbserialize import deserialize
 from server.conf.cmdparser import cmdparser
@@ -605,6 +605,45 @@ class CommandShortcutsTests(WorldCommandTest):
         self.assertEqual(self.run_raw("전역 줄임말"), self.run_raw("단축어"))
         self.run_raw("정찰 해지")
         self.assertEqual(self.saved(), {})
+
+    def test_map_options_coexist_with_postfix_target_actions(self):
+        record = search_tag("maintenance_log", category="primal_interactable")[0]
+        self.char1.location = record.location
+        self.assertIn("대상", self.run_raw("지도 조사"))
+        self.assertFalse(self.char1.profile_snapshot()["quests"]["radio_tower"]["record_read"])
+        record.key = "지도"
+        self.assertIn("발전기 복구 절차", self.run_raw("지도 봐"))
+        record.key = "지도 근처"
+        self.assertIn("발전기 복구 절차", self.run_raw("지도 근처 봐"))
+        record.key = "지도 중심"
+        self.assertIn("발전기 복구 절차", self.run_raw("지도 중심 봐"))
+        record.key = "지도"
+        self.assertIn("복구 절차", self.run_raw("지도 조사"))
+        self.assertTrue(self.char1.profile_snapshot()["quests"]["radio_tower"]["record_read"])
+        self.assertIn("@", self.run_raw("지도"))
+        self.assertIn("방문한 장소만 표시", self.run_raw("지도 목록"))
+        self.assertEqual(self.run_raw("지도 근처"), self.run_raw("지 근처"))
+        self.assertIn("지도 중심", self.run_raw("지도 도움말"))
+        self.assertIn("지도 중심", self.run_raw("지도 도움"))
+        for raw, speech in (("지도 근처 말", "지도 근처"), ("'지도 조사", "지도 조사")):
+            self.assertIn(speech, self.run_raw(raw))
+        bundled = self.run_raw("지도 근처, 상태 해")
+        self.assertIn("@", bundled)
+        self.assertIn("체력", bundled)
+        before = self.char1.location
+        self.assertIn("출구", self.run_raw("출구"))
+        self.assertEqual(self.char1.location, before)
+
+    def test_locked_postfix_after_map_prefix_never_selects_prefix_or_shortcut(self):
+        commands = CharacterCmdSet()
+        locked = Command(key="확인", aliases=["여러 단어"], locks="cmd:false()")
+        locked.input_style = "target"
+        commands.add(locked)
+        self.char1.change(lambda profile: profile["command_shortcuts"].update(
+            확인="귀환", 단어="귀환"))
+        for raw in ("지도 확인", "지 여러 단어"):
+            with self.subTest(raw=raw):
+                self.assertEqual(cmdparser(raw, commands, self.char1), [])
 
     def test_store_count_length_and_atomic_replacement_boundaries(self):
         self.char1.change(lambda p: p.update(command_shortcuts={f"a{i}": None for i in range(99)}))

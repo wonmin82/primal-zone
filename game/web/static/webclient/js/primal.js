@@ -387,7 +387,7 @@
       } else if (kind === "pz_log" && Array.isArray(args?.[0]?.segments)) {
         const message = args[0];
         if (message.kind === "prompt") latestPrompt = message.segments;
-        append("", ["sheet", "event", "error", "chat", "prompt"].includes(message.kind) ? message.kind : "", message.segments);
+        append("", ["sheet", "event", "error", "chat", "prompt", "map"].includes(message.kind) ? message.kind : "", message.segments);
       } else if (kind === "pz_state" && args?.[0]) render(args[0]);
       else if (kind === "pz_action_result" && args?.[0]?.action) {
         byId("context-actions").append(actionButton("확정", args[0].action));

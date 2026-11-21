@@ -121,6 +121,22 @@ test('TEST-50A-06 Desktop/Narrow 구조·입력·버튼 이름·스크린샷 증
   }
 });
 
+test('TEST-103-01 문자 지도 웹 로그와 좁은 화면', async ({ actors }) => {
+  const a = await actors.create(0);
+  for (const width of [1280, 375]) {
+    await a.page.setViewportSize({ width, height: 840 });
+    await a.command('지도');
+    const map = a.page.locator('#log .log-entry.map').last();
+    await expect(map).toContainText('@');
+    await expect(map).toHaveCSS('white-space', 'pre');
+    await expect(map).toHaveCSS('overflow-x', 'auto');
+    await expect(map.locator('.semantic-player')).toContainText('@');
+    await a.command('지도 목록');
+    await expect(a.page.locator('#log .log-entry.sheet').last()).toContainText('방문한 장소만 표시됩니다.');
+    await expect(a.page.locator('#log .log-entry.sheet').last()).toHaveCSS('white-space', 'pre-wrap');
+  }
+});
+
 test('TEST-P2-02-A 개인 메시지는 실제 전달하되 진단에 원문 비수집', async ({ actors }) => {
   const a = await actors.create(0), b = await actors.create(1);
   const privateText = 'PRIVATE-FIXTURE-' + Date.now();

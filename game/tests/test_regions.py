@@ -277,7 +277,7 @@ class RegionTests(WorldCommandTest):
         self.assertEqual(self.char1.profile()["quests"], saved["quests"])
         self.assertIn("포식자", self.char1.quest_text(saved))
         with patch.object(self.char1, "msg") as message:
-            self.char1.execute_cmd("지도")
+            self.char1.execute_cmd("지도 목록")
         self.assertIn("[깊은 밀림]", str(message.call_args_list))
         with patch.object(self.char1, "msg") as message:
             Explorer.push_state(self.char1)
