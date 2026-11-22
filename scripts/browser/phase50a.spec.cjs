@@ -390,7 +390,8 @@ test('TEST-104-03 주변 행동과 지도 뷰포트의 위치·크기 및 키보
     const map = rect('#minimap-panel'), viewport = rect('#minimap-output'), party = rect('.party-panel');
     return {
       surroundingTop:surrounding.top, surroundingHeight:surrounding.height, gridHeight:grid.height,
-      mapTop:map.top, viewportTop:viewport.top, viewportHeight:viewport.height, partyTop:party.top, scrollY,
+      mapTop:map.top, viewportTop:viewport.top, viewportHeight:viewport.height, partyTop:party.top,
+      actionHeight:rect('.surroundings-scroll').height, scrollY,
     };
   });
   let requestCount = 0;
@@ -405,13 +406,14 @@ test('TEST-104-03 주변 행동과 지도 뷰포트의 위치·크기 및 키보
     await expect(canvas).toHaveText('@─?');
     expect(await page.locator('.right-column > :first-child > :first-child').getAttribute('class')).toContain('surroundings-panel');
     const start = await geometry();
+    expect(start.actionHeight).toBeGreaterThanOrEqual(180);
     expect(start.mapTop).toBeGreaterThan(start.surroundingTop);
     expect(start.partyTop).toBeGreaterThan(start.mapTop);
     const measured = {};
     const stable = async stage => {
       const current = await geometry();
       expect(current.scrollY).toBe(start.scrollY);
-      for (const key of ['surroundingTop', 'surroundingHeight', 'gridHeight', 'mapTop', 'viewportTop', 'viewportHeight']) {
+      for (const key of ['surroundingTop', 'surroundingHeight', 'gridHeight', 'mapTop', 'viewportTop', 'viewportHeight', 'actionHeight']) {
         expect(Math.abs(current[key] - start[key]), stage + ' ' + key).toBeLessThanOrEqual(1);
       }
       measured[stage] = current;

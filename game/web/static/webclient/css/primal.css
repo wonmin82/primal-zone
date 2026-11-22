@@ -39,7 +39,7 @@ body{font-synthesis:none;font-variant-ligatures:none}h1,h2,b,strong,.brand,.eyeb
 .log-entry.map{white-space:pre;overflow-wrap:normal;overflow-x:auto;font-family:ui-monospace,monospace}
 .exploration-panels{display:flex;flex-direction:column;gap:18px;min-inline-size:0}
 .surroundings-panel{
-  --surroundings-height:24rem;
+  --surroundings-height:30rem;
   display:flex;flex-direction:column;block-size:var(--surroundings-height);min-inline-size:0;
 }
 .surroundings-fixed{flex:none}
@@ -72,7 +72,7 @@ body{font-synthesis:none;font-variant-ligatures:none}h1,h2,b,strong,.brand,.eyeb
 @media(max-width:1150px){.exploration-panels{grid-column:1/-1}}
 @media(max-width:700px){
   .exploration-panels{gap:12px}
-  .surroundings-panel{--surroundings-height:21rem}
+  .surroundings-panel{--surroundings-height:28rem}
   .minimap{--minimap-height:10rem}
   .minimap button,.minimap select,.minimap-center-row input,.minimap summary{min-height:44px}
   .minimap summary{align-content:center}
