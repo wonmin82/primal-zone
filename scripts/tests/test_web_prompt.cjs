@@ -557,6 +557,12 @@ test("전역 중심 검색으로 확인한 지도는 다음 중심 이름의 범
     sheet:"전초구역", sheets:["본부", "전초구역"], centers:["부두"],
     messages:[{kind:"map", segments:[{text:"o", role:"text"}]}], summary:"탐사대 부두"});
   assert.equal(c.byId("minimap-sheet").value, "전초구역");
+  const receivedId = last().id;
+  mapState(c, "r1");
+  assert.equal(last().id, receivedId);
+  mapState(c, "r2");
+  assert.deepEqual(last(), {id:receivedId + 1, sheet:"전초구역", center:"탐사대 부두"});
+  mapReply(c, "r2", last(), "부두 중심", "전초구역");
   c.byId("minimap-center").value = "다음 장소";
   c.byId("minimap-center-form").fire("submit");
   assert.equal(last().sheet, "전초구역");

@@ -30,6 +30,7 @@ class MapSession:
     revision: str = field(default_factory=_new_token)
     facts: tuple | None = None
     checks: dict = field(default_factory=dict)
+    sheet_checks: list = field(default_factory=list)
     timer: object = None
     pending: object = None
     request_id: int = 0
@@ -40,6 +41,7 @@ class MapSession:
             self.timer.cancel()
         self.timer = None
         self.checks.clear()
+        self.sheet_checks.clear()
 
     def cancel_request(self):
         if self.pending is not None and self.pending.active():
@@ -56,6 +58,9 @@ class MapSession:
             return any(
                 previous != _public_access(obj, self.viewer)
                 for obj, previous in self.checks.values()
+            ) or any(
+                previous != any(_public_access(room, self.viewer) for room in rooms)
+                for rooms, previous in self.sheet_checks
             )
         except Exception:
             logger.exception("미니맵 공개 범위를 다시 확인할 수 없습니다.")
@@ -108,7 +113,7 @@ def _watch(session, entry):
     if entry.changed():
         entry.invalidate()
         session.msg(pz_map_state=([{"revision": entry.revision, "owner": entry.owner}], {}))
-    elif entry.checks:
+    elif entry.checks or entry.sheet_checks:
         entry.timer = reactor.callLater(RECHECK_SECONDS, _watch, session, entry)
 
 
@@ -164,12 +169,19 @@ def _deliver(session, entry, request_id, payload):
         reset(session)
         return
     checks = {}
+    sheet_checks = []
 
     def check(obj, caller):
         if obj.pk not in checks:
             allowed = _public_access(obj, caller)
             checks[obj.pk] = (obj, allowed)
         return checks[obj.pk][1]
+
+    def check_sheet(rooms, caller):
+        # 공개 Sheet 이름은 해당 Sheet에 보이는 장소가 한 곳이라도 있는지에만 의존한다.
+        allowed = any(_public_access(room, caller) for room in rooms)
+        sheet_checks.append((rooms, allowed))
+        return allowed
 
     try:
         sheet, center = _label(payload, "sheet"), _label(payload, "center")
@@ -179,7 +191,7 @@ def _deliver(session, entry, request_id, payload):
                   "sheets": [], "centers": [], "summary": message}
     else:
         entry.last_request = monotonic()
-        result = web_map(viewer, sheet=sheet, center=center, view_check=check)
+        result = web_map(viewer, sheet=sheet, center=center, view_check=check, sheet_check=check_sheet)
 
     try:
         require_session(viewer, session)
@@ -189,7 +201,8 @@ def _deliver(session, entry, request_id, payload):
         return
     entry.stop()
     entry.checks = checks
-    if checks:
+    entry.sheet_checks = sheet_checks
+    if checks or sheet_checks:
         from twisted.internet import reactor
 
         entry.timer = reactor.callLater(RECHECK_SECONDS, _watch, session, entry)

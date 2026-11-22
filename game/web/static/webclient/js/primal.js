@@ -90,6 +90,11 @@
     minimapCenter.value = "";
     minimapScroll = [0, 0];
   }
+  function minimapQuery() {
+    const {sheet, center, centerSheet} = minimapSelection;
+    const scope = centerSheet || sheet;
+    return {...(scope ? {sheet:scope} : {}), ...(center ? {center} : {})};
+  }
   function resetMinimap() {
     minimapOwner = minimapRevision = "";
     clearMinimapSelection();
@@ -98,9 +103,7 @@
   }
   function requestMinimap({force = false, keepScroll = true} = {}) {
     if (!playing || !minimapRevision || !minimapPanel.open || minimapPanel.hidden) return;
-    const {sheet, center, centerSheet} = minimapSelection;
-    const scope = centerSheet || sheet;
-    const query = {...(scope ? {sheet:scope} : {}), ...(center ? {center} : {})};
+    const query = minimapQuery();
     const key = JSON.stringify([minimapRevision, query]);
     if (!force && (minimapPending?.key === key || minimapDisplayed === key)) return;
     if (!keepScroll) minimapScroll = [0, 0];
@@ -138,10 +141,12 @@
         !minimapPending || response?.id !== minimapPending.id || response.revision !== minimapRevision ||
         response.owner !== minimapOwner) return;
     if (!Array.isArray(response.messages) || !Array.isArray(response.sheets) || !Array.isArray(response.centers)) return;
-    const key = minimapPending.key;
     clearMinimap();
-    minimapDisplayed = key;
     minimapPublicSheet = typeof response.sheet === "string" && response.sheets.includes(response.sheet) ? response.sheet : "";
+    if (minimapSelection.center && minimapPublicSheet) {
+      minimapSelection.centerSheet = minimapPublicSheet;
+    }
+    minimapDisplayed = JSON.stringify([minimapRevision, minimapQuery()]);
     setMinimapSheets(response.sheets);
     minimapCenters.replaceChildren(...response.centers.filter(name => typeof name === "string").map(name => {
       const option = document.createElement("option");
@@ -165,7 +170,9 @@
       elements.push(row);
     }
     minimapContent.replaceChildren(...elements);
-    minimapDescription.textContent = typeof response.summary === "string" ? response.summary : "";
+    if (!minimapStatus.textContent) {
+      minimapDescription.textContent = typeof response.summary === "string" ? response.summary : "";
+    }
     if (!elements.length && !minimapStatus.textContent) minimapStatus.textContent = "표시할 지도가 없습니다.";
     [minimapOutput.scrollLeft, minimapOutput.scrollTop] = minimapScroll;
   }

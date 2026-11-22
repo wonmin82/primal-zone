@@ -140,6 +140,29 @@ class MinimapTests(WorldCommandTest):
         self.assertEqual(scoped["sheet"], automatic["sheet"])
         self.assertTrue(any(message["kind"] == "map" for message in scoped["messages"]))
 
+    def test_remote_sheet_invalidation_depends_on_sheet_visibility(self):
+        zones = ("support_5f_c", "support_5f_e1")
+        self.char1.change(lambda profile: profile.update(visited=list(zones)))
+        first = self.send_map(id=1)
+        entry = self.session.primal_minimap
+        self.assertIn("본부 5층", first["sheets"])
+        self.send.reset_mock()
+        self.rooms[zones[0]].locks.add("view:false()")
+        _watch(self.session, entry)
+        self.assertEqual(entry.revision, first["revision"])
+        self.send.assert_not_called()
+
+        self.rooms[zones[1]].locks.add("view:false()")
+        _watch(self.session, entry)
+        self.assertNotEqual(entry.revision, first["revision"])
+        second = self.send_map(id=2)
+        self.assertNotIn("본부 5층", second["sheets"])
+
+        self.rooms[zones[0]].locks.add("view:all()")
+        _watch(self.session, entry)
+        self.assertNotEqual(entry.revision, second["revision"])
+        self.assertIn("본부 5층", self.send_map(id=3)["sheets"])
+
     def test_unsubscribe_cancels_permission_watch_and_pending_request(self):
         from server.conf.primal_inputfuncs import pz_map
 
@@ -156,6 +179,7 @@ class MinimapTests(WorldCommandTest):
         self.assertIsNone(entry.timer)
         self.assertIsNone(entry.pending)
         self.assertFalse(entry.checks)
+        self.assertFalse(entry.sheet_checks)
 
     def test_failed_permission_recheck_invalidates_display_without_error_details(self):
         first = self.send_map(id=1)

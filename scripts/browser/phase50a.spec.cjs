@@ -460,6 +460,13 @@ test('TEST-104-03 주변 행동과 지도 뷰포트의 위치·크기 및 키보
     await receive(revision + '-revoked', ++requestCount, [message('error', '조회할 수 없는 지도')], false);
     await expect(viewport.getByRole('status')).toHaveText('조회할 수 없는 지도');
     await stable('권한 철회·오류');
+    await mapSheet.evaluate(el => el.focus({preventScroll:true}));
+    state(revision + '-sheet-focus');
+    await expect(mapSheet).toBeFocused();
+    await receive(revision + '-sheet-focus', ++requestCount, small);
+    await expect(canvas).toHaveText('@─?');
+    await expect(mapSheet).toBeFocused();
+    await expect(page.locator('#minimap-description')).toHaveAttribute('aria-live', 'polite');
     await command.evaluate(el => el.focus({preventScroll:true}));
     state(revision + '-restored');
     await receive(revision + '-restored', ++requestCount, small);
