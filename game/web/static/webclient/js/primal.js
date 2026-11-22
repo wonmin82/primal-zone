@@ -52,6 +52,7 @@
   }
   const minimapPanel = byId("minimap-panel"), minimapSheet = byId("minimap-sheet");
   const minimapCenter = byId("minimap-center"), minimapCenters = byId("minimap-centers");
+  const minimapCenterSubmit = byId("minimap-center-submit");
   const minimapOutput = byId("minimap-output"), minimapStatus = byId("minimap-status");
   const minimapContent = byId("minimap-content");
   const minimapDescription = byId("minimap-description");
@@ -75,6 +76,7 @@
     clearTimeout(minimapTimer);
     minimapPending = null;
     minimapDisplayed = "";
+    minimapCenterSubmit.disabled = true;
     minimapContent.replaceChildren();
     minimapContent.setAttribute("aria-busy", "false");
     minimapStatus.textContent = ""; minimapDescription.textContent = "";
@@ -154,7 +156,10 @@
       return option;
     }));
     const elements = [];
-    const hasCanvas = response.messages.some(message => message?.kind === "map");
+    const hasCanvas = response.messages.some(message => message?.kind === "map" && Array.isArray(message.segments));
+    const isConnector = response.sheet === "" && response.messages.length === 1 &&
+      response.messages[0]?.kind === "sheet" && Array.isArray(response.messages[0].segments);
+    const hasError = response.messages.some(message => message?.kind === "error");
     for (const [index, message] of response.messages.entries()) {
       if (!Array.isArray(message?.segments)) continue;
       const canvas = message.kind === "map";
@@ -174,6 +179,7 @@
       minimapDescription.textContent = typeof response.summary === "string" ? response.summary : "";
     }
     if (!elements.length && !minimapStatus.textContent) minimapStatus.textContent = "표시할 지도가 없습니다.";
+    minimapCenterSubmit.disabled = hasError || !(hasCanvas ? minimapPublicSheet : isConnector);
     [minimapOutput.scrollLeft, minimapOutput.scrollTop] = minimapScroll;
   }
   minimapPanel.addEventListener("toggle", () => {
@@ -187,7 +193,6 @@
   minimapSheet.addEventListener("change", () => {
     minimapSelection = minimapSheet.value ? {sheet:minimapSheet.value} : {};
     minimapPublicSheet = "";
-    minimapCenter.value = "";
     requestMinimap({keepScroll:false});
   });
   minimapCenter.addEventListener("keydown", (event) => {
@@ -195,17 +200,21 @@
   });
   byId("minimap-center-form").addEventListener("submit", (event) => {
     event.preventDefault();
+    if (minimapCenterSubmit.disabled || !playing || minimapPanel.hidden ||
+        !minimapPanel.open || socket?.readyState !== WebSocket.OPEN) return;
     const center = minimapCenter.value.trim();
     if (!center || center.length > 120) return;
-    const {sheet, centerSheet} = minimapSelection;
-    minimapSelection = {sheet, center, centerSheet:sheet || minimapPublicSheet || centerSheet};
+    const sheet = minimapPublicSheet && minimapSelection.sheet;
+    minimapSelection = {sheet, center, centerSheet:minimapPublicSheet};
     minimapCenter.value = "";
     requestMinimap({keepScroll:false});
   });
   byId("minimap-current").addEventListener("click", () => {
     const returnToCurrent = minimapSelection.sheet || minimapSelection.center;
-    minimapCenter.value = "";
-    if (!returnToCurrent) return;
+    if (!returnToCurrent) {
+      if (minimapCenterSubmit.disabled && !minimapPending) requestMinimap({force:true});
+      return;
+    }
     minimapSelection = {};
     minimapPublicSheet = "";
     minimapSheet.value = "";

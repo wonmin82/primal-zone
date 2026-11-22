@@ -8,7 +8,7 @@
   <title>원시구역 — 탐사 기록</title>
   <link rel="icon" type="image/x-icon" href="{% static 'website/images/favicon.ico' %}">
   <link rel="stylesheet" href="{% static 'webclient/css/primal.css' %}?v=exploration-map-surroundings">
-  <script defer src="{% static 'webclient/js/primal.js' %}?v=exploration-map-phase2"></script>
+  <script defer src="{% static 'webclient/js/primal.js' %}?v=exploration-map-center-ready"></script>
 </head>
 <body data-ws-url="{{ websocket_url|default:'' }}" data-ws-port="{{ websocket_port }}">
   <header class="masthead">
@@ -85,7 +85,7 @@
             <div class="minimap-center-row">
               <input id="minimap-center" list="minimap-centers" maxlength="120" autocomplete="off" required>
               <datalist id="minimap-centers"></datalist>
-              <button id="minimap-center-submit" type="submit">중심 이동</button>
+              <button id="minimap-center-submit" type="submit" disabled>중심 이동</button>
             </div>
           </form>
           <div class="minimap-actions">

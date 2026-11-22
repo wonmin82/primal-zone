@@ -482,6 +482,139 @@ test('TEST-104-03 주변 행동과 지도 뷰포트의 위치·크기 및 키보
     JSON.stringify(results, null, 2));
 });
 
+test('TEST-104-04 실제 지도 갱신 중 중심 제출 제한과 조회 복구', async ({ actors }) => {
+  const a = await actors.create(0);
+  const { page } = a;
+  const center = page.locator('#minimap-center');
+  const submit = page.locator('#minimap-center-submit');
+  const refresh = page.locator('#minimap-refresh');
+  const status = page.locator('#minimap-status');
+  const canvas = page.locator('#minimap-output .minimap-map');
+  const summary = page.locator('#minimap-description');
+  const place = '본부 3층 중앙 복도';
+  const go = async (command, zone) => {
+    await a.command(command);
+    await expect.poll(() => a.state.zone).toBe(zone);
+    await expect(summary).toContainText(a.state.room);
+  };
+
+  // 실제 서버 요청은 전달하고 지도 응답만 클라이언트 수신 경계에서 지연한다.
+  await page.evaluate(() => {
+    const {send, addEventListener} = WebSocket.prototype;
+    const held = [];
+    const gate = window.mapCenterGate = {
+      hold: false, requests: [], held: 0,
+      release() {
+        this.hold = false;
+        for (const deliver of held.splice(0)) deliver();
+        this.held = 0;
+      },
+    };
+    WebSocket.prototype.send = function(data) {
+      const [kind, args] = JSON.parse(data);
+      if (kind === 'pz_map' && Number.isInteger(args[0]?.id)) {
+        const {sheet, center} = args[0];
+        gate.requests.push({...sheet && {sheet}, ...center && {center}});
+      }
+      return send.call(this, data);
+    };
+    WebSocket.prototype.addEventListener = function(kind, listener, options) {
+      if (kind !== 'message') return addEventListener.call(this, kind, listener, options);
+      return addEventListener.call(this, kind, event => {
+        if (gate.hold && JSON.parse(event.data)[0] === 'pz_map') {
+          held.push(() => listener.call(this, event));
+          gate.held++;
+        } else listener.call(this, event);
+      }, options);
+    };
+  });
+  await page.getByRole('button', {name:'접속 종료', exact:true}).click();
+  await expect(page.locator('#connection-label')).toHaveText('연결 끊김');
+  a.authenticated = false;
+  await page.getByRole('button', {name:'재연결', exact:true}).click();
+  await a.login(false);
+  await expect(canvas).toContainText('@');
+  for (const [command, zone] of [
+    ['남', 'hq_concourse'], ['승강기', 'support_elevator'],
+    ['3층', 'support_3f_c'], ['동', 'support_3f_e1'],
+  ]) await go(command, zone);
+  await expect(submit).toBeEnabled();
+  await page.evaluate(() => { window.mapCenterGate.requests = []; });
+  const hold = () => page.evaluate(() => { window.mapCenterGate.hold = true; });
+  const release = () => page.evaluate(() => window.mapCenterGate.release());
+  const requests = () => page.evaluate(() => window.mapCenterGate.requests);
+  const waitHeld = () => expect.poll(() => page.evaluate(() => window.mapCenterGate.held)).toBe(1);
+  const tops = () => page.evaluate(() => ['#minimap-panel', '#minimap-output'].map(selector =>
+    document.querySelector(selector).getBoundingClientRect().top + window.scrollY));
+  const expectStable = async reference => {
+    for (const [index, top] of (await tops()).entries()) expect(Math.abs(top - reference[index])).toBeLessThanOrEqual(1);
+  };
+
+  await center.fill(place);
+  const before = await tops();
+  await hold();
+  await a.command('회복실 문 닫아');
+  await waitHeld();
+  await expect(status).toHaveText('지도를 불러오는 중입니다.');
+  await expect(submit).toBeDisabled();
+  await expect(page.locator('#command')).toBeFocused();
+  const pending = await requests();
+  expect(pending).toEqual([{}]);
+  await center.press('Enter');
+  await expect(center).toBeFocused();
+  expect(await requests()).toEqual(pending);
+  await submit.click({force:true});
+  expect(await requests()).toEqual(pending);
+  await page.locator('#minimap-center-form').dispatchEvent('submit', {cancelable:true});
+  expect(await requests()).toEqual(pending);
+  await expect(center).toHaveValue(place);
+  await expectStable(before);
+  await release();
+  await expect(submit).toBeEnabled();
+  await expect(center).toHaveValue(place);
+  await expectStable(before);
+  expect(await requests()).toEqual(pending);
+
+  await page.setViewportSize({width:375, height:840});
+  await submit.click();
+  await expect.poll(requests).toEqual([...pending, {sheet:'본부 3층', center:place}]);
+  await expect(page.locator('#minimap-output .minimap-message').first()).toContainText(place);
+  await expect(submit).toBeEnabled();
+
+  await center.fill('존재하지 않는 중심 검증');
+  await center.press('Enter');
+  await expect(status).not.toBeEmpty();
+  await expect(canvas).toHaveCount(0);
+  await expect(submit).toBeDisabled();
+  await expect.poll(async () => (await requests()).at(-1)).toEqual({sheet:'본부 3층', center:'존재하지 않는 중심 검증'});
+  await page.locator('#minimap-current').click();
+  await expect(submit).toBeEnabled();
+  await expect.poll(async () => (await requests()).at(-1)).toEqual({});
+
+  await page.clock.install();
+  await hold();
+  await refresh.click();
+  await waitHeld();
+  await page.clock.fastForward(10001);
+  await expect(status).toContainText('지도 응답이 지연되었습니다');
+  await expect(submit).toBeDisabled();
+  await release();
+  await expect(status).toContainText('지도 응답이 지연되었습니다');
+  await expect(submit).toBeDisabled();
+  await refresh.click();
+  await expect(submit).toBeEnabled();
+
+  await go('서', 'support_3f_c');
+  await go('승강기', 'support_elevator');
+  await expect(canvas).toHaveCount(0);
+  await expect(submit).toBeEnabled();
+  await center.fill(place);
+  await center.press('Enter');
+  await expect.poll(async () => (await requests()).at(-1)).toEqual({center:place});
+  await expect(canvas).toContainText('o');
+  expect(a.errors).toEqual([]);
+});
+
 test('TEST-P2-02-A 개인 메시지는 실제 전달하되 진단에 원문 비수집', async ({ actors }) => {
   const a = await actors.create(0), b = await actors.create(1);
   const privateText = 'PRIVATE-FIXTURE-' + Date.now();
