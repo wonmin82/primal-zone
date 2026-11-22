@@ -17,7 +17,6 @@ from world.item_entities.models import ItemEntity
 from world.item_inventory import grant
 from world.multiplayer import world_change
 
-from tests.action_control_fixture import selection_label
 from tests.base import WorldCommandTest
 from tests.item_entity_fixture import NativeItemTest
 
@@ -80,7 +79,7 @@ class EquipmentTests(NativeItemTest, WorldCommandTest):
                 outputs = [call.args[0] for call in message.call_args_list
                            if call.args and isinstance(call.args[0], ft.Text) and tokens(call.args[0], "success")]
                 self.assertEqual(len(outputs), 1)
-                self.assertEqual(tokens(outputs[0], "item"), [selection_label(row)])
+                self.assertEqual(tokens(outputs[0], "item"), [ITEMS[identity]["name"]])
 
     def test_wrong_actions_and_legacy_alias_do_not_save(self):
         self.all_items()
@@ -120,7 +119,7 @@ class EquipmentTests(NativeItemTest, WorldCommandTest):
         self.assertIsNone(Explorer.profile(self.char1).equipment_context.active)
         self.char1.execute_cmd("절단마체테 무장")
         self.assertEqual(list(equipped_items(self.char1).values_list("pk", flat=True)), [target.pk])
-        self.assertIn(selection_label(target) + " [주무기]", view.equipment(self.char1.profile()))
+        self.assertIn(ITEMS[target.definition_id]["name"] + " [주무기]", view.equipment(self.char1.profile()))
 
     def test_spaced_names_aliases_and_combat_restriction(self):
         self.char1.change(lambda p: p.update(credits=1000))
@@ -179,7 +178,7 @@ class EquipmentTests(NativeItemTest, WorldCommandTest):
         self.clear_equipment()
         for identity in ("jungle_longblade", "tactical_protective_suit"):
             equip_item(self.char1, self.item(identity))
-        self.assertIn(selection_label(self.item("jungle_longblade")) + " [주무기]", view.equipment(self.char1.profile()))
+        self.assertIn(ITEMS["jungle_longblade"]["name"] + " [주무기]", view.equipment(self.char1.profile()))
         self.assertEqual((rules.stats(self.char1.profile())["attack"], rules.stats(self.char1.profile())["defense"]), (14, 4))
         for shop_id, catalog in SHOP_CATALOGS.items():
             self.assertEqual({ITEMS[i]["name"] for i in catalog["purchase_catalog"]}, set(tokens(view.shop(shop_id, "상인"), "item")))

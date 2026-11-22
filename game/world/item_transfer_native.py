@@ -5,18 +5,13 @@ from world.content import ITEMS
 from world.item_entities import api
 from world.item_entities.services import domain_errors
 from world.multiplayer import world_change
-from world.targets import Mode, matching, parse_selector, select
+from world.targets import Mode, select_native_items
 
 
 def stored_items(character, container):
     owner = character if container.personal else container
     location = "personal_storage" if container.personal else "shared_storage"
     return list(api.items_in_location(location, owner_object=owner).order_by("sequence"))
-
-
-def item_names(item):
-    definition = ITEMS[item.definition_id]
-    return (item.definition_id, definition["name"], *definition.get("aliases", []))
 
 
 def require_ownership_transfer(item, destination):
@@ -124,8 +119,7 @@ def transfer(character, value, *, recipient=None, container=None, withdraw=False
             ObjectDB.objects.select_for_update().get(pk=identity)
         pool = stored_items(character, container) if withdraw else list(api.items_in_location("inventory", owner_object=character).order_by("sequence"))
         api.lock_items([item.pk for owner in owners.values() for item in api.items_owned_by(owner)])
-        selector = parse_selector(value, [name for item in pool for name in item_names(item)])
-        rows = select(matching(pool, selector, item_names), selector)
+        rows, selector = select_native_items(pool, value)
         if selector.mode == Mode.ALL and any(not ITEMS[item.definition_id]["stackable"] for item in rows):
             raise rules.RuleError("스택만 모두 옮길 수 있습니다.")
         identity = rows[0].definition_id

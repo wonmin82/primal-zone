@@ -132,8 +132,7 @@ class Phase3ItemDoorTests(NativeItemTest):
         self.assertEqual(label(record, 1), "붕대 2")
         # 실제 텍스트/Web 소지품 Presenter가 같은 UUID의 영속 번호와 수량을 결합한다.
         row = next(row for row in inventory_rows(self.char1.profile()) if row["identity"] == str(second.pk))
-        self.assertEqual((row["selector"], row["count"], row["information_command"]),
-                         ("붕대 2", 5, "붕대 2 정보"))
+        self.assertEqual((row["selector"], row["count"]), ("붕대", 5))
         self.assertEqual(second.quantity, 5)
         role = RoleDefinition("subject", (ReferenceKind.ITEM,), DefaultTargetPolicy.FIRST_LEGACY_ORDER)
         with self.assertRaises(RuleError):
@@ -146,9 +145,7 @@ class Phase3ItemDoorTests(NativeItemTest):
         fresh = self.create("bandage")
         self.assertEqual(number_for(descriptor(fresh).reference), 1)
         only = next(row for row in inventory_rows(self.char1.profile()) if row["identity"] == str(fresh.pk))
-        # 단독 1의 생략은 허용 사항이지 의무가 아니다. 현재 구현은 숨은
-        # 그룹원의 존재를 표시 차이로 노출하지 않도록 1도 명시한다.
-        self.assertEqual(only["selector"], "붕대 1")
+        self.assertEqual(only["selector"], "붕대")
         fresh_record = next(record for record in records_for(self.char1, ReferenceKind.ITEM)
                             if record.reference == descriptor(fresh).reference)
         self.assertEqual(label(fresh_record, 1), "붕대 1")
@@ -169,7 +166,8 @@ class Phase3ItemDoorTests(NativeItemTest):
             self.assertEqual(current.name, "개명 붕대")
             self.assertIn("새별칭", current.aliases)
             role = RoleDefinition("subject", (ReferenceKind.ITEM,))
-            self.assertEqual(select_role(self.char1, role, "새별칭"), (before.reference,))
+            with self.assertRaises(RuleError):
+                select_role(self.char1, role, '"개명 붕대" 1')
             self.assertEqual(number_for(current.reference), 1)
             self.assertEqual(list(NumberScope.objects.order_by("pk").values()), counters)
         item.refresh_from_db()
@@ -301,10 +299,10 @@ class Phase3EnemySelectionTests(NativeItemTest):
         first.db.respawn_at = 1000
         self.assertEqual(labels(room_objects(self.char1))[second.pk], "회귀 사냥감 2")
         rows = multiplayer_state(self.char1, now=100)["enemies"]
-        self.assertEqual([(row["id"], row["label"], row["attack_command"], row["look_command"]) for row in rows],
-                         [(second.pk, "회귀 사냥감 2", "회귀 사냥감 2 공격", "회귀 사냥감 2 봐")])
+        self.assertEqual([(row["id"], row["label"]) for row in rows], [(second.pk, "회귀 사냥감")])
         self.assertNotIn("체력", self.command("회귀 사냥감 1 봐"))
-        self.assertIn("체력", self.command(rows[0]["look_command"]))
+        self.assertIn("체력", self.command("회귀 사냥감 2 봐"))
+        self.assertEqual(rows[0]["look_action"]["roles"]["subject"][0]["identity"], str(second.pk))
 
     def test_player_visibility_keeps_canonical_number_without_hidden_fallback(self):
         from world.state import multiplayer_state
@@ -320,7 +318,7 @@ class Phase3EnemySelectionTests(NativeItemTest):
         rows_a = multiplayer_state(self.char1, now=100)["enemies"]
         rows_b = multiplayer_state(self.char2, now=100)["enemies"]
         self.assertEqual([row["id"] for row in rows_a], [first.pk, second.pk])
-        self.assertEqual([(row["id"], row["label"]) for row in rows_b], [(second.pk, "회귀 사냥감 2")])
+        self.assertEqual([(row["id"], row["label"]) for row in rows_b], [(second.pk, "회귀 사냥감")])
         from world.targets import parse_selector, resolve
 
         with self.assertRaises(RuleError):
@@ -513,13 +511,12 @@ class Phase3EnemySelectionTests(NativeItemTest):
         scopes = list(NumberScope.objects.order_by("pk").values())
         for _ in range(2):
             rows = multiplayer_state(self.char1, now=100)["enemies"]
-            self.assertEqual([(row["id"], row["label"], row["attack_command"], row["look_command"])
-                              for row in rows],
-                             [(second.pk, "회귀 사냥감 2", "회귀 사냥감 2 공격", "회귀 사냥감 2 봐")])
+            self.assertEqual([(row["id"], row["label"]) for row in rows], [(second.pk, "회귀 사냥감 2")])
         with patch.object(self.char1, "start_combat") as start:
             self.command("회귀 사냥감 1 공격")
             start.assert_not_called()
-            self.command(rows[0]["attack_command"])
+            self.command("회귀 사냥감 2 공격")
+            self.assertEqual(rows[0]["attack_action"]["roles"]["subject"][0]["identity"], str(second.pk))
             start.assert_called_once_with(second)
         self.assertEqual(list(SelectionNumber.objects.order_by("pk").values()), numbers)
         self.assertEqual(list(NumberScope.objects.order_by("pk").values()), scopes)
@@ -564,6 +561,7 @@ class Phase3EnemySelectionTests(NativeItemTest):
         from world.npc_dialogue import available_intents, discovery, keyword_guide
         from world.observation import context_for
         from world.room_hints import render
+        from world.selection_display import room_snapshot
         from world.state import multiplayer_state
         from world.target_presentation import selector_hint
 
@@ -575,9 +573,9 @@ class Phase3EnemySelectionTests(NativeItemTest):
             npc.tags.add("commander", category="primal_actor_spawn")
         self.assertEqual(render(context_for(self.char1, observed_at=100)),
                          "'윤대장 1에게 안녕 · '윤대장 2에게 안녕")
-        normal_hint = selector_hint(npcs, "npc")
+        normal_hint = selector_hint(npcs, "npc", room_snapshot(self.char1, 100).labels)
         self.assertEqual(normal_hint.segments[-1],
-                         {"role": "text", "text": " 같은 표기로 구분해 지정할 수 있다."})
+                         {"role": "text", "text": "를 확인할 수 있다."})
         self.assertTrue(all(part["text"] for part in normal_hint.segments))
         reference = descriptor(npcs[0]).reference
         SelectionNumber.objects.filter(kind=reference.kind, identity=reference.identity).delete()
@@ -588,7 +586,7 @@ class Phase3EnemySelectionTests(NativeItemTest):
         with patch.object(self.char1, "msg") as output:
             keyword_guide(self.char1, npcs[0], available_intents(self.char1, npcs[0]), force=True)
         self.assertNotIn("에게", str(output.call_args_list))
-        hint = str(selector_hint(npcs, "npc"))
+        hint = str(selector_hint(npcs, "npc", room_snapshot(self.char1, 100).labels))
         self.assertIn("윤대장 2", hint)
         self.assertNotIn("윤대장 1", hint)
         self.assertNotIn("None", hint)

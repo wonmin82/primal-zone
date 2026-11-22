@@ -411,11 +411,11 @@
     byId("xp").max = state.xp_next - state.xp_floor;
     byId("xp").value = state.level >= state.max_level ? byId("xp").max : state.xp - state.xp_floor;
     renderExits(state.exit_details);
-    const actions = state.enemies.map((enemy) => {
+    const actions = state.enemies.flatMap((enemy) => {
       const el = actionButton(enemy.label + " " + enemy.hp + "/" + enemy.max_hp + (enemy.can_attack ? " 사냥" : " · 다른 그룹 교전 중"), enemy.attack_action);
       el.replaceChildren(semantic("hostile", enemy.label), " " + enemy.hp + "/" + enemy.max_hp + (enemy.can_attack ? " 사냥" : " · 다른 그룹 교전 중"));
       el.disabled = !enemy.can_attack;
-      return el;
+      return enemy.look_action ? [el, actionButton(enemy.label + " 봐", enemy.look_action)] : [el];
     });
     actions.push(...duelControls(state.duels || [], state.server_now));
     if (state.corpses.length > 1 && state.loot_actions?.corpses) {
@@ -427,7 +427,7 @@
       const title = document.createElement("p"); title.className = "loot-label";
       title.replaceChildren(semantic("remains", corpse.label), " · ", semantic("remains", corpse.name));
       actions.push(title);
-      actions.push(button(corpse.label + " 봐", corpse.look_command));
+      if (corpse.look_action) actions.push(actionButton(corpse.label + " 봐", corpse.look_action));
       if (corpse.loot.length && corpse.take_action) {
         const all = actionButton(corpse.label + " 전리품 회수", corpse.take_action);
         all.disabled = !corpse.loot.some((item) => item.can_take); actions.push(all);
@@ -491,10 +491,16 @@
     const invitation = state.invitation;
     byId("party-invitation").hidden = !invitation || pendingTime(invitation, state.server_now).expired;
     byId("party-inviter").textContent = invitation ? invitation.inviter + "의 일행 초청 · " + pendingTime(invitation, state.server_now).label : "";
-    for (const object of state.interactables) for (const action of object.actions) {
-      const el = action.action ? actionButton(object.label + " " + action.label, action.action) : button(object.label + " " + action.label, action.command);
-      el.replaceChildren(semantic(object.role, object.label), " ", semantic("command", action.label));
-      actions.push(el);
+    for (const object of state.interactables) {
+      const controls = object.actions.filter((row) => row.action);
+      if (object.look_action && !controls.some((row) => row.action.action_id === "global.look_target")) {
+        controls.unshift({label: "봐", action: object.look_action});
+      }
+      for (const control of controls) {
+        const el = actionButton(object.label + " " + control.label, control.action);
+        el.replaceChildren(semantic(object.role, object.label), " ", semantic("command", control.label));
+        actions.push(el);
+      }
     }
     byId("context-actions").replaceChildren(...actions);
     for (const action of state.action_controls || []) {

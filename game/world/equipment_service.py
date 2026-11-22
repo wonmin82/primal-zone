@@ -37,26 +37,44 @@ def equipped_items(character):
     return ItemEntity.objects.filter(owner_object=character, location_kind="equipment").order_by("sequence")
 
 
+def _carried_items(character):
+    from world.item_entities.api import items_owned_by
+
+    return [row for row in items_owned_by(character)
+            if row.root().location_kind in ("inventory", "equipment")]
+
+
+def _item_display_records(owned):
+    from world.selection_display import displays
+    from world.selection_numbers.api import descriptor, numbered_records
+
+    original = [record for row in owned if (record := descriptor(row)) is not None]
+    numbered = {record.reference: record for record in numbered_records(original)}
+    labels = displays(numbered.get(record.reference, record) for record in original)
+    return ({ref.identity: record.number for ref, record in numbered.items()},
+            {ref.identity: label for ref, label in labels.items()})
+
+
 def entity_snapshot(character):
     from world.content.item_mapping import LEGACY_ITEM_MAPPING
-    from world.item_entities.api import items_owned_by
     from world.item_runtime import maintenance
-    from world.selection_numbers.models import SelectionNumber
 
-    owned = [row for row in items_owned_by(character)
-             if row.root().location_kind in ("inventory", "equipment")]
-    scopes = {f"character:{character.pk}", *(f"inside:{row.parent_item_id}" for row in owned if row.parent_item_id)}
-    numbers = dict(SelectionNumber.objects.filter(kind="item", scope__scope_id__in=scopes,
-                                                  identity__in=[str(row.pk) for row in owned])
-                   .values_list("identity", "number"))
+    owned = _carried_items(character)
+    numbers, labels = _item_display_records(owned)
 
     def definition_id(row):
         return LEGACY_ITEM_MAPPING.get(row.definition_id, row.definition_id) if maintenance.get() else row.definition_id
 
+    def display_name(row):
+        name = labels.get(str(row.pk)) or ITEMS[definition_id(row)]["name"]
+        parent_name = labels.get(str(row.parent_item_id))
+        return f"{parent_name}의 {name}" if parent_name else name
+
     carried = tuple(
         eq.item_snapshot(definition_id(row), ITEMS[definition_id(row)], item_id=row.pk,
                          sequence=row.sequence, quantity=row.quantity, location=row.location_kind,
-                         slot=row.slot, state_summary=state_summary(row), selection_number=numbers.get(str(row.pk)))
+                         slot=row.slot, state_summary=state_summary(row), selection_number=numbers.get(str(row.pk)),
+                         display_label=display_name(row))
         for row in owned
     )
     return eq.EquipmentSnapshot(tuple(item for item in carried if item.location == "equipment"),
@@ -227,30 +245,19 @@ def validate_equipment_row(row):
 
 
 def resolve_item(character, value, action):
-    from world.targets import item_selector, matching, parse_selector, require_single, select
+    from world.targets import item_selector, select_native_items
 
     if not entity_runtime(character):
         return item_selector(value, ITEMS, action)
-    candidates = entity_snapshot(character).carried
-
-    def name_values(item):
-        return (item.definition_id, item.name, *item.aliases)
-
-    selector = parse_selector(value, [name for item in candidates for name in name_values(item)])
-    require_single(selector, action)
-    selected = select(matching(candidates, selector, name_values), selector)
-    return ItemEntity.objects.get(pk=selected[0].identity)
+    selected, _ = select_native_items(_carried_items(character), value, action)
+    return selected[0]
 
 
 def selector_label(character, item):
     if not isinstance(item, ItemEntity):
         return ITEMS[item]["name"]
-    from dataclasses import replace
-
-    from world.selection_numbers.api import descriptor, label, number_for
-
-    record = descriptor(item)
-    return label(replace(record, number=number_for(record.reference)))
+    _, labels = _item_display_records(_carried_items(character))
+    return labels.get(str(item.pk)) or ITEMS[item.definition_id]["name"]
 
 
 def _change_equipment(character, item, *, remove=False, expected_slot=None):

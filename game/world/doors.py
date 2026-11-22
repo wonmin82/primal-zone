@@ -285,12 +285,14 @@ def resolve_door(caller, value, action, now=None):
     from world.actions.resolver import select_role
     from world.actions.schema import ReferenceKind, RoleDefinition
     from world.selection_numbers.api import descriptor
-    if not value.strip():
+    if isinstance(value, str) and not value.strip():
         raise rules.RuleError(f"대상 이름 뒤에 {action}를 입력하세요. 예: 관리실 문 {action}")
     candidates = current_doors(caller, now)
     from evennia.objects.models import ObjectDB
 
-    references = {descriptor(ObjectDB.objects.get(pk=target.exit_pk)).reference for target in candidates}
+    endpoints = ObjectDB.objects.in_bulk([target.exit_pk for target in candidates])
+    references = {record.reference for endpoint in endpoints.values()
+                  if (record := descriptor(endpoint)) and record.reference.kind == ReferenceKind.DOOR}
     reference = select_role(caller, RoleDefinition("provider", (ReferenceKind.DOOR,)), value, candidates=references)[0]
     return next(target for target in candidates if str(target.exit_pk) == reference.identity)
 
@@ -330,17 +332,19 @@ def actions_for(caller, target, now=None):
     return [{"label": action, "command": target.direction + " 문 " + action} for action in actions]
 
 
-def web_controls(caller, now=None, *, action_rows=None):
+def web_controls(caller, now=None, *, action_rows=None, snapshot=None):
+    from world.actions.global_actions import target_action
     from world.actions.manifest import get_index
     from world.actions.presentation import action_controls
-    from world.selection_numbers.api import number_for
+    from world.selection_display import room_snapshot
 
-    rows = action_controls(caller, get_index(), now) if action_rows is None else action_rows
-    return [dict(name=target.name, label=target.direction + " " + target.name, role="object",
-                 look_command=f"문 {number_for('door', target.exit_pk)} 봐",
+    snapshot = room_snapshot(caller, now) if snapshot is None else snapshot
+    rows = action_controls(caller, get_index(), now, snapshot=snapshot) if action_rows is None else action_rows
+    return [dict(name=target.name, label=snapshot.labels[target.exit_pk], role="object",
+                 look_action=target_action("look_target", snapshot.references[target.exit_pk]),
                  actions=[row for row in rows if row["action"]["roles"].get("provider", [{}])[0].get("kind") == "door"
                           and row["action"]["roles"]["provider"][0]["identity"] == str(target.exit_pk)])
-            for target in current_doors(caller, now)]
+            for target in current_doors(caller, now) if target.exit_pk in snapshot.references]
 
 
 def look_door(caller, value, now):
@@ -363,7 +367,21 @@ def look_door(caller, value, now):
             raise rules.RuleError("대상이 모호합니다. 문 방향 또는 다른 대상의 정확한 이름을 지정하세요.")
         return None  # 실제 Door 후보가 없다면 같은 이름의 기존 객체/소지품만 조회한다.
     target = resolve_door(caller, value, "봐", now)
-    examples = [ft.token("command", action["command"]) for action in actions_for(caller, target, now)]
+    return describe_door(caller, target, now)
+
+
+def describe_door(caller, target, now):
+    from world.selection_display import provider_command, room_snapshot
+
+    if not Door.objects.filter(Q(exit_a_id=target.exit_pk) | Q(exit_b_id=target.exit_pk),
+                               door_id=target.identity).exists():
+        return ft.text("그 방향은 지금 이용할 수 없다.")
+    snapshot = room_snapshot(caller, now)
+    record = snapshot.records.get(snapshot.references.get(target.exit_pk))
+    examples = [
+        ft.token("command", command) for action in actions_for(caller, target, now)
+        if (command := provider_command(caller, record, action["label"], lambda name: name))
+    ]
     return ft.compact(ft.token("object", target.name), description(target, now),
                       *([ft.text("조작: ", ft.join(examples, " · "))] if examples else []))
 
@@ -426,6 +444,8 @@ def operate_endpoint(caller, endpoint, action, now=None):
         if state == UNAVAILABLE:
             raise rules.RuleError("그 문은 지금 이용할 수 없습니다.")
         door = Door.objects.get(door_id=target.identity)
+        if endpoint.pk not in (door.exit_a_id, door.exit_b_id):
+            raise rules.RuleError("원래 문이 없어졌거나 위치·권한이 바뀌었습니다.")
         if action in ("잠궈", "풀어"):
             if not door.lockable:
                 raise rules.RuleError("잠글 수 없는 문입니다.")

@@ -1,139 +1,214 @@
-"""Loot 표시 번호와 권리 노출을 분리하고 동일 선택의 Typed 요청을 만든다."""
+"""공개 전리품의 표시와 회수 문법을 안정 참조와 별도로 계산한다."""
 
-from dataclasses import replace
+from dataclasses import dataclass
 from time import time
 
-from world.actions.loot_resolution import entry_reference, make_invocation
+from world.actions.loot_resolution import entry_records, make_invocation
 from world.actions.presentation import reference_json
 from world.currency import format_currency
 from world.loot_assets import asset_name
-from world.selection_numbers.api import descriptor, label, number_for, resolve_reference
+from world.selection_display import displays, room_snapshot
+from world.selection_numbers.api import descriptor, numbered_records
 
 
-def _numbered_target(record):
-    """표시 이름과 달리 실행 안내는 현재 실물의 저장 번호가 있어야 한다."""
-    number = number_for(record.reference) if record is not None else None
-    return label(replace(record, number=number)) if record is not None and number is not None else None
-
-
-def payload(caller, selections, *, quantity=0, now=None):
+def payload(caller, selections, *, quantity=0, now=None, display=None):
     from world.loot_service import native_source
-    from world.rules import RuleError
 
     selections = tuple(selections or ())
     if not selections:
         return None
-    # ALL의 일부만 골라 서명하면 텍스트 ALL과 다른 부분 회수가 된다.
-    # 권한 필터를 통과한 원 후보 전체가 유효할 때만 동일 선택을 제공한다.
-    for source in {source.pk: source for source, _ in selections}.values():
-        record = descriptor(source)
-        if not native_source(source) or record is None or number_for(record.reference) is None:
+    if display is None:
+        sources = {source.pk: source for source, _ in selections}
+        source_records = {pk: descriptor(source) for pk, source in sources.items() if native_source(source)}
+        entry_rows = entry_records(selections)
+        valid = {record.reference: record for record in numbered_records(
+            (*source_records.values(), *entry_rows.values())
+        )}
+    else:
+        source_records, entry_rows, valid = display.sources, display.entry_records, display.valid
+    source_refs, subject_refs = [], []
+    for source, entry in selections:
+        original = source_records.get(source.pk)
+        selected = entry_rows.get((source.pk, entry))
+        if original is None or original.reference not in valid or selected is None or selected.reference not in valid:
             return None
-    for _, selected in selections:
-        try:
-            reference = entry_reference(selected)
-        except RuleError:
-            return None
-        if number_for(reference) is None:
-            return None
-    invocation = make_invocation(caller, selections, quantity=quantity, now=now)
+        source_refs.append(original.reference)
+        subject_refs.append(selected.reference)
+    invocation = make_invocation(
+        caller, selections, quantity=quantity, now=now,
+        references=(tuple(dict.fromkeys(source_refs)), tuple(subject_refs)),
+    )
     return {"action_id": invocation.action_id, "variant": invocation.variant_id,
             "roles": {name: [reference_json(ref) for ref in refs] for name, refs in invocation.roles},
             "arguments": dict(invocation.arguments)}
 
 
-def visible_entries(source, caller, now=None):
-    from typeclasses.loot import Corpse, can_take_entry
+@dataclass
+class _LootDisplay:
+    caller: object
+    now: float
+    room: object
+    corpses: tuple
+    ground: tuple
+    snapshots: dict
+    sources: dict
+    entry_records: dict
+    valid: dict
+    allowed: dict
+    accessible: frozenset
+    selection_records: tuple
+    labels: dict
+    entries: dict
+    obscured: bool
+
+    def selections(self, sources):
+        return [(source, entry) for source in sources
+                if (snapshot := self.snapshots.get(source.pk)) is not None and snapshot.native
+                for entry in self.allowed[source.pk]]
+
+    def valid_command(self, text, expected, quantity):
+        from world.actions.loot_resolution import select_loot
+        from world.rules import RuleError
+
+        try:
+            actual, count = select_loot(
+                self.caller, text, now=self.now, sources=self.sources, entries=self.entries,
+                records=self.selection_records, accessible=self.accessible,
+            )
+        except RuleError:
+            return False
+        return tuple(actual) == expected and count == quantity
+
+    def command(self, source, entries, *, all_entries=False):
+        from typeclasses.loot import Corpse
+
+        if not entries:
+            return ""
+        source_record = self.sources.get(source.pk)
+        if source_record is None or source_record.number is None:
+            return ""
+        prefixes = ("",)
+        if isinstance(source, Corpse):
+            prefixes = tuple(name + "에서 " for name in _selection_names(source_record))
+        if all_entries:
+            texts = ("모두",)
+        else:
+            record = self.entry_records.get((source.pk, entries[0]))
+            record = self.valid.get(record.reference) if record else None
+            if record is None:
+                return ""
+            texts = _selection_names(record)
+        expected = tuple((source.pk, entry) for entry in entries)
+        for prefix in prefixes:
+            for name in texts:
+                text = prefix + name
+                if self.valid_command(text, expected, 0 if all_entries else 1):
+                    return text + " 가져"
+        return ""
+
+
+def _selection_names(record):
+    from world.targets import exact_selector
+
+    return f"{record.name} {record.number}", exact_selector(record.name, record.number)
+
+
+def loot_display(caller, now=None, objects=None, *, snapshot=None):
+    from typeclasses.loot import Corpse, DroppedLoot, can_take_entry
     from world.loot_service import loot_snapshot
-    from world.multiplayer import object_by_id
-    from world.observation import can_inspect_loot, can_perceive, context_for
+    from world.observation import can_inspect_loot, context_for
+    from world.targets import room_objects
 
     now = time() if now is None else now
-    context = context_for(caller, observed_at=now)
-    if source.location != caller.location or not can_inspect_loot(context) or not can_perceive(source, context):
+    objects = tuple(room_objects(caller, observed_at=now) if objects is None else objects)
+    room = room_snapshot(caller, now, objects=objects) if snapshot is None else snapshot
+    corpses = tuple(source for source in objects if source.is_typeclass(Corpse, exact=True))
+    ground = tuple(source for source in objects if source.is_typeclass(DroppedLoot, exact=True))
+    sources = (*corpses, *ground)
+    obscured = not can_inspect_loot(context_for(caller, observed_at=now))
+    snapshots = {source.pk: loot_snapshot(source) for source in sources} if not obscured else {}
+    allowed = {pk: tuple(entry for entry in value.entries if can_take_entry(entry.as_entry(), caller, now))
+               for pk, value in snapshots.items()}
+    pairs = tuple((source, entry) for source in sources
+                  if (value := snapshots.get(source.pk)) is not None and value.native for entry in value.entries)
+    entry_rows = entry_records(pairs)
+    valid = dict(room.records)
+    valid.update((record.reference, record) for record in numbered_records(entry_rows.values()))
+    source_records = {source.pk: valid.get(current.reference, current) for source in sources
+                      if (current := descriptor(source)) is not None}
+    allowed_records = [valid.get(record.reference, record) for (pk, entry), record in entry_rows.items()
+                       if entry in allowed[pk]]
+    entries = {pk: tuple((entry, record.reference if (record := entry_rows.get((pk, entry))) else None)
+                         for entry in value.entries) for pk, value in snapshots.items() if value.native}
+    return _LootDisplay(
+        caller, now, room, corpses, ground, snapshots, source_records, entry_rows, valid, allowed,
+        frozenset(record.reference for record in allowed_records),
+        tuple(valid.get(record.reference, record) for record in entry_rows.values()),
+        displays(allowed_records), entries, obscured,
+    )
+
+
+def visible_entries(source, caller, now=None, *, display=None):
+    from world.multiplayer import object_by_id
+
+    display = loot_display(caller, now) if display is None else display
+    now = display.now
+    snapshot = display.snapshots.get(source.pk)
+    if snapshot is None or (snapshot.native and source.pk not in display.room.references):
         return []
     rows = []
-    snapshot = loot_snapshot(source)
-    source_record = descriptor(source)
-    source_target = _numbered_target(source_record)
-    if snapshot.native and source_target is None:
-        return []
-    for selected in snapshot.entries:
+    for selected in display.allowed[source.pk]:
         entry = selected.as_entry()
-        if not can_take_entry(entry, caller, now):
-            continue
+        action = None
+        command = ""
         if snapshot.native:
-            reference = entry_reference(selected)
-            target = _numbered_target(descriptor(resolve_reference(reference)))
+            record = display.entry_records.get((source.pk, selected))
+            target = display.labels.get(record.reference) if record else None
             if target is None:
                 continue
-            action = payload(caller, [(source, selected)], quantity=1, now=now)
+            action = payload(caller, [(source, selected)], quantity=1, now=now, display=display)
             if action is None:
                 continue
+            command = display.command(source, (selected,))
         else:
-            # 과거 blob은 읽기 전용으로만 표시한다. 배열 위치를 영속 ID/번호로 가장하지 않는다.
+            # 과거 blob은 읽기 전용이며 순서를 영속 번호로 사용하지 않는다.
             target = asset_name(entry)
-            action = None
-        amount = format_currency(entry["quantity"]) if entry["kind"] == "currency" else f"×{entry['quantity']}"
-        assigned = [object_by_id(identity) for identity in entry.get("remaining_shares", {})] if entry["kind"] == "currency" else [object_by_id(entry["assigned_player"])]
-        prefix = source_target + "에서 " if isinstance(source, Corpse) and source_target is not None else ""
+        currency = entry["kind"] == "currency"
+        amount = format_currency(entry["quantity"]) if currency else f"×{entry['quantity']}"
+        assigned_ids = entry.get("remaining_shares", {}) if currency else (entry["assigned_player"],)
+        assigned = [object_by_id(identity) for identity in assigned_ids]
+        display_label = amount if currency and target == asset_name(entry) else target + " " + amount
         rows.append({**entry, "name": asset_name(entry), "label": target, "take_target": target,
-                     "amount_label": amount, "display_label": amount if entry["kind"] == "currency" else target + " " + amount,
+                     "amount_label": amount, "display_label": display_label,
                      "assigned_name": " · ".join(player.key if player else "탈퇴한 탐사자" for player in assigned),
                      "protected": now < entry["protection_until"], "can_take": True,
-                     "take_command": prefix + target + " 가져" if snapshot.native else "",
-                     "action": action})
+                     "take_command": command, "action": action})
     return rows
 
 
-def _sources(caller, now, objects=None):
-    from typeclasses.loot import room_loot
-    from world.targets import room_objects
-
-    objects = room_objects(caller, observed_at=now) if objects is None else objects
-    return ([source for source in room_loot(caller.location) if source in objects],
-            [source for source in room_loot(caller.location, corpse=False) if source in objects])
-
-
-def _selections(caller, sources, now):
-    from typeclasses.loot import can_take_entry
-    from world.loot_service import loot_snapshot
-    from world.observation import can_inspect_loot, context_for
-
-    if not can_inspect_loot(context_for(caller, observed_at=now)):
-        return []
-    return [(source, entry) for source in sources for snapshot in [loot_snapshot(source)]
-            if snapshot.native for entry in snapshot.entries if can_take_entry(entry.as_entry(), caller, now)]
-
-
-def source_controls(caller, now=None, objects=None):
+def source_controls(caller, now=None, objects=None, *, snapshot=None, display=None):
     from typeclasses.loot import Corpse
-    from world.loot_service import native_source
-    from world.observation import can_inspect_loot, context_for
 
-    now = time() if now is None else now
-    corpses, ground = _sources(caller, now, objects)
+    display = loot_display(caller, now, objects, snapshot=snapshot) if display is None else display
     output = {}
-    for source in (*corpses, *ground):
-        record = descriptor(source)
-        target = _numbered_target(record)
-        source_label = (target if target is not None else "시체 (선택 번호 확인 불가)") if isinstance(source, Corpse) else "바닥 전리품"
-        selections = _selections(caller, [source], now)
-        action = payload(caller, selections, now=now)
-        output[source.pk] = {"label": source_label,
-                             "take_command": ((source_label + "에서 모두 가져" if isinstance(source, Corpse) else "모두 가져")
-                                              if native_source(source) and target is not None and (not selections or action is not None) else ""),
+    for source in (*display.corpses, *display.ground):
+        label = (display.room.labels[source.pk] or "시체 (선택 번호 확인 불가)"
+                 if isinstance(source, Corpse) else "바닥 전리품")
+        selections = display.selections((source,))
+        action = payload(caller, selections, now=display.now, display=display)
+        output[source.pk] = {"label": label,
+                             "take_command": display.command(source, tuple(entry for _, entry in selections),
+                                                             all_entries=True) if action else "",
                              "take_action": action,
-                             "loot": visible_entries(source, caller, now),
-                             "loot_obscured": not can_inspect_loot(context_for(caller, observed_at=now))}
+                             "loot": visible_entries(source, caller, display=display),
+                             "loot_obscured": display.obscured}
     return output
 
 
-def all_controls(caller, now=None, objects=None):
-    now = time() if now is None else now
-    corpses, ground = _sources(caller, now, objects)
-    return {"corpses": payload(caller, _selections(caller, corpses, now), now=now),
-            "ground": payload(caller, _selections(caller, ground, now), now=now)}
+def all_controls(caller, now=None, objects=None, *, snapshot=None, display=None):
+    display = loot_display(caller, now, objects, snapshot=snapshot) if display is None else display
+    return {key: payload(caller, display.selections(sources), now=display.now, display=display)
+            for key, sources in (("corpses", display.corpses), ("ground", display.ground))}
 
 
 def render(caller, index, reference, binding, observed_at=None):

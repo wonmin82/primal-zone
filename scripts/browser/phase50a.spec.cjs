@@ -366,7 +366,9 @@ test('TEST-104-03 주변 행동과 지도 뷰포트의 위치·크기 및 키보
     enemies:more ? [{label:'적', hp:4, max_hp:4, can_attack:true}] : [],
     corpses:[], ground_loot:more ? [{loot:[{display_label:'전리품'}]}] : [], inventory:[],
     interactables:more ? Array.from({length:16}, (_, i) => ({
-      role:'npc', label:'주변 인물 ' + i, actions:[{label:'봐', command:'주변 인물 봐'}],
+      role:'npc', label:'주변 인물 ' + i, actions:[],
+      look_action:{action_id:'global.look_target', variant:'adapter',
+        roles:{subject:[{kind:'actor', identity:String(i), scope_id:'room:1'}]}, arguments:{}},
     })) : [],
   });
   const receive = async (revision, count, messages, selected = true) => {
@@ -778,7 +780,7 @@ test('TEST-66C-01 바닥 전리품 안정 UUID·중복 및 오래된 요청 거�
   await a.command('회수부품 버려');
   expect(count()).toBe(initial - 1);
   const entry = a.state.ground_loot.flatMap(source => source.loot).find(item => item.id === 'scrap');
-  expect(entry.label).toBe('회수부품 1');
+  expect(entry.label).toBe('회수부품');
   expect(entry?.action.action_id).toBe('loot.take');
   const original = entry.action;
   expect(original.roles.source[0].identity).toBeTruthy();
@@ -842,3 +844,23 @@ test('TEST-66C-01 바닥 전리품 안정 UUID·중복 및 오래된 요청 거�
   expect(count()).toBe(initial);
   expect(a.errors).toEqual([]);
 });
+
+for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
+  test(`TEST-108-${viewport.width} 공개 대상의 안정 관찰 버튼`, async ({ actors }) => {
+    const a = await actors.create(0, viewport);
+    await a.command('남');
+    await a.command('서');
+    expect(a.state.zone).toBe('dock');
+    const target = a.state.interactables.find(row => row.look_action && row.role === 'npc');
+    expect(target).toBeTruthy();
+    const buttons = a.page.locator('#context-actions [data-action-invocation]');
+    const index = await buttons.evaluateAll((elements, expected) => elements.findIndex(element =>
+      JSON.stringify(JSON.parse(element.dataset.actionInvocation)) === JSON.stringify(expected)), target.look_action);
+    expect(index).toBeGreaterThanOrEqual(0);
+    const prompts = a.prompts;
+    await buttons.nth(index).click();
+    await expect.poll(() => a.prompts).toBeGreaterThan(prompts);
+    await expect(a.page.locator('#log .sheet').last()).toContainText(target.name);
+    expect(a.errors).toEqual([]);
+  });
+}

@@ -15,7 +15,9 @@ from world.targets import (
     TargetSelector,
     matching,
     names,
+    parse_exact_selector,
     parse_selector,
+    relation_parts,
     resolve,
     room_objects,
 )
@@ -96,31 +98,48 @@ def available_dialogue_topics(caller, npc):
                  if not item.mutates_state and item.intent_id != "greeting")[:3]
 
 
-def explicit_target(caller, original):
+def explicit_target(caller, original, *, pool=None, numbered=None):
     """발화 앞부분의 조사 경계만 검사. 미발견이면 원문을 그대로 돌려준다."""
-    pool = nearby(caller)
+    pool = nearby(caller) if pool is None else pool
     known = [name for obj in pool for name in names(obj)]
-    words = original.split()
-    for position, word in enumerate(words):
-        if not word.endswith("에게"):
-            continue
-        prefix = " ".join([*words[:position], word[:-2]]).strip()
+    for prefix, body in relation_parts(original, "에게", b1=True):
+        exact = parse_exact_selector(prefix)
         # 잘못된 0번도 인식된 이름에 한해서 selector의 정상 오류로 끝낸다.
         base = prefix.rsplit(None, 1)
-        numbered = len(base) == 2 and (base[-1].lstrip("+-").isdecimal() or base[-1] == "모두")
-        base_name = base[0] if numbered else prefix
+        has_suffix = len(base) == 2 and (base[-1].lstrip("+-").isdecimal() or base[-1] == "모두")
+        base_name = base[0] if has_suffix else prefix
         literal = matching(pool, TargetSelector(prefix))
-        if not literal and not matching(pool, TargetSelector(base_name)):
+        if not exact and not prefix.startswith('"') and not literal and not matching(pool, TargetSelector(base_name)):
             return None, original
-        if not literal and numbered and base[-1].startswith(("-", "+")):
+        if not literal and has_suffix and base[-1].startswith(("-", "+")):
             raise rules.RuleError("대상 번호는 1 이상의 정수로 지정하세요.")
-        selector = parse_selector(prefix, known)
-        npc = resolve(pool, selector, caller, "말")[0]
-        body = " ".join(words[position + 1:])
+        selector = exact or parse_selector(prefix, known, b1=True, literal_names=[obj.key for obj in pool])
+        npc = resolve(pool, selector, caller, "말", numbered=numbered)[0]
         if not body:
             raise rules.RuleError("NPC에게 할 말을 입력하세요.")
-        return npc, body
+        return npc, " ".join(body.split())
     return None, original
+
+
+def dialogue_target_text(caller, npc, *, pool=None, records=None):
+    """현재 말 Role에서 같은 NPC로 돌아오는 선택 문자열만 안내한다."""
+    from world.selection_display import selection_text
+    from world.selection_numbers.api import descriptor, numbered_records
+
+    pool = nearby(caller) if pool is None else pool
+    original = [record for obj in pool if (record := descriptor(obj))]
+    numbered = ({record.reference: record for record in numbered_records(original)}
+                if records is None else records)
+    candidates = tuple(numbered.get(record.reference, record) for record in original)
+    target = next((record for record in candidates if record.reference.identity == str(npc.pk)), None)
+    def resolve_message(value):
+        greeting = "안녕"
+        message = validate_message(f"{value}에게 {greeting}")
+        selected, body = explicit_target(caller, message, pool=pool, numbered=numbered)
+        record = descriptor(selected)
+        return (record.reference,) if record and body == greeting else ()
+
+    return selection_text(target, resolve_message)
 
 
 def clear_context(caller):
@@ -266,15 +285,13 @@ def response(caller, npc, intent):
 
 
 def keyword_guide(recipient, npc, active, *, force=False):
-    from world.targets import labels
-
     now = time()
     present = {obj.id for obj in recipient.location.contents if supports(obj)} if recipient.location else set()
     store = {key: row for key, row in dict(recipient.ndb.npc_dialogue_guides or {}).items()
              if key in present and row["location_id"] == getattr(recipient.location, "id", None)
              and 0 <= now - row["at"] < CONTEXT_TTL}
     words = tuple(dict.fromkeys(item.keyword for item in active if item.intent_id != "greeting"))
-    target = labels(nearby(recipient)).get(npc.id)
+    target = dialogue_target_text(recipient, npc)
     if target is None:
         words = ()
     previous = store.get(npc.id)
@@ -438,9 +455,7 @@ def resolve_keyword(caller, token, session):
 
 
 def discovery(npc, caller):
-    from world.targets import labels
-
-    target = labels(nearby(caller)).get(npc.id)
+    target = dialogue_target_text(caller, npc)
     if target is None:
         return "선택 번호를 확인할 수 없어 말 걸기 안내를 제공하지 않습니다."
     topics = " · ".join(item.keyword for item in intents_for(type_name(npc)) if not item.mutates_state)

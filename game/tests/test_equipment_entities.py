@@ -280,9 +280,9 @@ class EquipmentEntityTests(GameCommandTest):
         self.char1.execute_cmd(name + " 2 해제")
         self.assertEqual(service.active_weapon_item(self.char1).pk, first.pk)
         self.assertIn(name + " 1 [주무기]", str(eq.equipment_rows(self.char1.profile())))
-        # 첫 UUID가 사라져도 남은 2번을 1번으로 재표시하거나 선택하지 않는다.
+        # 단독 장비는 번호를 생략하고 명시 입력은 저장 번호만 적용한다.
         api.delete_item(first, operation="burn")
-        self.assertEqual([row["selector"] for row in eq.inventory_rows(self.char1.profile())], [name + " 2"])
+        self.assertEqual([row["selector"] for row in eq.inventory_rows(self.char1.profile())], [name])
         self.char1.execute_cmd(name + " 1 무장")
         second.refresh_from_db()
         self.assertEqual(second.location_kind, "inventory")

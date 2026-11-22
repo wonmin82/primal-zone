@@ -386,13 +386,16 @@ class ActionRuntimeTests(NativeItemTest):
     def test_review_fixed_labels_hidden_members_holes_and_reset(self):
         from dataclasses import replace
 
-        from world.selection_numbers.api import label, records_for
+        from world.selection_display import room_snapshot
+        from world.selection_numbers.api import label
+
         first, second = self.instrument(), self.instrument()
 
         def check(expected):
             rows = [r for r in action_controls(self.char1, self.index) if r["action"]["action_id"] == "validation.object"]
             self.assertEqual([r["label"] for r in rows], expected)
-            visible = {r.reference: label(r) for r in records_for(self.char1, ReferenceKind.OBJECT)}
+            snapshot = room_snapshot(self.char1)
+            visible = {ref: snapshot.labels[pk] for pk, ref in snapshot.references.items()}
             for row in rows:
                 payload = row["action"]["roles"]["provider"][0]
                 ref = next(r for r in visible if r.identity == payload["identity"])
@@ -403,14 +406,14 @@ class ActionRuntimeTests(NativeItemTest):
         check(["검증기 2 검측"])
         first.db.action_available = True
         second.locks.add("view:false()")
-        check(["검증기 1 검측"])
+        check(["검증기 검측"])
         self.assertNotIn(str(second.pk), str([r["action"]["roles"] for r in action_controls(self.char1, self.index)]))
         second.locks.add("view:true()")
         first.delete()
-        check(["검증기 2 검측"])
+        check(["검증기 검측"])
         second.delete()
         fresh = self.instrument()
-        check(["검증기 1 검측"])
+        check(["검증기 검측"])
         self.assertEqual(label(replace(descriptor(fresh), number=1)), "검증기 1")
 
     def test_item_number_quantity_syntax_and_shortage_never_replace_default(self):
@@ -882,14 +885,16 @@ class ActionRuntimeTests(NativeItemTest):
         self.assertIn("1,000", " ".join(str(call.args[0]) for call in self.output.call_args_list if call.args))
         self.assertIsNone(self.char1.ndb.shortcut_execution)
 
-    def test_unique_formal_name_one_compatibility_never_applies_to_bandage_holes(self):
+    def test_explicit_number_matches_the_record_for_formal_names_and_bandage_holes(self):
         from world.item_entities.api import delete_item
 
         self.instrument()
         unique = self.instrument("고유 검증기", unique=True)
         role = RoleDefinition("provider", (ReferenceKind.OBJECT,))
         self.assertEqual(number_for(descriptor(unique).reference), 2)
-        self.assertEqual(select_role(self.char1, role, "고유 검증기 1"), (descriptor(unique).reference,))
+        with self.assertRaises(RuleError):
+            select_role(self.char1, role, "고유 검증기 1")
+        self.assertEqual(select_role(self.char1, role, "고유 검증기 2"), (descriptor(unique).reference,))
         a, b = self.create("bandage"), self.create("bandage")
         delete_item(a)
         item_role = RoleDefinition("subject", (ReferenceKind.ITEM,), DefaultTargetPolicy.FIRST_LEGACY_ORDER)

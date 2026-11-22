@@ -377,6 +377,35 @@ test("문 조작은 안정 Endpoint Action이고 이동은 기존 text 경로를
   assert.equal(move.disabled,true);
 });
 
+test("대상 관찰과 말 걸기는 표시 이름과 독립적인 원래 참조만 전송", () => {
+  const c = client();
+  const target = (name, identity, kind) => ({action_id:"global."+name,variant:"adapter",
+    roles:{subject:[{kind,identity,scope_id:"room:7"}]},arguments:{}});
+  const observations = [
+    {label:"시체",name:"사체",role:"remains",loot:[],look_action:target("look_target","corpse-1","corpse")},
+    {label:"문",role:"object",actions:[],look_action:target("look_target","door-1","door")},
+    {label:"윤대장",role:"npc",actions:[
+      {label:"말 걸기",action:target("greet_target","npc-1","actor")},
+      {label:"말 걸기",command:"구형 문자열 말"},
+    ],look_action:target("look_target","npc-1","actor")},
+  ];
+  const render = (rows) => c.receive("pz_state",partyState(null,{corpses:rows.slice(0,1),interactables:rows.slice(1)}));
+  render(observations);
+  const context = c.byId("context-actions");
+  const buttons = context.children.filter(row => row.dataset?.actionInvocation);
+  assert.equal(buttons.length,4);
+  assert.deepEqual(commandButtons(context),[]);
+  const stale = buttons.find(row => JSON.parse(row.dataset.actionInvocation).action_id === "global.greet_target");
+  render([{...observations[0],look_action:target("look_target","corpse-2","corpse")},observations[1]]);
+  for (const button of [...buttons.filter(row => row !== stale),stale]) {
+    c.document.fire("click",{target:button});
+    const [kind,[request]] = c.socket.sent.at(-1);
+    assert.equal(kind,"pz_action");
+    assert.deepEqual(request.roles,JSON.parse(button.dataset.actionInvocation).roles);
+  }
+  assert.equal(c.socket.sent.at(-1)[1][0].roles.subject[0].identity,"npc-1");
+});
+
 test("재분배 버튼은 서버 배열 순서와 무관하게 선언된 scope의 Action만 전송", () => {
   const c = client();
   const reset = ["all","attributes","skills"].map(scope => ({action:{action_id:"training.reset."+scope,

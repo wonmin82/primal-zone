@@ -343,7 +343,7 @@ class LightingTests(WorldCommandTest):
         self.clear()
         self.char1.location = self.rooms["dock"]
         context = context_for(self.char1, observed_at=100)
-        self.assertEqual(room_hint(context), "'윤대장 1에게 안녕")
+        self.assertEqual(room_hint(context), "'윤대장에게 안녕")
         commander = next(obj for obj in context.room.contents if obj.tags.has("commander", category="primal_actor_spawn"))
         commander.locks.add("view:false()")
         self.assertEqual(room_hint(context), "")
@@ -396,7 +396,7 @@ class LightingTests(WorldCommandTest):
         self.char1.location = self.rooms["wreck"]
         cache = next(obj for obj in self.char1.location.contents if obj.tags.has("emergency_light_cache", category="primal_interactable"))
         with patch.dict(INTERACTABLES["emergency_light_cache"], name="시험 비상함"):
-            self.assertEqual(room_hint(context_for(self.char1, observed_at=100)), "시험 비상함 조사")
+            self.assertEqual(room_hint(context_for(self.char1, observed_at=100)), "비상장비함 조사")
         cache.locks.add("view:false()")
         hint = room_hint(context_for(self.char1, observed_at=100))
         self.assertIn("광원", hint)

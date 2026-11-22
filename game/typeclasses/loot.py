@@ -315,7 +315,7 @@ class Corpse(NumberedObjectMixin, DistantPresenceMixin, DefaultObject):
             lines.append("작은 전리품을 식별하기 어렵다. 광원을 사용하세요." if not can_inspect_loot(context_for(looker, observed_at=now)) else "남은 전리품이 없다.")
         if control:
             lines.extend(["", ft.text("지정: ", ft.token("remains", control["label"]))])
-            if entries and control.get("take_action"):
+            if entries and control.get("take_command"):
                 lines.append(ft.text("회수: ", ft.usage(control["take_command"], {"가져"})))
         return ft.sheet(ft.token("remains", self.key), *lines)
 
@@ -443,13 +443,14 @@ class DroppedLoot(NumberedObjectMixin, DistantPresenceMixin, DefaultObject):
             )
         if not entries:
             lines.append("남은 전리품이 없다.")
-        if control and entries and any(entry.get("action") for entry in entries):
+        commands = [entry["take_command"] for entry in entries if entry.get("take_command")]
+        if control and commands:
             lines.extend(
                 [
                     "",
                     ft.text(
                         "회수: ",
-                        ft.usage(" · ".join(entry["take_command"] for entry in entries), {"가져"}),
+                        ft.usage(" · ".join(commands), {"가져"}),
                     ),
                 ]
             )

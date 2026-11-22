@@ -39,7 +39,7 @@ class SelectionRecord:
             raise ValueError("참조와 번호의 Scope가 일치해야 합니다.")
 
 
-def descriptor(value):
+def descriptor(value, *, doors_by_endpoint=None):
     """현재 실물만 읽는다. 번호 생성·생명주기 정합화·권한 변경은 하지 않는다."""
     if not enabled():
         return None
@@ -106,7 +106,10 @@ def descriptor(value):
     elif isinstance(value, DroppedLoot):
         kind, group, name = ReferenceKind.OBJECT, "world:ground_source", value.key
     else:
-        door = Door.objects.filter(Q(exit_a_id=value.pk) | Q(exit_b_id=value.pk)).first() if value.db_destination_id else None
+        door = None
+        if value.db_destination_id:
+            door = (doors_by_endpoint.get(value.pk) if doors_by_endpoint is not None else
+                    Door.objects.filter(Q(exit_a_id=value.pk) | Q(exit_b_id=value.pk)).first())
         if door:
             from world.content.doors import DOORS
 
@@ -165,6 +168,26 @@ def number_for(reference_or_kind, identity=None):
     return query.values_list("number", flat=True).first()
 
 
+def numbered_records(records):
+    """현재 실물의 descriptor와 일치하는 번호 행만 한 번에 읽는다."""
+    records = tuple(record for record in records if record and record.reference.kind != ReferenceKind.ROOM)
+    if not records:
+        return ()
+    rows = SelectionNumber.objects.filter(
+        scope__scope_id__in={record.scope_id for record in records},
+        kind__in={record.reference.kind for record in records},
+    ).values_list("kind", "identity", "scope__scope_id", "scope__group_id", "name", "number")
+    numbers = {(kind, identity, scope, group, name): number
+               for kind, identity, scope, group, name, number in rows if number > 0}
+    result = []
+    for record in records:
+        reference = record.reference
+        number = numbers.get((reference.kind, reference.identity, record.scope_id, record.group_id, record.name))
+        if number is not None:
+            result.append(replace(record, number=number))
+    return tuple(result)
+
+
 def label(record, unique_group_count=1):
     # 1도 항상 표시한다. 숨은 그룹원의 존재/제공 상태가 label을 바꾸지 않는다.
     if record.number is None:
@@ -203,7 +226,7 @@ def current_scopes(caller, kind=None):
     return scopes
 
 
-def records_for(caller, kind=None, scope_id=None, *, scope_ids=None, kinds=None, check_visibility=True):
+def records_for(caller, kind=None, scope_id=None, *, scope_ids=None, kinds=None, check_visibility=True, references=None):
     """이미 발급된 번호만 관찰한다. 권한으로 재번호하지 않는다."""
     scopes = set(scope_ids) if scope_ids is not None else current_scopes(caller, kind)
     if scope_id is not None:
@@ -214,17 +237,22 @@ def records_for(caller, kind=None, scope_id=None, *, scope_ids=None, kinds=None,
     requested = None if kinds is None else frozenset(ReferenceKind(value) for value in kinds)
     if requested is not None:
         query = query.filter(kind__in=requested)
+    references = None if references is None else frozenset(references)
+    if references is not None:
+        query = query.filter(identity__in={ref.identity for ref in references})
     result = []
     if kind in (None, ReferenceKind.ROOM) and (requested is None or ReferenceKind.ROOM in requested) and caller.location:
         room = descriptor(caller.location)
-        if room and room.scope_id in scopes:
+        if room and room.scope_id in scopes and (references is None or room.reference in references):
             result.append(room)
     for row in query:
         ref = TargetReference(ReferenceKind(row.kind), row.identity, row.scope.scope_id)
+        if references is not None and ref not in references:
+            continue
         entity = resolve_reference(ref)
         if entity is not None and (not check_visibility or visible_entity(caller, entity)):
             record = descriptor(entity)
-            if record.group_id == row.scope.group_id:
+            if record.group_id == row.scope.group_id and record.name == row.name and row.number > 0:
                 result.append(replace(record, number=row.number))
     return tuple(result)
 

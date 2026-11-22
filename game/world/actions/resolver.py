@@ -13,7 +13,14 @@ from world.actions.schema import (
     TargetScope,
 )
 from world.rules import RuleError
-from world.targets import Mode, normalized, parse_selector
+from world.targets import (
+    MAX_SELECTION_LENGTH,
+    Mode,
+    normalized,
+    parse_exact_selector,
+    parse_selector,
+    quoted_name_spans,
+)
 
 
 class TargetNotFound(RuleError):
@@ -35,7 +42,7 @@ class ActionInvocation:
     request_id: str | None = None
 
 
-def role_records(caller, role, bindings=None, *, cache=None, check_visibility=True):
+def role_records(caller, role, bindings=None, *, cache=None, check_visibility=True, references=None):
     from world.selection_numbers.api import (
         SelectionRecord,
         current_scopes,
@@ -81,12 +88,15 @@ def role_records(caller, role, bindings=None, *, cache=None, check_visibility=Tr
                 root = entity.root()
                 if root.location_kind in ("inventory", "equipment") and root.owner_object_id == caller.pk:
                     scopes.add(f"inside:{entity.pk}")
-    key = ("scope", frozenset(scopes), frozenset(role.kinds), check_visibility)
+    references = None if references is None else frozenset(references)
+    key = ("scope", frozenset(scopes), frozenset(role.kinds), check_visibility, references)
     if cache is None:
-        records = records_for(caller, scope_ids=scopes, kinds=role.kinds, check_visibility=check_visibility)
+        records = records_for(caller, scope_ids=scopes, kinds=role.kinds, check_visibility=check_visibility,
+                              references=references)
     else:
         if key not in cache:
-            cache[key] = records_for(caller, scope_ids=scopes, kinds=role.kinds, check_visibility=check_visibility)
+            cache[key] = records_for(caller, scope_ids=scopes, kinds=role.kinds, check_visibility=check_visibility,
+                                     references=references)
         records = cache[key]
     records = tuple(record for record in records if record.reference.kind in role.kinds)
     if role.scope == TargetScope.SOURCE:
@@ -112,34 +122,55 @@ def select_role(caller, role, query=None, *, bindings=None, candidates=None, cac
     records = role_records(caller, role, bindings, cache=cache)
     if candidates is not None:
         records = tuple(record for record in records if record.reference in candidates)
-    if query is None or not query.strip():
+    return select_records(role, records, query)
+
+
+def record_selector(query, records, *, b1=True):
+    primary = [record.name for record in records]
+    aliases = [alias for record in records for alias in record.aliases]
+    return parse_selector(query, (*primary, *aliases), b1=b1, literal_names=primary)
+
+
+def matching_records(records, selector):
+    records = tuple(records)
+    if selector.exact:
+        matches = [record for record in records
+                   if record.name == selector.name and record.number == selector.index]
+    else:
+        name = normalized(selector.name)
+        matches = [record for record in records if normalized(record.name) == name]
+        if not matches or selector.mode == Mode.ALL:
+            matches = [record for record in records if name in
+                       {normalized(value) for value in (record.name, *record.aliases)}]
+        elif selector.mode == Mode.DEFAULT and len(matches) > 1 and selector.name[-1:].isdecimal():
+            raise TargetAmbiguous("숫자로 끝나는 실제 이름이 여러 대상과 일치합니다. 다른 고유 이름을 지정하세요.")
+        if len({record.group_id for record in matches}) > 1:
+            raise TargetAmbiguous("서로 다른 선택 그룹의 별칭이 겹칩니다. 실제 이름을 지정하세요.")
+        if selector.mode == Mode.INDEX:
+            matches = [record for record in matches if record.number == selector.index]
+    if selector.mode == Mode.INDEX and len(matches) > 1:
+        raise TargetAmbiguous("대상 번호가 겹칩니다. 대상을 고유하게 지정하세요.")
+    return matches
+
+
+def select_records(role, records, query):
+    """이미 관찰된 Role 후보에서 선택한다. 반환한 참조는 실행 Gateway에서 다시 검증한다."""
+    empty = query is None or (isinstance(query, str) and not query.strip())
+    if empty:
         if role.required:
             raise RuleError("대상 이름을 입력하세요.")
         matches, selector = list(records), None
     else:
-        # 실제 정식 이름은 별칭보다 먼저, 숫자 접미를 분해하기 전 확인한다.
-        exact = [record for record in records if normalized(record.name) == normalized(query)]
-        if exact:
-            if len(exact) > 1 and re.search(r"\d+$", query.strip()):
-                raise TargetAmbiguous("숫자로 끝나는 실제 이름이 여러 대상과 일치합니다. 다른 고유 이름을 지정하세요.")
-            matches, selector = exact, None
-        else:
-            known = [name for record in records for name in (record.name, *record.aliases)]
-            selector = parse_selector(query, known)
-            matches = [record for record in records if normalized(selector.name) in
-                       {normalized(name) for name in (record.name, *record.aliases)}]
-            if len({record.group_id for record in matches}) > 1:
-                raise TargetAmbiguous("서로 다른 선택 그룹의 별칭이 겹칩니다. 실제 이름을 지정하세요.")
-            if selector.mode == Mode.INDEX:
-                unique_match = len(matches) == 1
-                matches = [record for record in matches if record.number == selector.index or
-                           (selector.index == 1 and unique_match and selector.name in record.unique_names)]
-                if len({record.scope_id for record in matches}) > 1:
-                    raise TargetAmbiguous("서로 다른 보관 범위의 번호가 겹칩니다. 대상을 고유하게 지정하세요.")
+        selector = record_selector(query, records, b1=any(
+            kind not in (ReferenceKind.ROOM, ReferenceKind.INVENTORY) for kind in role.kinds
+        ))
+        matches = matching_records(records, selector)
     if not matches:
-        if (query is None or not query.strip()) and not role.required:
+        if empty and not role.required:
             return ()
         raise TargetNotFound("지금 선택할 수 없는 대상입니다.")
+    if selector and selector.mode == Mode.INDEX:
+        return (matches[0].reference,)
     if selector and selector.mode == Mode.ALL and not (role.allow_all or role.default == DefaultTargetPolicy.ALL):
         raise RuleError("이 행동은 전체 대상 선택을 지원하지 않습니다.")
     if selector and selector.mode == Mode.ALL or role.default == DefaultTargetPolicy.ALL:
@@ -324,11 +355,33 @@ def provided(caller, index, *, action_id=None, for_cmdset=False):
     return unshadowed(caller, index, pairs)
 
 
+def _variant_fields(pattern, args, spans):
+    """인용 안에서 분리된 capture를 버리고 원문 위치를 보존해 다시 맞춘다."""
+    masked = args
+    while match := re.fullmatch(pattern, masked):
+        split = {(left, right) for left, right in spans
+                 if any(left < boundary < right for position in match.regs[1:] for boundary in position)}
+        if not split:
+            return {key: args[left:right] if left >= 0 else None
+                    for key in match.groupdict() for left, right in [match.span(key)]}
+        updates = list(masked)
+        for left, right in split:
+            updates[left:right] = "\ue000" * (right - left)
+        revised = "".join(updates)
+        if revised == masked:
+            break
+        masked = revised
+    return None
+
+
 def dispatch_text(caller, index, verb_id, args, command_name):
+    if len(args) > 4 * MAX_SELECTION_LENGTH:
+        raise RuleError("행동 대상과 인자 입력이 너무 깁니다.")
     possible = []
     verb = index.verbs[verb_id]
     selections = {}
     record_cache = {}  # 구문 선택 한 번에만 재사용한다. Gateway는 잠금 뒤 새로 검증한다.
+    spans = quoted_name_spans(args)
     offers = provided(caller, index)
     custom = {index.actions[binding.action_id] for _, binding in offers
               if index.actions[binding.action_id].verb_id == verb_id
@@ -350,10 +403,9 @@ def dispatch_text(caller, index, verb_id, args, command_name):
             verb = index.verbs[verb_id]
             if command_name.casefold() not in {(key + suffix).casefold() for key in (verb.key, *verb.aliases)}:
                 continue
-            match = re.fullmatch(variant.pattern, args)
-            if not match:
+            fields = _variant_fields(variant.pattern, args, spans)
+            if fields is None:
                 continue
-            fields = match.groupdict()
             # 정적으로 검증한 normal/all 쌍의 예약 접두어는 별칭 조회보다 먼저 검사한다.
             # 선언 순서가 아니라 서로 배타적인 입력 계약이며 일반 Role 선택 순서는 유지한다.
             if any(fields.get(role) is not None and fields[role].startswith(prefix)
@@ -382,6 +434,8 @@ def dispatch_text(caller, index, verb_id, args, command_name):
                         continue
                     query = fields.get(role.name)
                     if role.name in all_roles and query:
+                        if parse_exact_selector(query):
+                            raise RuleError("정확한 번호와 '모두'를 함께 지정할 수 없습니다.")
                         query += " 모두"
                     context = () if role.scope == TargetScope.CURRENT else roles.get(role.scope_from, ())
                     key = (role, query, context)

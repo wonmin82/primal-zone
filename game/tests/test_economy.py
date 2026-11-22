@@ -305,8 +305,8 @@ class EconomyTests(WorldCommandTest):
         seller = search_tag("supply_shopkeeper", category="primal_actor_spawn")[0]
         item = ItemEntity.objects.get(owner_object=self.char1, definition_id="bandage")
         actions = controls_for(self.char1, seller)
-        single = next(a for a in actions if a["label"] == "붕대 1 · 5칩 팔아")
-        bulk = next(a for a in actions if a["label"] == "붕대 1 모두 팔아 · 총 15칩")
+        single = next(a for a in actions if a["label"] == "붕대 · 5칩 팔아")
+        bulk = next(a for a in actions if a["label"] == "붕대 모두 팔아 · 총 15칩")
         for control, count in ((single, "1"), (bulk, "모두")):
             assert_provider(self, control, seller)
             self.assertEqual(control["action"]["action_id"], "shop.sell.supply")
@@ -317,7 +317,7 @@ class EconomyTests(WorldCommandTest):
         item.refresh_from_db()
         self.assertEqual(item.quantity, 2)
         actions = controls_for(self.char1, seller)
-        bulk = next(a for a in actions if a["label"] == "붕대 1 모두 팔아 · 총 10칩")
+        bulk = next(a for a in actions if a["label"] == "붕대 모두 팔아 · 총 10칩")
         self.assertEqual(bulk["action"]["roles"]["subject"][0]["identity"], str(item.pk))
         execute_control(self, bulk)
         self.assertNotIn("bandage", self.char1.profile()["inventory"])
@@ -399,7 +399,7 @@ class EconomyTests(WorldCommandTest):
             sources.append(create_dropped_loot(self.char1.location, [self.currency_entry(amount)]))
         rows = [CurrencyLoot.objects.get(owner_object=source) for source in sources]
         entries = [s["loot"][0] for s in multiplayer_state(self.char1)["ground_loot"]]
-        self.assertEqual([e["display_label"] for e in entries], ["8칩", "1칩"])
+        self.assertEqual([e["display_label"] for e in entries], ["보급칩 1 8칩", "보급칩 2 1칩"])
         self.assertEqual([number_for(descriptor(row).reference) for row in rows], [1, 2])
         self.assertEqual([e["take_target"] for e in entries], ["보급칩 1", "보급칩 2"])
         self.assertEqual([e["take_command"] for e in entries], ["보급칩 1 가져", "보급칩 2 가져"])
@@ -448,7 +448,7 @@ class EconomyTests(WorldCommandTest):
         sales = [a for a in actions if a.get("action", {}).get("action_id") == "shop.sell.supply"
                  and a["action"]["roles"]["subject"][0]["identity"] == str(item.pk)]
         self.assertEqual(len(sales), 1)
-        self.assertEqual(sales[0]["label"], "붕대 1 · 5칩 팔아")
+        self.assertEqual(sales[0]["label"], "붕대 · 5칩 팔아")
         self.assertEqual(sales[0]["action"]["arguments"]["count"], "1")
         self.assertNotIn("command", sales[0])
         self.assertFalse(any(a["action"]["arguments"]["count"] == "모두" for a in sales))

@@ -30,6 +30,7 @@ class ZoneRoom(DefaultRoom):
         room = ROOMS.get(self.db.zone_id)
         if not room:
             return super().return_appearance(looker, **kwargs)
+        from world.selection_display import room_snapshot
         from world.target_presentation import presence
         from world.targets import room_objects
 
@@ -45,6 +46,7 @@ class ZoneRoom(DefaultRoom):
             exit_diagram(exit_entries(looker, self, observed_at)), "",
         ]
         pool = room_objects(looker, self, observed_at)
+        controls = room_snapshot(looker, observed_at, objects=pool).labels
         features = set(action_objects(self))
         objects = [obj for obj in pool if obj in features]
         for name in dict.fromkeys(obj.key for obj in objects):
@@ -55,7 +57,7 @@ class ZoneRoom(DefaultRoom):
                     group[0].semantic_role,
                     "명" if group[0].semantic_role == "npc" else "개",
                     group[0].presence,
-                    pool=pool,
+                    controls=controls,
                 )
             )
         enemies = [obj for obj in room_enemies(self) if obj in pool]
@@ -63,7 +65,7 @@ class ZoneRoom(DefaultRoom):
             lines.extend(
                 presence(
                     [obj for obj in enemies if obj.get_local_presence() == sentence],
-                    "hostile", "마리", sentence, pool=pool,
+                    "hostile", "마리", sentence, controls=controls,
                 )
             )
         lines.extend(
@@ -73,6 +75,7 @@ class ZoneRoom(DefaultRoom):
                 "구",
                 "바닥에 남아 있다.",
                 source=True,
+                controls=controls,
             )
         )
         for dropped in (obj for obj in room_loot(self, corpse=False) if obj in pool):

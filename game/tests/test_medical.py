@@ -174,8 +174,9 @@ class MedicalCommandsTests(WorldCommandTest):
 
         actions = next(obj["actions"] for obj in state["interactables"] if obj["name"] == "의무관")
         controls = [control for control in actions if "action" in control]
-        self.assertEqual([control["action"]["action_id"] for control in controls], ["medical.treat"])
-        self.assertEqual([control["command"] for control in actions if "command" in control], ["'의무관 1에게 안녕"])
+        self.assertEqual([control["action"]["action_id"] for control in controls],
+                         ["medical.treat", "global.greet_target"])
+        self.assertEqual(controls[1]["action"]["roles"]["subject"][0]["identity"], str(self.doctor.pk))
         assert_provider(self, controls[0], self.doctor)
         before = deepcopy(self.char1.profile())
         from world import interactable_services
@@ -205,7 +206,7 @@ class MedicalCommandsTests(WorldCommandTest):
             self.assertIn("이용할 대상을 찾지", self.command(raw))
             self.assertEqual(self.char1.profile(), before)
         self.assertEqual({obj["name"] for obj in multiplayer_state(self.char1)["interactables"]}, {"윤대장"})
-        self.assertEqual(render(context_for(self.char1)), "'윤대장 1에게 안녕")
+        self.assertEqual(render(context_for(self.char1)), "'윤대장에게 안녕")
 
     def test_return_roof_elevator_medical_supply_purchase_and_expedition_paths(self):
         self.char1.location = self.rooms["grass"]

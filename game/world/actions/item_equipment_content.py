@@ -4,7 +4,7 @@ from world import equipment
 from world.actions import item_equipment_services as service
 from world.actions.item_equipment_help import SPECS, sections
 from world.actions.item_equipment_presentation import render
-from world.actions.room_npc_content import literal
+from world.actions.room_npc_content import literal, quoted_item_name
 from world.actions.schema import (
     ActionBinding,
     ActionDefinition,
@@ -30,7 +30,8 @@ services = (ServiceDefinition("item_equipment.execute", service.execute,
 def item_pattern(identities):
     names = tuple(dict.fromkeys(name for identity in identities
                                 for name in (identity, ITEMS[identity]["name"], *ITEMS[identity].get("aliases", ()))))
-    return "(?:" + "|".join(literal(name) for name in names) + r")(?:[0-9]+)?"
+    ordinary = "(?:" + "|".join(literal(name) for name in names) + r")(?: ?[0-9]+)?"
+    return "(?:" + "|".join((ordinary, *(quoted_item_name(ITEMS[identity]["name"]) for identity in identities))) + ")"
 
 for identity, data in ITEMS.items():
     operations = ["information"]

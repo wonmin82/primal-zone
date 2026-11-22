@@ -167,11 +167,11 @@ class SettlementWorldTests(SettlementFixture, WorldCommandTest):
         actions = next(obj["actions"] for obj in multiplayer_state(self.char1)["interactables"] if obj["name"] == self.officer.key)
         from tests.action_control_fixture import assert_provider
 
-        structured = [control for control in actions if "action" in control]
+        structured = [control for control in actions if control["action"]["action_id"].startswith("settlement.")]
         self.assertEqual({control["action"]["action_id"] for control in structured},
                          {"settlement.rate", "settlement.all"})
-        self.assertEqual([control["command"] for control in actions if "command" in control],
-                         ["'자원 정산관 1에게 안녕"])
+        greet = next(control["action"] for control in actions if control["action"]["action_id"] == "global.greet_target")
+        self.assertEqual(greet["roles"]["subject"][0]["identity"], str(self.officer.pk))
         for control in structured:
             assert_provider(self, control, self.officer)
         exchange = next(control for control in structured if control["action"]["action_id"] == "settlement.all")
@@ -201,8 +201,9 @@ class SettlementWorldTests(SettlementFixture, WorldCommandTest):
             self.assertEqual(state["credits"], 7 * SALVAGE_CREDIT_RATE)
             self.assertEqual(state["resources"], {"scrap": {"name": "회수부품", "count": 0}})
         remaining = next(obj["actions"] for obj in multiplayer_state(self.char1)["interactables"] if obj["name"] == self.officer.key)
-        self.assertEqual([action["action"]["action_id"] for action in remaining if "action" in action], ["settlement.rate"])
-        self.assertEqual([action["command"] for action in remaining if "command" in action], ["'자원 정산관 1에게 안녕"])
+        self.assertEqual([row["action"]["action_id"] for row in remaining],
+                         ["settlement.rate", "global.greet_target"])
+        self.assertEqual(remaining[1]["action"]["roles"]["subject"][0]["identity"], str(self.officer.pk))
         self.char1.location = self.rooms["support_2f_e1"]
         self.assertNotIn("정산관", self.command("북 봐"))
 

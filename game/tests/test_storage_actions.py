@@ -58,7 +58,7 @@ class StorageActionsTests(NativeItemTest):
 
         controls = {entry["name"]: entry["actions"] for entry in multiplayer_state(self.char1)["interactables"]}
         for provider in (self.box, self.locker):
-            self.assertTrue(any(control.get("label") == "봐" and control.get("command", "").endswith(" 봐")
+            self.assertTrue(any(control.get("label") == "봐" and control.get("action", {}).get("action_id") == "global.look_target"
                                 for control in controls[provider.key]))
         self.assertIn("보관했다", self.raw("개인 보관함에 붕대 넣어"))
         row.refresh_from_db()

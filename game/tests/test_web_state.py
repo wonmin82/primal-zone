@@ -337,8 +337,8 @@ class NativeLootWebTests(NativeLootTest):
         a = loot_controls(self.char1, 109)[self.source.pk]
         b = loot_controls(self.char2, 109)[self.source.pk]
         self.assertEqual(a["label"], b["label"])
-        self.assertEqual([row["label"] for row in a["loot"]], ["회수부품 1"])
-        self.assertEqual([row["label"] for row in b["loot"]], ["회수부품 2"])
+        self.assertEqual([row["label"] for row in a["loot"]], ["회수부품"])
+        self.assertEqual([row["label"] for row in b["loot"]], ["회수부품"])
         for state, identity in ((a, first.pk), (b, second.pk)):
             self.assertEqual(state["loot"][0]["action"]["roles"]["subject"][0]["identity"], str(identity))
             self.assertEqual(state["loot"][0]["action"]["roles"]["source"][0]["identity"], str(self.source.pk))

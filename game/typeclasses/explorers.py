@@ -306,7 +306,6 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         from world.environment import display
         from world.environment_state import snapshot_for
         from world.minimap_sessions import WEB_PROTOCOLS, state_fields
-        from world.room_hints import render as room_hint
         from world.state import multiplayer_state
 
         from typeclasses.interactables import instructor_for
@@ -327,15 +326,12 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         instructor = instructor_for(self, observed_at=observed_at)
         from world.exit_presentation import exit_entries
 
-        from typeclasses.interactables import growth_controls
-
         sessions = self.sessions.all()
         web = [session for session in sessions if session.protocol_key in WEB_PROTOCOLS]
         map_doors = [] if web else None
         exits = exit_entries(self, observed_at=observed_at, map_doors=map_doors)
         payload = {
             "growth": rules.growth_state(profile),
-            "training_controls": growth_controls(self, observed_at),
             "max_level": rules.MAX_LEVEL,
             "training_available": bool(instructor),
             "name": self.key,
@@ -361,8 +357,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             "equipment_labels": eq.SLOT_LABELS,
             "exits": [entry["name"] for entry in exits if entry["exists"]],
             "exit_details": exits,
-            "hint": room_hint(observation),
-            **multiplayer_state(self, now=observed_at),
+            **multiplayer_state(self, now=observed_at, observation=observation),
             "player_round": profile["player_round"],
             "heavy_ready": observed_at >= profile["heavy_ready_at"],
             "queued_action": profile["queued_action"],

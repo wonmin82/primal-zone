@@ -122,7 +122,7 @@ class ItemEquipmentActionsTests(NativeItemTest):
         invocation = from_web({**control["action"], "request_id": "drink-numbered-label"}, self.index)
         self.assertEqual(dict(invocation.roles)["subject"][0].identity, str(identity))
         result = execute(self.char1, self.session, invocation, self.index)
-        self.assert_consumption_message(result, "정제수 1", "을", " 마셨다.", 6)
+        self.assert_consumption_message(result, "정제수", "를", " 마셨다.", 6)
         self.assertEqual(self.char1.profile()["hp"], 7)
         item.refresh_from_db()
         self.assertEqual((item.pk, item.quantity, number_for(descriptor(item).reference)), (identity, 2, 1))
@@ -174,21 +174,21 @@ class ItemEquipmentActionsTests(NativeItemTest):
 
     def test_equipment_slot_and_hand_role_golden_messages(self):
         cases = (
-            ("folding_shield", "접이식방패 1", "들었다", "내려놓았다"),
-            ("portable_analyzer", "휴대분석기 1", "장착했다", "해제했다"),
-            ("security_goggles", "보안고글 1", "썼다", "벗었다"),
-            ("expedition_tag", "탐사인식표 1", "걸었다", "벗었다"),
-            ("light_protective_suit", "경량방호복 1", "입었다", "벗었다"),
-            ("shock_absorbing_gloves", "충격흡수장갑 1", "꼈다", "벗었다"),
-            ("emergency_belt", "응급벨트 1", "둘렀다", "풀었다"),
-            ("reinforced_explorer_pants", "보강탐사바지 1", "입었다", "벗었다"),
-            ("non_slip_boots", "미끄럼방지탐사화 1", "신었다", "벗었다"),
-            ("focus_ring", "집중링 1", "꼈다", "뺐다"),
-            ("survival_module", "생존모듈 1", "착용했다", "벗었다"),
+            ("folding_shield", "접이식방패", "를", "들었다", "내려놓았다"),
+            ("portable_analyzer", "휴대분석기", "를", "장착했다", "해제했다"),
+            ("security_goggles", "보안고글", "을", "썼다", "벗었다"),
+            ("expedition_tag", "탐사인식표", "를", "걸었다", "벗었다"),
+            ("light_protective_suit", "경량방호복", "을", "입었다", "벗었다"),
+            ("shock_absorbing_gloves", "충격흡수장갑", "을", "꼈다", "벗었다"),
+            ("emergency_belt", "응급벨트", "를", "둘렀다", "풀었다"),
+            ("reinforced_explorer_pants", "보강탐사바지", "를", "입었다", "벗었다"),
+            ("non_slip_boots", "미끄럼방지탐사화", "를", "신었다", "벗었다"),
+            ("focus_ring", "집중링", "을", "꼈다", "뺐다"),
+            ("survival_module", "생존모듈", "을", "착용했다", "벗었다"),
         )
         weapon = self.create("explorer_machete")
         self.equipment_action("탐사용 벌목도 1", ("wield", "무장"), weapon)
-        for identity, label, equip_verb, remove_verb in cases:
+        for identity, label, particle, equip_verb, remove_verb in cases:
             with self.subTest(item=identity):
                 row = self.create(identity)
                 before = self.atomic_state()
@@ -196,8 +196,8 @@ class ItemEquipmentActionsTests(NativeItemTest):
                     (("equip", "착용"), "equipment", equip_verb),
                     (("remove", "벗어"), "inventory", remove_verb),
                 ):
-                    result = self.equipment_action(label, command, row)
-                    self.assert_equipment_message(result, f"{label}을 {verb}.", label, "을 ", verb)
+                    result = self.equipment_action(label + " 1", command, row)
+                    self.assert_equipment_message(result, f"{label}{particle} {verb}.", label, particle + " ", verb)
                     row.refresh_from_db()
                     self.assertEqual(row.location_kind, location)
                     self.assertEqual(number_for(descriptor(row).reference), 1)
@@ -241,7 +241,7 @@ class ItemEquipmentActionsTests(NativeItemTest):
     def test_two_handed_weapon_refuses_shield_with_existing_error_and_no_mutation(self):
         weapon, shield = self.create("pioneer_spear"), self.create("folding_shield")
         result = self.equipment_action("개척창 1", ("wield", "무장"), weapon)
-        self.assert_equipment_message(result, "개척창 1로 무장했다.", "개척창 1", "로 ", "무장했다")
+        self.assert_equipment_message(result, "개척창으로 무장했다.", "개척창", "으로 ", "무장했다")
         self.assertEqual(equipment_service.hand_usage(self.char1), 2)
         before = self.atomic_state()
         result = self.equipment_action("접이식방패 1", ("equip", "착용"), shield)
@@ -249,7 +249,7 @@ class ItemEquipmentActionsTests(NativeItemTest):
         self.assertIn("손 장비 공간이 부족합니다. 먼저 기존 장비를 해제하세요.", result.messages[0])
         self.assertEqual(self.atomic_state(), before)
         result = self.equipment_action("개척창 1", ("unwield", "해제"), weapon)
-        self.assert_equipment_message(result, "개척창 1을 해제했다.", "개척창 1", "을 ", "해제했다")
+        self.assert_equipment_message(result, "개척창을 해제했다.", "개척창", "을 ", "해제했다")
 
     def test_unsupported_equipment_operation_is_refused_before_changing_state(self):
         self.create("light_protective_suit")

@@ -19,7 +19,7 @@ from world.actions.schema import (
 from world.content import ITEMS, SHOP_CATALOGS
 from world.content.shops import accepts
 from world.progression import ATTRIBUTES, SKILLS
-from world.targets import normalized
+from world.targets import normalized, quote_name
 
 PROVIDER = RoleDefinition("provider", (ReferenceKind.OBJECT,), required=False)
 SERVICE_ACTOR = RoleDefinition("provider", (ReferenceKind.ACTOR,), required=False)
@@ -38,6 +38,10 @@ def literal(value):
     for char in normalized(value):
         tokens.append("[" + char + char.upper() + "]" if char.isascii() and char.isalpha() else re.escape(char))
     return ignored + ignored.join(tokens) + ignored
+
+
+def quoted_item_name(name):
+    return re.escape(quote_name(name)) + r"[ \t]+[0-9]+"
 
 
 def verb(key, aliases=()):
@@ -146,7 +150,8 @@ for item, data in ITEMS.items():
             roles = (SERVICE_ACTOR, RoleDefinition("subject", (ReferenceKind.ITEM,), DefaultTargetPolicy.FIRST_LEGACY_ORDER,
                                               required=False, definition_ids=(item,)))
             item_pattern = "(?:" + "|".join(literal(name) for name in names) + ")"
-            variants += (SyntaxVariant("numbered", r"(?:(?P<provider>.+)에게 )?(?P<subject>" + item_pattern + r" [0-9]+)(?: (?P<count>[0-9]+개|모두))?", show_control=False),)
+            numbered = r"(?:(?P<provider>.+)에게 )?(?P<subject>" + item_pattern + r" [0-9]+|" + quoted_item_name(data["name"]) + r")(?: (?P<count>[0-9]+개|모두))?"
+            variants += (SyntaxVariant("numbered", numbered, show_control=False),)
         actions.append(ActionDefinition(identity, "game." + VERB_IDS[key], roles, variants,
                                         (ArgumentDefinition("value", default=item, choices=(item,)), *((ArgumentDefinition("count", default="1"),) if method == "value" else ())), help=f"상인에게 {data['name']} {key}"))
         for shop in shops:

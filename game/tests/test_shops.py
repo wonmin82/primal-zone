@@ -18,7 +18,6 @@ from world.room_hints import render
 from world.selection_numbers.api import descriptor
 from world.state import multiplayer_state
 
-from tests.action_control_fixture import selection_label
 from tests.base import WorldCommandTest
 
 
@@ -53,7 +52,8 @@ class ShopTests(WorldCommandTest):
                     # 집중링/정신집중링처럼 이름의 부분 문자열이 겹쳐도 독립 상품으로 검사한다.
                     self.assertEqual(bool(re.search(r"(?<![가-힣])" + re.escape(ITEMS[item]["name"]) + r" ·", output)), item in SHOP_CATALOGS[shop_id]["purchase_catalog"], item)
                 self.assertNotIn("회수부품", output)
-            self.assertIn(selection_label(seller) + "에게 물건이름 사", self.command(seller.key + " 봐"))
+            example = ITEMS[SHOP_CATALOGS[shop_id]["purchase_catalog"][0]]["name"]
+            self.assertIn(f"{seller.key}에게 {example} 사", self.command(seller.key + " 봐"))
             self.assertIn("판매 목록", self.command(seller.key + "에게 보급 말"))
 
     def test_bare_targeted_alias_purchases_and_infinite_catalog(self):
@@ -87,7 +87,7 @@ class ShopTests(WorldCommandTest):
             self.assertIn("상인", self.command(raw))
             self.assertEqual(self.char1.profile(), before)
         self.assertEqual([obj["name"] for obj in multiplayer_state(self.char1)["interactables"]], ["윤대장"])
-        self.assertEqual(render(context_for(self.char1)), "'윤대장 1에게 안녕")
+        self.assertEqual(render(context_for(self.char1)), "'윤대장에게 안녕")
 
     def test_multiple_sellers_filter_by_item_and_use_common_number_selector(self):
         seller = self.sellers["supply"]

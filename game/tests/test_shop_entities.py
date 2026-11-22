@@ -86,8 +86,8 @@ class NativeShopTests(Phase5Test):
                     if control["action"]["action_id"] == "shop.sell.supply"]
         price = shop_service.resale(row)
         self.assertEqual({control["label"] for control in controls},
-                         {f"붕대 1 · {format_currency(price)} 팔아",
-                          f"붕대 1 모두 팔아 · 총 {format_currency(price * 8)}"})
+                         {f"붕대 · {format_currency(price)} 팔아",
+                          f"붕대 모두 팔아 · 총 {format_currency(price * 8)}"})
         for control in controls:
             self.assertEqual(control["action"]["roles"]["subject"][0]["identity"], str(row.pk))
         self.assertEqual({control["action"]["arguments"]["count"] for control in controls}, {"1", "모두"})
@@ -175,7 +175,7 @@ class NativeShopTests(Phase5Test):
         self.assertEqual({row["action"]["roles"]["subject"][0]["identity"]: row["label"] for row in sales},
                          {str(first.pk): "절단마체테 1 · 27칩 팔아",
                           str(second.pk): "절단마체테 2 · 27칩 팔아",
-                          str(advanced.pk): f"정글장도 1 · {format_currency(shop_service.resale(advanced))} 팔아"})
+                          str(advanced.pk): f"정글장도 · {format_currency(shop_service.resale(advanced))} 팔아"})
         self.assertNotIn("shop.buy.jungle_longblade", [row["action"]["action_id"] for row in actions])
         for row in actions:
             assert_provider(self, row, seller)
@@ -228,7 +228,7 @@ class NativeShopTests(Phase5Test):
 
         sale = next(row for row in controls_for(self.char1, seller)
                     if row["action"]["action_id"] == "shop.sell.weapon")
-        self.assertEqual(sale["label"], f"정글장도 2 · {format_currency(shop_service.resale(second))} 팔아")
+        self.assertEqual(sale["label"], f"정글장도 · {format_currency(shop_service.resale(second))} 팔아")
         self.assertEqual(sale["action"]["roles"]["subject"][0]["identity"], str(second.pk))
         self.assertIn("매입", self.command("정글장도 2 팔아"))
         self.assertFalse(ItemEntity.objects.filter(pk=second.pk).exists())

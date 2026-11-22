@@ -1,6 +1,7 @@
 """Storage 버튼은 현재 접근 가능한 실제 UUID를 전달한다. 조회 중 이동하지 않는다."""
 
-from world.actions.presentation import reference_json
+from world.actions.presentation import reference_json, target_label
+from world.actions.presentation_context import profile_snapshot
 
 
 def render(caller, index, reference, binding, observed_at=None):
@@ -9,11 +10,11 @@ def render(caller, index, reference, binding, observed_at=None):
     from world.actions.resolver import role_records
     from world.content import ITEMS
     from world.item_entities.policy import can_item_operation
-    from world.selection_numbers.api import label, resolve_reference
+    from world.selection_numbers.api import resolve_reference
 
     provider = resolve_reference(reference)
     try:
-        rules.require_peace(caller.profile_snapshot())
+        rules.require_peace(profile_snapshot(caller))
         domain.require_container(caller, provider)
     except rules.RuleError:
         return []
@@ -23,6 +24,9 @@ def render(caller, index, reference, binding, observed_at=None):
     withdraw = dict(binding.config)["withdraw"]
     output = []
     for record in records:
+        label = target_label(caller, record.reference, observed_at)
+        if label is None:
+            continue
         item = resolve_reference(record.reference)
         if item is None or (not withdraw and item.location_kind != "inventory") or not can_item_operation(item, "store"):
             continue
@@ -32,7 +36,7 @@ def render(caller, index, reference, binding, observed_at=None):
             continue
         quantities = ("1", "모두") if ITEMS[item.definition_id]["stackable"] and item.quantity > 1 else ("1",)
         for count in quantities:
-            output.append({"label": label(record) + (" 스택 전부" if count == "모두" else "") + (" 꺼내" if withdraw else " 넣어"),
+            output.append({"label": label + (" 스택 전부" if count == "모두" else "") + (" 꺼내" if withdraw else " 넣어"),
                            "description": action.help,
                            "action": {"action_id": action.id, "variant": "normal",
                                       "roles": {"provider": [reference_json(reference)],

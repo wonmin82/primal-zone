@@ -1,5 +1,7 @@
 # Action 아키텍처 Phase 1
 
+B-1 번호의 조건부 표시, 인용 정확 선택, 웹 안정 참조 계약은 [Selection Number v1.5 FINAL](selection-number-display-design-v1.5.md)을 따른다.
+
 ## 통합 Actor v1.6 Foundation 확장
 
 [Actor 설계](actor-unification-design-v1.md)와 [구현 계획](actor-unification-implementation-plan-v1.md)에 따른 PR-A는 기존 단일 Registry와 동기 완료 계약을 유지하며 Global/Entity Source와 효과 경계를 확장한다. 기존 positional ActionBinding은 EntitySource의 호환 표기이고 Global은 `GlobalSource(ScopeRoot.CALLER/CURRENT_ROOM/ROLE)`로 명시한다. Global 역할은 Provider를 암묵적으로 참조하지 않고 Root와 역할 의존성을 선언한다. 명시 EntitySource는 실제 ProviderDefinition 등록을 요구한다. 기존 운영 Manifest와 게임 경로는 PR-B 전환까지 유지한다.
