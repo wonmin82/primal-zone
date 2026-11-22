@@ -144,6 +144,12 @@
         response.owner !== minimapOwner) return;
     if (!Array.isArray(response.messages) || !Array.isArray(response.sheets) || !Array.isArray(response.centers)) return;
     clearMinimap();
+    const hasError = response.messages.some(message => message?.kind === "error");
+    if (hasError && minimapSelection.center) {
+      // 새로고침이 실패한 중심을 반복하지 않도록 명시적으로 선택한 지도만 남긴다.
+      const {sheet} = minimapSelection;
+      minimapSelection = sheet ? {sheet} : {};
+    }
     minimapPublicSheet = typeof response.sheet === "string" && response.sheets.includes(response.sheet) ? response.sheet : "";
     if (minimapSelection.center && minimapPublicSheet) {
       minimapSelection.centerSheet = minimapPublicSheet;
@@ -159,7 +165,6 @@
     const hasCanvas = response.messages.some(message => message?.kind === "map" && Array.isArray(message.segments));
     const isConnector = response.sheet === "" && response.messages.length === 1 &&
       response.messages[0]?.kind === "sheet" && Array.isArray(response.messages[0].segments);
-    const hasError = response.messages.some(message => message?.kind === "error");
     for (const [index, message] of response.messages.entries()) {
       if (!Array.isArray(message?.segments)) continue;
       const canvas = message.kind === "map";

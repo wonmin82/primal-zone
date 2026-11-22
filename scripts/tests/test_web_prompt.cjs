@@ -677,6 +677,26 @@ test("지도 시간 초과와 유효하지 않은 응답은 제출을 막고 현
   assert.deepEqual(last(), {id:4, sheet:"본부", center:"중앙 복도"});
 });
 
+test("실패한 중심 조회를 새로고침하면 명시적으로 선택한 지도만 다시 조회", () => {
+  const c = client();
+  const last = () => mapFrames(c.socket).at(-1);
+  mapState(c, "r1");
+  mapReply(c, "r1", last(), "본부");
+  c.byId("minimap-sheet").value = "전초구역";
+  c.byId("minimap-sheet").fire("change");
+  mapReply(c, "r1", last(), "전초구역", "전초구역");
+  c.byId("minimap-center").value = "잘못된 중심";
+  c.byId("minimap-center-form").fire("submit");
+  assert.deepEqual(last(), {id:3, sheet:"전초구역", center:"잘못된 중심"});
+  c.receive("pz_map", {id:3, revision:"r1", owner:"explorer-a", sheet:"", sheets:[], centers:[],
+    messages:[{kind:"error", segments:[{role:"warning",text:"조회할 수 있는 지도가 없습니다."}]}]});
+  assert.equal(c.byId("minimap-center-submit").disabled, true);
+  c.byId("minimap-refresh").fire("click");
+  assert.deepEqual(last(), {id:4, sheet:"전초구역"});
+  mapReply(c, "r1", last(), "복구된 전초구역", "전초구역");
+  assert.equal(c.byId("minimap-center-submit").disabled, false);
+});
+
 test("미니맵 닫기·제어 해제·다른 캐릭터·재접속에서 지난 요청과 선택을 폐기", () => {
   const c = client();
   const panel = c.byId("minimap-panel"), output = c.byId("minimap-content");

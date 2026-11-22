@@ -587,7 +587,7 @@ test('TEST-104-04 실제 지도 갱신 중 중심 제출 제한과 조회 복구
   await expect(canvas).toHaveCount(0);
   await expect(submit).toBeDisabled();
   await expect.poll(async () => (await requests()).at(-1)).toEqual({sheet:'본부 3층', center:'존재하지 않는 중심 검증'});
-  await page.locator('#minimap-current').click();
+  await refresh.click();
   await expect(submit).toBeEnabled();
   await expect.poll(async () => (await requests()).at(-1)).toEqual({});
 
@@ -601,7 +601,7 @@ test('TEST-104-04 실제 지도 갱신 중 중심 제출 제한과 조회 복구
   await release();
   await expect(status).toContainText('지도 응답이 지연되었습니다');
   await expect(submit).toBeDisabled();
-  await refresh.click();
+  await page.locator('#minimap-current').click();
   await expect(submit).toBeEnabled();
 
   await go('서', 'support_3f_c');
