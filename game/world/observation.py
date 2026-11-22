@@ -71,13 +71,17 @@ def perceives(snapshot, detectability):
     return VISIBILITY_RANK[snapshot.effective_visibility] <= DETECTABILITY_LIMIT.get(detectability, -1)
 
 
-def can_view_in_room(obj, context):
+def can_view_in_room(obj, context, *, view_check=None):
     """현재 방의 객체에 기존 view 접근 정책을 적용한다."""
-    return obj.location == context.room and obj.access(context.viewer, "view")
+    if obj.location != context.room:
+        return False
+    if view_check is not None:
+        return view_check(obj, context.viewer)
+    return obj.access(context.viewer, "view")
 
 
-def can_perceive(obj, context):
-    if not can_view_in_room(obj, context):
+def can_perceive(obj, context, *, view_check=None):
+    if not can_view_in_room(obj, context, view_check=view_check):
         return False
     if obj.destination:  # 이동 방향은 어둠 속에서도 인지한다.
         return True

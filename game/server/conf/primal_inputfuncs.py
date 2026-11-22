@@ -138,3 +138,13 @@ def pz_auth(session, payload=None, **kwargs):
         session.msg(
             pz_auth=([{"ok": False, "message": "\n".join(str(error) for error in errors)}], {})
         )
+
+
+def pz_map(session, payload=None, **kwargs):
+    """인증한 현재 Explorer의 공개 지도만 요청 세션에 돌려준다."""
+    from typeclasses.explorers import Explorer
+    from world.minimap_sessions import request
+
+    caller = session.get_puppet()
+    if isinstance(caller, Explorer):
+        request(caller, session, payload)

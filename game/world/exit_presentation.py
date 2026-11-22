@@ -7,11 +7,11 @@ from world.content import DIRECTIONS, ROOMS, ordered_directions
 from world.content.directions import PLANAR_DIRECTIONS
 
 
-def exit_entries(viewer, room=None, observed_at=None, *, reveal_observed=True):
+def exit_entries(viewer, room=None, observed_at=None, *, reveal_observed=True, map_doors=None):
     """나침반·조회·지도·웹이 공유하는 공개 정보. 숨긴 목적지 ID는 반환하지 않는다."""
     from world.access import entry_message
     from world.distant_presentation import DistantViewContext
-    from world.doors import exit_block, state_for_exit
+    from world.doors import exit_block, exit_block_detail, state_for_exit
     from world.observation import can_perceive, context_for
 
     room = viewer.location if room is None else room
@@ -53,7 +53,12 @@ def exit_entries(viewer, room=None, observed_at=None, *, reveal_observed=True):
             status, reason = "전투 중 이동 불가", "전투 중에는 이동할 수 없습니다."
         else:
             status = "이동 가능"
-        door_reason = exit_block(obj, viewer, now)
+        if map_doors is None:
+            door_reason = exit_block(obj, viewer, now)
+        else:
+            door_reason, visible_block = exit_block_detail(obj, viewer, now)
+            if visible_block and name in definition.get("exits", {}):
+                map_doors.append(name)
         if not reason and door_reason:
             reason = door_reason
             state = state_for_exit(obj, now)

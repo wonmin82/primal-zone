@@ -305,6 +305,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             return
         from world.environment import display
         from world.environment_state import snapshot_for
+        from world.minimap_sessions import WEB_PROTOCOLS, state_fields
         from world.room_hints import render as room_hint
         from world.state import multiplayer_state
 
@@ -313,7 +314,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         observed_at = time() if observed_at is None else observed_at
         environment = snapshot_for(self.location, observed_at)
         profile = self.profile_snapshot()
-        from world.observation import context_for
+        from world.observation import context_for, perceives
         from world.observation import display as observation_display
 
         observation = context_for(self, observed_at=observed_at, environment=environment)
@@ -328,7 +329,10 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
 
         from typeclasses.interactables import growth_controls
 
-        exits = exit_entries(self, observed_at=observed_at)
+        sessions = self.sessions.all()
+        web = [session for session in sessions if session.protocol_key in WEB_PROTOCOLS]
+        map_doors = [] if web else None
+        exits = exit_entries(self, observed_at=observed_at, map_doors=map_doors)
         payload = {
             "growth": rules.growth_state(profile),
             "training_controls": growth_controls(self, observed_at),
@@ -365,7 +369,16 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             "quest": self.quest_text(profile),
             "visited": [ROOMS[key]["name"] for key in profile["visited"] if key in ROOMS],
         }
-        self.msg(pz_state=([payload], {}))
+        if not web:
+            self.msg(pz_state=([payload], {}))
+            return
+        for session in sessions:
+            state = payload
+            if session in web:
+                flags = state_fields(self, session, profile["visited"], exits, map_doors,
+                                     perceives(observation.snapshot, "normal"))
+                state = {**payload, **flags}
+            self.msg(session=session, pz_state=([state], {}))
 
     @staticmethod
     def quest_text(profile):
@@ -410,6 +423,10 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
     def at_post_unpuppet(self, account=None, session=None, **kwargs):
         from commands.shortcut_execution import stop_execution
 
+        if session is not None:
+            from world.minimap_sessions import reset
+
+            reset(session)
         stop_execution(self, session)
         self.ndb.shortcut_delete_all_request = None
         self.ndb.npc_dialogue_context = None

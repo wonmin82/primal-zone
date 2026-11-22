@@ -2,7 +2,7 @@
 
 from unittest import TestCase
 
-from world.map_layout import LayoutUnrepresentable, MapDeclarationInvalid, layout, render
+from world.map_layout import VECTORS, LayoutUnrepresentable, MapDeclarationInvalid, layout, render
 from world.text import display_width
 
 
@@ -44,6 +44,34 @@ class MapLayoutTests(TestCase):
         ])
         for row in (*unicode_map.lines, *ascii_map.lines):
             self.assertLessEqual(display_width(row), 60)
+
+    def test_each_independent_boundary_symbol_has_a_stroke_in_all_eight_directions(self):
+        hub = self.make_layout(("a",), ())
+        for symbol in ("?", "+", "×"):
+            boundaries = tuple(("a", direction, symbol) for direction in VECTORS)
+            for ascii_only in (False, True):
+                with self.subTest(symbol=symbol, ascii_only=ascii_only):
+                    shown = "x" if ascii_only and symbol == "×" else symbol
+                    result = render(hub, boundaries, current="a", ascii_only=ascii_only)
+                    self.assertEqual(list(map(str, result.lines)), [
+                        f"{shown} {shown} {shown}",
+                        " \\|/" if ascii_only else " ╲│╱",
+                        f"{shown}-@-{shown}" if ascii_only else f"{shown}─@─{shown}",
+                        " /|\\" if ascii_only else " ╱│╲",
+                        f"{shown} {shown} {shown}",
+                    ])
+                    self.assertFalse(result.omitted)
+
+    def test_mixed_boundary_strokes_and_symbols_keep_semantic_roles(self):
+        hub = self.make_layout(("a",), ())
+        view = render(hub, (("a", "서", "?"), ("a", "동", "+"), ("a", "남", "×")), current="a")
+        self.assertEqual(list(map(str, view.lines)), ["?─@─+", "  │", "  ×"])
+        self.assertEqual(view.lines[0].segments, [
+            {"text": "?", "role": "muted"}, {"text": "─", "role": "direction"},
+            {"text": "@", "role": "player"}, {"text": "─", "role": "direction"},
+            {"text": "+", "role": "npc"},
+        ])
+        self.assertEqual(view.lines[2].segments[-1], {"text": "×", "role": "warning"})
 
     def test_relative_hint_and_route_share_one_bidirectional_path(self):
         result = self.make_layout(
@@ -145,10 +173,55 @@ class MapLayoutTests(TestCase):
         ))
         blocked = render(result, (("a", "동", "×"), ("b", "동", "+"), ("c", "동", "?")),
                          current="a")
-        self.assertEqual(list(map(str, blocked.lines)), ["@×o+", "  │", "  o?"])
+        self.assertEqual(list(map(str, blocked.lines)), ["@×o─+", "  │", "  o─?"])
         ambiguous = render(result, (("a", "동", "?"),), current="a")
         self.assertEqual(ambiguous.omitted, (("a", "동", "?"),))
         self.assertEqual(str(ambiguous.lines[0]), "@─o")
+
+    def test_blocked_path_retains_spacing_and_uses_the_actual_exit_direction(self):
+        result = self.make_layout(("a", "b"), (("a", "동", "b"),))
+        # 역방향에는 실제 Exit이 없으므로 독립 차단이 통로를 덮으면 안 된다.
+        view = render(result, (("b", "서", "×"),), current="a")
+        self.assertEqual(list(map(str, view.lines)), ["@─o"])
+        self.assertEqual(view.omitted, (("b", "서", "×"),))
+
+        result = self.make_layout(("a", "b"), (("b", "서", "a"),), anchors=("a",))
+        view = render(result, (("b", "서", "×"),), current="b", ascii_only=True)
+        self.assertEqual(list(map(str, view.lines)), ["ox@"])
+        self.assertFalse(view.omitted)
+
+    def test_blocked_hinted_path_marks_only_the_departure_stroke(self):
+        result = self.make_layout(
+            ("a", "b"), (("a", "동", "b"),), routes={("a", "동"): ((2, 0), (2, 1))},
+        )
+        view = render(result, (("a", "동", "×"),), current="a")
+        self.assertEqual(list(map(str, view.lines)), ["@×──·", "    │", "    ·─o"])
+
+    def test_boundary_collision_with_a_room_or_hint_omits_the_entire_symbol(self):
+        result = self.make_layout(("a", "b", "c"), (("a", "동", "b"), ("b", "남", "c")))
+        view = render(result, (("a", "남동", "?"),), current="a")
+        self.assertEqual(list(map(str, view.lines)), ["@─o", "  │", "  o"])
+        self.assertEqual(view.omitted, (("a", "남동", "?"),))
+
+        result = self.make_layout(("a", "b", "c"), (("a", "동", "b"), ("a", "북동", "c")),
+                                  routes={("a", "동"): ((1, 0), (1, 2))})
+        ground = render(result, current="a")
+        view = render(result, (("c", "남", "+"),), current="a")
+        self.assertEqual(view.lines, ground.lines)
+        self.assertEqual(view.omitted, (("c", "남", "+"),))
+
+    def test_crossing_diagonal_boundaries_never_create_a_false_junction(self):
+        result = self.make_layout(("a", "b"), (("a", "동", "b"),))
+        boundaries = (("b", "남서", "×"), ("a", "남동", "?"))
+        view = render(result, boundaries, current="a")
+        self.assertEqual(list(map(str, view.lines)), ["@─o", " ╲", "  ?"])
+        self.assertEqual(view.omitted, (("b", "남서", "×"),))
+        self.assertEqual(view, render(result, reversed(boundaries), current="a"))
+
+        result = self.make_layout(("a", "b", "c"), (("a", "동", "b"), ("b", "남서", "c")))
+        view = render(result, (("a", "남동", "?"),), current="a")
+        self.assertEqual(list(map(str, view.lines)), ["@─o", " ╱", "o"])
+        self.assertEqual(view.omitted, (("a", "남동", "?"),))
 
     def test_large_maps_and_long_hints_render_a_bounded_viewport(self):
         for size in (10, 100, 1000):
@@ -172,4 +245,6 @@ class MapLayoutTests(TestCase):
         view = render(sparse, current="a")
         self.assertTrue(view.partial)
         self.assertEqual(len(view.lines), 1)
-        self.assertTrue(view.lines[0].endswith("…"))
+        self.assertEqual(view.lines[0], "@" + "─" * 58 + "…")
+        ascii_view = render(sparse, current="a", ascii_only=True)
+        self.assertEqual([row for row in ascii_view.lines if row], ["  @" + "-" * 54 + "..."])

@@ -106,10 +106,14 @@ def load_exits(origins, current_pk):
     return grouped
 
 
-def visible_rooms(viewer, zones, current, visited):
+def _view(obj, viewer):
+    return obj.access(viewer, "view")
+
+
+def visible_rooms(viewer, zones, current, visited, *, view_check=None):
     rooms = load_rooms(set(zones) & (visited | {current}))
     return {zone: room for zone, room in rooms.items()
-            if zone == current or room.access(viewer, "view")}
+            if zone == current or (view_check or _view)(room, viewer)}
 
 
 def _exit_mismatch(zone, direction, pk, problem, visible):
@@ -136,14 +140,16 @@ def _diagnose_missing_exits(missing):
             _exit_mismatch(zone, direction, None, "관리 Exit 누락", False)
 
 
-def project(viewer, catalog, sheet, *, current, visited, now, center=None, near=False):
+def project(viewer, catalog, sheet, *, current, visited, now, center=None, near=False,
+            view_check=None, public_labels=None):
     from world.doors import current_door_overlays
     from world.observation import can_perceive, can_view_in_room, context_for
 
+    check = view_check or _view
     candidates = ({current} if near or sheet is None else set(sheet.rooms)) & (visited | {current})
     candidate_rooms = load_rooms(candidates)
     origins = {zone: room for zone, room in candidate_rooms.items()
-               if zone == current or room.access(viewer, "view")}
+               if zone == current or check(room, viewer)}
     if current in candidates and (current not in origins or origins[current].pk != viewer.location.pk):
         raise RuntimeGraphMismatch(f"현재 Room 정체성 {current}")
     if not origins or (center is not None and center not in origins):
@@ -161,7 +167,7 @@ def project(viewer, catalog, sheet, *, current, visited, now, center=None, near=
         managed_counts, exits = defaultdict(int), defaultdict(list)
         for obj, identities in grouped[room.pk]:
             if not identities:
-                if here and obj.db_destination_id and can_perceive(obj, context):
+                if here and obj.db_destination_id and can_perceive(obj, context, view_check=view_check):
                     notices.append((obj.key, "지도에 배치되지 않은 출구"))
                 continue
             direction = obj.key
@@ -170,12 +176,12 @@ def project(viewer, catalog, sheet, *, current, visited, now, center=None, near=
             invalid_identity = (identities != [f"{zone}:{direction}"] or target is None
                                 or obj.db_typeclass_path != "typeclasses.exits.Exit")
             if not here:
-                visible = (obj.db_destination_id or not invalid_identity) and obj.access(viewer, "view")
+                visible = (obj.db_destination_id or not invalid_identity) and check(obj, viewer)
             elif not invalid_identity and not obj.db_destination_id:
                 # 목적지가 손상된 정상 정체성의 Exit도 방향의 view 정책을 적용한다.
-                visible = can_view_in_room(obj, context)
+                visible = can_view_in_room(obj, context, view_check=view_check)
             else:
-                visible = can_perceive(obj, context)
+                visible = can_perceive(obj, context, view_check=(view_check if obj.db_destination_id else None))
             problem = None
             if invalid_identity:
                 problem = "관리 Exit 정체성 불일치"
@@ -215,7 +221,7 @@ def project(viewer, catalog, sheet, *, current, visited, now, center=None, near=
     public_doors = current_door_overlays(context, current, current_exits) if context else set()
     public_targets = {target for _, target in public_exits.values()}
     disclosed = origins.keys() | {zone for zone in (public_targets & visited) - candidates
-                                  if zone in actual_rooms and actual_rooms[zone].access(viewer, "view")}
+                                  if zone in actual_rooms and check(actual_rooms[zone], viewer)}
     nodes, edges = set(origins), set()
     for (zone, direction), (obj, target) in public_exits.items():
         known = target in disclosed
@@ -240,6 +246,11 @@ def project(viewer, catalog, sheet, *, current, visited, now, center=None, near=
 
     # 안정 ID 순서를 보존하는 요청별 임시 키. 내부 ID는 결과에 남기지 않는다.
     keys = {zone: str(index).zfill(len(str(len(nodes)))) for index, zone in enumerate(sorted(nodes))}
+    if public_labels is not None:
+        public_labels.update({
+            keys[zone]: (ROOMS[zone]["name"], *catalog.room_aliases.get(zone, ()))
+            for zone in nodes & visited
+        })
     edge_pairs = {(source, target) for source, _, target in edges}
     visible_edges = {(source, direction) for source, direction, _ in edges}
     positions = {keys[zone]: (keys[ref], offset) for zone, (ref, offset) in catalog.positions.items()

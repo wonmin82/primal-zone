@@ -368,14 +368,20 @@ def look_door(caller, value, now):
                       *([ft.text("조작: ", ft.join(examples, " · "))] if examples else []))
 
 
-def exit_block(exit_obj, caller, now=None):
+def exit_block_detail(exit_obj, caller, now=None):
+    """이동 차단 안내와 플레이어에게 관찰된 닫힌 문 여부."""
     state = state_for_exit(exit_obj, now)
     if state in (None, "OPEN"):
-        return None
+        return None, False
     target = next((t for t in current_doors(caller, now) if t.exit_pk == exit_obj.pk), None)
     if not target or state == UNAVAILABLE:
-        return "출구를 이용할 수 없습니다."
-    return "문이 잠겨 있습니다. 먼저 풀어 주세요." if state == "LOCKED" else "문이 닫혀 있습니다. 먼저 열어 주세요."
+        return "출구를 이용할 수 없습니다.", False
+    message = "문이 잠겨 있습니다. 먼저 풀어 주세요." if state == "LOCKED" else "문이 닫혀 있습니다. 먼저 열어 주세요."
+    return message, True
+
+
+def exit_block(exit_obj, caller, now=None):
+    return exit_block_detail(exit_obj, caller, now)[0]
 
 
 def _push_endpoints(identity):
