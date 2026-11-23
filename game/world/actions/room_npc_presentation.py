@@ -1,7 +1,7 @@
 """M01/M02 서비스의 순수 화면. 실행 문장을 만들지 않고 안정 참조를 전달한다."""
 
 from world.actions.presentation import reference_json, target_label
-from world.actions.presentation_context import available, profile_snapshot
+from world.actions.presentation_context import available, door_action_labels, profile_snapshot
 
 
 def render(caller, index, reference, binding, observed_at=None):
@@ -18,9 +18,7 @@ def render(caller, index, reference, binding, observed_at=None):
     if profile_snapshot(caller).get("combat_target"):
         return []
     if reference.kind == "door":
-        from world import doors
-        target = next(iter([target for target in doors.current_doors(caller, observed_at) if target.exit_pk == provider.pk]), None)
-        if target is None or config["operation"] not in {a["label"] for a in doors.actions_for(caller, target, observed_at)}:
+        if provider is None or config["operation"] not in door_action_labels(caller, provider.pk, observed_at):
             return []
     defaults = {arg.name: arg.default for arg in action.arguments if arg.default is not None}
     if binding.provider_definition.startswith("skill."):

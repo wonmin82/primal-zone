@@ -1,6 +1,9 @@
 """B-1 실물 참조·순수 조회 및 최종 변경 시점의 원자적 번호 확정."""
 
+from collections import defaultdict
 from dataclasses import dataclass, replace
+from functools import cache
+from uuid import UUID
 
 from django.core.exceptions import ValidationError
 from django.db.models import Q
@@ -195,11 +198,14 @@ def label(record, unique_group_count=1):
     return f"{record.name} {record.number}"
 
 
-def visible_entity(caller, entity, *, require_carried_root=False):
+def visible_entity(caller, entity, *, require_carried_root=False, get_observation=None):
     from world.item_entities.api import CARRIED_LOCATIONS
     from world.item_entities.models import ItemEntity
     from world.loot_entities.models import CurrencyLoot
     from world.observation import can_inspect_loot, can_perceive, context_for
+
+    def observation():
+        return context_for(caller) if get_observation is None else get_observation()
 
     if isinstance(entity, ItemEntity):
         try:
@@ -211,13 +217,13 @@ def visible_entity(caller, entity, *, require_carried_root=False):
         if root.location_kind in (*CARRIED_LOCATIONS, "personal_storage"):
             return root.owner_object_id == caller.pk
         source = root.owner_object
-        context = context_for(caller)
+        context = observation()
         return can_perceive(source, context) and (
             root.location_kind == "shared_storage" or can_inspect_loot(context))
     if isinstance(entity, CurrencyLoot):
-        context = context_for(caller)
+        context = observation()
         return can_perceive(entity.owner_object, context) and can_inspect_loot(context)
-    return can_perceive(entity, context_for(caller))
+    return can_perceive(entity, observation())
 
 
 def current_scopes(caller, kind=None):
@@ -230,6 +236,69 @@ def current_scopes(caller, kind=None):
             corpses = SelectionNumber.objects.filter(scope__scope_id=room, kind=ReferenceKind.CORPSE)
             scopes.update(f"corpse_loot:{identity}" for identity in corpses.values_list("identity", flat=True))
     return scopes
+
+
+def _reference_key(reference):
+    try:
+        if reference.kind in (ReferenceKind.ITEM, ReferenceKind.LOOT):
+            key = UUID(reference.identity)
+        else:
+            key = int(reference.identity)
+            if not 0 < key <= 2**63 - 1:
+                return None
+    except ValueError:
+        return None
+    return key if str(key) == reference.identity else None
+
+
+def _numbered_entities(rows, *, include_parents):
+    from world.door_entities.models import Door
+    from world.item_entities.models import ItemEntity
+    from world.loot_entities.models import CurrencyLoot
+
+    item_kinds = (ReferenceKind.ITEM, ReferenceKind.LOOT)
+    identities = defaultdict(set)
+    for ref, key, _ in rows:
+        model = ItemEntity if ref.kind in item_kinds else (
+            CurrencyLoot if ref.kind == ReferenceKind.CURRENCY else ObjectDB)
+        identities[model].add(key)
+
+    objects = ObjectDB.objects.in_bulk(identities[ObjectDB])
+    items = ItemEntity.objects.select_related("owner_object").in_bulk(identities[ItemEntity])
+    currencies = CurrencyLoot.objects.select_related("owner_object").in_bulk(identities[CurrencyLoot])
+    if include_parents:
+        _load_item_parents(items)
+
+    endpoints = {obj.pk for obj in objects.values() if obj.db_destination_id}
+    doors = {}
+    if endpoints:
+        for door in Door.objects.filter(Q(exit_a_id__in=endpoints) | Q(exit_b_id__in=endpoints)).order_by("pk"):
+            doors.setdefault(door.exit_a_id, door)
+            doors.setdefault(door.exit_b_id, door)
+
+    result = []
+    for ref, key, row in rows:
+        entity = (items if ref.kind in item_kinds else
+                  currencies if ref.kind == ReferenceKind.CURRENCY else objects).get(key)
+        if entity is not None:
+            result.append((ref, row, entity, descriptor(entity, doors_by_endpoint=doors)))
+    return result
+
+
+def _load_item_parents(items):
+    """현재 조회의 parent 관계만 깊이별로 읽어 기존 root 검사를 재사용한다."""
+    from world.item_entities.models import ItemEntity
+
+    nodes = items.copy()
+    pending = set(items)
+    while pending:
+        parent_ids = {nodes[key].parent_item_id for key in pending} - {None} - nodes.keys()
+        parents = ItemEntity.objects.select_related("owner_object").in_bulk(parent_ids)
+        nodes.update(parents)
+        pending = set(parents)
+    for node in nodes.values():
+        if node.parent_item_id in nodes:
+            node.parent_item = nodes[node.parent_item_id]
 
 
 def records_for(caller, kind=None, scope_id=None, *, scope_ids=None, kinds=None, check_visibility=True,
@@ -252,18 +321,28 @@ def records_for(caller, kind=None, scope_id=None, *, scope_ids=None, kinds=None,
         room = descriptor(caller.location)
         if room and room.scope_id in scopes and (references is None or room.reference in references):
             result.append(room)
+    from world.observation import context_for
+
+    @cache
+    def observation():
+        return context_for(caller)
+
+    rows = []
     for row in query:
-        ref = TargetReference(ReferenceKind(row.kind), row.identity, row.scope.scope_id)
-        if references is not None and ref not in references:
+        try:
+            ref = TargetReference(ReferenceKind(row.kind), row.identity, row.scope.scope_id)
+        except (TypeError, ValueError):
             continue
-        entity = resolve_reference(ref)
+        if (references is None or ref in references) and (key := _reference_key(ref)) is not None:
+            rows.append((ref, key, row))
+    for ref, row, entity, record in _numbered_entities(rows, include_parents=check_visibility or require_carried_root):
+        if (record is None or record.reference != ref or record.group_id != row.scope.group_id
+                or record.name != row.name or row.number < 1):
+            continue
         carried = require_carried_root and ref.kind == ReferenceKind.ITEM
-        if entity is not None and (
-            (not check_visibility and not carried) or visible_entity(caller, entity, require_carried_root=carried)
-        ):
-            record = descriptor(entity)
-            if record.group_id == row.scope.group_id and record.name == row.name and row.number > 0:
-                result.append(replace(record, number=row.number))
+        if (not check_visibility and not carried) or visible_entity(
+                caller, entity, require_carried_root=carried, get_observation=observation):
+            result.append(replace(record, number=row.number))
     return tuple(result)
 
 

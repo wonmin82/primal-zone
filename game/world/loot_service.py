@@ -351,8 +351,13 @@ def reconcile_claims(source, *, now):
     if not native_source(source):
         return 0
     with world_change():
+        expired = LootClaim.objects.filter(item_entity__owner_object=source, protection_until__lte=now)
+        # 일반적인 비만료 출처는 실물 트리 잠금 없이 읽기에서 끝난다.
+        # 실제 만료 정리는 기존 잠금 순서에서 조건을 다시 평가한다.
+        if not expired.exists():
+            return 0
         lock_sources([source])
-        deleted, _ = LootClaim.objects.filter(item_entity__owner_object=source, protection_until__lte=now).delete()
+        deleted, _ = expired.delete()
         return deleted
 
 
