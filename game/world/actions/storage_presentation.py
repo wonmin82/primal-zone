@@ -9,8 +9,9 @@ def render(caller, index, reference, binding, observed_at=None):
     from world import rules
     from world.actions.resolver import role_records
     from world.content import ITEMS
+    from world.item_entities.models import ItemEntity
     from world.item_entities.policy import can_item_operation
-    from world.selection_numbers.api import resolve_reference
+    from world.selection_numbers.api import descriptor, resolve_reference
 
     provider = resolve_reference(reference)
     try:
@@ -21,14 +22,19 @@ def render(caller, index, reference, binding, observed_at=None):
     action = index.actions[binding.action_id]
     role = next(iter([role for role in action.roles if role.name == "subject"]))
     records = role_records(caller, role, {"provider": (reference,)})
+    items = {str(item.pk): item for item in
+             ItemEntity.objects.filter(pk__in=[record.reference.identity for record in records])}
     withdraw = dict(binding.config)["withdraw"]
     output = []
     for record in records:
         label = target_label(caller, record.reference, observed_at)
         if label is None:
             continue
-        item = resolve_reference(record.reference)
-        if item is None or (not withdraw and item.location_kind != "inventory") or not can_item_operation(item, "store"):
+        item = items.get(record.reference.identity)
+        current = descriptor(item)
+        if (current is None or current.reference != record.reference
+                or (not withdraw and item.location_kind != "inventory")
+                or not can_item_operation(item, "store")):
             continue
         try:
             domain.require_ownership_transfer(item, caller if withdraw or provider.personal else provider)

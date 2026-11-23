@@ -110,6 +110,59 @@ class SelectionNumberTests(GameCommandTest):
             door_reads = [query for query in queries if Door._meta.db_table in query["sql"]]
             self.assertEqual(len(door_reads), 1)
 
+    def test_records_for_batches_carried_item_candidates(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        items = [
+            create_item("bandage", location_kind="inventory", owner_object=self.char1)
+            for _ in range(100)
+        ]
+        references = [descriptor(item).reference for item in items]
+        counts = []
+        for count in (1, 10, 100):
+            with CaptureQueriesContext(connection) as queries:
+                records = records_for(self.char1, ReferenceKind.ITEM, references=references[:count])
+            self.assertEqual(
+                {record.reference: record.number for record in records},
+                {ref: number for number, ref in enumerate(references[:count], 1)},
+            )
+            counts.append(len(queries))
+        self.assertEqual(counts, [2, 2, 2])
+
+    def test_records_for_keeps_actual_scope_kind_name_group_and_visibility(self):
+        from unittest.mock import patch
+
+        from world.observation import context_for
+
+        visible = self.facility()
+        hidden = self.facility()
+        renamed = self.facility()
+        regrouped = self.facility()
+        different_scope = self.facility(room=self.room2)
+        hidden.locks.add(f"view:id({self.char2.pk})")
+        visible_ref = descriptor(visible).reference
+        hidden_ref = descriptor(hidden).reference
+        other_ref = descriptor(different_scope).reference
+        scope = SelectionNumber.objects.get(kind=visible_ref.kind, identity=visible_ref.identity).scope
+        other = NumberScope.objects.create(scope_id=scope.scope_id, group_id="invalid")
+        SelectionNumber.objects.bulk_create([
+            SelectionNumber(scope=other, kind=visible_ref.kind, identity="999999999999999999999999", number=8, name="시험 시설"),
+            SelectionNumber(scope=other, kind="invalid", identity="12345", number=9, name="시험 시설"),
+        ])
+        SelectionNumber.objects.filter(kind=visible_ref.kind, identity=str(renamed.pk)).update(name="다른 이름")
+        SelectionNumber.objects.filter(kind=visible_ref.kind, identity=str(regrouped.pk)).update(scope=other)
+        SelectionNumber.objects.filter(kind=other_ref.kind, identity=other_ref.identity).update(scope=scope, number=10)
+
+        with patch("world.observation.context_for", wraps=context_for) as observe:
+            self.assertEqual([row.reference for row in records_for(self.char1, ReferenceKind.OBJECT)],
+                             [visible_ref])
+            observe.assert_called_once_with(self.char1)
+        self.assertEqual([row.reference for row in records_for(self.char1, ReferenceKind.OBJECT,
+                                                                check_visibility=False)],
+                         [visible_ref, hidden_ref])
+        self.assertNotIn(other_ref, [row.reference for row in records_for(self.char1)])
+
     def test_historical_schema_context_is_test_only_and_resets_after_failure(self):
         from django.test import override_settings
         from world.selection_numbers.mode import enabled, historical_schema

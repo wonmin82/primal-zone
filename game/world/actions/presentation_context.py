@@ -9,10 +9,18 @@ _MISSING = object()
 
 
 @dataclass
+class _DoorPresentation:
+    observed_at: float
+    targets: dict
+    actions: dict = field(default_factory=dict)
+
+
+@dataclass
 class _PresentationContext:
     caller: object
     profile: object = _MISSING
     availability: dict = field(default_factory=dict)
+    doors: dict = field(default_factory=dict)
 
 
 _current = ContextVar("action_presentation_context", default=None)
@@ -49,3 +57,25 @@ def available(provider, caller, observed_at):
         # 객체 참조도 보존하여 범위 안에서 id 재사용을 방지한다.
         context.availability[key] = (provider, provider.available(caller, observed_at))
     return context.availability[key][1]
+
+
+def door_action_labels(caller, endpoint_id, observed_at):
+    """같은 화면 요청의 관찰 시각에서만 문 후보와 버튼 여부를 재사용한다."""
+    from world import doors
+
+    context = _current.get()
+    views = context.doors if context is not None and context.caller is caller else {}
+    key = (caller.db_location_id, observed_at)
+    if key not in views:
+        now = doors.time() if observed_at is None else observed_at
+        targets = {target.exit_pk: target for target in doors.current_doors(caller, now)}
+        views[key] = _DoorPresentation(now, targets)
+    view = views[key]
+    target = view.targets.get(endpoint_id)
+    if target is None:
+        return frozenset()
+    if endpoint_id not in view.actions:
+        view.actions[endpoint_id] = frozenset({
+            row["label"] for row in doors.actions_for(caller, target, view.observed_at)
+        })
+    return view.actions[endpoint_id]

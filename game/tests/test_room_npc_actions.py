@@ -102,6 +102,38 @@ class RoomNpcActionsTests(NativeItemTest, WorldCommandTest):
             self.char1.location = self.rooms["dock"]
             self.assertEqual(execute(self.char1, self.session, invocation, self.index).status, ResultStatus.REFUSED)
 
+    def test_door_controls_share_observation_only_within_one_render(self):
+        from world import doors
+
+        self.char1.location = self.rooms["hq_admin_office"]
+        with patch.object(doors, "time", return_value=100):
+            self.assertIn("잠금", self.raw("관리실 문 풀어"))
+            self.assertIn("열었다", self.raw("관리실 문 열어"))
+        door = Door.objects.get(door_id="hq_admin_door")
+        endpoint = str(door.exit_b_id)
+
+        def labels(rows):
+            return [row["label"] for row in rows if any(
+                ref["kind"] == "door" and ref["identity"] == endpoint
+                for ref in row["action"]["roles"].get("provider", ())
+            )]
+
+        with (patch.object(doors, "time", return_value=159),
+              patch.object(doors, "current_doors", wraps=doors.current_doors) as candidates,
+              patch.object(doors, "actions_for", wraps=doors.actions_for) as operations):
+            self.assertEqual(labels(action_controls(self.char1, self.index)), ["닫아"])
+            candidates.assert_called_once_with(self.char1, 159)
+            self.assertEqual(operations.call_count, 1)
+            self.assertEqual(operations.call_args.args[1].exit_pk, door.exit_b_id)
+            self.assertEqual(operations.call_args.args[2], 159)
+
+            self.assertEqual(labels(action_controls(self.char1, self.index, 160)), ["열어"])
+            self.assertEqual(candidates.call_count, 2)
+            self.assertEqual(operations.call_count, 2)
+            self.assertEqual(operations.call_args.args[2], 160)
+        door.refresh_from_db()
+        self.assertEqual((door.state, door.auto_close_at), ("OPEN", 160))
+
     def test_incineration_confirmation_keeps_original_item(self):
         self.char1.location = self.rooms["salvage_office"]
         item = self.create("outpost_supply_pass")

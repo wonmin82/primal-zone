@@ -8,7 +8,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
@@ -17,7 +17,12 @@ jobs:
           prune-cache: true
       - run: uv sync --locked --python 3.13
       - run: uv run python scripts/dev.py check
-      - run: uv run python scripts/dev.py test --parallel 2
+      - name: 테스트 러너 리소스 확인
+        run: |
+          printf 'Available CPUs: %s\n' "$(nproc)"
+          free -m
+          df -h .
+      - run: uv run python scripts/dev.py test --parallel 4
         env:
           PRIMAL_TEST_PROGRESS: '1'
   smoke:
