@@ -444,6 +444,24 @@ test("아이템 버튼은 같은 표시 이름에서도 해당 UUID의 구조화
   assert.equal(c.byId("inventory").firstElementChild.children.filter(child => child.dataset?.actionInvocation).length,0);
 });
 
+test("내부 물품의 안정 보기 버튼은 해당 소지품 행에만 붙는다", () => {
+  const c = client();
+  const item = identity => ({id:"mag",identity,name:"탄창",selector:"탄창",count:1,location:"inside"});
+  const action = (identity, parent) => ({action_id:"global.look_target",variant:"adapter",
+    roles:{subject:[{kind:"item",identity,scope_id:"inside:"+parent}]},arguments:{}});
+  c.receive("pz_state",partyState(null,{inventory:[item("loaded"),item("other")],
+    action_controls:[{label:"봐",action:action("loaded","first-firearm")}]}));
+  const [first, second] = c.byId("inventory").children;
+  const [button] = first.children.filter(child => child.dataset?.actionInvocation);
+  assert.ok(button);
+  assert.equal(second.children.filter(child => child.dataset?.actionInvocation).length,0);
+  assert.equal(c.byId("context-actions").children.filter(child => child.dataset?.actionInvocation).length,0);
+  c.document.fire("click",{target:button});
+  const [name,args] = c.socket.sent.at(-1);
+  assert.equal(name,"pz_action");
+  assert.deepEqual(args[0].roles,action("loaded","first-firearm").roles);
+});
+
 
 test("전리품 버튼은 Source와 Entry 안정 참조를 보존하고 문자열 명령을 실행하지 않는다", () => {
   const c = client();
@@ -459,9 +477,12 @@ test("전리품 버튼은 Source와 Entry 안정 참조를 보존하고 문자�
   const corpses = [corpse(3,"original-corpse-entry"),corpse(4,"other-corpse-entry")];
   const all = {corpses:action("3","original-corpse-entry"),ground:action("8","original-ground-entry")};
   c.receive("pz_state",partyState(null,{corpses,
-    ground_loot:[{id:8,loot:[entry("8","original-ground-entry")]}],loot_actions:all}));
+    ground_loot:[{id:8,label:"바닥 전리품 2",loot:[entry("8","original-ground-entry")]},
+      {id:9,label:"바닥 전리품 4",loot:[]}],loot_actions:all}));
   const buttons = c.byId("context-actions").children.filter(row => row.dataset?.actionInvocation);
   assert.equal(buttons.length,7); // 여러 시체 전체, 출처별 전체/개별, 바닥 전체/개별
+  assert.match(buttons.at(-1).textContent,/^바닥 전리품 2 · /);
+  assert.ok(c.byId("context-actions").children.some(row => row.textContent === "바닥 전리품 4"));
   for (const button of buttons) {
     const expected = JSON.parse(button.dataset.actionInvocation);
     c.document.fire("click",{target:button});

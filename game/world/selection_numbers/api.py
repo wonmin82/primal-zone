@@ -195,14 +195,20 @@ def label(record, unique_group_count=1):
     return f"{record.name} {record.number}"
 
 
-def visible_entity(caller, entity):
+def visible_entity(caller, entity, *, require_carried_root=False):
+    from world.item_entities.api import CARRIED_LOCATIONS
     from world.item_entities.models import ItemEntity
     from world.loot_entities.models import CurrencyLoot
     from world.observation import can_inspect_loot, can_perceive, context_for
 
     if isinstance(entity, ItemEntity):
-        root = entity.root()
-        if root.location_kind in ("inventory", "equipment", "personal_storage"):
+        try:
+            root = entity.root()
+        except ValidationError:
+            return False
+        if require_carried_root:
+            return root.location_kind in CARRIED_LOCATIONS and root.owner_object_id == caller.pk
+        if root.location_kind in (*CARRIED_LOCATIONS, "personal_storage"):
             return root.owner_object_id == caller.pk
         source = root.owner_object
         context = context_for(caller)
@@ -226,7 +232,8 @@ def current_scopes(caller, kind=None):
     return scopes
 
 
-def records_for(caller, kind=None, scope_id=None, *, scope_ids=None, kinds=None, check_visibility=True, references=None):
+def records_for(caller, kind=None, scope_id=None, *, scope_ids=None, kinds=None, check_visibility=True,
+                references=None, require_carried_root=False):
     """이미 발급된 번호만 관찰한다. 권한으로 재번호하지 않는다."""
     scopes = set(scope_ids) if scope_ids is not None else current_scopes(caller, kind)
     if scope_id is not None:
@@ -250,7 +257,10 @@ def records_for(caller, kind=None, scope_id=None, *, scope_ids=None, kinds=None,
         if references is not None and ref not in references:
             continue
         entity = resolve_reference(ref)
-        if entity is not None and (not check_visibility or visible_entity(caller, entity)):
+        carried = require_carried_root and ref.kind == ReferenceKind.ITEM
+        if entity is not None and (
+            (not check_visibility and not carried) or visible_entity(caller, entity, require_carried_root=carried)
+        ):
             record = descriptor(entity)
             if record.group_id == row.scope.group_id and record.name == row.name and row.number > 0:
                 result.append(replace(record, number=row.number))

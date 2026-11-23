@@ -6,11 +6,13 @@ from dataclasses import dataclass
 from world.targets import normalized
 
 
-def displays(records, *, same_context=False, other_names=()):
+def displays(records, *, same_context=False, other_names=(), public_names=None):
     from world.rules import RuleError
     from world.targets import exact_selector, parse_selector
 
     records = tuple(records)
+    public_names = {} if public_names is None else public_names
+    display_names = {record.reference: public_names.get(record.reference, record.name) for record in records}
     occupied = {normalized(name) for name in other_names}
     names = defaultdict(set)
     aliases = defaultdict(set)
@@ -18,12 +20,13 @@ def displays(records, *, same_context=False, other_names=()):
     initial = {}
     for record in records:
         scope = None if same_context else record.scope_id
-        names[scope, normalized(record.name)].add(record.reference)
-        for name in (*record.aliases, *record.unique_names):
-            aliases[scope, normalized(name)].add(record.reference)
+        names[scope, normalized(display_names[record.reference])].add(record.reference)
+        if record.reference not in public_names:
+            for name in (*record.aliases, *record.unique_names):
+                aliases[scope, normalized(name)].add(record.reference)
     for record in records:
         scope = None if same_context else record.scope_id
-        name = record.name
+        name = display_names[record.reference]
         if len(names[scope, normalized(name)]) > 1 and record.number is not None:
             name = f"{name} {record.number}"
         initial[record.reference] = name
@@ -39,15 +42,30 @@ def displays(records, *, same_context=False, other_names=()):
         except RuleError:
             reserved = False
         # 실제 이름은 다른 객체의 번호 표기와 별칭에 앞선다.
-        sole_literal = names[key] == {ref} and name == record.name
+        sole_literal = names[key] == {ref} and name == display_names[ref]
         collides = normalized(name) in occupied or (
             not sole_literal and bool((names[key] | aliases[key] | candidates[key]) - {ref}))
         if record.number is None:
             result[ref] = None
         elif reserved or collides:
-            result[ref] = exact_selector(record.name, record.number)
+            result[ref] = exact_selector(display_names[ref], record.number)
         else:
             result[ref] = name
+
+    if public_names:
+        # 다른 그룹의 정식 이름과 공개 이름에 같은 번호가 붙을 수 있다.
+        occupied.update({normalized(label) for ref, label in result.items() if label and ref not in public_names})
+        for record in records:
+            ref = record.reference
+            label = result[ref]
+            if ref not in public_names or label is None:
+                continue
+            if normalized(label) in occupied:
+                label = f"{display_names[ref]} · 고정 번호 {record.number}"
+                while normalized(label) in occupied:
+                    label += " · 출처"
+                result[ref] = label
+            occupied.add(normalized(label))
     return result
 
 
@@ -98,17 +116,16 @@ def room_snapshot(caller, observed_at=None, *, objects=None):
         for pk in doors:
             del by_id[pk]
     valid = {record.reference: record for record in numbered_records(by_id.values())}
+    ground_names = {obj.pk: obj.get_display_name(caller) for obj in objects if isinstance(obj, DroppedLoot)}
+    labels = {obj.pk: ground_names.get(obj.pk, obj.key) for obj in objects if obj.pk not in by_id}
     rendered = displays(
-        [valid.get(record.reference, record) for obj in objects
-         if (record := by_id.get(obj.pk)) and not isinstance(obj, DroppedLoot)],
+        [valid.get(record.reference, record) for record in by_id.values()],
         same_context=True,
-        other_names=[obj.key for obj in objects if obj.pk not in by_id],
+        other_names=labels.values(),
+        # 보호된 원명과 별칭은 충돌 판정에도 사용하지 않는다.
+        public_names={by_id[pk].reference: name for pk, name in ground_names.items() if pk in by_id},
     )
-    labels = {obj.pk: obj.key for obj in objects if obj.pk not in by_id}
-    for obj in objects:
-        if obj.pk in by_id:
-            reference = by_id[obj.pk].reference
-            labels[obj.pk] = obj.get_display_name(caller) if isinstance(obj, DroppedLoot) else rendered[reference]
+    labels.update({pk: rendered[record.reference] for pk, record in by_id.items()})
     return RoomSnapshot(
         labels,
         valid,

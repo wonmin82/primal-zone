@@ -84,25 +84,43 @@ def build_entries(enemy, groups, now, rng=None):
     return entries
 
 
-def recipient_for_item(entry, caller, now):
+def recipient_for_item(entry, caller, now, *, party=None, recipients=None):
     """item 순번 배정의 지급 대상. currency의 트리거 권한과 구분한다."""
     from typeclasses.parties import party_for
 
     entry = normalize_entry(entry)
     if now >= entry["protection_until"]:
         return caller
-    party = party_for(caller)
+    if recipients is None:
+        party = party_for(caller)
     allowed = caller.id in (entry["reserved_player"], entry["assigned_player"]) or (
         party and party.id == entry["reserved_party"]
     )
-    return object_by_id(entry["assigned_player"]) if allowed else None
+    if not allowed:
+        return None
+    assigned = entry["assigned_player"]
+    return object_by_id(assigned) if recipients is None else recipients.get(assigned)
 
 
-def can_take_entry(entry, caller, now):
+def can_take_entry(entry, caller, now, *, party=None, recipients=None):
     entry = normalize_entry(entry)
     if entry["kind"] == "currency":
         return now >= entry["protection_until"] or caller.id in entry["eligible_players"]
-    return recipient_for_item(entry, caller, now) is not None
+    return recipient_for_item(entry, caller, now, party=party, recipients=recipients) is not None
+
+
+def readable_entry_flags(entries, caller, now):
+    """전리품 관찰에서는 같은 권리 판정에 한 번 읽은 파티와 배정자를 제공한다."""
+    from evennia.objects.models import ObjectDB
+
+    from typeclasses.parties import party_for
+
+    entries = tuple(entries)
+    assigned = {entry["assigned_player"] for entry in entries if entry["kind"] == "item"
+                and entry["protection_until"] > now and entry["assigned_player"]}
+    recipients = ObjectDB.objects.in_bulk(assigned) if assigned else {}
+    party = party_for(caller) if assigned else None
+    return tuple(can_take_entry(entry, caller, now, party=party, recipients=recipients) for entry in entries)
 
 
 def room_loot(room, corpse=True):
@@ -454,7 +472,8 @@ class DroppedLoot(NumberedObjectMixin, DistantPresenceMixin, DefaultObject):
                     ),
                 ]
             )
-        return ft.sheet(ft.token("item", "바닥 전리품"), *lines)
+        title = control["label"] if control else self.get_display_name(looker)
+        return ft.sheet(ft.token("item", title), *lines)
 
     def at_object_creation(self):
         self.locks.add("get:false();puppet:false();delete:false()")

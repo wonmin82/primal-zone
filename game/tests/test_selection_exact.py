@@ -83,6 +83,41 @@ class ExactSelectorTests(SimpleTestCase):
 
 @override_settings(ACTION_CONTENT_PACKAGES=("world.actions.item_equipment_content",))
 class NativeSelectionNumberTests(NativeItemTest):
+    def test_nested_inside_display_and_observation_candidates_read_at_fixed_depth(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        from world.actions.global_actions import LOOK_TARGET
+        from world.actions.presentation import _carried_labels
+        from world.actions.resolver import role_records
+        from world.equipment_service import entity_snapshot
+
+        root = self.create("bandage")
+        child = api.create_item("flashlight", location_kind="inside", parent_item=root, socket="tool")
+        target = api.create_item("battery", location_kind="inside", parent_item=child, socket="power")
+        scope = f"inside:{child.pk}"
+        reference = descriptor(target).reference
+
+        def observations():
+            with CaptureQueriesContext(connection) as queries:
+                labels = _carried_labels(self.char1)
+                records = role_records(self.char1, LOOK_TARGET)
+                snapshot = entity_snapshot(self.char1)
+            return (labels[scope], {record.reference for record in records}, snapshot, len(queries))
+
+        first, first_refs, snapshot, small = observations()
+        names = [descriptor(row).name for row in (root, child, target)]
+        item = next(item for item in snapshot.carried if item.identity == str(target.pk))
+        self.assertEqual(snapshot.label(item), "의 ".join(names))
+        self.assertEqual(first, {reference: names[-1]})
+        self.assertIn(reference, first_refs)
+        siblings = [api.create_item("battery", location_kind="inside", parent_item=child, socket="power")
+                    for _ in range(9)]
+        expanded, refs, _, large = observations()
+        self.assertEqual(expanded[reference], f"{names[-1]} 1")
+        self.assertTrue({descriptor(item).reference for item in siblings} <= refs)
+        self.assertEqual(small, large)
+        print(f"Inside 표시·관찰·장비 Snapshot SQL (같은 깊이의 자식 1개/10개) {small}/{large}")
+
     def test_same_inside_name_has_its_own_parent_display_context(self):
         from world.equipment_service import entity_snapshot
 

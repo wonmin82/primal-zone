@@ -55,6 +55,7 @@ def role_records(caller, role, bindings=None, *, cache=None, check_visibility=Tr
         return (SelectionRecord(TargetReference(ReferenceKind.INVENTORY, str(caller.pk), scope),
                                 scope, "inventory:root", "소지품"),)
 
+    references = None if references is None else frozenset(references)
     if role.scope == TargetScope.CURRENT:
         kind = None if {ReferenceKind.LOOT, ReferenceKind.CURRENCY}.intersection(role.kinds) else ReferenceKind.ITEM
         scopes = current_scopes(caller, kind)
@@ -63,6 +64,10 @@ def role_records(caller, role, bindings=None, *, cache=None, check_visibility=Tr
         elif role.scope_root == ScopeRoot.ROLE:
             scopes = {ref.scope_id for ref in (bindings or {}).get(role.root_role, ())
                       if resolve_reference(ref) is not None}
+        if role.include_carried_inside and references is not None:
+            # Scope는 조회 범위 힌트다. records_for가 현재 실물과 소지 Root를 검사한다.
+            scopes.update({ref.scope_id for ref in references
+                           if ref.kind == ReferenceKind.ITEM and ref.scope_id.startswith("inside:")})
     else:
         from typeclasses.interactables import Container
         from world.item_entities.models import ItemEntity
@@ -88,15 +93,27 @@ def role_records(caller, role, bindings=None, *, cache=None, check_visibility=Tr
                 root = entity.root()
                 if root.location_kind in ("inventory", "equipment") and root.owner_object_id == caller.pk:
                     scopes.add(f"inside:{entity.pk}")
-    references = None if references is None else frozenset(references)
-    key = ("scope", frozenset(scopes), frozenset(role.kinds), check_visibility, references)
+    key = ("scope", frozenset(scopes), frozenset(role.kinds), check_visibility, references,
+           role.include_carried_inside)
+
+    def load_records():
+        if role.include_carried_inside and references is None:
+            from world.item_entities.api import carried_items
+            from world.selection_numbers.api import descriptor, numbered_records
+
+            kinds = tuple(kind for kind in role.kinds if kind != ReferenceKind.ITEM)
+            current = records_for(caller, scope_ids=scopes, kinds=kinds,
+                                  check_visibility=check_visibility)
+            items = numbered_records([descriptor(row) for row in carried_items(caller)])
+            return (*current, *items)
+        return records_for(caller, scope_ids=scopes, kinds=role.kinds, check_visibility=check_visibility,
+                           references=references, require_carried_root=role.include_carried_inside)
+
     if cache is None:
-        records = records_for(caller, scope_ids=scopes, kinds=role.kinds, check_visibility=check_visibility,
-                              references=references)
+        records = load_records()
     else:
         if key not in cache:
-            cache[key] = records_for(caller, scope_ids=scopes, kinds=role.kinds, check_visibility=check_visibility,
-                                     references=references)
+            cache[key] = load_records()
         records = cache[key]
     records = tuple(record for record in records if record.reference.kind in role.kinds)
     if role.scope == TargetScope.SOURCE:

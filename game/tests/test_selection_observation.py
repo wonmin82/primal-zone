@@ -94,6 +94,99 @@ class SelectionObservationTests(NativeItemTest):
             self.assertEqual(self.run_action(item_request).status, ResultStatus.REFUSED)
             observe.assert_not_called()
 
+    def test_inside_look_uses_the_nested_uuid_in_typed_and_exact_text(self):
+        from world.actions.presentation import action_controls
+        from world.equipment_service import selector_label
+        from world.item_entities.api import create_item, delete_item
+
+        root = self.create("bandage")
+        child = create_item("flashlight", location_kind="inside", parent_item=root, socket="tool")
+        batteries = [create_item("battery", location_kind="inside", parent_item=child, socket="power")
+                     for _ in range(7)]
+        for removed in batteries[:-1]:
+            delete_item(removed)
+        target = batteries[-1]
+        reference = descriptor(target).reference
+        self.assertEqual(number_for(reference), 7)
+        other = self.create("flashlight")
+        same_name = create_item("battery", location_kind="inside", parent_item=other, socket="power")
+        self.assertEqual(number_for(descriptor(same_name).reference), 1)
+        with patch("world.equipment_service.selector_label", wraps=selector_label) as observe:
+            web = self.run_action(self.request("look_target", target))
+            text = self.look(exact_selector(descriptor(target).name, 7))
+            self.assertEqual(web.status, ResultStatus.SUCCESS, web.messages)
+            self.assertEqual(text.status, ResultStatus.SUCCESS, text.messages)
+            self.assertEqual(tuple(map(str, text.messages)), tuple(map(str, web.messages)))
+            self.assertEqual([call.args[1].pk for call in observe.call_args_list], [target.pk, target.pk])
+        controls = [row["action"] for row in action_controls(self.char1, self.index, 100)
+                    if row["action"]["action_id"] == "global.look_target"]
+        self.assertIn(target_action("look_target", reference), controls)
+
+    def test_direct_inside_light_can_be_observed_without_activating_it(self):
+        from world.item_entities.api import create_item
+
+        root = self.create("bandage")
+        first = create_item("flashlight", location_kind="inside", parent_item=root, socket="tool")
+        second_root = self.create("bandage")
+        second = create_item("flashlight", location_kind="inside", parent_item=second_root, socket="tool")
+        number = number_for(descriptor(first).reference)
+        self.assertEqual(number, number_for(descriptor(second).reference))
+        self.assertIn("여러 범위", str(self.look(exact_selector(descriptor(first).name, number)).messages))
+        state = first.state.copy()
+        result = self.run_action(self.request("look_target", first))
+        self.assertEqual(result.status, ResultStatus.SUCCESS)
+        self.assertIn("붕대 1의 탐사용손전등", str(result.messages))
+        first.refresh_from_db()
+        self.assertEqual(first.state, state)
+
+    def test_inside_look_refuses_stale_scopes_and_private_roots(self):
+        from typeclasses.interactables import Container
+        from world.equipment_service import selector_label
+        from world.item_entities.api import create_item, delete_item, move_item_tree
+
+        root = self.create("bandage")
+        child = create_item("battery", location_kind="inside", parent_item=root, socket="part")
+        old_request = self.request("look_target", child)
+        with patch("world.equipment_service.selector_label", wraps=selector_label) as observe:
+            move_item_tree(root, location_kind="inventory", owner_object=self.char2)
+            self.assertEqual(self.run_action(old_request).status, ResultStatus.REFUSED)
+            move_item_tree(root, location_kind="personal_storage", owner_object=self.char1)
+            self.assertEqual(self.run_action(old_request).status, ResultStatus.REFUSED)
+            box = create_object(Container, key="비공개 보관함", location=self.char1.location)
+            box.locks.add("view:false();call:false()")
+            move_item_tree(root, location_kind="shared_storage", owner_object=box)
+            self.assertEqual(self.run_action(old_request).status, ResultStatus.REFUSED)
+            move_item_tree(root, location_kind="inventory", owner_object=self.char1)
+            moved = move_item(child, location_kind="inventory", owner_object=self.char1)
+            self.assertEqual(self.run_action(old_request).status, ResultStatus.REFUSED)
+            child = move_item(moved, location_kind="inside", parent_item=root, socket="part")
+            delete_item(child)
+            replacement = create_item("battery", location_kind="inside", parent_item=root, socket="part")
+            self.assertEqual(number_for(descriptor(replacement).reference), 1)
+            self.assertEqual(self.run_action(old_request).status, ResultStatus.REFUSED)
+            observe.assert_not_called()
+
+    def test_inside_look_refuses_corrupt_parent_cycle(self):
+        from world.actions.presentation import target_label
+        from world.item_entities.api import create_item
+        from world.item_entities.models import ItemEntity
+
+        root = self.create("bandage")
+        child = create_item("battery", location_kind="inside", parent_item=root, socket="part")
+        reference = descriptor(child).reference
+        request = self.request("look_target", child)
+        # 격리 DB에 위치 제약은 만족하고 부모 관계만 손상된 데이터를 재현한다.
+        ItemEntity.objects.filter(pk=root.pk).update(location_kind="inside", owner_object_id=None,
+                                                    parent_item_id=child.pk, socket="broken")
+        try:
+            with patch("world.actions.global_actions._item_appearance") as observe:
+                self.assertEqual(self.run_action(request).status, ResultStatus.REFUSED)
+                self.assertIsNone(target_label(self.char1, reference, 100))
+                observe.assert_not_called()
+        finally:
+            ItemEntity.objects.filter(pk=root.pk).update(location_kind="inventory", owner_object=self.char1,
+                                                        parent_item_id=None, socket=None)
+
     def test_hidden_moved_and_deleted_corpse_never_observe_replacement(self):
         room = self.char1.location
         remote = create_object("typeclasses.rooms.Room", key="다른 방")

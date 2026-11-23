@@ -8,6 +8,7 @@ from evennia.objects.models import ObjectDB
 from world import equipment as eq
 from world import recovery, rules
 from world.content import ITEMS
+from world.item_entities.api import carried_items
 from world.item_entities.models import ItemEntity
 from world.multiplayer import world_change
 
@@ -37,13 +38,6 @@ def equipped_items(character):
     return ItemEntity.objects.filter(owner_object=character, location_kind="equipment").order_by("sequence")
 
 
-def _carried_items(character):
-    from world.item_entities.api import items_owned_by
-
-    return [row for row in items_owned_by(character)
-            if row.root().location_kind in ("inventory", "equipment")]
-
-
 def _item_display_records(owned):
     from world.selection_display import displays
     from world.selection_numbers.api import descriptor, numbered_records
@@ -55,33 +49,40 @@ def _item_display_records(owned):
             {ref.identity: label for ref, label in labels.items()})
 
 
+def _item_context_label(row, items, label_of):
+    names = []
+    while row is not None:
+        names.append(label_of(row))
+        row = items.get(row.parent_item_id)
+    return "의 ".join(reversed(names))
+
+
 def entity_snapshot(character):
     from world.content.item_mapping import LEGACY_ITEM_MAPPING
     from world.item_runtime import maintenance
 
-    owned = _carried_items(character)
+    owned = carried_items(character)
+    items = {row.pk: row for row in owned}
     numbers, labels = _item_display_records(owned)
 
     def definition_id(row):
         return LEGACY_ITEM_MAPPING.get(row.definition_id, row.definition_id) if maintenance.get() else row.definition_id
 
     def display_name(row):
-        name = labels.get(str(row.pk)) or ITEMS[definition_id(row)]["name"]
-        parent_name = labels.get(str(row.parent_item_id))
-        return f"{parent_name}의 {name}" if parent_name else name
+        return labels.get(str(row.pk)) or ITEMS[definition_id(row)]["name"]
 
     carried = tuple(
         eq.item_snapshot(definition_id(row), ITEMS[definition_id(row)], item_id=row.pk,
                          sequence=row.sequence, quantity=row.quantity, location=row.location_kind,
                          slot=row.slot, state_summary=state_summary(row), selection_number=numbers.get(str(row.pk)),
-                         display_label=display_name(row))
+                         display_label=_item_context_label(row, items, display_name))
         for row in owned
     )
     return eq.EquipmentSnapshot(tuple(item for item in carried if item.location == "equipment"),
                                 carried, character.db.active_weapon_item_id)
 
 
-def state_summary(row):
+def state_summary(row, *, observed_at=None):
     from world.content.item_mapping import LEGACY_ITEM_MAPPING
     from world.item_runtime import maintenance
 
@@ -101,7 +102,7 @@ def state_summary(row):
 
         from world.lighting import project_power
 
-        state = project_power(row.state, time())
+        state = project_power(row.state, time() if observed_at is None else observed_at)
         capacity = definition['light_source'].get('max_power_seconds', 1800)
         return f"{'켜짐' if state['enabled'] else '꺼짐'} · {ceil(state['remaining_power'] / capacity * 100)}%"
     return ""
@@ -249,15 +250,24 @@ def resolve_item(character, value, action):
 
     if not entity_runtime(character):
         return item_selector(value, ITEMS, action)
-    selected, _ = select_native_items(_carried_items(character), value, action)
+    selected, _ = select_native_items(carried_items(character), value, action)
     return selected[0]
 
 
-def selector_label(character, item):
+def selector_label(character, item, *, with_parents=False):
     if not isinstance(item, ItemEntity):
         return ITEMS[item]["name"]
-    _, labels = _item_display_records(_carried_items(character))
-    return labels.get(str(item.pk)) or ITEMS[item.definition_id]["name"]
+    owned = carried_items(character)
+    _, labels = _item_display_records(owned)
+
+    def display_name(row):
+        return labels.get(str(row.pk)) or ITEMS[row.definition_id]["name"]
+
+    if with_parents and item.parent_item_id:
+        items = {row.pk: row for row in owned}
+        if item.pk in items:
+            return _item_context_label(items[item.pk], items, display_name)
+    return display_name(item)
 
 
 def _change_equipment(character, item, *, remove=False, expected_slot=None):

@@ -20,24 +20,23 @@ class _DisplayContexts:
 
     def for_scope(self, scope):
         if scope.startswith(("character:", "inside:")):
-            if self.carried is None:
-                self.carried = _carried_labels(self.caller)
-            return self.carried.get(scope, {})
+            return self.carried_scopes().get(scope, {})
         if scope not in self.scopes:
             self.scopes[scope] = displays(_scope_records(self.caller, scope))
         return self.scopes[scope]
+
+    def carried_scopes(self):
+        if self.carried is None:
+            self.carried = _carried_labels(self.caller)
+        return self.carried
 
 
 def _carried_labels(caller):
     from collections import defaultdict
 
-    from django.db.models import Q
-    from world.item_entities.models import ItemEntity
+    from world.item_entities.api import carried_items
 
-    roots = Q(owner_object=caller, location_kind__in=("inventory", "equipment"))
-    children = Q(parent_item__owner_object=caller, parent_item__location_kind__in=("inventory", "equipment"),
-                 location_kind="inside")
-    records = [record for item in ItemEntity.objects.filter(roots | children) if (record := descriptor(item))]
+    records = [record for item in carried_items(caller) if (record := descriptor(item))]
     valid = {record.reference: record for record in numbered_records(records)}
     scopes = defaultdict(dict)
     for reference, label in displays(valid.get(record.reference, record) for record in records).items():
@@ -168,6 +167,15 @@ def _action_controls(caller, index, observed_at, *, provider_reference, verb_key
                              "description": action.help,
                              "action": {"action_id": action.id, "variant": variant.id,
                                         "roles": roles, "arguments": arguments}})
+    if provider_reference is None and verb_key is None and any([
+        reference is None and binding.action_id == "global.look_target" for reference, binding in pairs
+    ]):
+        from world.actions.global_actions import target_action
+
+        controls.extend([{"label": f"{label} 봐", "action": target_action("look_target", reference)}
+                         for scope, targets in _current_labels.get().carried_scopes().items()
+                         if scope.startswith("inside:")
+                         for reference, label in targets.items() if label is not None])
     return controls
 
 

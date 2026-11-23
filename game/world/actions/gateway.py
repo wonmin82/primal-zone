@@ -198,11 +198,18 @@ def _lock_roles(caller, invocation):
                 identities.add(entity.pk)
             elif isinstance(entity, ItemEntity):
                 current = entity
-                while current:
+                trail = set()
+                while current is not None:
+                    if current.pk in trail:
+                        raise rules.RuleError("원래 대상의 아이템 부모 관계를 확인할 수 없습니다.")
+                    trail.add(current.pk)
                     items.add(current.pk)
                     if current.owner_object_id:
                         identities.add(current.owner_object_id)
-                    current = current.parent_item
+                    try:
+                        current = current.parent_item
+                    except ItemEntity.DoesNotExist:
+                        raise rules.RuleError("원래 대상의 아이템 부모 관계를 확인할 수 없습니다.") from None
                 if ref.kind == ReferenceKind.LOOT:
                     sources[entity.owner_object_id] = entity.owner_object
             elif isinstance(entity, CurrencyLoot):

@@ -11,6 +11,29 @@ from world.selection_display import displays, room_snapshot
 from world.selection_numbers.api import descriptor, numbered_records
 
 
+def ground_lookup_objects(caller, objects, query, now):
+    """일반 관찰에서 읽을 수 있는 물품에 해당하는 바닥 출처 이름만 제공한다."""
+    from typeclasses.loot import DroppedLoot, readable_entry_flags
+    from world.item_runtime import maintenance, native_runtime
+    from world.loot_service import loot_snapshots, native_source
+    from world.observation import can_inspect_loot, context_for
+    from world.targets import names, normalized
+
+    raw = normalized(query)
+    ground = [obj for obj in objects if isinstance(obj, DroppedLoot)
+              and any(raw.startswith(normalized(name)) for name in names(obj))]
+    allowed = set()
+    if ground and can_inspect_loot(context_for(caller, observed_at=now)):
+        if native_runtime() and not maintenance.get():
+            ground = [obj for obj in ground if native_source(obj)]
+        snapshots = loot_snapshots(ground)
+        pairs = [(obj.pk, entry) for obj in ground for row in snapshots[obj.pk].entries
+                 for entry in [row.as_entry()] if normalized(asset_name(entry)) == normalized(obj.key)]
+        flags = readable_entry_flags((entry for _, entry in pairs), caller, now)
+        allowed = {pk for (pk, _), readable in zip(pairs, flags) if readable}
+    return [obj for obj in objects if not isinstance(obj, DroppedLoot) or obj.pk in allowed]
+
+
 def payload(caller, selections, *, quantity=0, now=None, display=None):
     from world.loot_service import native_source
 
@@ -115,7 +138,7 @@ def _selection_names(record):
 
 def loot_display(caller, now=None, objects=None, *, snapshot=None):
     from typeclasses.loot import Corpse, DroppedLoot, can_take_entry
-    from world.loot_service import loot_snapshot
+    from world.loot_service import loot_snapshots
     from world.observation import can_inspect_loot, context_for
     from world.targets import room_objects
 
@@ -126,7 +149,7 @@ def loot_display(caller, now=None, objects=None, *, snapshot=None):
     ground = tuple(source for source in objects if source.is_typeclass(DroppedLoot, exact=True))
     sources = (*corpses, *ground)
     obscured = not can_inspect_loot(context_for(caller, observed_at=now))
-    snapshots = {source.pk: loot_snapshot(source) for source in sources} if not obscured else {}
+    snapshots = loot_snapshots(sources) if not obscured else {}
     allowed = {pk: tuple(entry for entry in value.entries if can_take_entry(entry.as_entry(), caller, now))
                for pk, value in snapshots.items()}
     pairs = tuple((source, entry) for source in sources
@@ -192,8 +215,10 @@ def source_controls(caller, now=None, objects=None, *, snapshot=None, display=No
     display = loot_display(caller, now, objects, snapshot=snapshot) if display is None else display
     output = {}
     for source in (*display.corpses, *display.ground):
-        label = (display.room.labels[source.pk] or "시체 (선택 번호 확인 불가)"
-                 if isinstance(source, Corpse) else "바닥 전리품")
+        label = display.room.labels[source.pk]
+        if label is None:
+            name = "시체" if isinstance(source, Corpse) else source.get_display_name(caller)
+            label = f"{name} (선택 번호 확인 불가)"
         selections = display.selections((source,))
         action = payload(caller, selections, now=display.now, display=display)
         output[source.pk] = {"label": label,

@@ -234,6 +234,12 @@
     el.dataset.actionInvocation = JSON.stringify(invocation);
     return el;
   }
+  function inventoryActionTarget(action) {
+    const roles = action.roles;
+    const reference = roles.provider?.[0] ??
+      (action.action_id === "global.look_target" ? roles.subject?.[0] : null);
+    return reference?.kind === "item" ? reference : null;
+  }
   function command(text) {
     if (!playing) { if (!dialog.open) dialog.showModal(); return; }
     if (!send("text", [text]) || !text.trim() || text === "idle") return;
@@ -443,10 +449,22 @@
       all.disabled = !state.ground_loot.some((source) => source.loot.some((item) => item.can_take));
       actions.push(all);
     }
-    for (const source of state.ground_loot) for (const item of source.loot) {
-      const el = actionButton("바닥 · " + item.display_label + " → " + (item.protected ? item.assigned_name : "자유 획득"), item.action);
-      el.replaceChildren("바닥 · ", semantic(item.kind === "currency" ? "reward" : "item", item.display_label), " → ", semantic(item.protected ? "player" : "muted", item.protected ? item.assigned_name : "자유 획득"));
-      el.disabled = !item.can_take || !item.action; actions.push(el);
+    for (const source of state.ground_loot) {
+      const label = source.label || "바닥 전리품";
+      if (!source.loot.length) {
+        const title = document.createElement("p");
+        title.className = "loot-label";
+        title.append(semantic("item", label));
+        actions.push(title);
+      }
+      for (const item of source.loot) {
+        const rights = item.protected ? item.assigned_name : "자유 획득";
+        const el = actionButton(label + " · " + item.display_label + " → " + rights, item.action);
+        el.replaceChildren(semantic("item", label), " · ", semantic(item.kind === "currency" ? "reward" : "item", item.display_label),
+          " → ", semantic(item.protected ? "player" : "muted", rights));
+        el.disabled = !item.can_take || !item.action;
+        actions.push(el);
+      }
     }
     renderGrowth(state);
     const party = state.party;
@@ -504,7 +522,7 @@
     }
     byId("context-actions").replaceChildren(...actions);
     for (const action of state.action_controls || []) {
-      if (action.action.roles.provider?.[0]?.kind !== "item") {
+      if (!inventoryActionTarget(action.action)) {
         byId("context-actions").append(actionButton(action.label, action.action));
       }
     }
@@ -523,8 +541,8 @@
         row.append(mark);
       }
       for (const control of state.action_controls || []) {
-        const provider = control.action.roles.provider?.[0];
-        if (provider?.kind === "item" && provider.identity === item.identity) {
+        const target = inventoryActionTarget(control.action);
+        if (target && target.identity === item.identity) {
           row.append(actionButton(control.label, control.action));
         }
       }

@@ -349,6 +349,7 @@ def web_controls(caller, now=None, *, action_rows=None, snapshot=None):
 
 def look_door(caller, value, now):
     """일반 객체와 정확한 문 이름이 충돌하면 임의 우선순위를 주지 않는다."""
+    from world.actions.loot_presentation import ground_lookup_objects
     from world.content import ITEMS
     from world.targets import matching, names, normalized, parse_selector, room_objects
 
@@ -359,7 +360,7 @@ def look_door(caller, value, now):
     selector = parse_selector(value, known)
     if normalized(selector.name) not in {normalized(name) for name in known}:
         return None
-    objects = room_objects(caller, observed_at=now)
+    objects = ground_lookup_objects(caller, room_objects(caller, observed_at=now), value, now)
     inventory = caller.profile_snapshot()["inventory"]
     if (matching(objects, selector, names) or any(quantity and normalized(selector.name) in
             {normalized(identity), normalized(ITEMS[identity]["name"])} for identity, quantity in inventory.items())):

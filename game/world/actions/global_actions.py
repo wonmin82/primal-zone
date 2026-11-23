@@ -25,7 +25,7 @@ from .schema import (
 LOOK_TARGET = RoleDefinition("subject", (
     ReferenceKind.ACTOR, ReferenceKind.ENEMY, ReferenceKind.OBJECT,
     ReferenceKind.CORPSE, ReferenceKind.DOOR, ReferenceKind.ITEM,
-), scope_root=ScopeRoot.CALLER)
+), scope_root=ScopeRoot.CALLER, include_carried_inside=True)
 
 
 def target_action(name, reference):
@@ -45,8 +45,9 @@ def _item_appearance(caller, item, observed_at):
     from world.lighting_service import status as light_status
 
     definition = ITEMS[item.definition_id]
-    detail = light_status(caller, item, observed_at) if definition.get("light_source") else state_summary(item)
-    return ft.compact(ft.token("item", selector_label(caller, item)),
+    detail = (light_status(caller, item, observed_at) if definition.get("light_source") and not item.parent_item_id
+              else state_summary(item, observed_at=observed_at))
+    return ft.compact(ft.token("item", selector_label(caller, item, with_parents=True)),
                       definition.get("description", "탐사 중 사용하는 물품이다."),
                       detail, definition.get("firearm_family", ""))
 
@@ -100,7 +101,7 @@ def look_target(context):
 def select_look_reference(caller, selector, observed_at):
     from typeclasses.loot import DroppedLoot
     from world.equipment_service import entity_runtime
-    from world.item_entities.api import items_owned_by
+    from world.item_entities.api import carried_items
     from world.observation import context_for, perceives
     from world.selection_numbers.api import descriptor, numbered_records
     from world.targets import room_objects
@@ -108,10 +109,7 @@ def select_look_reference(caller, selector, observed_at):
     entities = [entity for entity in room_objects(caller, observed_at=observed_at)
                 if not isinstance(entity, DroppedLoot)]
     if entity_runtime(caller):
-        items = tuple(items_owned_by(caller))
-        roots = {row.pk for row in items if row.owner_object_id == caller.pk
-                 and row.location_kind in ("inventory", "equipment")}
-        entities.extend([row for row in items if row.pk in roots or row.parent_item_id in roots])
+        entities.extend(carried_items(caller))
     candidates = {record.reference: (record, entity) for entity in entities
                   if (record := descriptor(entity)) is not None and record.reference.kind in LOOK_TARGET.kinds
                   and record.name == selector.name}
@@ -208,7 +206,11 @@ def look(context):
                 messages.append(ft.token("error", str(error)))
             return ActionResult(messages=messages)
         reconcile_room(caller.location, observed_at)
-        objects = room_objects(caller, observed_at=observed_at)
+        from world.actions.loot_presentation import ground_lookup_objects
+
+        objects = ground_lookup_objects(
+            caller, room_objects(caller, observed_at=observed_at), name, observed_at,
+        )
         profile = caller.profile_snapshot()
         inventory = {
             key: ITEMS[key]
