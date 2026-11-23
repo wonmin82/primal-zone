@@ -46,8 +46,8 @@ def firearm_snapshot(firearm):
     return firearms.FirearmSnapshot(str(firearm.pk), firearm.definition_id, family, loaded_magazine(firearm))
 
 
-def compatible_magazines(character, firearm):
-    family = firearm_snapshot(firearm).family
+def compatible_magazines(character, firearm, *, snapshot=None):
+    family = (firearm_snapshot(firearm) if snapshot is None else snapshot).family
     return tuple(magazine_snapshot(row) for row in ItemEntity.objects.filter(
         owner_object=character, location_kind="inventory").order_by("sequence")
         if ITEMS[row.definition_id].get("magazine", {}).get("family") == family)

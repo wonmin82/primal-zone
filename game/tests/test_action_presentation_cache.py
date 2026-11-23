@@ -139,7 +139,7 @@ class ActionPresentationCacheTests(NativeItemTest, WorldCommandTest):
             profile_snapshot(self.char1)
             self.assertEqual(profiles.call_count, 3)
         # action_controls 자체가 예외로 끝나도 다음 직접 Presenter 조회로 전파되지 않는다.
-        def fail_after_snapshot(caller, index):
+        def fail_after_snapshot(caller, index, **kwargs):
             profile_snapshot(caller)
             raise ValueError("조회 실패")
 

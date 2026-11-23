@@ -9,6 +9,25 @@ _MISSING = object()
 
 
 @dataclass
+class _ItemPresentation:
+    records: dict = field(default_factory=dict)
+    entities: dict = field(default_factory=dict)
+    values: dict = field(default_factory=dict)
+
+    def item(self, reference):
+        from world.selection_numbers.api import resolve_reference
+
+        if reference not in self.entities:
+            self.entities[reference] = resolve_reference(reference)
+        return self.entities[reference]
+
+    def read(self, key, load):
+        if key not in self.values:
+            self.values[key] = load()
+        return self.values[key]
+
+
+@dataclass
 class _DoorPresentation:
     observed_at: float
     targets: dict
@@ -21,6 +40,7 @@ class _PresentationContext:
     profile: object = _MISSING
     availability: dict = field(default_factory=dict)
     doors: dict = field(default_factory=dict)
+    items: dict = field(default_factory=dict)
 
 
 _current = ContextVar("action_presentation_context", default=None)
@@ -44,6 +64,17 @@ def profile_snapshot(caller):
         context.profile = caller.profile_snapshot()
     # EquipmentProfile의 부가 context도 보존하며 소비자 간 mutable 공유를 막는다.
     return copy.deepcopy(context.profile)
+
+
+def item_presentation(caller, observed_at):
+    """현재 표시 호출의 호출자·장소·관찰 시각에 실물과 순수 계산을 한정한다."""
+    context = _current.get()
+    if context is None or context.caller is not caller:
+        return _ItemPresentation()
+    key = (caller.db_location_id, observed_at)
+    if key not in context.items:
+        context.items[key] = _ItemPresentation()
+    return context.items[key]
 
 
 def available(provider, caller, observed_at):
