@@ -87,6 +87,12 @@ def _roles(roles):
                  "역할 Scope Root 참조 오류")
         if role.scope == TargetScope.CARRIED_AND_INSIDE:
             _require(role.kinds == (ReferenceKind.ITEM,), "소지품과 내부 결합 Scope는 아이템 역할 전용입니다.")
+        _require(type(role.include_carried_inside) is bool and (
+            not role.include_carried_inside or (
+                role.scope == TargetScope.CURRENT and role.scope_root == ScopeRoot.CALLER
+                and role.name != "provider" and ReferenceKind.ITEM in role.kinds
+            )
+        ), "내부 소지품 관찰 Scope 선언 오류")
         _require(all(type(identity) is str and identity for identity in role.definition_ids)
                  and len(set(role.definition_ids)) == len(role.definition_ids), "역할 콘텐츠 정의 제한 오류")
     return names

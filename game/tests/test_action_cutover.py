@@ -106,7 +106,8 @@ class ActionCutoverTests(NativeItemTest, WorldCommandTest):
         self.assertEqual(provider_controls(self.char1, self.doctor), [])
         self.assertNotIn("회복 · 20 회복", self.raw("의무관 봐"))
         row = next(row for row in multiplayer_state(self.char1)["interactables"] if row["name"] == self.doctor.key)
-        self.assertFalse(any("action" in action for action in row["actions"]))
+        self.assertFalse(any(action.get("action", {}).get("action_id") == "medical.treat"
+                             for action in row["actions"]))
         self.doctor.locks.add("call:all();view:false()")
         self.assertEqual(provider_controls(self.char1, self.doctor), [])
         self.doctor.locks.add("view:all()")

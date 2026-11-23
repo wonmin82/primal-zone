@@ -153,13 +153,7 @@ class SemanticTextTests(WorldCommandTest):
                     self.assertIn("회복", tokens(output, "command"))
                 else:
                     self.assertEqual(tokens(output, "command"), list(getattr(obj, "actions", ())))
-                from dataclasses import replace
-
-                from world.selection_numbers.api import descriptor, label, number_for
-
-                record = descriptor(obj)
-                expected_label = (label(replace(record, number=number_for(record.reference)))
-                                  if isinstance(obj, Container) and record else obj.key)
+                expected_label = obj.key
                 self.assertIn(expected_label, tokens(output, obj.semantic_role))
 
     def test_spaced_enemy_and_legacy_item_lookup_keeps_semantic_roles(self):
@@ -379,7 +373,7 @@ class SemanticTextTests(WorldCommandTest):
             self.assertEqual(self.char1.profile()["xp"], 11)
             corpse = room_loot(self.char1.location)[0]
             output = corpse.return_appearance(self.char1)
-            self.assertEqual(tokens(output, "remains"), [corpse.key, "시체 1"])
+            self.assertEqual(tokens(output, "remains"), [corpse.key, "시체"])
             first.reset_mock()
             second.reset_mock()
             take_loot(self.char2, now=103)

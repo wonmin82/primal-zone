@@ -166,7 +166,7 @@ def _roles(caller, action, invocation):
         refs = bindings.get(name, ())
         if (role.required and not refs) or (not role.allow_all and role.default != DefaultTargetPolicy.ALL and len(refs) > 1) or len(refs) != len(set(refs)):
             raise rules.RuleError("행동 대상 수를 확인하세요.")
-        current = {record.reference for record in role_records(caller, role, bindings)} if refs else set()
+        current = {record.reference for record in role_records(caller, role, bindings, references=refs)} if refs else set()
         if any(ref.kind not in role.kinds or ref not in current for ref in refs):
             if (action.id == "loot.take" and name == "subject"
                     and all(ref.kind in role.kinds for ref in refs)):
@@ -175,6 +175,8 @@ def _roles(caller, action, invocation):
                 raise LootUnavailable()
             raise rules.RuleError("원래 대상이 없어졌거나 위치·권한이 바뀌었습니다.")
         entities[name] = tuple(resolve_reference(ref) for ref in refs)
+        if any(entity is None for entity in entities[name]):
+            raise rules.RuleError("원래 대상이 없어졌거나 위치·권한이 바뀌었습니다.")
     if action.provider_from and bindings.get("provider") != bindings.get(action.provider_from):
         raise rules.RuleError("행동 제공자와 대상이 일치하지 않습니다.")
     return entities
@@ -196,11 +198,18 @@ def _lock_roles(caller, invocation):
                 identities.add(entity.pk)
             elif isinstance(entity, ItemEntity):
                 current = entity
-                while current:
+                trail = set()
+                while current is not None:
+                    if current.pk in trail:
+                        raise rules.RuleError("원래 대상의 아이템 부모 관계를 확인할 수 없습니다.")
+                    trail.add(current.pk)
                     items.add(current.pk)
                     if current.owner_object_id:
                         identities.add(current.owner_object_id)
-                    current = current.parent_item
+                    try:
+                        current = current.parent_item
+                    except ItemEntity.DoesNotExist:
+                        raise rules.RuleError("원래 대상의 아이템 부모 관계를 확인할 수 없습니다.") from None
                 if ref.kind == ReferenceKind.LOOT:
                     sources[entity.owner_object_id] = entity.owner_object
             elif isinstance(entity, CurrencyLoot):

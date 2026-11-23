@@ -1,6 +1,6 @@
 """기존 후치형 Loot 문법을 실제 Source와 영속 Entry 참조로 확정한다."""
 
-from time import time
+from time import time  # noqa: F401 -- 테스트와 실행 Adapter가 공유하는 관찰 시각
 
 from django.core import signing
 from world import rules
@@ -23,6 +23,28 @@ def entry_reference(entry):
     return record.reference
 
 
+def entry_records(selections):
+    """출처와 실제 owner가 일치하는 Entry descriptor를 일괄 읽는다."""
+    from world.actions.schema import ReferenceKind
+    from world.item_entities.models import ItemEntity
+    from world.loot_entities.models import CurrencyLoot
+
+    items = ItemEntity.objects.select_related("owner_object").in_bulk(
+        {entry.item_id for _, entry in selections if entry.item_id is not None}
+    )
+    money = CurrencyLoot.objects.select_related("owner_object").in_bulk(
+        {entry.currency_id for _, entry in selections if entry.currency_id is not None}
+    )
+    records = {}
+    for source, entry in selections:
+        entity = items.get(entry.item_id) if entry.kind == "item" else money.get(entry.currency_id)
+        if entity is not None and entity.owner_object_id == source.pk:
+            record = descriptor(entity)
+            if record is not None and record.reference.kind in (ReferenceKind.LOOT, ReferenceKind.CURRENCY):
+                records[source.pk, entry] = record
+    return records
+
+
 def fingerprint(caller, selections, now):
     from typeclasses.loot import can_take_entry
 
@@ -34,90 +56,128 @@ def fingerprint(caller, selections, now):
                         for source, entry in selections]}
 
 
-def make_invocation(caller, selections, *, quantity=0, now=None, origin="text"):
-    now = time() if now is None else now
+def make_invocation(caller, selections, *, quantity=0, now=None, origin="text", references=None):
+    from world.actions import loot_resolution as clock
+
+    now = clock.time() if now is None else now
     if not selections:
         raise rules.RuleError("가져갈 물건이 없거나 다른 탐사자의 보호된 전리품입니다.")
-    sources = tuple(dict.fromkeys([descriptor(source).reference for source, _ in selections]))
-    subjects = tuple([entry_reference(entry) for _, entry in selections])
+    if references is None:
+        sources = tuple(dict.fromkeys([descriptor(source).reference for source, _ in selections]))
+        subjects = tuple([entry_reference(entry) for _, entry in selections])
+    else:
+        sources, subjects = references
     token = signing.dumps(fingerprint(caller, selections, now), salt=SALT, compress=True)
     return ActionInvocation("loot.take", "take", (("provider", sources), ("source", sources),
                             ("subject", subjects)), (("quantity", quantity), ("snapshot", token)), origin)
 
 
 def resolve(caller, index, action, args, command_name):
-    from dataclasses import replace
-
-    from typeclasses.loot import can_take_entry, room_loot
+    from typeclasses.loot import room_loot
     from world.actions import loot_resolution as clock
-    from world.actions.loot_resolution import entry_reference, make_invocation
-    from world.actions.resolver import TargetAmbiguous, TargetNotFound, role_records, select_role
-    from world.actions.schema import DefaultTargetPolicy, ReferenceKind
-    from world.currency import currency_names, currency_request
     from world.lifecycle import reconcile_room
     from world.loot_service import loot_snapshot
     from world.observation import can_inspect_loot, can_perceive, context_for
-    from world.selection_numbers.api import descriptor as describe
-    from world.selection_numbers.api import number_for
-    from world.targets import Mode, loot_parts, parse_loot
+    from world.selection_numbers.api import numbered_records
+    from world.targets import loot_parts
 
     if command_name not in ("가져", "집"):
         return None
     now = clock.time()
-    # 전역 카탈로그 별칭은 실제 Scope의 정식 이름보다 먼저 선택하지 않는다.
-    _, source_selector = loot_parts(args)
+    # 실행 진입점의 기존 관찰 정합화는 순수 선택과 분리한다.
+    parts = loot_parts(args)
     reconcile_room(caller.location, now)
     context = context_for(caller, observed_at=now)
     if not can_inspect_loot(context):
         raise rules.RuleError("지금은 작은 전리품을 식별할 수 없습니다. 광원을 사용하세요.")
-    sources = [source for source in room_loot(caller.location, source_selector is not None)
-               if can_perceive(source, context)]
-    if source_selector:
-        if source_selector.mode == Mode.INDEX:
-            sources = [source for source in sources
-                       if number_for(describe(source).reference) == source_selector.index]
-        elif source_selector.mode != Mode.ALL:
-            sources = sources[:1]
-    if not sources:
+    sources = {source.pk: source for source in room_loot(caller.location, parts[1] is not None)
+               if can_perceive(source, context)}
+    sources_records = {pk: record for pk, source in sources.items() if (record := descriptor(source))}
+    numbered_sources = {record.reference: record for record in numbered_records(sources_records.values())}
+    sources_records = {pk: numbered_sources.get(record.reference, record) for pk, record in sources_records.items()}
+    source_ids = _source_ids(sources_records, parts[1])
+    snapshots = {pk: loot_snapshot(sources[pk]) for pk in source_ids}
+    assets = entry_records([(sources[pk], entry) for pk, snapshot in snapshots.items()
+                            if snapshot.native for entry in snapshot.entries])
+    valid = {record.reference: record for record in numbered_records(assets.values())}
+    entries = {pk: [(entry, asset.reference if (asset := assets.get((pk, entry))) else None)
+                    for entry in snapshot.entries] for pk, snapshot in snapshots.items()}
+    selected, quantity = select_loot(
+        caller, args, now=now, sources=sources_records, entries=entries,
+        records=[valid.get(record.reference, record) for record in assets.values()], parts=parts,
+    )
+    selected_sources = tuple(dict.fromkeys([sources_records[pk].reference for pk, _ in selected]))
+    selected_entries = tuple([assets[pk, entry].reference for pk, entry in selected])
+    return make_invocation(caller, [(sources[pk], entry) for pk, entry in selected], quantity=quantity, now=now,
+                           references=(selected_sources, selected_entries))
+
+
+def _source_ids(sources, selector):
+    from world.actions.resolver import matching_records
+    from world.actions.schema import ReferenceKind
+    from world.targets import Mode
+
+    source_kind = ReferenceKind.CORPSE if selector else ReferenceKind.OBJECT
+    source_ids = [pk for pk, record in sources.items() if record.reference.kind == source_kind]
+    if selector:
+        if selector.mode == Mode.INDEX:
+            refs = {record.reference for record in matching_records([sources[pk] for pk in source_ids], selector)}
+            source_ids = [pk for pk in source_ids if sources[pk].reference in refs]
+        elif selector.mode != Mode.ALL:
+            source_ids = source_ids[:1]
+    if not source_ids:
         raise rules.RuleError("지금 선택할 수 없는 전리품 출처입니다.")
-    bindings = {"source": tuple([describe(source).reference for source in sources])}
-    subject = next(iter([role for role in action.roles if role.name == "subject"]))
-    records = role_records(caller, subject, bindings)
-    matches = [(source, entry) for source in sources for entry in loot_snapshot(source).entries]
-    accessible = {entry_reference(entry) for _, entry in matches
-                  if can_take_entry(entry.as_entry(), caller, now)}
-    # 숨긴 이름은 문법 해석을 바꾸지 않는다. 실제 선택 후보/번호는 그대로 보존한다.
-    request = parse_loot(args, [name for record in records if record.reference in accessible
-                               for name in (record.name, *record.aliases)] + list(currency_names()))
-    currency = currency_request(request.target)
-    if request.target.name != "전리품":
-        kinds = (ReferenceKind.CURRENCY,) if currency else (ReferenceKind.LOOT,)
-        role = replace(subject, kinds=kinds, default=DefaultTargetPolicy.ALL)
-        query = "보급칩" if currency else request.target.name
-        query += f" {request.target.index}" if request.target.mode == Mode.INDEX else " 모두" if request.target.mode == Mode.ALL else ""
+    return source_ids
+
+
+def select_loot(caller, args, *, now, sources, entries, records, accessible=None, parts=None):
+    """현재 Source와 Entry Snapshot에서 효과 없이 전체 선택과 수량을 계산한다."""
+    from typeclasses.loot import can_take_entry
+    from world.actions.resolver import TargetAmbiguous, matching_records
+    from world.actions.schema import ReferenceKind
+    from world.currency import currency_names, currency_request
+    from world.targets import Mode, loot_parts, loot_request
+
+    query, source_selector = loot_parts(args) if parts is None else parts
+    source_ids = _source_ids(sources, source_selector)
+    matches = [(pk, entry, ref) for pk in source_ids for entry, ref in entries.get(pk, ())]
+    by_ref = {record.reference: record for record in records}
+    if accessible is None:
+        accessible = {ref for _, entry, ref in matches if can_take_entry(entry.as_entry(), caller, now)}
+    selected_refs = {ref for _, _, ref in matches}
+    scoped = [record for ref, record in by_ref.items() if ref in selected_refs]
+    visible = [record for record in scoped if record.reference in accessible]
+    request = loot_request(query, source_selector,
+                           [name for record in visible for name in (record.name, *record.aliases)] + list(currency_names()),
+                           literal_names=[record.name for record in visible])
+    selector = request.target
+    currency = None if selector.exact else currency_request(selector)
+    if selector.exact or (selector.name, selector.mode) != ("전리품", Mode.ALL):
+        from dataclasses import replace
+
+        if not selector.exact:
+            kind = ReferenceKind.CURRENCY if currency else ReferenceKind.LOOT
+            scoped = [record for record in scoped if record.reference.kind == kind]
+        if currency:
+            selector = replace(selector, name="보급칩")
         try:
-            selected = set(select_role(caller, role, query, bindings=bindings,
-                                       candidates={record.reference for record in records}))
-        except TargetNotFound:
-            raise LootUnavailable() from None
+            selected = {record.reference for record in matching_records(scoped, selector)}
         except TargetAmbiguous:
-            # 공개 후보끼리 이미 모호하면 원래 안내를 유지한다. 숨긴 후보가
-            # 충돌을 만든 경우에만 존재 여부를 알 수 없는 거절로 바꾼다.
-            try:
-                select_role(caller, role, query, bindings=bindings, candidates=accessible)
-            except TargetAmbiguous:
-                raise
-            except TargetNotFound:
-                pass
+            # 같은 오류가 공개 후보에서도 발생할 때만 구체적인 모호성 오류를 보여 준다.
+            matching_records([record for record in scoped if record.reference in accessible], selector)
             raise LootUnavailable() from None
-        matches = [(source, entry) for source, entry in matches if entry_reference(entry) in selected]
-    if request.target.mode != Mode.ALL:
-        # 공통 정식 이름/그룹/번호 판정 뒤 기존 Source PK·Entry 순서의 기본값을 보존한다.
+        matches = [(pk, entry, ref) for pk, entry, ref in matches if ref in selected]
+    if selector.mode != Mode.ALL:
         matches = matches[:1]
     else:
-        matches = [(source, entry) for source, entry in matches
-                   if can_take_entry(entry.as_entry(), caller, now)]
-    if request.target.name != "전리품" and not matches:
+        matches = [(pk, entry, ref) for pk, entry, ref in matches
+                   if ref in accessible or (ref is None and can_take_entry(entry.as_entry(), caller, now))]
+    if not matches:
+        if (selector.name, selector.mode) == ("전리품", Mode.ALL):
+            raise rules.RuleError("가져갈 물건이 없거나 다른 탐사자의 보호된 전리품입니다.")
         raise LootUnavailable()
-    quantity = 0 if request.target.mode == Mode.ALL else currency[0] if currency else 1
-    return make_invocation(caller, matches, quantity=quantity, now=now)
+    for pk, _, ref in matches:
+        if sources[pk].number is None or (record := by_ref.get(ref)) is None or record.number is None:
+            raise LootUnavailable()
+    quantity = 0 if selector.mode == Mode.ALL else currency[0] if currency else 1
+    return [(pk, entry) for pk, entry, _ in matches], quantity

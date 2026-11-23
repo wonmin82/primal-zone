@@ -2,7 +2,7 @@
 
 from world import text as ft
 from world.loot_assets import asset_text
-from world.targets import labels, ordered
+from world.targets import ordered
 
 
 def count_word(count):
@@ -20,27 +20,24 @@ def count_word(count):
     }.get(count, str(count))
 
 
-def selector_hint(objects, role, source=False, pool=None):
-    if len(objects) < 2:
+def selector_hint(objects, role, controls):
+    if not objects:
         return ft.text("")
-    controls = labels(
-        pool if pool is not None else objects, lambda obj: "시체" if source else obj.key
-    )
     selectable = [obj for obj in ordered(objects) if controls[obj.id] is not None]
     missing = "선택 번호를 확인할 수 없는 대상의 번호 안내는 제공하지 않습니다."
     if not selectable:
         return ft.text(missing)
     hint = ft.text(
-        "고정 번호 ",
+        "대상 표시 ",
         ft.join(
             [ft.text("'", ft.token(role, controls[obj.id]), "'") for obj in selectable], ", "
         ),
-        " 같은 표기로 구분해 지정할 수 있다.",
+        "를 확인할 수 있다.",
     )
     return ft.text(hint, " ", missing) if len(selectable) != len(objects) else hint
 
 
-def presence(objects, role, unit, sentence, source=False, pool=None):
+def presence(objects, role, unit, sentence, *, controls, source=False):
     groups = {}
     for obj in ordered(objects):
         groups.setdefault(obj.key, []).append(obj)
@@ -61,32 +58,31 @@ def presence(objects, role, unit, sentence, source=False, pool=None):
                     sentence,
                 )
             )
-    if source and len(objects) > 1:
-        lines.append(selector_hint(objects, role, source=True))
-    elif not source:
-        for group in groups.values():
-            if len(group) > 1:
-                lines.append(selector_hint(group, role, pool=pool))
+    numbered = [obj for obj in objects if controls[obj.id] != ("시체" if source else obj.key)]
+    if numbered:
+        lines.append(selector_hint(numbered, role, controls))
     return lines
 
 
 def corpse_overview(corpses, caller, now, pool=None):
+    from world.actions.loot_presentation import loot_display, visible_entries
     from world.observation import can_inspect_loot, context_for
-    from world.selection_numbers.api import descriptor, number_for
-    from world.state import loot_entries
+    from world.selection_display import room_snapshot
 
+    snapshot = room_snapshot(caller, now)
+    controls = snapshot.labels
     lines = [ft.text("주변에 시체 ", count_word(len(corpses)), " 구가 남아 있다.")]
     if not can_inspect_loot(context_for(caller, observed_at=now)):
         lines.append("작은 전리품을 식별하기 어렵다. 광원을 사용하세요.")
-        lines.append(selector_hint(corpses, "remains", source=True, pool=pool))
+        lines.append(selector_hint(corpses, "remains", controls))
         return ft.join(lines)
-    pool = ordered(corpses if pool is None else pool)
+    display = loot_display(caller, now, snapshot=snapshot)
     for corpse in ordered(corpses):
-        index = number_for(descriptor(corpse).reference)
-        if index is None:
+        label = controls.get(corpse.pk)
+        if label is None:
             lines.append(ft.text("선택 번호를 확인할 수 없는 ", ft.token("remains", corpse.key), "가 남아 있다."))
             continue
-        entries = loot_entries(corpse, caller, now)
+        entries = visible_entries(corpse, caller, now, display=display)
         items = []
         for entry in entries:
             rights = (
@@ -106,12 +102,10 @@ def corpse_overview(corpses, caller, now, pool=None):
             )
         lines.append(
             ft.text(
-                "첫 번째 " if index == 1 else count_word(index) + " 번째 ",
-                ft.token("remains", corpse.key),
+                ft.token("remains", label if label != "시체" else corpse.key),
                 "에는 ",
                 ft.join(items, ", ") if items else "전리품이 더는 없다",
                 "가 남아 있다." if items else ".",
             )
         )
-    lines.append(selector_hint(corpses, "remains", source=True, pool=pool))
     return ft.join(lines)

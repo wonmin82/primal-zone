@@ -257,6 +257,21 @@ class LootActionTests(NativeLootTest):
                 self.assertNotIn(secret, str(output))
                 self.assertNotIn("739", str(output))
             self.assertIn(secret, str(room.return_appearance(self.char1, observed_at=201)))
+            from types import SimpleNamespace
+
+            from world.actions.global_actions import look
+
+            def observe_as(player, query):
+                with patch("commands.character.time", return_value=201):
+                    return tuple(map(str, look(SimpleNamespace(caller=player, arguments={"query": query})).messages))
+
+            self.assertIn(secret, " ".join(observe_as(self.char1, secret)))
+            for query in (secret, f"{secret} {source_number}", f"{secret} 모두"):
+                result = observe_as(self.char2, query)
+                ground.locks.add("view:false()")
+                absent = observe_as(self.char2, query)
+                ground.locks.add("view:all()")
+                self.assertEqual(result, absent)
             for player in (self.char1, self.char2):
                 record = next(record for record in records_for(player) if record.reference == reference)
                 self.assertEqual(record.number, number)
@@ -264,6 +279,28 @@ class LootActionTests(NativeLootTest):
         self.assertEqual(item.pk, identity)
         self.assertEqual(descriptor(ground).reference, source_reference)
         self.assertEqual(number_for(source_reference), source_number)
+
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        from world.actions.loot_presentation import ground_lookup_objects
+        from world.bootstrap import build_world
+        from world.doors import current_doors
+
+        sibling = create_object(DroppedLoot, key=secret, location=room)
+        loot_service.populate_source(sibling, loot_service.source_entries(ground))
+        sql_counts = []
+        for candidates in ([ground], [ground, sibling]):
+            with CaptureQueriesContext(connection) as queries:
+                self.assertEqual(ground_lookup_objects(self.char1, candidates, secret, 201), candidates)
+            sql_counts.append(len(queries))
+        self.assertEqual(*sql_counts)
+
+        self.char2.location = build_world()["hq_concourse"]
+        door = current_doors(self.char2, 201)[0]
+        before_door = observe_as(self.char2, door.name)
+        ground.location = self.char2.location
+        ground.aliases.add(door.name)
+        self.assertEqual(observe_as(self.char2, door.name), before_door)
 
 
     def test_name_in_inventory_does_not_shadow_all_sources_loot_syntax(self):
@@ -402,8 +439,7 @@ class LootActionTests(NativeLootTest):
             self.assertIsNone(payload(self.char1, [(self.source, self.entry(first_item))], now=100))
             self.assertIsNone(all_controls(self.char1, 100)["corpses"])
             rows = multiplayer_state(self.char1, 100)["corpses"]
-            self.assertEqual([(row["id"], row["label"], row["look_command"])
-                              for row in rows], [(second.pk, "시체 2", "시체 2 봐")])
+            self.assertEqual([(row["id"], row["label"]) for row in rows], [(second.pk, "시체 2")])
             self.assertEqual(controls[second.pk]["take_command"], "시체 2에서 모두 가져")
             self.assertIn((missing.kind, missing.identity, "missing"), verify())
         self.assertEqual(self.missing_number_state(), before)
@@ -483,7 +519,8 @@ class LootActionTests(NativeLootTest):
         self.assertEqual(controls[self.source.pk]["take_command"], "시체 1에서 모두 가져")
         self.assertIsNone(controls[second.pk]["take_action"])
         self.assertEqual([row["quantity"] for row in controls[second.pk]["loot"]], [good.quantity])
-        self.assertEqual(self.run_take("모든 시체에서 모두").status, ResultStatus.REFUSED)
+        with self.assertRaises(RuleError):
+            self.invocation("모든 시체에서 모두")
         self.assertEqual(self.missing_number_state(), before)
 
     def test_ground_keeps_existing_label_and_all_syntax_but_missing_entry_blocks_aggregate(self):
@@ -512,6 +549,107 @@ class LootActionTests(NativeLootTest):
                          self.index)
         self.assertEqual(result.status, ResultStatus.SUCCESS)
         self.assertEqual(ItemEntity.objects.get(owner_object=self.char1, definition_id="bandage").quantity, 1)
+
+    def test_ground_source_display_uses_only_visible_local_persistent_numbers(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        from typeclasses.interactables import ActionObject
+        from world.actions.loot_presentation import source_controls
+        from world.selection_display import room_snapshot
+        from world.selection_numbers.models import SelectionNumber
+        from world.state import multiplayer_state
+
+        room = self.char1.location
+        other_room = create_object("typeclasses.rooms.Room", key="다른 방")
+
+        def source(room, number):
+            return create_object(DroppedLoot, key=f"숨은 원명 {number}", location=room)
+
+        first = source(room, 1)
+        self.assertEqual(source_controls(self.char1, 100)[first.pk]["label"], "바닥 전리품")
+        same_name = create_object(ActionObject, key="바닥 전리품", location=room)
+        self.assertEqual(number_for(descriptor(same_name).reference), 1)
+        labels = room_snapshot(self.char1, 100).labels
+        self.assertEqual(labels[same_name.pk], '"바닥 전리품" 1')
+        self.assertEqual(labels[first.pk], "바닥 전리품 · 고정 번호 1")
+        same_name.delete()
+        second, third, fourth = (source(room, n) for n in (2, 3, 4))
+        first.delete()
+        third.delete()
+        distant = source(other_room, 1)
+        second_ref, fourth_ref = (descriptor(obj).reference for obj in (second, fourth))
+        self.assertEqual([number_for(ref) for ref in (second_ref, fourth_ref)], [2, 4])
+        before = list(SelectionNumber.objects.order_by("pk").values())
+        for objects in ([second], [second, fourth]):
+            with CaptureQueriesContext(connection) as queries:
+                room_snapshot(self.char1, 100, objects=objects)
+            number_queries = [query for query in queries if SelectionNumber._meta.db_table in query["sql"]]
+            self.assertEqual(len(number_queries), 1)
+        state = multiplayer_state(self.char1, 100)["ground_loot"]
+        self.assertEqual([(row["id"], row["label"]) for row in state],
+                         [(second.pk, "바닥 전리품 2"), (fourth.pk, "바닥 전리품 4")])
+        self.assertIn("바닥 전리품 4", fourth.return_appearance(self.char1, observed_at=100))
+        self.assertNotIn("숨은 원명", str(state) + str(fourth.return_appearance(self.char1, observed_at=100)))
+        self.assertNotIn(distant.pk, room_snapshot(self.char1, 100).labels)
+        self.assertEqual(list(SelectionNumber.objects.order_by("pk").values()), before)
+
+        collision = create_object(ActionObject, key="바닥 전리품 2", location=room)
+        snapshot = room_snapshot(self.char1, 100)
+        self.assertEqual(snapshot.labels[collision.pk], "바닥 전리품 2")
+        self.assertEqual(snapshot.labels[second.pk], '"바닥 전리품" 2')
+        self.assertEqual(snapshot.records[second_ref].name, second.key)
+        self.assertIn('"바닥 전리품" 2', second.return_appearance(self.char1, observed_at=100))
+        second.locks.add("view:false()")
+        visible = source_controls(self.char1, 100)
+        self.assertNotIn(second.pk, visible)
+        self.assertEqual(visible[fourth.pk]["label"], "바닥 전리품")
+        second.delete()
+        self.assertEqual(source_controls(self.char1, 100)[fourth.pk]["label"], "바닥 전리품")
+        fifth, sixth, seventh = (source(room, n) for n in (5, 6, 7))
+        for obj in (fourth, fifth, sixth):
+            obj.delete()
+        self.assertEqual(number_for(descriptor(seventh).reference), 7)
+        self.assertEqual(source_controls(self.char1, 100)[seventh.pk]["label"], "바닥 전리품")
+        self.remove_number(seventh)
+        missing = source_controls(self.char1, 100)[seventh.pk]
+        self.assertEqual(missing["label"], "바닥 전리품 (선택 번호 확인 불가)")
+        self.assertIsNone(missing["take_action"])
+
+    def test_distinguished_ground_buttons_keep_source_and_entry_and_reject_stale_source(self):
+        from world.actions.gateway import from_web
+        from world.actions.loot_presentation import source_controls
+
+        room = self.char1.location
+        sources = [create_object(DroppedLoot, key="숨은 바닥 묶음", location=room) for _ in range(2)]
+        for source in sources:
+            loot_service.populate_source(source, [])
+        items = [api.create_item("ammo_9", location_kind="world_loot", owner_object=source)
+                 for source in sources]
+        controls = source_controls(self.char1, 100)
+        self.assertEqual([controls[source.pk]["label"] for source in sources], ["바닥 전리품 1", "바닥 전리품 2"])
+        self.assertTrue(all(not controls[source.pk]["take_command"] for source in sources))
+        actions = [controls[source.pk]["loot"][0]["action"] for source in sources]
+        for source, item, action in zip(sources, items, actions, strict=True):
+            self.assertEqual(action["roles"]["source"][0]["identity"], str(source.pk))
+            self.assertEqual(action["roles"]["subject"][0]["identity"], str(item.pk))
+
+        def click(action, request_id):
+            return execute(self.char1, self.session, from_web({**action, "request_id": request_id}, self.index), self.index)
+
+        self.assertEqual(click(actions[0], "original-ground").status, ResultStatus.SUCCESS)
+        items[0].refresh_from_db()
+        items[1].refresh_from_db()
+        self.assertEqual((items[0].owner_object_id, items[1].owner_object_id), (self.char1.pk, sources[1].pk))
+        self.assertEqual(click(actions[0], "deleted-ground").status, ResultStatus.REFUSED)
+        other_room = create_object("typeclasses.rooms.Room", key="다른 방")
+        sources[1].location = other_room
+        self.assertEqual(click(actions[1], "moved-ground").status, ResultStatus.REFUSED)
+        items[1].refresh_from_db()
+        self.assertEqual(items[1].owner_object_id, sources[1].pk)
+        self.char1.location = other_room
+        fresh = source_controls(self.char1, 100)[sources[1].pk]["loot"][0]["action"]
+        self.assertEqual(click(fresh, "fresh-ground").status, ResultStatus.SUCCESS)
+        self.assertEqual(ItemEntity.objects.get(owner_object=self.char1, definition_id="ammo_9").quantity, 2)
 
     def test_missing_number_stale_web_is_already_refused_without_domain_effect(self):
         from world.actions.gateway import from_web
@@ -561,7 +699,7 @@ class LootActionTests(NativeLootTest):
         overview = str(corpse_overview([self.source, second], self.char1, 100))
         self.assertNotIn("None", overview)
         self.assertNotIn("첫 번째", overview)
-        self.assertIn("두 번째", overview)
+        self.assertIn("시체 2에는", overview)
         self.assertIn("선택", overview)
         control = source_controls(self.char1, 100)[legacy.pk]
         self.assertEqual(control["take_command"], "")
@@ -596,12 +734,29 @@ class LootActionTests(NativeLootTest):
         self.assertNotIn("17", str(public_fields))
         self.assertEqual(self.missing_number_state(), before)
 
+    def test_protected_entry_never_changes_the_visible_entries_text_command(self):
+        from world.actions.loot_presentation import visible_entries
+        from world.loot_entities.models import LootClaim
+        from world.multiplayer import world_change
+
+        hidden = self.loot_item(quantity=17)
+        visible = self.loot_item(quantity=2, assigned=self.char2)
+        before, = visible_entries(self.source, self.char2, 100)
+        with world_change():
+            LootClaim.objects.filter(item_entity=hidden).delete()
+            api.delete_item(hidden)
+        after, = visible_entries(self.source, self.char2, 100)
+        self.assertEqual(before["label"], after["label"])
+        self.assertEqual(before["take_command"], after["take_command"])
+        self.assertTrue(after["take_command"])
+        self.assertEqual(after["action"]["roles"]["subject"][0]["identity"], str(visible.pk))
+
     def test_direct_container_controls_with_missing_number_do_not_fall_back_to_raw_name(self):
         from typeclasses.interactables import Container
 
         first = create_object(Container, key="동명 보관상자", location=self.char1.location)
-        self.assertEqual(first.web_actions(self.char1, "unused", 100),
-                         [{"label": "봐", "command": "동명 보관상자 1 봐"}])
+        self.assertEqual(first.web_actions(self.char1, "unused", 100)[0]["action"]["action_id"],
+                         "global.look_target")
         second = create_object(Container, key="동명 보관상자", location=self.char1.location)
         containers = (first, second)
         self.assertEqual([number_for(descriptor(obj).reference) for obj in containers], [1, 2])
@@ -609,8 +764,9 @@ class LootActionTests(NativeLootTest):
         with patch("commands.character.time", return_value=100), patch.object(
                 self.char1, "at_look", wraps=self.char1.at_look) as looked:
             for number, container in enumerate(containers, 1):
-                command = container.web_actions(self.char1, "unused", 100)[0]["command"]
-                self.assertEqual(command, f"동명 보관상자 {number} 봐")
+                action = container.web_actions(self.char1, "unused", 100)[0]["action"]
+                self.assertEqual(action["roles"]["subject"][0]["identity"], str(container.pk))
+                command = f"동명 보관상자 {number} 봐"
                 looked.reset_mock()
                 completed = []
                 self.char1.execute_cmd(command, session=self.session).addCallback(lambda _: completed.append(True))
@@ -622,8 +778,8 @@ class LootActionTests(NativeLootTest):
         before = self.missing_number_state()
         for _ in range(3):
             self.assertEqual(first.web_actions(self.char1, "unused", 100), [])
-            self.assertEqual(second.web_actions(self.char1, "unused", 100),
-                             [{"label": "봐", "command": "동명 보관상자 2 봐"}])
+            self.assertEqual(second.web_actions(self.char1, "unused", 100)[0]["action"]["roles"]["subject"][0]["identity"],
+                             str(second.pk))
         self.assertIsNone(number_for(descriptor(first).reference))
         self.assertEqual(number_for(descriptor(second).reference), 2)
         with patch("commands.character.time", return_value=100), patch.object(

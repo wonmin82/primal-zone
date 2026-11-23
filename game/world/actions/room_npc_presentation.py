@@ -1,6 +1,6 @@
 """M01/M02 서비스의 순수 화면. 실행 문장을 만들지 않고 안정 참조를 전달한다."""
 
-from world.actions.presentation import reference_json
+from world.actions.presentation import reference_json, target_label
 from world.actions.presentation_context import available, profile_snapshot
 
 
@@ -61,19 +61,21 @@ def render(caller, index, reference, binding, observed_at=None):
             label = "회수부품 모두 교환" if "value" not in defaults else "회수부품 교환"
         if record:
             from world.item_entities.policy import can_item_operation
-            from world.selection_numbers.api import label as target_label
             item = resolve_reference(record.reference)
+            item_label = target_label(caller, record.reference, observed_at)
+            if item is None or item_label is None:
+                continue
             operation = "burn" if key == "소각" else "sell"
             if key != "가치" and (item.location_kind != "inventory" or not can_item_operation(item, operation)):
                 continue
             current_roles["subject"] = [reference_json(record.reference)]
-            label = target_label(record) + " " + key
+            label = item_label + " " + key
             if key == "팔아":
                 from world.currency import format_currency
                 from world.shop_service import resale
 
                 price = resale(item)
-                label = f"{target_label(record)} · {format_currency(price)} 팔아"
+                label = f"{item_label} · {format_currency(price)} 팔아"
         elif "value" in defaults and defaults["value"] in ITEMS:
             label = ITEMS[defaults["value"]]["name"] + " " + key
             if key == "사":
@@ -96,7 +98,7 @@ def render(caller, index, reference, binding, observed_at=None):
                            "action": {"action_id": action.id, "variant": variant.id,
                                       "roles": current_roles, "arguments": args}})
             if record and "count" in args and item.quantity > 1 and ITEMS[item.definition_id]["stackable"]:
-                all_label = (f"{target_label(record)} 모두 팔아 · 총 {format_currency(item.quantity * price)}"
+                all_label = (f"{item_label} 모두 팔아 · 총 {format_currency(item.quantity * price)}"
                              if key == "팔아" else label.replace(" " + key, " 모두 " + key))
                 output.append({"label": all_label, "description": action.help,
                                "action": {"action_id": action.id, "variant": variant.id,
@@ -128,19 +130,18 @@ def sort_controls(provider, rows):
 
 
 def controls_for(caller, provider, observed_at=None):
-    from dataclasses import replace
-
     from typeclasses.interactables import Container
+    from world.actions.global_actions import target_action
     from world.actions.manifest import get_index
     from world.actions.presentation import action_controls
-    from world.selection_numbers.api import descriptor, label, number_for
+    from world.selection_display import room_snapshot
+    from world.selection_numbers.api import descriptor
 
     if isinstance(provider, Container):
-        record = descriptor(provider)
-        number = number_for(record.reference) if record is not None else None
-        if number is None:
+        reference = room_snapshot(caller, observed_at).references.get(provider.pk)
+        if reference is None:
             return []
-        return [{"label": "봐", "command": label(replace(record, number=number)) + " 봐"}]
+        return [{"label": "봐", "action": target_action("look_target", reference)}]
     record = descriptor(provider)
     if not record:
         return []

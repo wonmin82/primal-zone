@@ -179,7 +179,8 @@ class TargetIntegrationTests(WorldCommandTest):
             self.assertIn(f"체력 {index * 5} /", output)
         state = multiplayer_state(self.char1, 100)
         for enemy, control in zip(enemies, state["enemies"]):
-            self.char1.execute_cmd(control["attack_command"])
+            self.assertEqual(control["attack_action"]["roles"]["subject"][0]["identity"], str(enemy.pk))
+            self.char1.execute_cmd(control["label"] + " 공격")
             self.assertEqual(self.char1.combat_target(), enemy)
             self.char1.leave_combat()
         for _ in range(3):
@@ -262,8 +263,8 @@ class TargetIntegrationTests(WorldCommandTest):
         )
         self.assertEqual([source["label"] for source in state["corpses"]], ["시체 2", "시체 3"])
         overview = self.look("시체 모두")
-        self.assertIn("두 번째 갈퀴사냥룡의 시체", overview)
-        self.assertIn("세 번째 밀림의포식자의 시체", overview)
+        self.assertIn("시체 2에는", overview)
+        self.assertIn("시체 3에는", overview)
         self.assertNotIn("첫 번째", overview)
 
     def test_named_corpse_overview_keeps_room_global_source_numbers(self):
@@ -271,17 +272,18 @@ class TargetIntegrationTests(WorldCommandTest):
         self.native_source(name="밀림의포식자의 시체")
         self.native_source()
         output = self.look("갈퀴사냥룡의 시체 모두")
-        self.assertIn("첫 번째 갈퀴사냥룡의 시체", output)
-        self.assertIn("세 번째 갈퀴사냥룡의 시체", output)
-        self.assertIn("'시체 1'", output)
-        self.assertIn("'시체 3'", output)
-        self.assertNotIn("'시체 2'", output)
+        self.assertIn("시체 1에는", output)
+        self.assertIn("시체 3에는", output)
+        self.assertIn("시체 1에는", output)
+        self.assertIn("시체 3에는", output)
+        self.assertNotIn("시체 2에는", output)
 
     def test_single_corpse_detail_provides_executable_source_command(self):
         corpse = self.native_source()
         control = multiplayer_state(self.char1, 100)["corpses"][0]
         output = self.look("시체")
-        self.assertIn("지정: 시체 1", output)
+        self.assertEqual(control["label"], "시체")
+        self.assertIn("지정: 시체", output)
         self.assertIn("회수: " + control["take_command"], output)
         self.assertNotIn("가능한 행동 : 가져", output)
         self.assertIn({"role": "command", "text": "가져"}, output.segments)
@@ -297,7 +299,8 @@ class TargetIntegrationTests(WorldCommandTest):
         b.db.decay_at = c.db.decay_at = 200
         control = multiplayer_state(self.char1, 100)["corpses"][1]
         self.assertEqual(control["id"], b.id)
-        output = self.look(control["look_command"].removesuffix(" 봐"))
+        self.assertEqual(control["look_action"]["roles"]["subject"][0]["identity"], str(b.pk))
+        output = self.look("시체 2")
         self.assertIn("지정: 시체 2", output)
         self.assertIn("회수: " + control["take_command"], output)
         self.char1.execute_cmd(control["take_command"])
@@ -309,7 +312,7 @@ class TargetIntegrationTests(WorldCommandTest):
         self.assertEqual(control["id"], b.id)
         self.assertEqual(control["label"], "시체 2")
         self.assertIn("지정: 시체 2", self.look("시체 2"))
-        self.assertIn("선택할 수 없는 대상", self.look("시체 1"))
+        self.assertNotIn("회수:", self.look("시체 1"))
         self.assertFalse(b.attributes.has("selector"))
         self.assertFalse(b.attributes.has("index"))
 

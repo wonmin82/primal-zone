@@ -79,29 +79,36 @@ def claim_context(item):
 
 
 def _item_snapshot(item):
-    claim = claim_context(item)
+    claim = getattr(item, "loot_claim", None)
     return LootEntrySnapshot("item", item.definition_id, item.quantity,
-                             claim.reserved_party if claim else None,
-                             claim.reserved_player if claim else None,
-                             claim.assigned_player if claim else None,
+                             claim.reserved_party_id if claim else None,
+                             claim.reserved_player_id if claim else None,
+                             claim.assigned_player_id if claim else None,
                              claim.protection_until if claim else 0, item_id=item.pk)
 
 
 def _currency_snapshot(row):
     return LootEntrySnapshot("currency", CURRENCY["id"], row.quantity,
                              row.reserved_party_id, row.reserved_player_id, None, row.protection_until,
-                             tuple(row.shares.order_by("player_id").values_list("player_id", "remaining_amount")),
+                             tuple((share.player_id, share.remaining_amount) for share in row.shares.all()),
                              currency_id=row.pk)
 
 
-def loot_snapshot(source):
-    """조회는 expired 권리를 free로 해석할 수 있고 저장소를 변경하지 않는다."""
+def loot_snapshots(sources):
+    """현재 출처와 권리를 함께 읽으며 영속 상태를 변경하지 않는다."""
     from world.item_runtime import maintenance, native_runtime, require_runtime
 
+    sources = tuple({source.pk: source for source in sources}.values())
+    if not sources:
+        return {}
     require_runtime()
-    if native_runtime() and not maintenance.get() and not native_source(source):
+    native = {source.pk for source in sources if native_source(source)}
+    if native_runtime() and not maintenance.get() and len(native) != len(sources):
         raise rules.RuleError("Item runtime migration required: 전리품 source가 변환되지 않았습니다.")
-    if not native_source(source):
+    snapshots = {}
+    for source in sources:
+        if source.pk in native:
+            continue
         entries = []
         for raw in source.db.entries or []:
             entry = normalize_entry(raw)
@@ -110,10 +117,22 @@ def loot_snapshot(source):
             entries.append(LootEntrySnapshot(entry["kind"], entry["id"], entry["quantity"],
                                              entry["reserved_party"], entry["reserved_player"],
                                              entry["assigned_player"], entry["protection_until"], shares))
-        return LootSourceSnapshot(False, tuple(entries))
-    items = ItemEntity.objects.filter(owner_object=source, location_kind__in=("corpse_loot", "world_loot"))
-    currency = CurrencyLoot.objects.filter(owner_object=source)
-    return LootSourceSnapshot(True, tuple([*map(_item_snapshot, items), *map(_currency_snapshot, currency)]))
+        snapshots[source.pk] = LootSourceSnapshot(False, tuple(entries))
+    if native:
+        entries = {identity: [] for identity in native}
+        items = ItemEntity.objects.filter(owner_object_id__in=native, location_kind__in=(
+            "corpse_loot", "world_loot")).select_related("loot_claim")
+        currency = CurrencyLoot.objects.filter(owner_object_id__in=native).prefetch_related("shares")
+        for item in items:
+            entries[item.owner_object_id].append(_item_snapshot(item))
+        for row in currency:
+            entries[row.owner_object_id].append(_currency_snapshot(row))
+        snapshots.update({identity: LootSourceSnapshot(True, tuple(rows)) for identity, rows in entries.items()})
+    return snapshots
+
+
+def loot_snapshot(source):
+    return loot_snapshots((source,))[source.pk]
 
 
 def source_entries(source):

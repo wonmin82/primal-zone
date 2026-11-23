@@ -22,11 +22,11 @@ def loot_entries(source, player, now):
     return visible_entries(source, player, now)
 
 
-def loot_controls(player, now, objects=None):
+def loot_controls(player, now, objects=None, *, snapshot=None):
     """상세 보기와 웹은 동일한 영속 번호·권리·안정 참조를 사용한다."""
     from world.actions.loot_presentation import source_controls
 
-    return source_controls(player, now, objects)
+    return source_controls(player, now, objects, snapshot=snapshot)
 
 
 def duel_observation(actor, viewer, now):
@@ -52,37 +52,51 @@ def duel_observation(actor, viewer, now):
     return tuple(messages)
 
 
-def multiplayer_state(player, now=None):
+def multiplayer_state(player, now=None, *, observation=None):
     now = time() if now is None else now
     from typeclasses.actors import Actor
     from typeclasses.interactables import ActionObject
 
     from world import duel
-    from world.actions.global_actions import DUEL_SKILLS
+    from world.actions.global_actions import DUEL_SKILLS, target_action
     from world.doors import web_controls as door_controls
     from world.lifecycle import reconcile_room
     from world.npc_dialogue import accessible as dialogue_accessible
     from world.npc_dialogue import supports as dialogue_supports
+    from world.selection_display import room_snapshot
 
     reconcile_room(player.location, now)
     objects = room_objects(player, observed_at=now)
     enemies = [obj for obj in room_enemies(player.location) if obj in objects]
     corpses = [obj for obj in room_loot(player.location) if obj in objects]
     ground = [obj for obj in room_loot(player.location, corpse=False) if obj in objects]
-    controls = labels(objects)
-    dialogue_controls = labels([obj for obj in objects if dialogue_supports(obj) and obj.access(player, "view")])
-    loot = loot_controls(player, now, objects)
-    from world.actions.loot_presentation import all_controls
+    snapshot = room_snapshot(player, now, objects=objects)
+    controls = snapshot.labels
+    from world.actions.loot_presentation import all_controls, loot_display, source_controls
     from world.actions.manifest import get_index
     from world.actions.presentation import action_controls, provider_controls, reference_json
-    from world.selection_numbers.api import descriptor
+    loot_view = loot_display(player, now, objects, snapshot=snapshot)
+    loot = source_controls(player, now, display=loot_view)
+    loot_actions = all_controls(player, now, display=loot_view)
+    action_rows = action_controls(player, get_index(), now, snapshot=snapshot)
+    room_fields = {}
+    if observation is not None:
+        from typeclasses.interactables import growth_controls
 
-    action_rows = action_controls(player, get_index(), now)
-    loot_actions = all_controls(player, now, objects)
+        from world.room_hints import render as room_hint
+
+        room_fields = {
+            "hint": room_hint(observation, objects=objects, snapshot=snapshot, action_rows=action_rows),
+            "training_controls": growth_controls(player, now, objects=objects, action_rows=action_rows),
+        }
+
+    def observe(obj):
+        reference = snapshot.references.get(obj.pk)
+        return target_action("look_target", reference) if reference else None
 
     def combat_action(enemy, action_id):
         return {"action_id": action_id, "variant": "adapter",
-                "roles": {"subject": [reference_json(descriptor(enemy).reference)]},
+                "roles": {"subject": [reference_json(snapshot.references[enemy.pk])]},
                 "arguments": {
                     "generation": enemy.db.combat_generation or 0,
                     "lifecycle": enemy.db.combat_lifecycle or 0,
@@ -90,10 +104,10 @@ def multiplayer_state(player, now=None):
 
     def duel_row(actor):
         status = duel.projection(actor, player, now=now)
-        record = descriptor(actor)
-        if record is None or controls[actor.id] is None:
+        reference = snapshot.references.get(actor.pk)
+        if reference is None:
             return None
-        subject = reference_json(record.reference)
+        subject = reference_json(reference)
 
         def action(name, **arguments):
             return {
@@ -126,7 +140,7 @@ def multiplayer_state(player, now=None):
 
         rows = provider_controls(player, obj, now, rows=action_rows)
         if getattr(obj, "action_provider_definition", None) in ("world.incinerator", "world.container", "world.personal_locker"):
-            rows.insert(0, {"label": "봐", "command": controls[obj.id] + " 봐"})
+            rows.insert(0, {"label": "봐", "action": observe(obj)})
         return sort_controls(obj, rows)
 
     party = party_for(player)
@@ -169,7 +183,11 @@ def multiplayer_state(player, now=None):
         }
     invited, invitation = invitation_for(player, now, reconcile=False)
     requested, request = request_for(player, now, reconcile=False)
+    combat = player.combat_snapshot()
+    if combat and combat["id"] in snapshot.references:
+        combat = {**combat, "name": controls[combat["id"]]}
     return {
+        **room_fields,
         "server_now": now,
         "duels": [
             row for obj in objects
@@ -188,10 +206,9 @@ def multiplayer_state(player, now=None):
                 "enemy_id": enemy.combat_definition_id,
                 "name": enemy.key,
                 "label": controls[enemy.id],
-                "attack_command": controls[enemy.id] + " 공격",
                 "attack_action": combat_action(enemy, "global.attack"),
                 "party_attack_action": combat_action(enemy, "global.party_attack"),
-                "look_command": controls[enemy.id] + " 봐",
+                "look_action": observe(enemy),
                 "hp": enemy.hp,
                 "max_hp": enemy.max_hp,
                 "state": enemy.db.state,
@@ -200,17 +217,17 @@ def multiplayer_state(player, now=None):
                 "mode": enemy.combat_profile["combat_mode"],
                 "can_attack": enemy.can_attack(player),
             }
-            for enemy in enemies if controls[enemy.id] is not None
+            for enemy in enemies if enemy.pk in snapshot.references
         ],
         "corpses": [
             {
                 "id": corpse.id,
                 "name": corpse.key,
                 **loot[corpse.id],
-                "look_command": loot[corpse.id]["label"] + " 봐",
+                "look_action": observe(corpse),
                 "decay_at": corpse.db.decay_at,
             }
-            for corpse in corpses if controls[corpse.id] is not None
+            for corpse in corpses if corpse.pk in snapshot.references
         ],
         "ground_loot": [
             {"id": dropped.id, **loot[dropped.id]} for dropped in ground
@@ -221,14 +238,14 @@ def multiplayer_state(player, now=None):
                 "label": controls[obj.id],
                 "role": obj.semantic_role,
                 "actions": object_actions(obj) + (
-                    [{"label": "말 걸기", "command": "'" + dialogue_controls[obj.id] + "에게 안녕"}]
+                    [{"label": "말 걸기", "action": target_action("greet_target", snapshot.references[obj.pk])}]
                     if dialogue_accessible(player, obj) else []
                 ),
-                "look_command": controls[obj.id] + " 봐",
+                "look_action": observe(obj),
             }
             for obj in objects
-            if (isinstance(obj, ActionObject) or dialogue_supports(obj)) and controls[obj.id] is not None
-        ] + door_controls(player, now, action_rows=action_rows),
+            if (isinstance(obj, ActionObject) or dialogue_supports(obj)) and obj.pk in snapshot.references
+        ] + door_controls(player, now, action_rows=action_rows, snapshot=snapshot),
         "party": party_data,
         "invitation": {
             "party_id": invited.id,
@@ -238,7 +255,7 @@ def multiplayer_state(player, now=None):
         if invited
         else None,
         "join_request": {"party_id": requested.pk, "expires_at": request["expires_at"]} if requested else None,
-        "combat_target": player.combat_snapshot(),
+        "combat_target": combat,
     }
 
 

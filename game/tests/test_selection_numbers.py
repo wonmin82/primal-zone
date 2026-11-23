@@ -32,6 +32,84 @@ from tests.base import GameCommandTest, clear_test_caches
 
 
 class SelectionNumberTests(GameCommandTest):
+    def test_public_labels_keep_holes_and_exclude_hidden_objects(self):
+        from world.selection_display import room_snapshot
+
+        first = self.facility()
+        self.assertEqual(room_snapshot(self.char1).labels[first.pk], "시험 시설")
+        second, third, fourth = [self.facility() for _ in range(3)]
+        first.delete()
+        third.delete()
+        snapshot = room_snapshot(self.char1)
+        self.assertEqual((snapshot.labels[second.pk], snapshot.labels[fourth.pk]), ("시험 시설 2", "시험 시설 4"))
+        second.locks.add(f"view:id({self.char2.pk})")
+        self.assertEqual(room_snapshot(self.char1).labels[fourth.pk], "시험 시설")
+        second.delete()
+        self.assertEqual(room_snapshot(self.char1).labels[fourth.pk], "시험 시설")
+        self.assertEqual(number_for(descriptor(fourth).reference), 4)
+
+    def test_display_escapes_number_collision_and_reserved_literal(self):
+        from world.selection_display import room_snapshot
+
+        first, second, third, fourth = [self.facility("장치") for _ in range(4)]
+        first.delete()
+        third.delete()
+        literal = self.facility("장치 2", "fixture.numeric_name")
+        quoted = self.facility('"장치" 2', "fixture.quoted_name")
+        rendered = room_snapshot(self.char1).labels
+        self.assertEqual(rendered[second.pk], '"장치" 2')
+        self.assertEqual(rendered[fourth.pk], "장치 4")
+        self.assertEqual(rendered[literal.pk], "장치 2")
+        self.assertEqual(rendered[quoted.pk], r'"\"장치\" 2" 1')
+
+    def test_number_batch_is_constant_for_one_ten_and_hundred_records(self):
+        from statistics import median
+        from time import perf_counter
+
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        from world.actions.schema import TargetReference
+        from world.selection_numbers.api import SelectionRecord, numbered_records
+
+        scope = NumberScope.objects.create(scope_id="measurement", group_id="fixture.batch", next_number=101)
+        SelectionNumber.objects.bulk_create([
+            SelectionNumber(scope=scope, kind="object", identity=str(n), number=n, name="검증기")
+            for n in range(1, 101)
+        ])
+        records = [SelectionRecord(TargetReference(ReferenceKind.OBJECT, str(n), scope.scope_id),
+                                   scope.scope_id, scope.group_id, "검증기") for n in range(1, 101)]
+        measurements = []
+        for count in (1, 10, 100):
+            subset = records[:count]
+            methods = (
+                (count, lambda: [number_for(record.reference) for record in subset]),
+                (1, lambda: [record.number for record in numbered_records(subset)]),
+            )
+            for expected_queries, read in methods:
+                durations = []
+                for _ in range(5):
+                    with CaptureQueriesContext(connection) as queries:
+                        start = perf_counter()
+                        result = read()
+                        durations.append((perf_counter() - start) * 1000)
+                    self.assertEqual(len(queries), expected_queries)
+                    self.assertEqual(result, list(range(1, count + 1)))
+                measurements.append((count, expected_queries, round(median(durations), 2)))
+        print(f"B-1 개별/배치 비교 (대상 수, SQL 수, 중앙값 ms) {measurements}")
+
+    def test_room_snapshot_reads_door_endpoints_in_one_query(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        from world.selection_display import room_snapshot
+
+        exits = [create_object(Exit, key=f"시험 출구 {counter}", location=self.room1, destination=self.room2)
+                 for counter in range(10)]
+        for count in (1, 10):
+            with CaptureQueriesContext(connection) as queries:
+                room_snapshot(self.char1, objects=exits[:count])
+            door_reads = [query for query in queries if Door._meta.db_table in query["sql"]]
+            self.assertEqual(len(door_reads), 1)
+
     def test_historical_schema_context_is_test_only_and_resets_after_failure(self):
         from django.test import override_settings
         from world.selection_numbers.mode import enabled, historical_schema

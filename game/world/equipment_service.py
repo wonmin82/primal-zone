@@ -8,6 +8,7 @@ from evennia.objects.models import ObjectDB
 from world import equipment as eq
 from world import recovery, rules
 from world.content import ITEMS
+from world.item_entities.api import carried_items
 from world.item_entities.models import ItemEntity
 from world.multiplayer import world_change
 
@@ -37,33 +38,51 @@ def equipped_items(character):
     return ItemEntity.objects.filter(owner_object=character, location_kind="equipment").order_by("sequence")
 
 
+def _item_display_records(owned):
+    from world.selection_display import displays
+    from world.selection_numbers.api import descriptor, numbered_records
+
+    original = [record for row in owned if (record := descriptor(row)) is not None]
+    numbered = {record.reference: record for record in numbered_records(original)}
+    labels = displays(numbered.get(record.reference, record) for record in original)
+    return ({ref.identity: record.number for ref, record in numbered.items()},
+            {ref.identity: label for ref, label in labels.items()})
+
+
+def _item_context_label(row, items, label_of):
+    names = []
+    while row is not None:
+        names.append(label_of(row))
+        row = items.get(row.parent_item_id)
+    return "의 ".join(reversed(names))
+
+
 def entity_snapshot(character):
     from world.content.item_mapping import LEGACY_ITEM_MAPPING
-    from world.item_entities.api import items_owned_by
     from world.item_runtime import maintenance
-    from world.selection_numbers.models import SelectionNumber
 
-    owned = [row for row in items_owned_by(character)
-             if row.root().location_kind in ("inventory", "equipment")]
-    scopes = {f"character:{character.pk}", *(f"inside:{row.parent_item_id}" for row in owned if row.parent_item_id)}
-    numbers = dict(SelectionNumber.objects.filter(kind="item", scope__scope_id__in=scopes,
-                                                  identity__in=[str(row.pk) for row in owned])
-                   .values_list("identity", "number"))
+    owned = carried_items(character)
+    items = {row.pk: row for row in owned}
+    numbers, labels = _item_display_records(owned)
 
     def definition_id(row):
         return LEGACY_ITEM_MAPPING.get(row.definition_id, row.definition_id) if maintenance.get() else row.definition_id
 
+    def display_name(row):
+        return labels.get(str(row.pk)) or ITEMS[definition_id(row)]["name"]
+
     carried = tuple(
         eq.item_snapshot(definition_id(row), ITEMS[definition_id(row)], item_id=row.pk,
                          sequence=row.sequence, quantity=row.quantity, location=row.location_kind,
-                         slot=row.slot, state_summary=state_summary(row), selection_number=numbers.get(str(row.pk)))
+                         slot=row.slot, state_summary=state_summary(row), selection_number=numbers.get(str(row.pk)),
+                         display_label=_item_context_label(row, items, display_name))
         for row in owned
     )
     return eq.EquipmentSnapshot(tuple(item for item in carried if item.location == "equipment"),
                                 carried, character.db.active_weapon_item_id)
 
 
-def state_summary(row):
+def state_summary(row, *, observed_at=None):
     from world.content.item_mapping import LEGACY_ITEM_MAPPING
     from world.item_runtime import maintenance
 
@@ -83,7 +102,7 @@ def state_summary(row):
 
         from world.lighting import project_power
 
-        state = project_power(row.state, time())
+        state = project_power(row.state, time() if observed_at is None else observed_at)
         capacity = definition['light_source'].get('max_power_seconds', 1800)
         return f"{'켜짐' if state['enabled'] else '꺼짐'} · {ceil(state['remaining_power'] / capacity * 100)}%"
     return ""
@@ -227,30 +246,28 @@ def validate_equipment_row(row):
 
 
 def resolve_item(character, value, action):
-    from world.targets import item_selector, matching, parse_selector, require_single, select
+    from world.targets import item_selector, select_native_items
 
     if not entity_runtime(character):
         return item_selector(value, ITEMS, action)
-    candidates = entity_snapshot(character).carried
-
-    def name_values(item):
-        return (item.definition_id, item.name, *item.aliases)
-
-    selector = parse_selector(value, [name for item in candidates for name in name_values(item)])
-    require_single(selector, action)
-    selected = select(matching(candidates, selector, name_values), selector)
-    return ItemEntity.objects.get(pk=selected[0].identity)
+    selected, _ = select_native_items(carried_items(character), value, action)
+    return selected[0]
 
 
-def selector_label(character, item):
+def selector_label(character, item, *, with_parents=False):
     if not isinstance(item, ItemEntity):
         return ITEMS[item]["name"]
-    from dataclasses import replace
+    owned = carried_items(character)
+    _, labels = _item_display_records(owned)
 
-    from world.selection_numbers.api import descriptor, label, number_for
+    def display_name(row):
+        return labels.get(str(row.pk)) or ITEMS[row.definition_id]["name"]
 
-    record = descriptor(item)
-    return label(replace(record, number=number_for(record.reference)))
+    if with_parents and item.parent_item_id:
+        items = {row.pk: row for row in owned}
+        if item.pk in items:
+            return _item_context_label(items[item.pk], items, display_name)
+    return display_name(item)
 
 
 def _change_equipment(character, item, *, remove=False, expected_slot=None):

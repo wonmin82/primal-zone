@@ -275,13 +275,13 @@ class ItemInteractionTests(ItemInteractionFixture):
         state = multiplayer_state(self.char1)
         boxes = [obj for obj in state["interactables"] if obj["name"] == "보관상자"]
         self.assertEqual(
-            [obj["look_command"] for obj in boxes], ["보관상자 1 봐", "보관상자 2 봐"]
+            [obj["label"] for obj in boxes], ["보관상자 1", "보관상자 2"]
         )
 
     def test_personal_locker_contents_are_per_caller_and_survive_cache_reload(self):
         self.command("개인 보관함에 붕대 모두 넣어")
         self.assertEqual(self.storage(self.locker), {"bandage": 3})
-        self.assertNotIn("붕대", self.locker.return_appearance(self.char2))
+        self.assertNotIn("붕대 ×", self.locker.return_appearance(self.char2))
         self.command("개인 보관함에 탐사대 작업복 넣어", self.char2)
         self.assertEqual(self.storage(self.locker, self.char2), {})
         self.command("개인 보관함에 붕대 넣어", self.char2)
@@ -332,7 +332,7 @@ class ItemInteractionTests(ItemInteractionFixture):
         boxes = [i for i in state["interactables"] if i["name"] in ("보관상자", "개인 보관함")]
         self.assertEqual(len(boxes), 2)
         for box in boxes:
-            self.assertEqual(box["look_command"], box["label"] + " 봐")
+            self.assertEqual(box["look_action"]["action_id"], "global.look_target")
             stores = [control for control in box["actions"] if control.get("action", {}).get("action_id") == "storage.store"]
             self.assertTrue(stores)
             provider = next(obj for obj in (self.box, self.locker) if obj.key == box["name"])

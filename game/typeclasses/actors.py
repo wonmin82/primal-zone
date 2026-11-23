@@ -221,20 +221,15 @@ class Actor(NumberedObjectMixin, DistantPresenceMixin, DefaultObject):
         lines = [presentation.description]
         if self.capability_active("settlement") or self.capability_active("shop"):
             from world.actions.presentation import provider_verbs
-            from world.targets import labels, room_objects
+
+            from typeclasses.interactables import service_commands
 
             actions = set(provider_verbs(looker, self, kwargs.get("observed_at")))
-            target = labels(room_objects(looker)).get(self.id)
-            if target and actions:
-                commands = ((
-                    f"{target} 목록", f"{target}에게 물건이름 사", f"{target}에게 물건이름 가치", f"{target}에게 물건이름 팔아",
-                ) if self.capability_active("shop") else (
-                    f"{target} 환율", "회수부품 교환", "회수부품 10개 교환", "회수부품 모두 교환",
-                    f"{target}에게 회수부품 10개 교환",
-                ))
+            if actions:
+                commands = service_commands(self, looker, actions, kwargs.get("observed_at"),
+                                            shop=self.capability_active("shop"))
                 lines.extend(("", ft.join(
-                    [ft.usage(command, actions) for command in commands
-                     if command.rsplit(" ", 1)[-1] in actions], " · ",
+                    [ft.usage(command, actions) for command in commands], " · ",
                 )))
         if self.capability_active("medical"):
             from world.actions.presentation import provider_verbs

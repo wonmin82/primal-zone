@@ -1,27 +1,27 @@
 """M04 웹 컨트롤은 실제 UUID를 보존하며 시간·전력은 순수 투영만 한다."""
 
-from world.actions.presentation import reference_json
+from world.actions.presentation import reference_json, target_label
+from world.actions.presentation_context import profile_snapshot
 
 
-def item_label(item):
-    from dataclasses import replace
-
+def item_label(item, caller=None):
     from world.content import ITEMS
-    from world.selection_numbers.api import descriptor, label, number_for
+    from world.selection_numbers.api import descriptor
 
-    record = descriptor(item)
-    return label(replace(record, number=number_for(record.reference))) if record else ITEMS[item.definition_id]["name"]
+    record = descriptor(item) if caller is not None else None
+    return (target_label(caller, record.reference) if record else None) or ITEMS[item.definition_id]["name"]
 
 
 def render(caller, index, reference, binding, observed_at=None):
-    from dataclasses import replace
-
     from world import firearm_service, lighting
     from world.actions.resolver import role_records
     from world.content import ITEMS
-    from world.selection_numbers.api import descriptor, label, number_for, resolve_reference
+    from world.selection_numbers.api import resolve_reference
 
     provider = resolve_reference(reference)
+    target_name = target_label(caller, reference, observed_at)
+    if provider is None or target_name is None:
+        return []
     action = index.actions[binding.action_id]
     operation = dict(binding.config)["operation"]
     if operation == "fill":
@@ -47,7 +47,7 @@ def render(caller, index, reference, binding, observed_at=None):
         key = index.verbs[action.verb_id].key
         return [{**control, "label": control["label"].rsplit(" · ", 1)[0] + " · " + key}
                 for control in controls]
-    combat = caller.profile_snapshot().get("combat_target")
+    combat = profile_snapshot(caller).get("combat_target")
     if combat and operation not in ("reload", "load", "light_on", "light_off", "light_status"):
         return []
     if operation in ("light_on", "light_off"):
@@ -69,7 +69,10 @@ def render(caller, index, reference, binding, observed_at=None):
         candidates = role_records(caller, declaration, refs)
         next_combinations = []
         for record in candidates:
+            selected_label = target_label(caller, record.reference, observed_at)
             entity = resolve_reference(record.reference)
+            if selected_label is None or entity is None:
+                continue
             if declaration.name == "source":
                 current_magazine = (operation == "load" and entity.location_kind == "inside"
                                     and entity.parent_item_id == provider.pk and entity.socket == "magazine")
@@ -80,6 +83,8 @@ def render(caller, index, reference, binding, observed_at=None):
                     if (snapshot.family != firearm_service.firearm_snapshot(provider).family
                             or snapshot.rounds <= 0 and not current_magazine):
                         continue
+            if declaration.name == "source" and current_magazine:
+                selected_label += " (현재 삽입)"
             for current, targets in combinations:
                 target = (resolve_reference(__reference(current["subject"][0]))
                           if "subject" in current else provider)
@@ -92,16 +97,11 @@ def render(caller, index, reference, binding, observed_at=None):
                     elif operation == "power_insert":
                         if ITEMS[entity.definition_id]["power_source"]["type"] != ITEMS[provider.definition_id]["light_source"]["power_type"]:
                             continue
-                selected_label = label(record)
-                if declaration.name == "source" and current_magazine:
-                    selected_label += " (현재 삽입)"
                 next_combinations.append(({**current, declaration.name: [reference_json(record.reference)]},
                                           [*targets, selected_label]))
         combinations = next_combinations
         if not combinations:
             return []
-    record = descriptor(provider)
-    target = label(replace(record, number=number_for(reference)))
     defaults = {argument.name: argument.default for argument in action.arguments if argument.default is not None}
     key = index.verbs[action.verb_id].key
     output = []
@@ -111,7 +111,7 @@ def render(caller, index, reference, binding, observed_at=None):
             snapshot = firearm_service.magazine_snapshot(selected)
             if snapshot.rounds <= 0 or snapshot.ammo_type != ITEMS[defaults["ammo"]]["ammo_type"]:
                 continue
-        output.append({"label": " · ".join((target, *targets, key)), "description": action.help,
+        output.append({"label": " · ".join((target_name, *targets, key)), "description": action.help,
                        "action": {"action_id": action.id, "variant": "normal", "roles": current, "arguments": defaults}})
     return output
 
@@ -124,10 +124,13 @@ def fill_controls(caller, index, reference, binding):
     from world.content import ITEMS
     from world.selection_numbers.api import resolve_reference
 
-    if caller.profile_snapshot().get("combat_target"):
+    if profile_snapshot(caller).get("combat_target"):
         return []
     action = index.actions[binding.action_id]
     provider = resolve_reference(reference)
+    provider_label = target_label(caller, reference)
+    if provider is None or provider_label is None:
+        return []
     subject = next(iter([role for role in action.roles if role.name == "subject"]), None)
     source = next(iter([role for role in action.roles if role.name == "source"]))
     targets = role_records(caller, subject, {"provider": (reference,)}) if subject else (None,)
@@ -137,6 +140,9 @@ def fill_controls(caller, index, reference, binding):
     output = []
     for record in targets:
         target = resolve_reference(record.reference) if record else provider
+        child_label = target_label(caller, record.reference) if record else None
+        if target is None or (record and child_label is None):
+            continue
         snapshot = firearm_service.magazine_snapshot(target)
         if snapshot.rounds >= snapshot.capacity:
             continue
@@ -147,7 +153,7 @@ def fill_controls(caller, index, reference, binding):
         roles = {"provider": [reference_json(reference)], "source": [reference_json(sources[0].reference)]}
         if record:
             roles["subject"] = [reference_json(record.reference)]
-        label = item_label(provider) + (" · " + item_label(target) if record else "") + " · 채워"
+        label = provider_label + (" · " + child_label if record else "") + " · 채워"
         output.append({"label": label, "description": action.help,
                        "action": {"action_id": action.id, "variant": "normal", "roles": roles,
                                   "arguments": {"snapshot": version}}})

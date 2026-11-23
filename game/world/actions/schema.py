@@ -106,6 +106,7 @@ class RoleDefinition:
     location_kinds: tuple[str, ...] = ()
     scope_root: ScopeRoot = ScopeRoot.PROVIDER
     root_role: str | None = None
+    include_carried_inside: bool = False
 
     def __post_init__(self):
         object.__setattr__(self, "kinds", tuple(self.kinds))

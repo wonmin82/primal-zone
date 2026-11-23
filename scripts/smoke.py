@@ -361,7 +361,7 @@ class Scenario:
             single_sale = next(action for obj in first.state["interactables"] for action in obj["actions"]
                                if action.get("action", {}).get("action_id") == "shop.sell.weapon"
                                and action["action"]["roles"].get("subject", [{}])[0].get("identity") == item_id)
-            assert single_sale["label"] == "절단마체테 1 · 27칩 팔아"
+            assert single_sale["label"] == "절단마체테 · 27칩 팔아"
             assert "command" not in single_sale
             subject = single_sale["action"]["roles"]["subject"]
             assert subject == [{"kind": "item", "identity": item_id,

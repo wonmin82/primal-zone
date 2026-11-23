@@ -366,7 +366,9 @@ test('TEST-104-03 주변 행동과 지도 뷰포트의 위치·크기 및 키보
     enemies:more ? [{label:'적', hp:4, max_hp:4, can_attack:true}] : [],
     corpses:[], ground_loot:more ? [{loot:[{display_label:'전리품'}]}] : [], inventory:[],
     interactables:more ? Array.from({length:16}, (_, i) => ({
-      role:'npc', label:'주변 인물 ' + i, actions:[{label:'봐', command:'주변 인물 봐'}],
+      role:'npc', label:'주변 인물 ' + i, actions:[],
+      look_action:{action_id:'global.look_target', variant:'adapter',
+        roles:{subject:[{kind:'actor', identity:String(i), scope_id:'room:1'}]}, arguments:{}},
     })) : [],
   });
   const receive = async (revision, count, messages, selected = true) => {
@@ -698,7 +700,7 @@ test('TEST-66B-01 아이템 행의 안정 UUID Action과 장비 해제·재장�
   expect(weapon?.identity).toBeTruthy();
   const control = operation => a.page.locator('#inventory [data-action-invocation]').evaluateAll((buttons, { identity, operation }) => buttons.map(button => ({
     payload: JSON.parse(button.dataset.actionInvocation),
-  })).find(row => row.payload.roles.provider[0].identity === identity &&
+  })).find(row => row.payload.roles.provider?.[0]?.identity === identity &&
     row.payload.action_id.endsWith('.' + operation))?.payload, {identity: weapon.identity, operation});
   const info = await control('information');
   expect(info.roles.subject[0].identity).toBe(weapon.identity);
@@ -771,6 +773,8 @@ test('TEST-66B-01 아이템 행의 안정 UUID Action과 장비 해제·재장�
 
 test('TEST-66C-01 바닥 전리품 안정 UUID·중복 및 오래된 요청 거절·텍스트 동등 지급', async ({ actors }) => {
   const a = await actors.create(0, { width: 1280, height: 900 });
+  await a.command('남');
+  expect(a.state.zone).toBe('hq_concourse');
   const count = () => a.state.inventory.filter(item => item.id === 'scrap').reduce((sum, item) => sum + item.count, 0);
   const initialIdentities = a.state.inventory.filter(item => item.id === 'scrap').map(item => item.identity).sort();
   const initial = count();
@@ -778,7 +782,7 @@ test('TEST-66C-01 바닥 전리품 안정 UUID·중복 및 오래된 요청 거�
   await a.command('회수부품 버려');
   expect(count()).toBe(initial - 1);
   const entry = a.state.ground_loot.flatMap(source => source.loot).find(item => item.id === 'scrap');
-  expect(entry.label).toBe('회수부품 1');
+  expect(entry.label).toBe('회수부품');
   expect(entry?.action.action_id).toBe('loot.take');
   const original = entry.action;
   expect(original.roles.source[0].identity).toBeTruthy();
@@ -840,5 +844,81 @@ test('TEST-66C-01 바닥 전리품 안정 UUID·중복 및 오래된 요청 거�
     .toEqual(replacement.action.roles.source);
   await a.command(replacement.take_command);
   expect(count()).toBe(initial);
+
+  await a.command('회수부품 버려');
+  await a.command('회수부품 버려');
+  const sources = a.state.ground_loot.filter(source => source.loot.some(item => item.id === 'scrap'));
+  expect(sources.map(source => source.label)).toEqual(['바닥 전리품 1', '바닥 전리품 2']);
+  for (const source of sources.toReversed()) {
+    const item = source.loot.find(entry => entry.id === 'scrap');
+    const index = await buttons.evaluateAll((elements, expected) => elements.findIndex(element => {
+      const payload = JSON.parse(element.dataset.actionInvocation);
+      return payload.action_id === 'loot.take' && payload.arguments.quantity === 1 &&
+        payload.roles.subject?.length === 1 &&
+        payload.roles.subject[0].identity === expected;
+    }), item.action.roles.subject[0].identity);
+    expect(index).toBeGreaterThanOrEqual(0);
+    await expect(buttons.nth(index)).toContainText(source.id === sources[1].id ? source.label : '바닥 전리품');
+    await buttons.nth(index).click();
+    await expect.poll(() => a.state.ground_loot.some(row => row.id === source.id)).toBe(false);
+    if (source.id === sources[1].id) {
+      expect(a.state.ground_loot.find(row => row.id === sources[0].id)?.label).toBe('바닥 전리품');
+    }
+  }
+  expect(count()).toBe(initial);
+  expect(a.errors).toEqual([]);
+});
+
+for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
+  test(`TEST-108-${viewport.width} 공개 대상의 안정 관찰 버튼`, async ({ actors }) => {
+    const a = await actors.create(0, viewport);
+    await a.command('남');
+    await a.command('서');
+    expect(a.state.zone).toBe('dock');
+    const target = a.state.interactables.find(row => row.look_action && row.role === 'npc');
+    expect(target).toBeTruthy();
+    const buttons = a.page.locator('#context-actions [data-action-invocation]');
+    const index = await buttons.evaluateAll((elements, expected) => elements.findIndex(element =>
+      JSON.stringify(JSON.parse(element.dataset.actionInvocation)) === JSON.stringify(expected)), target.look_action);
+    expect(index).toBeGreaterThanOrEqual(0);
+    const prompts = a.prompts;
+    await buttons.nth(index).click();
+    await expect.poll(() => a.prompts).toBeGreaterThan(prompts);
+    await expect(a.page.locator('#log .sheet').last()).toContainText(target.name);
+    expect(a.errors).toEqual([]);
+  });
+}
+
+test('TEST-110-INSIDE 장전 아이템 행의 실제 안정 관찰과 인용 조회', async ({ actors }) => {
+  const a = await actors.create(1, { width: 390, height: 844 });
+  for (const command of ['남', '승강기', '5층', '동', '북']) await a.command(command);
+  expect(a.state.zone).toBe('weapon_shop');
+  await a.command('정찰권총 사');
+  const weapon = a.state.inventory.find(item => item.id === 'scout_pistol');
+  const child = a.state.inventory.find(item => item.location === 'inside' && item.magazine);
+  expect(child?.identity).toBeTruthy();
+  expect(child.selector).toContain(weapon.name);
+
+  const buttons = a.page.locator('#inventory [data-action-invocation]');
+  const index = await buttons.evaluateAll((elements, subject) => elements.findIndex(element => {
+    const payload = JSON.parse(element.dataset.actionInvocation);
+    return payload.action_id === 'global.look_target' && payload.roles.subject[0].identity === subject;
+  }), child.identity);
+  expect(index).toBeGreaterThanOrEqual(0);
+  const action = JSON.parse(await buttons.nth(index).getAttribute('data-action-invocation'));
+  expect(action.roles.subject[0]).toEqual({ kind:'item', identity:child.identity, scope_id:'inside:' + weapon.identity });
+  const prompts = a.prompts;
+  const detail = a.page.locator('#log .log-entry').filter({
+    has: a.page.locator('.semantic-item', { hasText: child.name }),
+  });
+  const before = await detail.count();
+  await buttons.nth(index).click();
+  await expect.poll(() => a.prompts).toBeGreaterThan(prompts);
+  await expect(detail).toHaveCount(before + 1);
+  const observed = await detail.last().textContent();
+  await a.command(`"${child.name}" 1 봐`);
+  await expect(detail).toHaveCount(before + 2);
+  await expect(detail.last()).toHaveText(observed);
+  expect(a.state.inventory.some(item => item.identity === child.identity && item.location === 'inside')).toBe(true);
   expect(a.errors).toEqual([]);
 });

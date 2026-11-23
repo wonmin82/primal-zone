@@ -234,6 +234,12 @@
     el.dataset.actionInvocation = JSON.stringify(invocation);
     return el;
   }
+  function inventoryActionTarget(action) {
+    const roles = action.roles;
+    const reference = roles.provider?.[0] ??
+      (action.action_id === "global.look_target" ? roles.subject?.[0] : null);
+    return reference?.kind === "item" ? reference : null;
+  }
   function command(text) {
     if (!playing) { if (!dialog.open) dialog.showModal(); return; }
     if (!send("text", [text]) || !text.trim() || text === "idle") return;
@@ -411,11 +417,11 @@
     byId("xp").max = state.xp_next - state.xp_floor;
     byId("xp").value = state.level >= state.max_level ? byId("xp").max : state.xp - state.xp_floor;
     renderExits(state.exit_details);
-    const actions = state.enemies.map((enemy) => {
+    const actions = state.enemies.flatMap((enemy) => {
       const el = actionButton(enemy.label + " " + enemy.hp + "/" + enemy.max_hp + (enemy.can_attack ? " 사냥" : " · 다른 그룹 교전 중"), enemy.attack_action);
       el.replaceChildren(semantic("hostile", enemy.label), " " + enemy.hp + "/" + enemy.max_hp + (enemy.can_attack ? " 사냥" : " · 다른 그룹 교전 중"));
       el.disabled = !enemy.can_attack;
-      return el;
+      return enemy.look_action ? [el, actionButton(enemy.label + " 봐", enemy.look_action)] : [el];
     });
     actions.push(...duelControls(state.duels || [], state.server_now));
     if (state.corpses.length > 1 && state.loot_actions?.corpses) {
@@ -427,7 +433,7 @@
       const title = document.createElement("p"); title.className = "loot-label";
       title.replaceChildren(semantic("remains", corpse.label), " · ", semantic("remains", corpse.name));
       actions.push(title);
-      actions.push(button(corpse.label + " 봐", corpse.look_command));
+      if (corpse.look_action) actions.push(actionButton(corpse.label + " 봐", corpse.look_action));
       if (corpse.loot.length && corpse.take_action) {
         const all = actionButton(corpse.label + " 전리품 회수", corpse.take_action);
         all.disabled = !corpse.loot.some((item) => item.can_take); actions.push(all);
@@ -443,10 +449,22 @@
       all.disabled = !state.ground_loot.some((source) => source.loot.some((item) => item.can_take));
       actions.push(all);
     }
-    for (const source of state.ground_loot) for (const item of source.loot) {
-      const el = actionButton("바닥 · " + item.display_label + " → " + (item.protected ? item.assigned_name : "자유 획득"), item.action);
-      el.replaceChildren("바닥 · ", semantic(item.kind === "currency" ? "reward" : "item", item.display_label), " → ", semantic(item.protected ? "player" : "muted", item.protected ? item.assigned_name : "자유 획득"));
-      el.disabled = !item.can_take || !item.action; actions.push(el);
+    for (const source of state.ground_loot) {
+      const label = source.label || "바닥 전리품";
+      if (!source.loot.length) {
+        const title = document.createElement("p");
+        title.className = "loot-label";
+        title.append(semantic("item", label));
+        actions.push(title);
+      }
+      for (const item of source.loot) {
+        const rights = item.protected ? item.assigned_name : "자유 획득";
+        const el = actionButton(label + " · " + item.display_label + " → " + rights, item.action);
+        el.replaceChildren(semantic("item", label), " · ", semantic(item.kind === "currency" ? "reward" : "item", item.display_label),
+          " → ", semantic(item.protected ? "player" : "muted", rights));
+        el.disabled = !item.can_take || !item.action;
+        actions.push(el);
+      }
     }
     renderGrowth(state);
     const party = state.party;
@@ -491,14 +509,20 @@
     const invitation = state.invitation;
     byId("party-invitation").hidden = !invitation || pendingTime(invitation, state.server_now).expired;
     byId("party-inviter").textContent = invitation ? invitation.inviter + "의 일행 초청 · " + pendingTime(invitation, state.server_now).label : "";
-    for (const object of state.interactables) for (const action of object.actions) {
-      const el = action.action ? actionButton(object.label + " " + action.label, action.action) : button(object.label + " " + action.label, action.command);
-      el.replaceChildren(semantic(object.role, object.label), " ", semantic("command", action.label));
-      actions.push(el);
+    for (const object of state.interactables) {
+      const controls = object.actions.filter((row) => row.action);
+      if (object.look_action && !controls.some((row) => row.action.action_id === "global.look_target")) {
+        controls.unshift({label: "봐", action: object.look_action});
+      }
+      for (const control of controls) {
+        const el = actionButton(object.label + " " + control.label, control.action);
+        el.replaceChildren(semantic(object.role, object.label), " ", semantic("command", control.label));
+        actions.push(el);
+      }
     }
     byId("context-actions").replaceChildren(...actions);
     for (const action of state.action_controls || []) {
-      if (action.action.roles.provider?.[0]?.kind !== "item") {
+      if (!inventoryActionTarget(action.action)) {
         byId("context-actions").append(actionButton(action.label, action.action));
       }
     }
@@ -517,8 +541,8 @@
         row.append(mark);
       }
       for (const control of state.action_controls || []) {
-        const provider = control.action.roles.provider?.[0];
-        if (provider?.kind === "item" && provider.identity === item.identity) {
+        const target = inventoryActionTarget(control.action);
+        if (target && target.identity === item.identity) {
           row.append(actionButton(control.label, control.action));
         }
       }

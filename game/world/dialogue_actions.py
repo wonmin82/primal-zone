@@ -12,6 +12,8 @@ from .actions.schema import (
     EffectDefinition,
     ExecutionPolicy,
     GlobalSource,
+    ReferenceKind,
+    RoleDefinition,
     ScopeRoot,
     ServiceDefinition,
     SyntaxVariant,
@@ -33,6 +35,14 @@ def speech(context):
             npc, intent = dialogue.resolve_keyword(caller, token, effect.session)
             request.update(npc=npc, intent=intent, selection=token if intent.mutates_state else None)
             original = f"{npc.key}에게 {intent.keyword}"
+        elif effect.roles.get("subject"):
+            npc, = effect.roles["subject"]
+            intent = next(iter([intent for intent in dialogue.available_intents(caller, npc)
+                                if intent.intent_id == "greeting"]), None)
+            if intent is None:
+                raise RuleError("원래 NPC에게 지금 말을 걸 수 없습니다.")
+            request.update(npc=npc, intent=intent)
+            original = f"{npc.key}에게 {intent.keyword}"
         else:
             original = dialogue.validate_message(effect.arguments.get("message"))
             explicit, body = dialogue.explicit_target(caller, original)
@@ -53,7 +63,8 @@ def speech(context):
         if "body" in request:
             dialogue.react(caller, request["body"], request["explicit"], invoke=select)
         elif not request["intent"].mutates_state:
-            dialogue.execute(caller, request["npc"], request["intent"])
+            current = effect.roles.get("subject", (request["npc"],))
+            dialogue.execute(caller, current[0], request["intent"])
         return ActionResult()
 
     read = context.effect("read_dialogue", read_dialogue)
@@ -79,20 +90,29 @@ def speech(context):
     return ActionResult()
 
 
+SPEECH_ACTION = ActionDefinition(
+    "dialogue.speech", "dialogue.speech_verb", (), (SyntaxVariant("speech", "", show_control=False),),
+    arguments=(ArgumentDefinition("message", required=False), ArgumentDefinition("token", required=False)),
+)
+GREET_ACTION = ActionDefinition(
+    "global.greet_target", "dialogue.greet_verb",
+    (RoleDefinition("subject", (ReferenceKind.ACTOR,), scope_root=ScopeRoot.CURRENT_ROOM),),
+    (SyntaxVariant("adapter", "", show_control=False),),
+)
+
 PACKAGE = ContentPackage(
     "dialogue.package",
-    verbs=(VerbDefinition("dialogue.speech_verb", "공개발화", adapter_only=True),),
-    actions=(ActionDefinition(
-        "dialogue.speech", "dialogue.speech_verb", (), (SyntaxVariant("speech", "", show_control=False),),
-        arguments=(ArgumentDefinition("message", required=False), ArgumentDefinition("token", required=False)),
-    ),),
+    verbs=(VerbDefinition("dialogue.speech_verb", "공개발화", adapter_only=True),
+           VerbDefinition("dialogue.greet_verb", "전역-말걸기", adapter_only=True)),
+    actions=(SPEECH_ACTION, GREET_ACTION),
     services=(ServiceDefinition("dialogue.speech_service", speech, effects=(
         EffectDefinition("speech", ExecutionPolicy.READ_ONLY),
         EffectDefinition("read_dialogue", ExecutionPolicy.READ_ONLY),
         EffectDefinition("quest", ExecutionPolicy.STATE_CHANGE),
     )),),
-    bindings=(ActionBinding("dialogue.speech_binding", "", "dialogue.speech", "dialogue.speech_service",
-                            source=GlobalSource(ScopeRoot.CURRENT_ROOM)),),
+    bindings=tuple(ActionBinding(action.id + "_binding", "", action.id, "dialogue.speech_service",
+                                  source=GlobalSource(ScopeRoot.CURRENT_ROOM))
+                   for action in (SPEECH_ACTION, GREET_ACTION)),
 )
 
 

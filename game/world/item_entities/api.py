@@ -375,11 +375,12 @@ def children_of(item):
     return ItemEntity.objects.filter(parent_item_id=item_id(item)).order_by("sequence")
 
 
-def items_owned_by(owner_object):
+def items_owned_by(owner_object, *, root_locations=None):
     """직접 위치와 inside 후손을 함께 조회한다. 개인 보관의 owner는 탐사자다."""
-    identities = set(
-        ItemEntity.objects.filter(owner_object=owner_object).values_list("pk", flat=True)
-    )
+    roots = ItemEntity.objects.filter(owner_object=owner_object)
+    if root_locations is not None:
+        roots = roots.filter(location_kind__in=root_locations)
+    identities = set(roots.values_list("pk", flat=True))
     pending = identities
     while pending:
         pending = (
@@ -388,3 +389,28 @@ def items_owned_by(owner_object):
         )
         identities.update(pending)
     return ItemEntity.objects.filter(pk__in=identities).order_by("sequence")
+
+
+CARRIED_LOCATIONS = (ItemEntity.Location.INVENTORY, ItemEntity.Location.EQUIPMENT)
+
+
+def carried_items(owner):
+    """현재 소지·장착 Root에 연결된 후손만 순번대로 읽는다."""
+    from collections import defaultdict
+
+    rows = tuple(items_owned_by(owner, root_locations=CARRIED_LOCATIONS))
+    children = defaultdict(list)
+    pending = []
+    for row in rows:
+        if row.location_kind == ItemEntity.Location.INSIDE and row.owner_object_id is None and row.parent_item_id:
+            children[row.parent_item_id].append(row)
+        elif (row.location_kind in CARRIED_LOCATIONS and row.owner_object_id == owner.pk
+              and row.parent_item_id is None):
+            pending.append(row)
+    reachable = set()
+    while pending:
+        row = pending.pop()
+        if row.pk not in reachable:
+            reachable.add(row.pk)
+            pending.extend(children[row.pk])
+    return [row for row in rows if row.pk in reachable]

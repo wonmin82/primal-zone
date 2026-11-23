@@ -22,6 +22,109 @@ from .schema import (
     VerbDefinition,
 )
 
+LOOK_TARGET = RoleDefinition("subject", (
+    ReferenceKind.ACTOR, ReferenceKind.ENEMY, ReferenceKind.OBJECT,
+    ReferenceKind.CORPSE, ReferenceKind.DOOR, ReferenceKind.ITEM,
+), scope_root=ScopeRoot.CALLER, include_carried_inside=True)
+
+
+def target_action(name, reference):
+    from .presentation import reference_json
+
+    return {
+        "action_id": "global." + name,
+        "variant": "adapter",
+        "roles": {"subject": [reference_json(reference)]},
+        "arguments": {},
+    }
+
+
+def _item_appearance(caller, item, observed_at):
+    from world.content import ITEMS
+    from world.equipment_service import selector_label, state_summary
+    from world.lighting_service import status as light_status
+
+    definition = ITEMS[item.definition_id]
+    detail = (light_status(caller, item, observed_at) if definition.get("light_source") and not item.parent_item_id
+              else state_summary(item, observed_at=observed_at))
+    return ft.compact(ft.token("item", selector_label(caller, item, with_parents=True)),
+                      definition.get("description", "탐사 중 사용하는 물품이다."),
+                      detail, definition.get("firearm_family", ""))
+
+
+def _room_appearance(caller, entity, observed_at):
+    from world.state import duel_observation
+
+    return ft.join((caller.at_look(entity, observed_at=observed_at),
+                    *duel_observation(entity, caller, observed_at)), "\n")
+
+
+def _observe_target(caller, entity, kind, observed_at):
+    if kind == ReferenceKind.ITEM:
+        return _item_appearance(caller, entity, observed_at)
+    from world.observation import can_perceive, context_for, perceives
+
+    observation = context_for(caller, observed_at=observed_at)
+    if not can_perceive(entity, observation) or (
+            getattr(entity, "supports_shared_combat", False) and entity.db.state != "alive"):
+        raise rules.RuleError("지금 살펴볼 수 없는 대상입니다.")
+    if kind == ReferenceKind.DOOR:
+        from world.content.doors import DOORS
+        from world.doors import DoorTarget, describe_door, identity_for_exit
+
+        identity = identity_for_exit(entity)
+        if identity not in DOORS or not perceives(observation.snapshot, "normal"):
+            raise rules.RuleError("지금 살펴볼 수 없는 대상입니다.")
+        target = DoorTarget(identity, entity.key, entity.pk)
+        return describe_door(caller, target, observed_at)
+    return _room_appearance(caller, entity, observed_at)
+
+
+def prepare_observation(caller, invocation):
+    from world.lifecycle import reconcile_room
+
+    if caller.location:
+        reconcile_room(caller.location)
+
+
+def look_target(context):
+    from commands.character import time
+
+    entity, = context.roles["subject"]
+    reference, = dict(context.invocation.roles)["subject"]
+    observed_at = time()
+    output = _observe_target(context.caller, entity, reference.kind, observed_at)
+    after_change(lambda: context.caller.push_state(observed_at=observed_at))
+    return ActionResult(messages=(output,))
+
+
+def select_look_reference(caller, selector, observed_at):
+    from typeclasses.loot import DroppedLoot
+    from world.equipment_service import entity_runtime
+    from world.item_entities.api import carried_items
+    from world.observation import context_for, perceives
+    from world.selection_numbers.api import descriptor, numbered_records
+    from world.targets import room_objects
+
+    entities = [entity for entity in room_objects(caller, observed_at=observed_at)
+                if not isinstance(entity, DroppedLoot)]
+    if entity_runtime(caller):
+        entities.extend(carried_items(caller))
+    candidates = {record.reference: (record, entity) for entity in entities
+                  if (record := descriptor(entity)) is not None and record.reference.kind in LOOK_TARGET.kinds
+                  and record.name == selector.name}
+    doors = [ref for ref in candidates if ref.kind == ReferenceKind.DOOR]
+    if doors and not perceives(context_for(caller, observed_at=observed_at).snapshot, "normal"):
+        for ref in doors:
+            del candidates[ref]
+    matches = [record.reference for record in numbered_records([record for record, _ in candidates.values()])
+               if record.number == selector.index]
+    if len(matches) != 1:
+        raise rules.RuleError("지금 살펴볼 수 없는 대상입니다." if not matches else
+                              "여러 범위의 대상이 이 이름과 번호에 일치합니다.")
+    reference, = matches
+    return reference, candidates[reference][1]
+
 
 def look(context):
     from commands.character import time
@@ -33,12 +136,32 @@ def look(context):
     from world.content import ITEMS
     from world.lifecycle import reconcile_room
     from world.target_presentation import corpse_overview
-    from world.targets import Mode, item_selector, names, parse_selector, resolve, room_objects
+    from world.targets import (
+        Mode,
+        item_selector,
+        names,
+        parse_exact_selector,
+        parse_selector,
+        resolve,
+        room_objects,
+    )
 
     name = context.arguments.get("query", "").strip()
     observed_at = time()
     from world.content.economy import CURRENCY
     from world.currency import is_currency
+
+    exact = parse_exact_selector(name)
+    if exact:
+        if caller.location:
+            reconcile_room(caller.location, observed_at)
+        try:
+            reference, entity = select_look_reference(caller, exact, observed_at)
+            messages.append(_observe_target(caller, entity, reference.kind, observed_at))
+        except rules.RuleError as error:
+            messages.append(ft.token("error", str(error)))
+        after_change(lambda: caller.push_state(observed_at=observed_at))
+        return ActionResult(messages=messages)
 
     if is_currency(name):
         messages.append(ft.compact(CURRENCY["name"], CURRENCY["description"]))
@@ -46,7 +169,8 @@ def look(context):
     if name and caller.location:
         from world.doors import look_door
         try:
-            door_output = look_door(caller, name, observed_at)
+            # 인용처럼 생긴 무효 입력도 현재 방과 소지품의 실제 이름일 수 있다.
+            door_output = None if name.startswith('"') else look_door(caller, name, observed_at)
         except rules.RuleError as error:
             messages.append(ft.text(ft.token("error", str(error)), kind="error"))
             return ActionResult(messages=messages)
@@ -82,7 +206,11 @@ def look(context):
                 messages.append(ft.token("error", str(error)))
             return ActionResult(messages=messages)
         reconcile_room(caller.location, observed_at)
-        objects = room_objects(caller, observed_at=observed_at)
+        from world.actions.loot_presentation import ground_lookup_objects
+
+        objects = ground_lookup_objects(
+            caller, room_objects(caller, observed_at=observed_at), name, observed_at,
+        )
         profile = caller.profile_snapshot()
         inventory = {
             key: ITEMS[key]
@@ -94,6 +222,8 @@ def look(context):
                 name,
                 [n for obj in objects for n in names(obj)]
                 + [n for key, data in inventory.items() for n in (key, data["name"])],
+                b1=True,
+                literal_names=[obj.key for obj in objects] + [data["name"] for data in inventory.values()],
             )
             if matching(objects, selector):
                 selected = resolve(objects, selector, caller, observed_at=observed_at)
@@ -105,31 +235,17 @@ def look(context):
                         pool=[obj for obj in objects if isinstance(obj, Corpse)],
                     )
                 else:
-                    from world.state import duel_observation
-
                     output = ft.join(
-                        [ft.join((caller.at_look(obj, observed_at=observed_at),
-                                  *duel_observation(obj, caller, observed_at)), "\n") for obj in selected],
+                        [_room_appearance(caller, obj, observed_at) for obj in selected],
                         "\n\n",
                     )
                 messages.append(output)
             else:
-                from world.equipment_service import (
-                    entity_runtime,
-                    resolve_item,
-                    selector_label,
-                    state_summary,
-                )
+                from world.equipment_service import entity_runtime, resolve_item
 
                 if entity_runtime(caller):
-                    from world.lighting_service import status as light_status
-
                     item = resolve_item(caller, name, "봐")
-                    identity = item.definition_id
-                    detail = light_status(caller, item, observed_at) if ITEMS[identity].get("light_source") else state_summary(item)
-                    messages.append(ft.compact(ft.token("item", selector_label(caller, item)),
-                                               ITEMS[identity].get("description", "탐사 중 사용하는 물품이다."),
-                                               detail, ITEMS[identity].get("firearm_family", "")))
+                    messages.append(_item_appearance(caller, item, observed_at))
                     after_change(lambda: caller.push_state(observed_at=observed_at))
                     return ActionResult(messages=messages)
                 identity = item_selector(name, inventory, "봐")
@@ -242,7 +358,8 @@ def attack(context):
     enemy = (
         resolve(
             objects,
-            parse_selector(name, [n for obj in objects for n in names(obj)]),
+            parse_selector(name, [n for obj in objects for n in names(obj)], b1=True,
+                           literal_names=[obj.key for obj in objects]),
             caller,
             "때려",
             lambda obj: isinstance(obj, Actor) and obj.shared_combat_active,
@@ -305,7 +422,8 @@ def party_attack(context):
     target = web_combat_target(context) or caller.combat_target()
     if query.strip():
         pool = [obj for obj in room_objects(caller) if isinstance(obj, Actor) and obj.supports_shared_combat]
-        selector = parse_selector(query, [name for obj in pool for name in names(obj)])
+        selector = parse_selector(query, [name for obj in pool for name in names(obj)], b1=True,
+                                  literal_names=[obj.key for obj in pool])
         # 일행공격의 무번호 복수 후보 거절은 일반 공격의 기본 첫 대상과 다르다.
         if selector.mode == Mode.DEFAULT:
             matches = matching(pool, selector)
@@ -452,6 +570,7 @@ DUEL_ACTIONS = {"duel_start", "duel_act", "duel_surrender"}
 DUEL_ID = ArgumentDefinition("encounter_id", required=False)
 DECLARATIONS = (
     ("look", look, ExecutionPolicy.STATE_CHANGE, (QUERY,)),
+    ("look_target", look_target, ExecutionPolicy.STATE_CHANGE, ()),
     ("help", help_page, ExecutionPolicy.READ_ONLY, (QUERY,)),
     ("status", status, ExecutionPolicy.READ_ONLY, ()),
     ("return", return_home, ExecutionPolicy.STATE_CHANGE, ()),
@@ -477,12 +596,14 @@ PACKAGE = ContentPackage(
     verbs=tuple(VerbDefinition("global." + key + "_verb", "전역-" + key, adapter_only=True)
                 for key, _, _, _ in DECLARATIONS),
     actions=tuple(ActionDefinition("global." + key, "global." + key + "_verb",
+                                   (LOOK_TARGET,) if key == "look_target" else
                                    (COMBAT_TARGET,) if key in COMBAT_ACTIONS | DUEL_ACTIONS else (),
                                    (SyntaxVariant("adapter", "", show_control=False),),
                                    arguments=(*arguments, COMBAT_GENERATION, COMBAT_LIFECYCLE)
                                    if key in COMBAT_ACTIONS else arguments)
                   for key, _, _, arguments in DECLARATIONS),
-    services=tuple(ServiceDefinition("global." + key + "_service", handler, policy=policy)
+    services=tuple(ServiceDefinition("global." + key + "_service", handler, policy=policy,
+                                     prepare=prepare_observation if key == "look_target" else None)
                    for key, handler, policy, _ in DECLARATIONS),
     bindings=tuple(ActionBinding("global." + key + "_binding", "", "global." + key,
                                  "global." + key + "_service", source=GlobalSource(ScopeRoot.CALLER))
