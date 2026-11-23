@@ -39,6 +39,14 @@ class VocabularyTests(WorldCommandTest):
             self.assertEqual(completed, [True])
         return "\n".join(str(call.args[0]) for call in output.call_args_list if call.args)
 
+    def test_attack_help_describes_persistent_selection_numbers(self):
+        output = self.raw("때려 도움")
+        self.assertIn("대상 번호는 고정된 선택 번호로", output)
+        self.assertIn("현재 방의 표시 순서와 다를 수 있습니다", output)
+        self.assertIn("남은 대상의 번호는 다시 매겨지지 않습니다", output)
+        self.assertIn("공격할 수 없는 대상은 거절합니다", output)
+        self.assertIn("갈퀴사냥룡 2 쳐", output)
+
     def test_inventory_aliases_and_removed_commands_are_not_active(self):
         # 제거된 명령의 불변성을 실제 10초 자연회복 경계와 분리한다.
         self.enterContext(patch("typeclasses.explorers.time", return_value=100))
