@@ -1,7 +1,7 @@
 """Storage 버튼은 현재 접근 가능한 실제 UUID를 전달한다. 조회 중 이동하지 않는다."""
 
 from world.actions.presentation import reference_json, target_label
-from world.actions.presentation_context import profile_snapshot
+from world.actions.presentation_context import item_presentation, profile_snapshot
 
 
 def render(caller, index, reference, binding, observed_at=None):
@@ -9,7 +9,6 @@ def render(caller, index, reference, binding, observed_at=None):
     from world import rules
     from world.actions.resolver import role_records
     from world.content import ITEMS
-    from world.item_entities.models import ItemEntity
     from world.item_entities.policy import can_item_operation
     from world.selection_numbers.api import descriptor, resolve_reference
 
@@ -21,16 +20,16 @@ def render(caller, index, reference, binding, observed_at=None):
         return []
     action = index.actions[binding.action_id]
     role = next(iter([role for role in action.roles if role.name == "subject"]))
-    records = role_records(caller, role, {"provider": (reference,)})
-    items = {str(item.pk): item for item in
-             ItemEntity.objects.filter(pk__in=[record.reference.identity for record in records])}
+    items = item_presentation(caller, observed_at)
+    records = role_records(caller, role, {"provider": (reference,)},
+                           cache=items.records, item_entities=items.entities)
     withdraw = dict(binding.config)["withdraw"]
     output = []
     for record in records:
         label = target_label(caller, record.reference, observed_at)
         if label is None:
             continue
-        item = items.get(record.reference.identity)
+        item = items.entities.get(record.reference)
         current = descriptor(item)
         if (current is None or current.reference != record.reference
                 or (not withdraw and item.location_kind != "inventory")

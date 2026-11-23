@@ -174,6 +174,36 @@ class StorageActionsTests(NativeItemTest):
         self.assertEqual(second.location_kind, "inventory")
         self.assertEqual(number_for(descriptor(second).reference), 2)
 
+    def test_store_controls_reuse_role_items_and_recheck_equipment_location(self):
+        from world.actions.presentation import reference_json
+        from world.selection_numbers import api as numbering
+
+        bandage = self.create("bandage", quantity=2)
+        weapon = self.create("explorer_machete")
+        locker_ref = descriptor(self.locker).reference
+        bandage_ref = descriptor(bandage).reference
+        weapon_ref = descriptor(weapon).reference
+
+        def controls():
+            return action_controls(self.char1, self.index, provider_reference=locker_ref, verb_key="넣어")
+
+        with patch.object(numbering, "resolve_reference", wraps=numbering.resolve_reference) as lookup:
+            rows = controls()
+            self.assertFalse(any(call.args[0] in (bandage_ref, weapon_ref) for call in lookup.call_args_list))
+        old_button = next(row for row in rows
+                          if row["action"]["roles"]["subject"] == [reference_json(weapon_ref)])
+        api.move_item_tree(weapon, location_kind="equipment", owner_object=self.char1,
+                           slot="hands", operation="equip")
+        weapon.refresh_from_db()
+        self.assertEqual(descriptor(weapon).reference, weapon_ref)
+        self.assertEqual(
+            [(row["action"]["roles"]["subject"], row["action"]["arguments"]) for row in controls()],
+            [([reference_json(bandage_ref)], {"count": "1"}), ([reference_json(bandage_ref)], {"count": "모두"})],
+        )
+        before = self.atomic_state()
+        self.assertEqual(self.invoke(old_button).status, ResultStatus.REFUSED)
+        self.assertEqual(self.atomic_state(), before)
+
     def test_stale_uuid_rejects_replacement_and_rollback_after_partial_work(self):
         first = self.create("bandage", quantity=2)
         control = self.control(item=first, provider=self.locker)
