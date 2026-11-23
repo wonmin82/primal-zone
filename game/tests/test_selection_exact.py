@@ -155,3 +155,51 @@ class NativeSelectionNumberTests(NativeItemTest):
             invocation = dispatch_text(self.char1, get_index(), "game.information", command, "정보")
             self.assertEqual(dict(invocation.roles)["subject"], (descriptor(second).reference,))
         self.assertNotEqual(descriptor(first).reference, descriptor(second).reference)
+
+    def test_text_default_keeps_sequence_over_uuid_and_number_order(self):
+        from unittest.mock import patch
+        from uuid import UUID
+
+        from world.actions.resolver import dispatch_text, role_records, select_role
+        from world.item_entities.models import ItemEntity
+        from world.selection_numbers import api as numbering
+
+        with patch.object(ItemEntity._meta.pk, "_get_default",
+                          side_effect=(UUID(int=3), UUID(int=2), UUID(int=1))):
+            hole = self.create("bandage")
+            oldest = api.create_item("bandage", location_kind="inventory", owner_object=self.char2)
+            newest = self.create("bandage")
+        api.delete_item(hole)
+        oldest = api.move_item_tree(oldest, location_kind="inventory", owner_object=self.char1)
+        original = descriptor(oldest).reference
+        later = descriptor(newest).reference
+        self.assertLess(oldest.sequence, newest.sequence)
+        self.assertGreater(oldest.pk, newest.pk)
+        self.assertEqual((number_for(later), number_for(original)), (2, 3))
+        role = RoleDefinition("subject", (ReferenceKind.ITEM,), DefaultTargetPolicy.FIRST_LEGACY_ORDER,
+                              allow_all=True, definition_ids=("bandage",))
+        with patch.object(numbering, "resolve_reference", wraps=numbering.resolve_reference) as lookup:
+            result = dispatch_text(self.char1, get_index(), "game.information", "붕대", "정보")
+            self.assertEqual(dict(result.roles)["subject"], (original,))
+            self.assertFalse(any(call.args[0].kind == ReferenceKind.ITEM for call in lookup.call_args_list))
+        self.assertEqual(select_role(self.char1, role, "붕대 2"), (later,))
+        self.assertEqual(select_role(self.char1, role, '"붕대" 3'), (original,))
+        self.assertEqual(select_role(self.char1, role, "붕대 모두"), (later, original))
+
+        records = role_records(self.char1, role)
+        api.move_item_tree(oldest, location_kind="inventory", owner_object=self.char2)
+        # 이미 입력된 후보의 실물이 사라졌다면 다른 UUID로 바꾸지 않는다.
+        self.assertEqual(select_records(role, records, "붕대"), (original,))
+        self.assertEqual(select_role(self.char1, role, "붕대"), (later,))
+
+    def test_mixed_legacy_candidates_compare_item_sequence_and_object_pk(self):
+        from evennia import create_object
+        from typeclasses.interactables import PersonalLocker
+
+        item = self.create("bandage")
+        locker = create_object(PersonalLocker, key="개인 보관함", location=self.char1.location)
+        records = (descriptor(locker), descriptor(item))
+        role = RoleDefinition("subject", (ReferenceKind.OBJECT, ReferenceKind.ITEM),
+                              DefaultTargetPolicy.FIRST_LEGACY_ORDER, required=False)
+        expected = item if item.sequence < locker.pk else locker
+        self.assertEqual(select_records(role, records, None), (descriptor(expected).reference,))

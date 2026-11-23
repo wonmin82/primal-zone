@@ -1,16 +1,15 @@
 """현재 상태를 읽기만 하는 아이템 Action controls. UUID payload는 공통 경계를 쓴다."""
 
 from world.actions.presentation import reference_json, target_label
-from world.actions.presentation_context import profile_snapshot
+from world.actions.presentation_context import item_presentation, profile_snapshot
 
 
 def render(caller, index, reference, binding, observed_at=None):
-    from world.selection_numbers.api import resolve_reference
-
-    item = resolve_reference(reference)
     operation = dict(binding.config)["operation"]
     if operation.startswith("advise_"):
         return []
+    items = item_presentation(caller, observed_at)
+    item = items.item(reference)
     if item is None or item.owner_object_id != caller.pk or item.parent_item_id or item.location_kind not in ("inventory", "equipment"):
         return []
     target = target_label(caller, reference, observed_at)
@@ -21,7 +20,8 @@ def render(caller, index, reference, binding, observed_at=None):
 
         action = index.actions[binding.action_id]
         subject = next(iter([role for role in action.roles if role.name == "subject"]))
-        children = role_records(caller, subject, {"provider": (reference,)})
+        children = role_records(caller, subject, {"provider": (reference,)},
+                                cache=items.records, item_entities=items.entities)
         controls = []
         for child in children:
             child_label = target_label(caller, child.reference, observed_at)

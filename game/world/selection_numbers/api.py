@@ -285,6 +285,20 @@ def _numbered_entities(rows, *, include_parents):
     return result
 
 
+def resolve_references(references):
+    """복수의 안정 참조를 종류별로 읽고 단건 해석과 같은 현재 Scope를 확인한다."""
+    entities, rows = {}, []
+    for reference in dict.fromkeys(references):
+        if reference.kind in (ReferenceKind.ROOM, ReferenceKind.INVENTORY):
+            entities[reference] = resolve_reference(reference)
+        elif (key := _reference_key(reference)) is not None:
+            rows.append((reference, key, None))
+    for ref, _, entity, current in _numbered_entities(rows, include_parents=False):
+        if current and current.reference == ref:
+            entities[ref] = entity
+    return entities
+
+
 def _load_item_parents(items):
     """현재 조회의 parent 관계만 깊이별로 읽어 기존 root 검사를 재사용한다."""
     from world.item_entities.models import ItemEntity
