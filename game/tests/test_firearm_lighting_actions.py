@@ -60,6 +60,79 @@ class FirearmLightingActionsTests(NativeItemTest):
         first.refresh_from_db()
         self.assertEqual(first.location_kind, "inventory")
 
+    def test_render_reuses_shared_scope_and_preserves_each_guns_source(self):
+        from world.actions.presentation import reference_json
+        from world.actions.schema import ReferenceKind
+        from world.selection_numbers import api as selections
+
+        ready = self.gun("partial", 15)
+        empty = self.gun("empty")
+        best = self.create("mag_556_standard", state={"rounds": 12})
+        self.create("mag_556_standard", state={"rounds": 0})
+        self.create("mag_9_extended", state={"rounds": 15})
+        with patch.object(selections, "records_for", wraps=selections.records_for) as reads:
+            controls = action_controls(self.char1, self.index, observed_at=100)
+
+        carried_scope = f"character:{self.char1.pk}"
+        self.assertEqual(sum(
+            call.kwargs.get("check_visibility") is True
+            and call.kwargs.get("kinds") == (ReferenceKind.ITEM,)
+            and carried_scope in call.kwargs.get("scope_ids", ())
+            for call in reads.call_args_list
+        ), 1)
+        explicit = [row for row in controls
+                    if row["action"]["action_id"] == "item_ops.load" and row["label"].endswith(" · 장전")]
+        typed = {str(gun.pk): [row["action"]["roles"]["source"][0] for row in explicit
+                              if row["action"]["roles"]["provider"][0]["identity"] == str(gun.pk)]
+                 for gun in (ready, empty)}
+        for gun in (ready, empty):
+            sources = (best, guns.loaded_magazine_item(gun))
+            self.assertEqual(typed[str(gun.pk)], [reference_json(descriptor(item).reference) for item in sources])
+        automatic = [row["action"] for row in controls if row["label"].endswith(" · 재장전")]
+        self.assertEqual(automatic, [{
+            "action_id": "item_ops.load",
+            "variant": "normal",
+            "roles": {
+                "provider": [reference_json(descriptor(empty).reference)],
+                "source": [reference_json(descriptor(best).reference)],
+            },
+            "arguments": {},
+        }])
+
+    def test_reload_keeps_domain_winner_even_without_a_number(self):
+        from world.selection_numbers.models import SelectionNumber
+
+        gun = self.gun()
+        numbered = self.create("mag_556_standard", state={"rounds": 7})
+        unnumbered = self.create("mag_556_standard", state={"rounds": 12})
+        stable = descriptor(unnumbered).reference
+        SelectionNumber.objects.filter(kind=stable.kind, identity=stable.identity).delete()
+
+        controls = action_controls(self.char1, self.index, observed_at=100)
+        self.assertFalse(any(row["label"].endswith(" · 재장전") for row in controls))
+        self.assertEqual(self.control("load", gun)["action"]["roles"]["source"][0]["identity"], str(numbered.pk))
+
+    def test_render_refreshes_sources_after_owner_change_without_retargeting_old_button(self):
+        gun = self.gun()
+        original = self.create("mag_556_standard", state={"rounds": 12})
+        fallback = self.create("mag_556_standard", state={"rounds": 7})
+        initial = next(row for row in action_controls(self.char1, self.index, observed_at=100)
+                       if row["label"].endswith(" · 재장전"))
+        self.assertEqual(initial["action"]["roles"]["source"][0]["identity"], str(original.pk))
+
+        api.move_item_tree(original, location_kind="inventory", owner_object=self.char2)
+        foreign_gun = guns.create_firearm("guard_carbine", owner_object=self.char2)
+        for caller, target, source in ((self.char2, foreign_gun, original), (self.char1, gun, fallback)):
+            controls = [row for row in action_controls(caller, self.index, observed_at=100)
+                        if row["label"].endswith(" · 재장전")]
+            self.assertEqual(len(controls), 1)
+            roles = controls[0]["action"]["roles"]
+            self.assertEqual(roles["provider"][0]["identity"], str(target.pk))
+            self.assertEqual(roles["source"][0]["identity"], str(source.pk))
+        before = self.atomic_state()
+        self.assertEqual(self.web(initial).status, ResultStatus.REFUSED)
+        self.assertEqual(self.atomic_state(), before)
+
     def test_explicit_magazine_uuid_web_and_repeat_dedup(self):
         from server.conf.primal_inputfuncs import pz_action
 

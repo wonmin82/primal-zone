@@ -3,8 +3,13 @@
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 
-from world.actions.presentation_context import presentation_scope, profile_snapshot
+from world.actions.presentation_context import (
+    item_presentation,
+    presentation_scope,
+    profile_snapshot,
+)
 from world.actions.resolver import provided
+from world.actions.schema import ReferenceKind
 from world.selection_display import displays, room_snapshot
 from world.selection_numbers.api import descriptor, numbered_records, resolve_reference
 
@@ -122,7 +127,8 @@ def action_controls(caller, index, observed_at=None, *, provider_reference=None,
 
 
 def _action_controls(caller, index, observed_at, *, provider_reference, verb_key):
-    pairs = provided(caller, index)
+    items = item_presentation(caller, observed_at)
+    pairs = provided(caller, index, item_entities=items.entities)
     if provider_reference is not None:
         pairs = tuple((reference, binding) for reference, binding in pairs if reference == provider_reference)
     if verb_key is not None:
@@ -133,7 +139,9 @@ def _action_controls(caller, index, observed_at, *, provider_reference, verb_key
         target = target_label(caller, reference, observed_at) if reference is not None else ""
         if target is None:
             continue
-        provider = resolve_reference(reference) if reference is not None else None
+        provider = None
+        if reference is not None:
+            provider = items.item(reference) if reference.kind == ReferenceKind.ITEM else resolve_reference(reference)
         service = index.services[binding.service_id]
         config = {argument.name: argument.default for argument in service.config_schema if argument.default is not None}
         config.update(binding.config)

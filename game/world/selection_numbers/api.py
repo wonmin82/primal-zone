@@ -302,7 +302,7 @@ def _load_item_parents(items):
 
 
 def records_for(caller, kind=None, scope_id=None, *, scope_ids=None, kinds=None, check_visibility=True,
-                references=None, require_carried_root=False):
+                references=None, require_carried_root=False, item_entities=None):
     """이미 발급된 번호만 관찰한다. 권한으로 재번호하지 않는다."""
     scopes = set(scope_ids) if scope_ids is not None else current_scopes(caller, kind)
     if scope_id is not None:
@@ -343,6 +343,8 @@ def records_for(caller, kind=None, scope_id=None, *, scope_ids=None, kinds=None,
         if (not check_visibility and not carried) or visible_entity(
                 caller, entity, require_carried_root=carried, get_observation=observation):
             result.append(replace(record, number=row.number))
+            if item_entities is not None and ref.kind == ReferenceKind.ITEM:
+                item_entities[ref] = entity
     return tuple(result)
 
 
