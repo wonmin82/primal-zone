@@ -83,6 +83,71 @@ class RoomNpcActionsTests(NativeItemTest, WorldCommandTest):
         self.assertIn("매입했다", self.raw("붕대 팔아"))
         self.assertEqual(self.char1.profile()["inventory"].get("bandage", 0), before)
 
+    def test_shop_and_burn_share_checked_inventory_and_refuse_stale_subjects(self):
+        from world.actions.presentation import reference_json
+        from world.actions.schema import ReferenceKind
+        from world.currency import format_currency
+        from world.selection_numbers import api as selections
+        from world.shop_service import resale
+
+        self.char1.location = self.char2.location = self.rooms["supply_shop"]
+        incinerator = search_tag("incinerator", category="primal_interactable")[0]
+        incinerator.location = self.char1.location
+        moved = self.create("bandage", quantity=2)
+        deleted = self.create("bandage")
+        foreign = api.create_item("bandage", location_kind="inventory", owner_object=self.char2)
+
+        def actions(rows, action_id):
+            return [row for row in rows if row["action"]["action_id"] == action_id]
+
+        def subjects(rows):
+            return [row["action"]["roles"]["subject"][0] for row in rows]
+
+        scope = f"character:{self.char1.pk}"
+        with patch.object(selections, "records_for", wraps=selections.records_for) as reads:
+            rows = action_controls(self.char1, self.index, observed_at=100)
+        self.assertEqual(sum(
+            call.kwargs.get("check_visibility") is True
+            and call.kwargs.get("kinds") == (ReferenceKind.ITEM,)
+            and scope in call.kwargs.get("scope_ids", ())
+            for call in reads.call_args_list
+        ), 1)
+        sale = actions(rows, "shop.sell.supply")
+        burn = actions(rows, "incinerator.burn")
+        moved_ref = reference_json(selections.descriptor(moved).reference)
+        deleted_ref = reference_json(selections.descriptor(deleted).reference)
+        for controls in (sale, burn):
+            self.assertEqual(subjects(controls), [moved_ref, moved_ref, deleted_ref])
+            self.assertEqual([row["action"]["arguments"]["count"] for row in controls], ["1", "모두", "1"])
+        self.assertEqual([row["label"] for row in sale], [
+            f"붕대 1 · {format_currency(resale(moved))} 팔아",
+            f"붕대 1 모두 팔아 · 총 {format_currency(2 * resale(moved))}",
+            f"붕대 2 · {format_currency(resale(deleted))} 팔아",
+        ])
+        value = actions(rows, "shop.value.bandage")
+        self.assertEqual(subjects(value), [moved_ref, moved_ref, deleted_ref])
+        self.assertEqual([row["action"]["variant"] for row in value], ["normal"] * 3)
+
+        moved = api.move_item_tree(moved, location_kind="inventory", owner_object=self.char2)
+        api.delete_item(deleted)
+        replacement = self.create("bandage")
+        other_rows = action_controls(self.char2, self.index, observed_at=100)
+        for identity in ("shop.sell.supply", "incinerator.burn"):
+            self.assertEqual(
+                {ref["identity"] for ref in subjects(actions(other_rows, identity))},
+                {str(foreign.pk), str(moved.pk)},
+            )
+        current_rows = action_controls(self.char1, self.index, observed_at=100)
+        for identity in ("shop.sell.supply", "incinerator.burn"):
+            self.assertEqual(subjects(actions(current_rows, identity)),
+                             [reference_json(selections.descriptor(replacement).reference)])
+
+        before = self.atomic_state()
+        for row, request in ((sale[1], "stale-sale-owner"), (burn[-1], "stale-burn-delete")):
+            invocation = from_web({**row["action"], "request_id": request}, self.index)
+            self.assertEqual(execute(self.char1, self.session, invocation, self.index).status, ResultStatus.REFUSED)
+            self.assertEqual(self.atomic_state(), before)
+
     def test_door_actual_endpoint_and_no_omission_or_stale_retarget(self):
         self.char1.location = self.rooms["hq_admin_office"]
         with patch("world.doors.time", return_value=100):

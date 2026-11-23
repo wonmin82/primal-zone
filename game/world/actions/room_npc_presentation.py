@@ -1,7 +1,13 @@
 """M01/M02 서비스의 순수 화면. 실행 문장을 만들지 않고 안정 참조를 전달한다."""
 
 from world.actions.presentation import reference_json, target_label
-from world.actions.presentation_context import available, door_action_labels, profile_snapshot
+from world.actions.presentation_context import (
+    available,
+    door_action_labels,
+    item_presentation,
+    profile_snapshot,
+)
+from world.actions.schema import ReferenceKind
 
 
 def render(caller, index, reference, binding, observed_at=None):
@@ -35,7 +41,12 @@ def render(caller, index, reference, binding, observed_at=None):
             return []
     roles = {"provider": [reference_json(reference)]}
     subjects = next(iter([role for role in action.roles if role.name == "subject"]), None)
-    candidates = role_records(caller, subjects) if subjects else (None,)
+    if subjects and subjects.kinds == (ReferenceKind.ITEM,):
+        items = item_presentation(caller, observed_at)
+        candidates = role_records(caller, subjects, cache=items.records, item_entities=items.entities)
+    else:
+        items = None
+        candidates = role_records(caller, subjects) if subjects else (None,)
     if action.verb_id == "game.exchange":
         from world.actions.collections import inventory_version
         source = next(iter([role for role in action.roles if role.name == "source"]))
@@ -59,7 +70,9 @@ def render(caller, index, reference, binding, observed_at=None):
             label = "회수부품 모두 교환" if "value" not in defaults else "회수부품 교환"
         if record:
             from world.item_entities.policy import can_item_operation
-            item = resolve_reference(record.reference)
+
+            # 표시 Role이 현재 Scope와 가시성을 확인한 실물만 재사용한다.
+            item = items.entities.get(record.reference) if items is not None else resolve_reference(record.reference)
             item_label = target_label(caller, record.reference, observed_at)
             if item is None or item_label is None:
                 continue
