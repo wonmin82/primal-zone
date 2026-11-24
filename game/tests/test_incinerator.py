@@ -7,6 +7,7 @@ from world import incinerator_service, rules
 from world.access import can_enter
 from world.content import ITEMS
 from world.firearm_service import create_firearm, unload_magazine
+from world.item_entities import api
 from world.item_entities.models import ItemEntity
 
 from tests.phase5_fixture import Phase5Test
@@ -167,6 +168,24 @@ class NativeIncineratorTests(CredentialConfirmationCases, Phase5Test):
         self.assertFalse(ItemEntity.objects.filter(definition_id="ammo_556").exists())
         self.assertEqual(self.char1.profile()["credits"], credits)
         self.assertIn("소각했다", self.command("경비카빈 소각"))
+
+    def test_burn_control_rejects_firearm_mounted_after_render(self):
+        from world.actions.presentation import provider_controls
+
+        from tests.action_control_fixture import execute_control
+
+        firearm = create_firearm("guard_carbine", owner_object=self.char1)
+        spare = create_firearm("guard_carbine", owner_object=self.char1, mode="empty")
+        controls = provider_controls(self.char1, self.obj("incinerator"), 100)
+        requested = [row for row in controls if row["action"]["action_id"] == "incinerator.burn"]
+        self.assertEqual([row["action"]["roles"]["subject"][0]["identity"] for row in requested],
+                         [str(firearm.pk)])
+
+        magazine = unload_magazine(self.char1, spare)
+        api.move_item(magazine, location_kind="inside", parent_item=firearm, socket="magazine", operation="load")
+        before = self.state()
+        self.assertNotIn("소각했다", execute_control(self, requested[0]))
+        self.assertEqual(self.state(), before)
 
     def test_invalid_quantity_and_after_change_failure_roll_back_everything(self):
         self.create("bandage", quantity=5)

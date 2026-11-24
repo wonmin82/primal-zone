@@ -213,14 +213,15 @@ class Generator(ActionObject):
 
 
 
-def _service_available(obj, caller, observed_at=None):
+def _service_available(obj, caller, observed_at=None, *, get_profile=None, get_observation=None):
     from world.observation import can_perceive, context_for
 
     return (
         obj.location is not None and obj.location == caller.location
         and ROOMS.get(caller.zone, {}).get("safe", False)
-        and not caller.profile_snapshot().get("combat_target")
-        and can_perceive(obj, context_for(caller, observed_at=observed_at))
+        and not (get_profile or caller.profile_snapshot)().get("combat_target")
+        and can_perceive(obj, get_observation() if get_observation is not None else
+                         context_for(caller, observed_at=observed_at))
     )
 
 
@@ -363,8 +364,9 @@ class Shopkeeper(ActionObject):
     description = "탐사자를 위한 물품을 보급칩으로 판매하는 상인이다."
     actions = ("목록", "사", "가치", "팔아")
 
-    def available(self, caller, observed_at=None):
-        return _service_available(self, caller, observed_at) and self.db.shop_id in SHOP_CATALOGS
+    def available(self, caller, observed_at=None, *, get_profile=None, get_observation=None):
+        return (_service_available(self, caller, observed_at, get_profile=get_profile, get_observation=get_observation)
+                and self.db.shop_id in SHOP_CATALOGS)
 
 
     @dialogue_appearance

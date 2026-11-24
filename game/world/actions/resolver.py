@@ -44,7 +44,24 @@ class ActionInvocation:
     request_id: str | None = None
 
 
-def role_records(caller, role, bindings=None, *, cache=None, check_visibility=True, references=None, item_entities=None):
+def cached_item_scopes(caller, scopes, cache, item_entities, *, check_visibility=True, references=None):
+    """같은 표시 요청의 Item Scope를 검증하고 비어 있는 Scope도 기록한다."""
+    from world.selection_numbers.api import records_for
+
+    keys = {scope: ("item_scope", scope, check_visibility, references) for scope in sorted(scopes)}
+    missing = {scope: [] for scope, key in keys.items() if key not in cache}
+    if missing:
+        for record in records_for(caller, scope_ids=missing, kinds=(ReferenceKind.ITEM,),
+                                  check_visibility=check_visibility, references=references,
+                                  item_entities=item_entities):
+            missing[record.scope_id].append(record)
+        for scope, records in missing.items():
+            cache[keys[scope]] = tuple(records)
+    return tuple([record for key in keys.values() for record in cache[key]])
+
+
+def role_records(caller, role, bindings=None, *, cache=None, check_visibility=True, references=None, item_entities=None,
+                 provider_entities=None, get_observation=None):
     from world.selection_numbers.api import (
         SelectionRecord,
         current_scopes,
@@ -53,11 +70,12 @@ def role_records(caller, role, bindings=None, *, cache=None, check_visibility=Tr
     )
 
     def resolve_entity(reference):
-        if item_entities is None or reference.kind != ReferenceKind.ITEM:
+        entities = item_entities if reference.kind == ReferenceKind.ITEM else provider_entities
+        if entities is None:
             return resolve_reference(reference)
-        if reference not in item_entities:
-            item_entities[reference] = resolve_reference(reference)
-        return item_entities[reference]
+        if reference not in entities:
+            entities[reference] = resolve_reference(reference)
+        return entities[reference]
 
     if role.kinds == (ReferenceKind.INVENTORY,):
         scope = f"inventory:{caller.pk}"
@@ -88,7 +106,7 @@ def role_records(caller, role, bindings=None, *, cache=None, check_visibility=Tr
             entity = resolve_entity(reference)
             if role.scope == TargetScope.STORAGE:
                 if (not isinstance(entity, Container) or entity.location != caller.location
-                        or not can_perceive(entity, context_for(caller))
+                        or not can_perceive(entity, get_observation() if get_observation else context_for(caller))
                         or not entity.access(caller, "view") or not entity.access(caller, "call")):
                     continue
                 scopes.add(f"personal_storage:{caller.pk}" if entity.personal else f"shared_storage:{entity.pk}")
@@ -117,18 +135,12 @@ def role_records(caller, role, bindings=None, *, cache=None, check_visibility=Tr
             return (*current, *items)
         return records_for(caller, scope_ids=scope_ids, kinds=role.kinds, check_visibility=check_visibility,
                            references=references, require_carried_root=role.include_carried_inside,
-                           item_entities=item_entities)
+                           item_entities=item_entities, provider_entities=provider_entities)
 
     if cache is not None and item_entities is not None and role.kinds == (ReferenceKind.ITEM,) and not role.include_carried_inside:
         # 여러 총기가 같은 소지 범위를 쓰더라도 각 총기의 Inside 후보는 구분한다.
-        scope_keys = {scope: ("item_scope", scope, check_visibility, references) for scope in sorted(scopes)}
-        missing = {scope: [] for scope, scope_key in scope_keys.items() if scope_key not in cache}
-        if missing:
-            for record in load_records(missing):
-                missing[record.scope_id].append(record)
-            for scope, scope_rows in missing.items():
-                cache[scope_keys[scope]] = tuple(scope_rows)
-        records = tuple([record for scope_key in scope_keys.values() for record in cache[scope_key]])
+        records = cached_item_scopes(caller, scopes, cache, item_entities,
+                                     check_visibility=check_visibility, references=references)
     elif cache is None:
         records = load_records()
     else:
@@ -331,7 +343,8 @@ def _root_records(caller, action, name):
     return candidates(name)
 
 
-def provided(caller, index, *, action_id=None, for_cmdset=False, item_entities=None):
+def provided(caller, index, *, action_id=None, for_cmdset=False, item_entities=None, provider_entities=None,
+             get_observation=None):
     def included(binding):
         action = index.actions[binding.action_id]
         return (action.public and (action_id is None or action.id == action_id)
@@ -361,11 +374,12 @@ def provided(caller, index, *, action_id=None, for_cmdset=False, item_entities=N
                 continue
         pairs.append((None, binding))
     role = RoleDefinition("provider", tuple(sorted(kinds)), required=False)
-    for record in role_records(caller, role, check_visibility=False, item_entities=item_entities) if kinds else ():
+    records = role_records(caller, role, check_visibility=False, item_entities=item_entities,
+                           provider_entities=provider_entities) if kinds else ()
+    for record in records:
         reference = record.reference
-        entity = (item_entities.get(reference)
-                  if item_entities is not None and reference.kind == ReferenceKind.ITEM
-                  else resolve_reference(reference))
+        entities = item_entities if reference.kind == ReferenceKind.ITEM else provider_entities
+        entity = entities.get(reference) if entities is not None else resolve_reference(reference)
         if entity is None:
             continue
         try:
@@ -381,7 +395,7 @@ def provided(caller, index, *, action_id=None, for_cmdset=False, item_entities=N
                 continue
         elif reference.kind not in (ReferenceKind.LOOT, ReferenceKind.CURRENCY) and entity.db.action_available is False:
             continue
-        if not for_cmdset and not visible_entity(caller, entity):
+        if not for_cmdset and not visible_entity(caller, entity, get_observation=get_observation):
             continue
         capabilities = getattr(entity, "capability_binding_ids", None)
         active_bindings = capabilities() if callable(capabilities) else None

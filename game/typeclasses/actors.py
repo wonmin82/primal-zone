@@ -159,11 +159,12 @@ class Actor(NumberedObjectMixin, DistantPresenceMixin, DefaultObject):
                 states[capability_id] = False
             self.db.capability_states = states
 
-    def available(self, caller, observed_at=None):
+    def available(self, caller, observed_at=None, *, get_profile=None, get_observation=None):
         if any(self.capability_active(kind) for kind in ("medical", "settlement", "shop", "training")):
             from typeclasses.interactables import _service_available
 
-            return _service_available(self, caller, observed_at)
+            return _service_available(self, caller, observed_at, get_profile=get_profile,
+                                      get_observation=get_observation)
         return True
 
     def training_offer(self):

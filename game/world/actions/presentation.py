@@ -5,13 +5,14 @@ from dataclasses import dataclass, field
 
 from world.actions.presentation_context import (
     item_presentation,
+    observation_snapshot,
     presentation_scope,
     profile_snapshot,
 )
-from world.actions.resolver import provided
-from world.actions.schema import ReferenceKind
+from world.actions.resolver import cached_item_scopes, provided
+from world.actions.schema import ReferenceKind, TargetScope
 from world.selection_display import displays, room_snapshot
-from world.selection_numbers.api import descriptor, numbered_records, resolve_reference
+from world.selection_numbers.api import descriptor, numbered_records
 
 _current_labels = ContextVar("action_selection_labels", default=None)
 
@@ -128,12 +129,23 @@ def action_controls(caller, index, observed_at=None, *, provider_reference=None,
 
 def _action_controls(caller, index, observed_at, *, provider_reference, verb_key):
     items = item_presentation(caller, observed_at)
-    pairs = provided(caller, index, item_entities=items.entities)
+    pairs = provided(caller, index, item_entities=items.entities, provider_entities=items.entities,
+                     get_observation=lambda: observation_snapshot(caller, observed_at))
     if provider_reference is not None:
         pairs = tuple((reference, binding) for reference, binding in pairs if reference == provider_reference)
     if verb_key is not None:
         pairs = tuple((reference, binding) for reference, binding in pairs
                       if index.verbs[index.actions[binding.action_id].verb_id].key == verb_key)
+    # 이미 제공·가시성이 검증된 소지 Root의 Inside Scope를 함께 읽는다.
+    inside_scopes = {
+        f"inside:{reference.identity}" for reference, binding in pairs
+        if reference is not None and reference.kind == ReferenceKind.ITEM
+        and any([role.kinds == (ReferenceKind.ITEM,) and role.scope_from == "provider"
+                and role.scope in (TargetScope.INSIDE, TargetScope.CARRIED_AND_INSIDE)
+                and not role.include_carried_inside for role in index.actions[binding.action_id].roles])
+    }
+    if len(inside_scopes) > 1:
+        cached_item_scopes(caller, inside_scopes, items.records, items.entities)
     controls = []
     for reference, binding in pairs:
         target = target_label(caller, reference, observed_at) if reference is not None else ""
@@ -141,7 +153,7 @@ def _action_controls(caller, index, observed_at, *, provider_reference, verb_key
             continue
         provider = None
         if reference is not None:
-            provider = items.item(reference) if reference.kind == ReferenceKind.ITEM else resolve_reference(reference)
+            provider = items.item(reference)
         service = index.services[binding.service_id]
         config = {argument.name: argument.default for argument in service.config_schema if argument.default is not None}
         config.update(binding.config)

@@ -24,19 +24,15 @@ def lighting_snapshot(character, profile=None, now=None):
     now = time() if now is None else now
     if not entity_runtime(character):
         return lighting.legacy_snapshot(profile if profile is not None else character.profile_snapshot(), now)
-    rows = list(api.items_owned_by(character))
+    from world.actions.firearm_lighting_presentation import item_label
+
+    rows = api.items_in_location("inventory", owner_object=character)
     items = []
     for row in rows:
         definition = ITEMS[row.definition_id]
         if not definition.get("light_source"):
             continue
-        if row.root().location_kind not in ("inventory", "equipment"):
-            continue
-        from world.actions.firearm_lighting_presentation import item_label
-
         label = item_label(row)
-        if row.location_kind != "inventory":
-            continue
         state = lighting.project_power(row.state, now)
         active = (str(row.pk) == character.db.active_light_item_id and state["enabled"]
                   and state["remaining_power"] > 0)

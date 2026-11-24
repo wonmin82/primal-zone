@@ -14,19 +14,53 @@ def stored_items(character, container):
     return list(api.items_in_location(location, owner_object=owner).order_by("sequence"))
 
 
-def require_ownership_transfer(item, destination):
+def _ownership_transferable(item):
+    return ITEMS[item.definition_id].get("transferable") is True
+
+
+def ownership_transfer_children(roots):
+    """표시 Role의 양도 후보에서 필요한 자식만 깊이별로 조회한다."""
+    from django.db import connections
+
+    from world.item_entities.models import ItemEntity
+
+    rows = ItemEntity.objects.only("parent_item", "definition_id")
+    limit = connections[rows.db].features.max_query_params
+    pending = {root.pk for root in roots if _ownership_transferable(root)}
+    children = {}
+    while pending:
+        parents = tuple(pending)
+        children.update((identity, []) for identity in parents)
+        pending = set()
+        batch_size = limit or len(parents)
+        for start in range(0, len(parents), batch_size):
+            for child in rows.filter(parent_item_id__in=parents[start:start + batch_size]):
+                children[child.parent_item_id].append(child)
+                if _ownership_transferable(child) and child.pk not in children:
+                    pending.add(child.pk)
+    return children
+
+
+def require_ownership_transfer(item, destination, *, children=None):
     """같은 owner 위치 이동과 owner 변경을 구분하고 내부 tree에도 귀속을 적용한다."""
     if item.owner_object_id == destination.pk:
         return
     pending = [item]
+    visited = set()
     while pending:
         row = pending.pop()
-        if ITEMS[row.definition_id].get("transferable") is not True:
+        if not _ownership_transferable(row):
             raise rules.RuleError("이 물건은 다른 소유자에게 넘기거나 공용 보관함에 맡길 수 없습니다.")
-        pending.extend(row.children.all())
+        if children is None:
+            pending.extend(row.children.all())
+        elif row.pk in visited or row.pk not in children:
+            raise rules.RuleError("물건의 내부 관계를 확인할 수 없습니다.")
+        else:
+            visited.add(row.pk)
+            pending.extend(children[row.pk])
 
 
-def require_container(character, container):
+def require_container(character, container, *, get_observation=None):
     """소유권과 별개로 현재 시설의 위치·관찰·호출 권한을 검사한다."""
     from typeclasses.interactables import Container
 
@@ -34,7 +68,7 @@ def require_container(character, container):
 
     if (not character.location or not isinstance(container, Container)
             or container.location != character.location
-            or not can_perceive(container, context_for(character))
+            or not can_perceive(container, get_observation() if get_observation else context_for(character))
             or not container.access(character, "view") or not container.access(character, "call")):
         raise rules.RuleError("이곳에서 사용할 수 있는 보관함이 아닙니다.")
 

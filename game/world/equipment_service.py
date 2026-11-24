@@ -59,10 +59,12 @@ def _item_context_label(row, items, label_of):
 
 def entity_snapshot(character):
     from world.content.item_mapping import LEGACY_ITEM_MAPPING
+    from world.firearm_service import magazine_snapshot
     from world.item_runtime import maintenance
 
     owned = carried_items(character)
     items = {row.pk: row for row in owned}
+    mounted = {row.parent_item_id: row for row in owned if row.socket == "magazine"}
     numbers, labels = _item_display_records(owned)
 
     def definition_id(row):
@@ -71,10 +73,15 @@ def entity_snapshot(character):
     def display_name(row):
         return labels.get(str(row.pk)) or ITEMS[definition_id(row)]["name"]
 
+    def read_magazine(row):
+        magazine = mounted.get(row.pk)
+        return magazine_snapshot(magazine) if magazine is not None else None
+
     carried = tuple(
         eq.item_snapshot(definition_id(row), ITEMS[definition_id(row)], item_id=row.pk,
                          sequence=row.sequence, quantity=row.quantity, location=row.location_kind,
-                         slot=row.slot, state_summary=state_summary(row), selection_number=numbers.get(str(row.pk)),
+                         slot=row.slot, state_summary=state_summary(row, read_magazine=read_magazine),
+                         selection_number=numbers.get(str(row.pk)),
                          display_label=_item_context_label(row, items, display_name))
         for row in owned
     )
@@ -82,7 +89,7 @@ def entity_snapshot(character):
                                 carried, character.db.active_weapon_item_id)
 
 
-def state_summary(row, *, observed_at=None):
+def state_summary(row, *, observed_at=None, read_magazine=None):
     from world.content.item_mapping import LEGACY_ITEM_MAPPING
     from world.item_runtime import maintenance
 
@@ -93,7 +100,7 @@ def state_summary(row, *, observed_at=None):
     if definition.get("firearm_family"):
         from world.firearm_service import loaded_magazine
 
-        magazine = loaded_magazine(row)
+        magazine = (read_magazine or loaded_magazine)(row)
         return (f"{ITEMS[magazine.definition_id]['name']} {magazine.rounds}/{magazine.capacity}"
                 if magazine else "탄창 없음")
     if definition.get("light_source"):

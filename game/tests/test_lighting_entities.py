@@ -4,6 +4,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from django.core.exceptions import ValidationError
+from django.db import connection
 from evennia.utils.create import create_object
 from typeclasses.loot import DroppedLoot
 from world import lighting_service as service
@@ -200,6 +201,37 @@ class LightingEntityTests(NativeItemTest):
         self.assertIsNone(service.lighting_snapshot(self.char1, now=101).active)
         service.reconcile(self.char1, 101)
         self.assertIsNone(self.char1.db.active_light_item_id)
+
+    def test_nested_lights_do_not_add_snapshot_queries(self):
+        spare, active = self.create("flashlight"), self.charged()
+        service.switch(self.char1, active, True, 100)
+        root = self.create("guard_carbine")
+        middle = api.create_item("guard_carbine", location_kind="inside", parent_item=root, socket="compartment")
+        stored = self.create("flashlight")
+        api.move_item(stored, location_kind="personal_storage", owner_object=self.char1, operation="store")
+        api.create_item("flashlight", location_kind="inventory", owner_object=self.char2)
+
+        def read():
+            statements = []
+
+            def capture(execute, sql, params, many, context):
+                statements.append(sql.lstrip().upper())
+                return execute(sql, params, many, context)
+
+            with connection.execute_wrapper(capture):
+                snapshot = service.lighting_snapshot(self.char1, now=101)
+            self.assertTrue(all(sql.startswith("SELECT") for sql in statements))
+            return snapshot, sum(ItemEntity._meta.db_table.upper() in sql for sql in statements)
+
+        api.create_item("flashlight", location_kind="inside", parent_item=middle, socket="first")
+        baseline, selects = read()
+        for index in range(8):
+            api.create_item("flashlight", location_kind="inside", parent_item=middle, socket=f"item_{index}")
+        updated, updated_selects = read()
+        self.assertEqual(updated, baseline)
+        self.assertEqual(updated_selects, selects)
+        self.assertEqual([row.identity for row in updated.items], [str(spare.pk), str(active.pk)])
+        self.assertEqual((updated.active.identity, updated.active.remaining_power), (str(active.pk), 1799))
 
     def test_invalid_flashlight_state_rejected(self):
         row = self.create("flashlight")
