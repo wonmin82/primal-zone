@@ -12,7 +12,7 @@ from typeclasses.explorers import Explorer
 from world import doors, rules
 from world import text as ft
 from world.actions.gateway import ResultStatus
-from world.actions.global_actions import invoke
+from world.actions.global_actions import invoke, select_look_reference
 from world.bootstrap import build_world
 from world.door_entities.models import Door, DoorInstallation
 from world.door_keys import issue_key
@@ -773,7 +773,7 @@ class DoorTest(WorldCommandTest):
     def test_individual_look_direction_actual_exit_and_object_collision(self):
         from evennia import create_object
         self.enterContext(patch("commands.character.time", return_value=100))
-        for raw in ("관리실 문 봐", "관리실문 봐", "동 문 봐", "문 1 봐", "문 봐"):
+        for raw in ("관리실 문 봐", "관리실문 봐", "동 문 봐", "문 1 봐", "문 봐", '"문" 1 봐'):
             self.char1.msg.reset_mock()
             self.assertIn("동쪽 관리실 문은 잠겨 있다.", self.raw(raw))
         self.char1.msg.reset_mock()
@@ -789,6 +789,26 @@ class DoorTest(WorldCommandTest):
         ordinary.db.desc = "문 이름을 가진 일반 물건이다."
         self.char1.msg.reset_mock()
         self.assertIn(ordinary.db.desc, self.raw("관리실 문 봐"))  # 실제 Door가 없으면 기존 객체 조회를 보존한다.
+
+    def test_exact_look_preserves_door_scope_alias_and_visibility(self):
+        from world.selection_numbers.api import descriptor, number_for
+        from world.targets import exact_selector, parse_exact_selector
+
+        endpoint = self.door().exit_a
+        reference = descriptor(endpoint).reference
+        number = number_for(reference)
+        selector = parse_exact_selector(exact_selector("문", number))
+        self.assertEqual(select_look_reference(self.char1, selector, 100), (reference, endpoint))
+
+        alias = parse_exact_selector(exact_selector("관리실 문", number))
+        with self.assertRaisesRegex(rules.RuleError, "살펴볼 수 없는"):
+            select_look_reference(self.char1, alias, 100)
+        with patch("world.observation.perceives", return_value=False):
+            with self.assertRaisesRegex(rules.RuleError, "살펴볼 수 없는"):
+                select_look_reference(self.char1, selector, 100)
+        endpoint.locks.add("view:false()")
+        with self.assertRaisesRegex(rules.RuleError, "살펴볼 수 없는"):
+            select_look_reference(self.char1, selector, 100)
 
     def test_multiple_door_selector_direction_order_and_ambiguity(self):
         # 구조 손상으로 같은 Room에 옮겨진 endpoint도 감지/정렬은 안전하게 처리하고 조작은 차단한다.

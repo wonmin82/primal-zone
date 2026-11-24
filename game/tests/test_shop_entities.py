@@ -199,6 +199,59 @@ class NativeShopTests(Phase5Test):
             shop_service.sell(self.char1, seller, "절단마체테")
         self.assertEqual(self.state(), before)
 
+    def test_firearm_control_rechecks_magazine_mounted_after_render(self):
+        from world.actions.room_npc_presentation import controls_for
+
+        from tests.action_control_fixture import execute_control
+
+        seller = self.obj("weapon_shopkeeper")
+        self.char1.location = seller.location
+        firearm = create_firearm("guard_carbine", owner_object=self.char1)
+        mounted = create_firearm("guard_carbine", owner_object=self.char1, mode="empty")
+        create_firearm("guard_carbine", owner_object=self.char2)
+        sale_subjects = {
+            row["action"]["roles"]["subject"][0]["identity"]: row
+            for row in controls_for(self.char1, seller)
+            if row["action"]["action_id"] == "shop.sell.weapon"
+        }
+        self.assertEqual(set(sale_subjects), {str(firearm.pk)})
+
+        magazine = unload_magazine(self.char1, mounted)
+        api.move_item(magazine, location_kind="inside", parent_item=firearm, socket="magazine", operation="load")
+        before = self.state()
+        self.assertNotIn("매입했다", execute_control(self, sale_subjects[str(firearm.pk)]))
+        self.assertEqual(self.state(), before)
+
+    def test_composite_controls_batch_mounted_magazine_reads(self):
+        from django.db import connection
+        from world.actions.manifest import get_index
+        from world.actions.presentation import action_controls
+
+        self.char1.location = self.obj("weapon_shopkeeper").location
+        create_firearm("guard_carbine", owner_object=self.char1, mode="empty")
+        saleable = set()
+
+        def display():
+            mounted_queries = []
+
+            def capture(execute, sql, params, many, context):
+                if (sql.lstrip().upper().startswith("SELECT") and "parent_item_id" in sql.lower()
+                        and "magazine" in (params or ())):
+                    mounted_queries.append(sql)
+                return execute(sql, params, many, context)
+
+            with connection.execute_wrapper(capture):
+                rows = action_controls(self.char1, get_index(), 100)
+            self.assertEqual({row["action"]["roles"]["subject"][0]["identity"]
+                              for row in rows if row["action"]["action_id"] == "shop.sell.weapon"}, saleable)
+            return len(mounted_queries)
+
+        for count in (1, 5):
+            for _ in range(len(saleable), count):
+                saleable.add(str(create_firearm("guard_carbine", owner_object=self.char1).pk))
+            with self.subTest(count=count):
+                self.assertEqual(display(), 1)
+
     def test_active_flashlight_sale_reconciles_and_failed_sale_restores_reference(self):
         from world.lighting_service import switch
 

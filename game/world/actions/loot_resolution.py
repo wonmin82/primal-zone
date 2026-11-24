@@ -45,18 +45,66 @@ def entry_records(selections):
     return records
 
 
-def fingerprint(caller, selections, now):
+def read_recipients(identities):
+    from django.db import connections
+    from evennia.objects.models import ObjectDB
+
+    # 과거 저장본의 숫자 문자열도 기존 PK 조회와 같은 실물을 가리킨다.
+    minimum, maximum = connections[ObjectDB.objects.db].ops.integer_field_range(
+        ObjectDB._meta.pk.get_internal_type())
+    keys = {}
+    for identity in identities:
+        if not identity or identity in keys:
+            continue
+        try:
+            pk = int(identity)
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if minimum <= pk <= maximum:
+            keys[identity] = pk
+    objects = ObjectDB.objects.in_bulk(set(keys.values()))
+    return {identity: objects.get(pk) for identity, pk in keys.items()}
+
+
+def read_loot_rights(caller, entries, now):
+    """선택 또는 표시 한 번에 필요한 보호 수령자와 일행을 읽는다."""
+    from typeclasses.parties import party_for
+
+    recipients = read_recipients([
+        entry.assigned_player for entry in entries if entry.kind == "item" and now < entry.protection_until
+    ])
+    return (party_for(caller) if recipients else None), recipients
+
+
+def snapshot_entry_index(sources):
+    """잠근 출처의 현재 항목을 소유자·종류·영속 ID로 찾는다."""
+    from world.loot_service import loot_snapshots
+
+    return {(pk, entry.kind, entry.item_id if entry.kind == "item" else entry.currency_id): entry
+            for pk, snapshot in loot_snapshots(sources).items() for entry in snapshot.entries}
+
+
+def snapshot_entry(entries, entity):
+    from world.item_entities.models import ItemEntity
+
+    kind = "item" if isinstance(entity, ItemEntity) else "currency"
+    return entries.get((entity.owner_object_id, kind, entity.pk))
+
+
+def fingerprint(caller, selections, now, *, party=None, recipients=None):
     from typeclasses.loot import can_take_entry
 
     return {"caller": caller.pk, "party": caller.db.party_id,
             "entries": [[source.pk, str(entry.item_id) if entry.item_id else None, entry.currency_id,
                          entry.quantity, entry.reserved_party, entry.reserved_player, entry.assigned_player,
                          entry.protection_until, [list(share) for share in entry.shares],
-                         now < entry.protection_until, bool(can_take_entry(entry.as_entry(), caller, now))]
+                         now < entry.protection_until, bool(can_take_entry(
+                             entry.as_entry(), caller, now, party=party, recipients=recipients))]
                         for source, entry in selections]}
 
 
-def make_invocation(caller, selections, *, quantity=0, now=None, origin="text", references=None):
+def make_invocation(caller, selections, *, quantity=0, now=None, origin="text", references=None,
+                    party=None, recipients=None):
     from world.actions import loot_resolution as clock
 
     now = clock.time() if now is None else now
@@ -67,7 +115,8 @@ def make_invocation(caller, selections, *, quantity=0, now=None, origin="text", 
         subjects = tuple([entry_reference(entry) for _, entry in selections])
     else:
         sources, subjects = references
-    token = signing.dumps(fingerprint(caller, selections, now), salt=SALT, compress=True)
+    token = signing.dumps(fingerprint(caller, selections, now, party=party, recipients=recipients),
+                          salt=SALT, compress=True)
     return ActionInvocation("loot.take", "take", (("provider", sources), ("source", sources),
                             ("subject", subjects)), (("quantity", quantity), ("snapshot", token)), origin)
 
@@ -76,7 +125,7 @@ def resolve(caller, index, action, args, command_name):
     from typeclasses.loot import room_loot
     from world.actions import loot_resolution as clock
     from world.lifecycle import reconcile_room
-    from world.loot_service import loot_snapshot
+    from world.loot_service import loot_snapshots
     from world.observation import can_inspect_loot, can_perceive, context_for
     from world.selection_numbers.api import numbered_records
     from world.targets import loot_parts
@@ -96,7 +145,10 @@ def resolve(caller, index, action, args, command_name):
     numbered_sources = {record.reference: record for record in numbered_records(sources_records.values())}
     sources_records = {pk: numbered_sources.get(record.reference, record) for pk, record in sources_records.items()}
     source_ids = _source_ids(sources_records, parts[1])
-    snapshots = {pk: loot_snapshot(sources[pk]) for pk in source_ids}
+    snapshots = loot_snapshots([sources[pk] for pk in source_ids])
+    snapshots = {pk: snapshots[pk] for pk in source_ids}
+    party, recipients = read_loot_rights(caller, [entry for snapshot in snapshots.values()
+                                                 for entry in snapshot.entries], now)
     assets = entry_records([(sources[pk], entry) for pk, snapshot in snapshots.items()
                             if snapshot.native for entry in snapshot.entries])
     valid = {record.reference: record for record in numbered_records(assets.values())}
@@ -105,11 +157,12 @@ def resolve(caller, index, action, args, command_name):
     selected, quantity = select_loot(
         caller, args, now=now, sources=sources_records, entries=entries,
         records=[valid.get(record.reference, record) for record in assets.values()], parts=parts,
+        party=party, recipients=recipients,
     )
     selected_sources = tuple(dict.fromkeys([sources_records[pk].reference for pk, _ in selected]))
     selected_entries = tuple([assets[pk, entry].reference for pk, entry in selected])
     return make_invocation(caller, [(sources[pk], entry) for pk, entry in selected], quantity=quantity, now=now,
-                           references=(selected_sources, selected_entries))
+                           references=(selected_sources, selected_entries), party=party, recipients=recipients)
 
 
 def _source_ids(sources, selector):
@@ -130,7 +183,8 @@ def _source_ids(sources, selector):
     return source_ids
 
 
-def select_loot(caller, args, *, now, sources, entries, records, accessible=None, parts=None):
+def select_loot(caller, args, *, now, sources, entries, records, accessible=None, parts=None,
+                party=None, recipients=None):
     """현재 Source와 Entry Snapshot에서 효과 없이 전체 선택과 수량을 계산한다."""
     from typeclasses.loot import can_take_entry
     from world.actions.resolver import TargetAmbiguous, matching_records
@@ -143,7 +197,8 @@ def select_loot(caller, args, *, now, sources, entries, records, accessible=None
     matches = [(pk, entry, ref) for pk in source_ids for entry, ref in entries.get(pk, ())]
     by_ref = {record.reference: record for record in records}
     if accessible is None:
-        accessible = {ref for _, entry, ref in matches if can_take_entry(entry.as_entry(), caller, now)}
+        accessible = {ref for _, entry, ref in matches if can_take_entry(
+            entry.as_entry(), caller, now, party=party, recipients=recipients)}
     selected_refs = {ref for _, _, ref in matches}
     scoped = [record for ref, record in by_ref.items() if ref in selected_refs]
     visible = [record for record in scoped if record.reference in accessible]
@@ -171,7 +226,8 @@ def select_loot(caller, args, *, now, sources, entries, records, accessible=None
         matches = matches[:1]
     else:
         matches = [(pk, entry, ref) for pk, entry, ref in matches
-                   if ref in accessible or (ref is None and can_take_entry(entry.as_entry(), caller, now))]
+                   if ref in accessible or (ref is None and can_take_entry(
+                       entry.as_entry(), caller, now, party=party, recipients=recipients))]
     if not matches:
         if (selector.name, selector.mode) == ("전리품", Mode.ALL):
             raise rules.RuleError("가져갈 물건이 없거나 다른 탐사자의 보호된 전리품입니다.")

@@ -39,11 +39,12 @@ def loaded_magazine(firearm):
     return magazine_snapshot(row) if row else None
 
 
-def firearm_snapshot(firearm):
+def firearm_snapshot(firearm, *, read_magazine=None):
     family = ITEMS[firearm.definition_id].get("firearm_family")
     if not family:
         raise rules.RuleError("총기를 선택하세요.")
-    return firearms.FirearmSnapshot(str(firearm.pk), firearm.definition_id, family, loaded_magazine(firearm))
+    magazine = (read_magazine or loaded_magazine)(firearm)
+    return firearms.FirearmSnapshot(str(firearm.pk), firearm.definition_id, family, magazine)
 
 
 def compatible_magazines(character, firearm, *, snapshot=None):

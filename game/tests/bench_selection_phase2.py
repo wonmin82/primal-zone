@@ -1,17 +1,25 @@
 """Selection v1.5의 격리 DB 실측. scripts/dev.py test tests.bench_selection_phase2 --parallel 1."""
 
+from collections import Counter
+from dataclasses import asdict
+from hashlib import sha256
+from itertools import count as integers
 from json import dumps
 from statistics import median
 from time import perf_counter
 from unittest.mock import patch
+from uuid import UUID
 
 from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from evennia import create_object
+from evennia.objects.models import ObjectDB
 from typeclasses.exits import Exit
 from typeclasses.interactables import PersonalLocker
 from typeclasses.loot import Corpse, DroppedLoot
 from typeclasses.zone_rooms import ZoneRoom
 from world import loot_service
+from world.actions.global_actions import select_look_reference
 from world.actions.loot_presentation import source_controls
 from world.actions.manifest import get_index
 from world.actions.presentation import action_controls
@@ -22,11 +30,12 @@ from world.content import ENEMIES
 from world.door_entities.models import Door, DoorInstallation
 from world.equipment_service import entity_snapshot, equip_item, resolve_item
 from world.item_entities.api import create_item
+from world.item_entities.models import ItemEntity
 from world.selection_display import room_snapshot
-from world.selection_numbers.api import descriptor
+from world.selection_numbers.api import descriptor, number_for
 from world.selection_numbers.models import SelectionNumber
 from world.state import multiplayer_state
-from world.targets import exact_selector
+from world.targets import exact_selector, parse_exact_selector
 
 from tests.item_entity_fixture import NativeItemTest
 
@@ -71,6 +80,86 @@ class SelectionPhase2Benchmark(NativeItemTest):
             "b1_select": b1_queries, "writes": writes,
         }), flush=True)
         return value
+
+    def test_assigned_loot_display(self):
+        identities = integers(1)
+        self.enterContext(patch.object(ItemEntity._meta.pk, "_get_default",
+                                       new=lambda: UUID(int=next(identities))))
+        self.enterContext(patch("django.core.signing.TimestampSigner.timestamp", return_value="1xViBB"))
+        source = create_object(Corpse, key="배정 전리품 계측", location=self.room)
+        source.db.decay_at = NOW + 100
+        loot_service.populate_source(source, [])
+        items = []
+        for size in COUNTS:
+            for _ in range(len(items), size):
+                item = create_item("ammo_9", quantity=2, location_kind="corpse_loot", owner_object=source)
+                loot_service.create_claim(item, reserved_player=self.char1, assigned_player=self.char1,
+                                          protection_until=NOW + 1)
+                items.append(item)
+            for observed_at in (NOW, NOW + 1):
+                self.measure_assigned_loot(source, items, observed_at)
+            self.measure_assigned_loot(source, items, NOW, text=True)
+
+    def measure_assigned_loot(self, source, items, observed_at, *, text=False):
+        def read():
+            if text:
+                return asdict(dispatch_text(self.char1, self.index, "game.take", "모든 시체에서 모두", "가져"))
+            return source_controls(self.char1, observed_at)
+
+        expected = read()
+        durations = []
+        for _ in range(SAMPLES):
+            begin = perf_counter()
+            actual = read()
+            durations.append((perf_counter() - begin) * 1000)
+            self.assertEqual(actual, expected)
+
+        queries = Counter()
+        object_lookups = Counter()
+
+        def count_sql(execute, sql, params, many, context):
+            statement = sql.lstrip().upper()
+            queries["sql"] += 1
+            if statement.startswith("SELECT"):
+                if ObjectDB._meta.db_table.upper() in statement:
+                    queries["object_select"] += 1
+                    if tuple(params or ()) == (self.char1.pk,):
+                        object_lookups[sql] += 1
+                if SelectionNumber._meta.db_table.upper() in statement:
+                    queries["b1_select"] += 1
+                if ItemEntity._meta.db_table.upper() in statement:
+                    queries["item_select"] += 1
+            elif statement.startswith(("INSERT", "UPDATE", "DELETE", "REPLACE")):
+                queries["writes"] += 1
+            return execute(sql, params, many, context)
+
+        with connection.execute_wrapper(count_sql):
+            actual = read()
+        self.assertEqual(actual, expected)
+        self.assertEqual(queries["writes"], 0)
+        if text:
+            roles = dict(actual["roles"])
+            self.assertEqual(tuple(ref["identity"] for ref in roles["source"]), (str(source.pk),))
+            self.assertEqual([ref["identity"] for ref in roles["subject"]], [str(item.pk) for item in items])
+        else:
+            rows = actual[source.pk]["loot"]
+            self.assertEqual(len(rows), len(items))
+            for row, item in zip(rows, items, strict=True):
+                self.assertEqual(row["assigned_name"], self.char1.key)
+                self.assertEqual(row["protected"], observed_at == NOW)
+                self.assertEqual(row["action"]["roles"]["subject"][0]["identity"], str(item.pk))
+        print("ASSIGNED_LOOT_BENCH " + dumps({
+            "scope": "protected" if observed_at == NOW else "expired",
+            "surface": "text" if text else "display",
+            "objects": len(items), "samples": SAMPLES, "selected": len(items),
+            "median_ms": round(median(durations), 3),
+            "payload_sha256": sha256(dumps(actual, ensure_ascii=False, sort_keys=True).encode()).hexdigest(),
+            "sql": queries["sql"], "object_select": queries["object_select"],
+            "b1_select": queries["b1_select"], "item_select": queries["item_select"],
+            "writes": queries["writes"],
+            "single_recipient_select": sum(object_lookups.values()),
+            "repeated_recipient_select": sum(n - 1 for n in object_lookups.values()),
+        }, sort_keys=True), flush=True)
 
     def test_room_snapshot_and_actor_door_display(self):
         # 정적 정의만 fixture로 교체하고 실제 Door·설치 이력·출구를 조회한다.
@@ -125,6 +214,36 @@ class SelectionPhase2Benchmark(NativeItemTest):
                        for obj in exits],
         )
         return exits[0]
+
+    def test_exact_door_look(self):
+        definitions = {}
+        self.enterContext(patch("world.doors.DOORS", definitions))
+        first = create_object(ZoneRoom, key="인용 계측 A", attributes=[("zone_id", "bench_a")],
+                              tags=[("bench_a", "primal_zone_room")])
+        second = create_object(ZoneRoom, key="인용 계측 B", attributes=[("zone_id", "bench_b")],
+                               tags=[("bench_b", "primal_zone_room")])
+        self.char1.location = first
+        endpoints = []
+        for size in COUNTS:
+            endpoints.extend(self.create_door(n, definitions, first, second)
+                             for n in range(len(endpoints), size))
+            target = endpoints[-1]
+            expected = descriptor(target).reference
+            selector = parse_exact_selector(exact_selector("문", number_for(expected)))
+
+            def read():
+                return select_look_reference(self.char1, selector, NOW)
+
+            self.assertEqual(self.measure("exact_door_look", size, read), (expected, target))
+            with CaptureQueriesContext(connection) as queries:
+                reference, selected = read()
+            door_reads = sum(query["sql"].lstrip().upper().startswith("SELECT")
+                             and f'"{Door._meta.db_table}"' in query["sql"] for query in queries)
+            self.assertEqual(door_reads, 1)
+            identity = dumps((asdict(reference), selected.pk), sort_keys=True)
+            print(dumps({"path": "exact_door_look_relation", "objects": size, "door_select": door_reads,
+                         "reference": asdict(reference), "payload_sha256": sha256(identity.encode()).hexdigest()}),
+                  flush=True)
 
     def test_inventory_equipment_and_explicit_number(self):
         equipped = equip_item(self.char1, self.create("guard_carbine"))
@@ -192,3 +311,12 @@ class SelectionPhase2Benchmark(NativeItemTest):
             )
             self.assertEqual(dict(invocation.roles)["source"], (source.reference,))
             self.assertEqual(dict(invocation.roles)["subject"], (descriptor(corpse_items[-1]).reference,))
+            all_matches = self.measure(
+                "multi_source_entry_selection", count,
+                lambda: dispatch_text(self.char1, self.index, "game.take", "모든 시체에서 모두", "가져"),
+                reconciles=True,
+            )
+            self.assertEqual(dict(all_matches.roles)["source"],
+                             tuple(descriptor(corpse).reference for corpse in corpses))
+            self.assertEqual(dict(all_matches.roles)["subject"],
+                             tuple(descriptor(item).reference for item in corpse_items))

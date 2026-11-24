@@ -92,23 +92,31 @@ class RoomSnapshot:
     references: dict
 
 
-def room_snapshot(caller, observed_at=None, *, objects=None):
+def door_rows_by_endpoint(objects):
+    """같은 방에서 확인할 문 endpoint의 실물을 함께 읽는다."""
     from django.db.models import Q
-    from typeclasses.loot import DroppedLoot
 
-    from world.actions.schema import ReferenceKind
     from world.door_entities.models import Door
-    from world.observation import context_for, perceives
-    from world.selection_numbers.api import descriptor, numbered_records
-    from world.targets import room_objects
 
-    objects = tuple(room_objects(caller, observed_at=observed_at) if objects is None else objects)
     endpoints = {obj.pk for obj in objects if obj.db_destination_id}
     doors_by_endpoint = {}
     if endpoints:
         for door in Door.objects.filter(Q(exit_a_id__in=endpoints) | Q(exit_b_id__in=endpoints)).order_by("pk"):
             doors_by_endpoint.setdefault(door.exit_a_id, door)
             doors_by_endpoint.setdefault(door.exit_b_id, door)
+    return doors_by_endpoint
+
+
+def room_snapshot(caller, observed_at=None, *, objects=None):
+    from typeclasses.loot import DroppedLoot
+
+    from world.actions.schema import ReferenceKind
+    from world.observation import context_for, perceives
+    from world.selection_numbers.api import descriptor, numbered_records
+    from world.targets import room_objects
+
+    objects = tuple(room_objects(caller, observed_at=observed_at) if objects is None else objects)
+    doors_by_endpoint = door_rows_by_endpoint(objects)
     by_id = {obj.pk: record for obj in objects if (record := descriptor(obj, doors_by_endpoint=doors_by_endpoint))
              and record.reference.kind != ReferenceKind.ROOM}
     doors = [pk for pk, record in by_id.items() if record.reference.kind == ReferenceKind.DOOR]

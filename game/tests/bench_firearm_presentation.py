@@ -1,6 +1,7 @@
 """#112 실측: scripts/dev.py test tests.bench_firearm_presentation --parallel 1."""
 
 from collections import Counter
+from dataclasses import asdict
 from hashlib import sha256
 from itertools import count
 from json import dumps
@@ -11,11 +12,15 @@ from uuid import UUID
 
 from django.db import connection
 from django.test import override_settings
-from world import firearm_service
+from evennia import create_object
+from typeclasses.interactables import Container, Incinerator
+from world import firearm_service, lighting_service
 from world.actions import collections, resolver
 from world.actions.manifest import get_index
 from world.actions.presentation import action_controls
+from world.actors.spawn import create_actor
 from world.content import ITEMS
+from world.item_entities import api
 from world.item_entities.models import ItemEntity
 from world.selection_numbers import api as selection
 from world.selection_numbers.models import SelectionNumber
@@ -138,3 +143,134 @@ class FirearmPresentationBenchmark(NativeItemTest):
             self.assert_sources(rows, "item_ops.load", other_gun, [magazine])
             for provider in (light, second_light):
                 self.assert_sources(rows, "item_ops.power_insert", provider, batteries)
+
+
+class CompositePolicyBenchmark(NativeItemTest):
+    def test_composite(self):
+        def create_candidate(i):
+            firearm_service.create_firearm("guard_carbine", owner_object=self.char1,
+                                           mode="partial" if i % 2 else "no_mag", rounds=3 if i % 2 else None)
+
+        self.measure_candidates("mixed_firearms", create_candidate)
+
+    def test_facility_providers(self):
+        self.measure_candidates("incinerators", lambda i: create_object(
+            Incinerator, key=f"측정 시설 {i}", location=self.char1.location))
+
+    def test_actor_providers(self):
+        self.measure_candidates("shops", lambda _: create_actor("weapon_shopkeeper", self.char1.location))
+
+    def measure_candidates(self, scenario, create_candidate):
+        self.char1.location.db.zone_id = "weapon_shop"
+        create_actor("weapon_shopkeeper", self.char1.location)
+        create_object(Container, key="정책 측정함", location=self.char1.location)
+        create_object(Incinerator, key="정책 측정 소각로", location=self.char1.location)
+        identities = count(1)
+        self.enterContext(patch.object(ItemEntity._meta.pk, "_get_default",
+                                       new=lambda: UUID(int=next(identities))))
+        self.create("bandage")
+        index = get_index()
+
+        def read():
+            result = action_controls(self.char1, index, 100)
+            return result
+
+        prior = 0
+        for total in COUNTS:
+            for i in range(prior, total):
+                create_candidate(i)
+            prior = total
+            expected = read()
+            times = []
+            for _ in range(SAMPLES):
+                start = perf_counter()
+                value = read()
+                times.append((perf_counter() - start) * 1000)
+                self.assertEqual(value, expected)
+            sqls = Counter()
+
+            def capture(execute, sql, params, many, context):
+                sqls[(sql, tuple(params or ()))] += 1
+                return execute(sql, params, many, context)
+
+            with connection.execute_wrapper(capture):
+                self.assertEqual(read(), expected)
+            kinds = Counter()
+            for (query, params), n in sqls.items():
+                q = query.upper()
+                kinds["sql"] += n
+                if not q.startswith("SELECT"):
+                    kinds["writes"] += n
+                if "SELECTION_NUMBERS_SELECTIONNUMBER" in q:
+                    kinds["b1"] += n
+                    if any(str(p).startswith("inside:") for p in params):
+                        kinds["inside_b1"] += n
+                if 'FROM "OBJECTS_OBJECTDB"' in q:
+                    kinds["objects"] += n
+                    kinds["duplicate_objects"] += n - 1
+                if 'FROM "ITEM_ENTITIES_ITEMENTITY"' in q:
+                    kinds["item"] += n
+                    if "magazine" in params and "PARENT_ITEM_ID" in q.partition("WHERE")[2]:
+                        kinds["magazine_relation"] += n
+            self.assertTrue(expected)
+            self.assertEqual(kinds["writes"], 0)
+            print("POLICY_COMPOSITE " + dumps({
+                "scenario": scenario, "n": total, "ms": round(median(times), 3), "controls": len(expected),
+                "sha": sha256(dumps(expected, sort_keys=True).encode()).hexdigest(), **kinds,
+            }), flush=True)
+
+
+class LightingScopeBenchmark(NativeItemTest):
+    def test_light_scope_benchmark(self):
+        identities = count(1)
+        self.enterContext(patch.object(ItemEntity._meta.pk, "_get_default",
+                                       new=lambda: UUID(int=next(identities))))
+        spare = self.create("flashlight")
+        active = self.create("flashlight")
+        battery = self.create("battery")
+        lighting_service.insert_power(self.char1, active, battery, 100)
+        lighting_service.switch(self.char1, active, True, 100)
+        root = self.create("guard_carbine")
+        middle = api.create_item("guard_carbine", location_kind="inside", parent_item=root, socket="compartment")
+        stored = self.create("flashlight")
+        api.move_item(stored, location_kind="personal_storage", owner_object=self.char1, operation="store")
+        api.create_item("flashlight", location_kind="inventory", owner_object=self.char2)
+        before = 0
+        for size in (1, 10, 100):
+            for i in range(before, size):
+                api.create_item("flashlight", location_kind="inside", parent_item=middle, socket=f"item_{i}")
+            before = size
+
+            def read():
+                return lighting_service.lighting_snapshot(self.char1, now=101)
+
+            expected = read()
+            times = []
+            for _ in range(5):
+                start = perf_counter()
+                snapshot = read()
+                times.append((perf_counter() - start) * 1000)
+                self.assertEqual(snapshot, expected)
+            statements = []
+
+            def trace(execute, sql, params, many, context):
+                statements.append((sql, tuple(params or ())))
+                return execute(sql, params, many, context)
+
+            with connection.execute_wrapper(trace):
+                snapshot = read()
+            self.assertEqual(snapshot, expected)
+            self.assertEqual([item.identity for item in snapshot.items], [str(spare.pk), str(active.pk)])
+            self.assertEqual((snapshot.active.identity, snapshot.active.remaining_power), (str(active.pk), 1799))
+            item_select = sum(sql.strip().upper().startswith("SELECT") and ItemEntity._meta.db_table in sql
+                              for sql, _ in statements)
+            single_parent = sum(sql.strip().upper().startswith("SELECT") and ItemEntity._meta.db_table in sql
+                                and (root.pk.hex in args or middle.pk.hex in args)
+                                and ' = %s' in sql.split("WHERE", 1)[-1] and " IN " not in sql.split("WHERE", 1)[-1]
+                                for sql, args in statements)
+            writes = sum(sql.strip().upper().startswith(("INSERT", "UPDATE", "DELETE", "REPLACE")) for sql, _ in statements)
+            self.assertEqual(writes, 0)
+            digest = sha256(dumps(asdict(snapshot), ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+            print("LIGHT_SCOPE_BENCH", dumps({"nested": size, "sql": len(statements), "item_select": item_select,
+                     "single_parent": single_parent, "writes": writes, "median_ms": round(median(times), 3),
+                     "payload_sha256": digest, "selected_ids": [item.identity for item in snapshot.items]}), flush=True)

@@ -26,6 +26,28 @@ class _ItemPresentation:
             self.values[key] = load()
         return self.values[key]
 
+    def loaded_magazine_item(self, firearm):
+        from django.db import connection
+        from world.content import ITEMS
+        from world.item_entities.models import ItemEntity
+
+        magazines = self.values.setdefault("mounted_magazines", {})
+        if firearm.pk not in magazines:
+            candidates = {row.pk for row in self.entities.values() if isinstance(row, ItemEntity)
+                          and row.owner_object_id == firearm.owner_object_id and row.parent_item_id is None
+                          and row.location_kind in ("inventory", "equipment")
+                          and ITEMS[row.definition_id].get("firearm_family")}
+            missing = sorted((candidates | {firearm.pk}) - magazines.keys())
+            batch_size = (connection.features.max_query_params or 1000) - 1
+            loaded = {}
+            for offset in range(0, len(missing), batch_size):
+                batch = missing[offset:offset + batch_size]
+                rows = ItemEntity.objects.filter(parent_item_id__in=batch, socket="magazine")
+                loaded.update(dict.fromkeys(batch))
+                loaded.update({row.parent_item_id: row for row in rows})
+            magazines.update(loaded)
+        return magazines[firearm.pk]
+
 
 @dataclass
 class _DoorPresentation:
@@ -41,6 +63,7 @@ class _PresentationContext:
     availability: dict = field(default_factory=dict)
     doors: dict = field(default_factory=dict)
     items: dict = field(default_factory=dict)
+    observations: dict = field(default_factory=dict)
 
 
 _current = ContextVar("action_presentation_context", default=None)
@@ -77,6 +100,18 @@ def item_presentation(caller, observed_at):
     return context.items[key]
 
 
+def observation_snapshot(caller, observed_at):
+    from world.observation import context_for
+
+    context = _current.get()
+    if context is None or context.caller is not caller:
+        return context_for(caller, observed_at=observed_at)
+    key = (caller.db_location_id, observed_at)
+    if key not in context.observations:
+        context.observations[key] = context_for(caller, observed_at=observed_at)
+    return context.observations[key]
+
+
 def available(provider, caller, observed_at):
     if not hasattr(provider, "available"):
         return True
@@ -85,8 +120,15 @@ def available(provider, caller, observed_at):
         return provider.available(caller, observed_at)
     key = (id(provider), observed_at)
     if key not in context.availability:
+        from typeclasses.actors import Actor
+        from typeclasses.interactables import Shopkeeper
+
+        state = {}
+        if isinstance(provider, (Actor, Shopkeeper)):
+            state = {"get_profile": lambda: profile_snapshot(caller),
+                     "get_observation": lambda: observation_snapshot(caller, observed_at)}
         # 객체 참조도 보존하여 범위 안에서 id 재사용을 방지한다.
-        context.availability[key] = (provider, provider.available(caller, observed_at))
+        context.availability[key] = (provider, provider.available(caller, observed_at, **state))
     return context.availability[key][1]
 
 

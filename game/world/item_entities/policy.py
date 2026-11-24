@@ -20,15 +20,18 @@ TREE_OPERATION_SCOPES = {
 }
 
 
-def can_item_operation(item, operation):
+def can_item_operation(item, operation, *, loaded_magazine_item=None):
     if not isinstance(operation, str) or operation not in TREE_OPERATION_SCOPES:
         return False
     identity = item if isinstance(item, str) else item.definition_id
-    if (not isinstance(item, str) and operation in ("sell", "burn")
-            and ITEMS.get(identity, {}).get("firearm_family")
-            and item.children.filter(socket="magazine").exists()):
+    definition = ITEMS.get(identity, {})
+    if definition.get("operation_policy", {}).get(operation) is not True:
         return False
-    return ITEMS.get(identity, {}).get("operation_policy", {}).get(operation) is True
+    if not isinstance(item, str) and operation in ("sell", "burn") and definition.get("firearm_family"):
+        if loaded_magazine_item is not None:
+            return loaded_magazine_item(item) is None
+        return not item.children.filter(socket="magazine").exists()
+    return True
 
 
 def definition_errors(identity, definition):

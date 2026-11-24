@@ -47,6 +47,58 @@ class LootActionTests(NativeLootTest):
         self.assertFalse(any(command.key == "가져" for command in COMMANDS))
         self.assertEqual(self.index.verbs_by_public_keys["집"], "game.take")
 
+    def test_assigned_loot_display_reuses_recipient_and_rechecks_button(self):
+        from django.db import connection
+        from evennia.objects.models import ObjectDB
+        from world.actions.gateway import from_web
+        from world.actions.loot_presentation import source_controls
+        from world.loot_entities.models import LootClaim
+        from world.multiplayer import world_change
+
+        first = self.loot_item(quantity=2, assigned=self.char2)
+
+        def display():
+            reads = []
+
+            def count_recipient(execute_sql, sql, params, many, context):
+                if (sql.startswith("SELECT") and f'FROM "{ObjectDB._meta.db_table}"' in sql
+                        and tuple(params or ()) == (self.char2.pk,)):
+                    reads.append(sql)
+                return execute_sql(sql, params, many, context)
+
+            with connection.execute_wrapper(count_recipient):
+                return source_controls(self.char1, 100)[self.source.pk], len(reads)
+
+        single, single_reads = display()
+        second = self.loot_item(quantity=3, assigned=self.char2)
+        hidden = self.loot_item(quantity=17, assigned=self.char1)
+        with world_change():
+            claim = LootClaim.objects.get(item_entity=hidden)
+            claim.reserved_player = self.char2
+            claim.assigned_player = self.char2
+            claim.save()
+        currency = loot_service.create_currency(self.source, 6, shares={self.char1: 2, self.char2: 4},
+                                                reserved_player=self.char1, protection_until=300)
+        multiple, multiple_reads = display()
+        self.assertEqual(multiple_reads, single_reads)
+        rows = {row["action"]["roles"]["subject"][0]["identity"]: row for row in multiple["loot"]}
+        self.assertEqual(set(rows), {str(first.pk), str(second.pk), str(currency.pk)})
+        self.assertEqual(rows[str(first.pk)]["assigned_name"], self.char2.key)
+        self.assertEqual(rows[str(second.pk)]["assigned_name"], self.char2.key)
+        self.assertEqual(rows[str(currency.pk)]["assigned_name"], f"{self.char1.key} · {self.char2.key}")
+        text = self.invocation("시체에서 9mm 권총탄 1")
+        self.assertEqual(dict(text.roles)["subject"], (descriptor(first).reference,))
+
+        with world_change():
+            claim = LootClaim.objects.get(item_entity=first)
+            claim.reserved_player = None
+            claim.save()
+        before = self.all_state()
+        stale = from_web({**single["loot"][0]["action"], "request_id": "changed-loot-recipient"}, self.index)
+        for invocation in (text, stale):
+            self.assertEqual(execute(self.char1, self.session, invocation, self.index).status, ResultStatus.REFUSED)
+            self.assertEqual(self.all_state(), before)
+
     def test_public_evennia_command_and_alias_change_real_inventory(self):
         item = self.loot_item(quantity=3)
         for command in ("시체에서 9mm 권총탄 가져", "시체에서 9mm 권총탄 집"):
@@ -383,14 +435,17 @@ class LootActionTests(NativeLootTest):
 
         legacy = create_object(Corpse, key="과거 저장 시체", location=self.char1.location)
         legacy.db.decay_at = 200
-        legacy.db.entries = [{"item": "bandage", "quantity": 2},
+        legacy.db.entries = [{"item": "bandage", "quantity": 2, "assigned_player": str(self.char1.pk)},
+                             {"item": "bandage", "quantity": 1, "assigned_player": str(2**63)},
                              {"kind": "currency", "id": "credits", "quantity": 21,
                               "shares": {self.char1.pk: 11, self.char2.pk: 10}, "protection_until": 220}]
         before = deepcopy(deserialize(legacy.db.entries))
         counts = ItemEntity.objects.count()
         control = source_controls(self.char1, 100)[legacy.pk]
-        self.assertEqual([entry["id"] for entry in control["loot"]], ["bandage", "credits"])
-        self.assertEqual([entry["quantity"] for entry in control["loot"]], [2, 21])
+        self.assertEqual([entry["id"] for entry in control["loot"]], ["bandage", "bandage", "credits"])
+        self.assertEqual([entry["quantity"] for entry in control["loot"]], [2, 1, 21])
+        self.assertEqual([entry["assigned_name"] for entry in control["loot"]],
+                         [self.char1.key, "탈퇴한 탐사자", f"{self.char1.key} · {self.char2.key}"])
         self.assertTrue(all(entry["action"] is None for entry in control["loot"]))
         self.assertTrue(all(entry["take_command"] == "" for entry in control["loot"]))
         self.assertIsNone(control["take_action"])

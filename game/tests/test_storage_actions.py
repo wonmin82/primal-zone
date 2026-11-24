@@ -1,7 +1,9 @@
 """운영 Storage Action의 UUID·수량·접근·원자성·B-1 회귀."""
 
+import re
 from unittest.mock import patch
 
+from django.db import connection
 from evennia import create_object
 from typeclasses.interactables import Container, PersonalLocker
 from world import rules
@@ -245,6 +247,76 @@ class StorageActionsTests(NativeItemTest):
         transfer_selected(self.char1, self.locker, [parent], withdraw=True)
         child.refresh_from_db()
         self.assertEqual(descriptor(child).reference, before)
+
+    def test_shared_controls_recheck_blocked_child_and_grandchild_for_original_root(self):
+        for withdraw, identity, verb in (
+            (False, "storage.store", "넣어"),
+            (True, "storage.retrieve", "꺼내"),
+        ):
+            with self.subTest(verb=verb):
+                owner = self.box if withdraw else self.char1
+                location = "shared_storage" if withdraw else "inventory"
+                allowed = api.create_item("flashlight", location_kind=location, owner_object=owner)
+                blocked = api.create_item("flashlight", location_kind=location, owner_object=owner)
+                direct = api.create_item("flashlight", location_kind=location, owner_object=owner)
+                allowed_child = api.create_item("battery", location_kind="inside",
+                                                parent_item=allowed, socket="power")
+                blocked_child = api.create_item("battery", location_kind="inside",
+                                                parent_item=blocked, socket="power")
+                api.create_item("bandage", location_kind="inside", parent_item=allowed_child, socket="test")
+                old_control = self.control(identity, blocked, provider=self.box)
+                restricted = api.create_item("generator_repair_part", location_kind="inside",
+                                             parent_item=blocked_child, socket="test")
+                api.create_item("generator_repair_part", location_kind="inside",
+                                parent_item=direct, socket="test")
+                provider_ref = descriptor(self.box).reference
+                controls = action_controls(self.char1, self.index, 100, provider_reference=provider_ref,
+                                           verb_key=verb)
+                identities = {control["action"]["roles"]["subject"][0]["identity"] for control in controls}
+                self.assertEqual(identities, {str(allowed.pk)})
+                before = self.atomic_state()
+                self.assertEqual(self.invoke(old_control, f"stale-shared-{identity}").status, ResultStatus.REFUSED)
+                self.assertEqual(self.atomic_state(), before)
+                api.delete_item(restricted)
+                self.assertEqual(self.control(identity, blocked, provider=self.box), old_control)
+
+    def test_shared_tree_relation_queries_scale_with_depth_not_root_count(self):
+        provider_ref = descriptor(self.box).reference
+        relation_lookup = re.compile(r'"PARENT_ITEM_ID"\s+(?:=|IN)\s*')
+        for withdraw, verb in ((False, "넣어"), (True, "꺼내")):
+            owner = self.box if withdraw else self.char1
+            location = "shared_storage" if withdraw else "inventory"
+            roots = []
+            relation_counts = []
+            for size in (1, 8):
+                for _ in range(size - len(roots)):
+                    root = api.create_item("flashlight", location_kind=location, owner_object=owner)
+                    child = api.create_item("battery", location_kind="inside", parent_item=root, socket="power")
+                    api.create_item("bandage", location_kind="inside", parent_item=child, socket="test")
+                    roots.append(root)
+
+                queries = []
+                writes = []
+
+                def capture(execute_sql, sql, params, many, context):
+                    statement = sql.upper().lstrip()
+                    if (statement.startswith("SELECT") and ItemEntity._meta.db_table.upper() in statement
+                            and relation_lookup.search(statement.partition(" WHERE ")[2])):
+                        queries.append(sql)
+                    elif statement.startswith(("INSERT", "UPDATE", "DELETE", "REPLACE")):
+                        writes.append(sql)
+                    return execute_sql(sql, params, many, context)
+
+                with connection.execute_wrapper(capture):
+                    controls = action_controls(self.char1, self.index, 100, provider_reference=provider_ref,
+                                               verb_key=verb)
+                identities = {control["action"]["roles"]["subject"][0]["identity"] for control in controls}
+                self.assertEqual(identities, {str(root.pk) for root in roots})
+                self.assertEqual(writes, [])
+                relation_counts.append(len(queries))
+            with self.subTest(verb=verb):
+                self.assertGreater(relation_counts[0], 0)
+                self.assertEqual(relation_counts[0], relation_counts[1], relation_counts)
 
     def test_shared_transfer_policy_combat_and_equipped_item_reject_without_effect(self):
         key = self.create("hq_admin_key")

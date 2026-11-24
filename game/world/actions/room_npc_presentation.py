@@ -17,7 +17,8 @@ def render(caller, index, reference, binding, observed_at=None):
     from world.selection_numbers.api import resolve_reference
 
     action = index.actions[binding.action_id]
-    provider = resolve_reference(reference)
+    view = item_presentation(caller, observed_at)
+    provider = view.item(reference)
     config = dict(binding.config)
     if not available(provider, caller, observed_at):
         return []
@@ -42,7 +43,7 @@ def render(caller, index, reference, binding, observed_at=None):
     roles = {"provider": [reference_json(reference)]}
     subjects = next(iter([role for role in action.roles if role.name == "subject"]), None)
     if subjects and subjects.kinds == (ReferenceKind.ITEM,):
-        items = item_presentation(caller, observed_at)
+        items = view
         candidates = role_records(caller, subjects, cache=items.records, item_entities=items.entities)
     else:
         items = None
@@ -77,7 +78,8 @@ def render(caller, index, reference, binding, observed_at=None):
             if item is None or item_label is None:
                 continue
             operation = "burn" if key == "소각" else "sell"
-            if key != "가치" and (item.location_kind != "inventory" or not can_item_operation(item, operation)):
+            if key != "가치" and (item.location_kind != "inventory" or not can_item_operation(
+                    item, operation, loaded_magazine_item=view.loaded_magazine_item)):
                 continue
             current_roles["subject"] = [reference_json(record.reference)]
             label = item_label + " " + key

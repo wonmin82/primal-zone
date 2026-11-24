@@ -34,7 +34,11 @@ def _magazine(view, item):
 def _firearm(view, item):
     from world.firearm_service import firearm_snapshot
 
-    return view.read(("firearm", item.pk), lambda: firearm_snapshot(item))
+    def magazine(firearm):
+        mounted = view.loaded_magazine_item(firearm)
+        return _magazine(view, mounted) if mounted is not None else None
+
+    return view.read(("firearm", item.pk), lambda: firearm_snapshot(item, read_magazine=magazine))
 
 
 def _role(caller, declaration, bindings, view):

@@ -103,15 +103,18 @@ def select_look_reference(caller, selector, observed_at):
     from world.equipment_service import entity_runtime
     from world.item_entities.api import carried_items
     from world.observation import context_for, perceives
+    from world.selection_display import door_rows_by_endpoint
     from world.selection_numbers.api import descriptor, numbered_records
     from world.targets import room_objects
 
     entities = [entity for entity in room_objects(caller, observed_at=observed_at)
                 if not isinstance(entity, DroppedLoot)]
+    doors_by_endpoint = door_rows_by_endpoint(entities)
     if entity_runtime(caller):
         entities.extend(carried_items(caller))
     candidates = {record.reference: (record, entity) for entity in entities
-                  if (record := descriptor(entity)) is not None and record.reference.kind in LOOK_TARGET.kinds
+                  if (record := descriptor(entity, doors_by_endpoint=doors_by_endpoint)) is not None
+                  and record.reference.kind in LOOK_TARGET.kinds
                   and record.name == selector.name}
     doors = [ref for ref in candidates if ref.kind == ReferenceKind.DOOR]
     if doors and not perceives(context_for(caller, observed_at=observed_at).snapshot, "normal"):

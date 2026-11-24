@@ -270,17 +270,32 @@ def populate_source(source, entries):
 
 
 def _current_entry(source, selected):
+    from world.item_runtime import require_runtime
+
     if not native_source(source):
         raise rules.RuleError("이 전리품은 legacy 호환 경로를 사용해야 합니다.")
-    for entry in loot_snapshot(source).entries:
-        if (entry.item_id, entry.currency_id) == (selected.item_id, selected.currency_id):
-            if (entry.reserved_party, entry.reserved_player, entry.assigned_player, entry.protection_until) != (
-                    selected.reserved_party, selected.reserved_player, selected.assigned_player, selected.protection_until):
-                raise rules.RuleError("전리품 권리가 바뀌었습니다. 다시 선택하세요.")
-            if (entry.quantity, entry.shares) != (selected.quantity, selected.shares):
-                raise rules.RuleError("전리품 수량이나 지분이 바뀌었습니다. 다시 선택하세요.")
-            return entry
-    raise rules.RuleError("전리품의 출처가 바뀌었거나 이미 회수되었습니다.")
+    require_runtime()
+    entry = None
+    if selected.item_id is not None and selected.currency_id is None:
+        item = ItemEntity.objects.select_related("loot_claim").filter(
+            pk=selected.item_id, owner_object=source, location_kind__in=("corpse_loot", "world_loot"),
+        ).first()
+        if item is not None:
+            entry = _item_snapshot(item)
+    elif selected.currency_id is not None and selected.item_id is None:
+        currency = CurrencyLoot.objects.prefetch_related("shares").filter(
+            pk=selected.currency_id, owner_object=source,
+        ).first()
+        if currency is not None:
+            entry = _currency_snapshot(currency)
+    if entry is None or (entry.item_id, entry.currency_id) != (selected.item_id, selected.currency_id):
+        raise rules.RuleError("전리품의 출처가 바뀌었거나 이미 회수되었습니다.")
+    if (entry.reserved_party, entry.reserved_player, entry.assigned_player, entry.protection_until) != (
+            selected.reserved_party, selected.reserved_player, selected.assigned_player, selected.protection_until):
+        raise rules.RuleError("전리품 권리가 바뀌었습니다. 다시 선택하세요.")
+    if (entry.quantity, entry.shares) != (selected.quantity, selected.shares):
+        raise rules.RuleError("전리품 수량이나 지분이 바뀌었습니다. 다시 선택하세요.")
+    return entry
 
 
 def pickup(source, selected, caller, quantity, *, now, locked=False):

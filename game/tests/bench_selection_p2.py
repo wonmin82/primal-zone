@@ -1,6 +1,7 @@
 """잔여 P2 격리 실측. scripts/dev.py test tests.bench_selection_p2 --parallel 1."""
 
 from collections import Counter
+from contextlib import ExitStack
 from dataclasses import asdict
 from hashlib import sha256
 from itertools import count
@@ -32,6 +33,7 @@ SAMPLES = 5
 ITEM_TABLE = ItemEntity._meta.db_table.upper()
 B1_TABLE = SelectionNumber._meta.db_table.upper()
 ITEM_ID_LOOKUP = compile_regex(rf'"{ITEM_TABLE}"\."ID"\s*=\s*%S')
+ITEM_CHILD_LOOKUP = compile_regex(rf'"{ITEM_TABLE}"\."PARENT_ITEM_ID"\s*(?:=|IN\s*\()')
 
 
 class SelectionP2Benchmark(NativeItemTest):
@@ -65,24 +67,30 @@ class SelectionP2Benchmark(NativeItemTest):
                     queries["b1_select"] += 1
                 if ITEM_TABLE in statement:
                     queries["item_select"] += 1
-                    if ITEM_ID_LOOKUP.search(statement.partition(" WHERE ")[2]):
+                    where = statement.partition(" WHERE ")[2]
+                    if ITEM_CHILD_LOOKUP.search(where):
+                        queries["child_relation_select"] += 1
+                    if ITEM_ID_LOOKUP.search(where):
                         by_pk[tuple(params or ())] += 1
             elif statement.startswith(("INSERT", "UPDATE", "DELETE", "REPLACE")):
                 queries["writes"] += 1
             return execute(sql, params, many, context)
 
-        transfer_policy = item_transfer_native.require_ownership_transfer
+        def counted(load):
+            def check(*args, **kwargs):
+                nonlocal policy_depth
+                policy_depth += 1
+                try:
+                    return load(*args, **kwargs)
+                finally:
+                    policy_depth -= 1
+            return check
 
-        def check_transfer(item, destination):
-            nonlocal policy_depth
-            policy_depth += 1
-            try:
-                return transfer_policy(item, destination)
-            finally:
-                policy_depth -= 1
-
-        with (connection.execute_wrapper(count_sql),
-              patch.object(item_transfer_native, "require_ownership_transfer", side_effect=check_transfer)):
+        with ExitStack() as stack:
+            stack.enter_context(connection.execute_wrapper(count_sql))
+            for name in ("require_ownership_transfer", "ownership_transfer_children"):
+                if (method := getattr(item_transfer_native, name, None)) is not None:
+                    stack.enter_context(patch.object(item_transfer_native, name, side_effect=counted(method)))
             actual = read()
         self.assertEqual(actual, expected)
         self.assertEqual(queries["writes"], 0)
@@ -92,7 +100,9 @@ class SelectionP2Benchmark(NativeItemTest):
             "controls": len(actual) if isinstance(actual, list) else None,
             "selected_uuid": None if isinstance(actual, list) else dict(actual.roles)["subject"][0].identity,
             "payload_sha256": sha256(dumps(payload, ensure_ascii=False, sort_keys=True).encode()).hexdigest(),
-            **{name: queries[name] for name in ("sql", "item_select", "b1_select", "policy_sql", "writes")},
+            **{name: queries[name] for name in (
+                "sql", "item_select", "b1_select", "child_relation_select", "policy_sql", "writes",
+            )},
             "item_pk_select": sum(by_pk.values()),
             "repeated_item_pk_select": sum(calls - 1 for calls in by_pk.values()),
         }, sort_keys=True), flush=True)
@@ -149,6 +159,43 @@ class SelectionP2Benchmark(NativeItemTest):
             restricted = self.create("generator_repair_part")
             self.measure_storage("mixed_policy_store", size, box, "넣어", inventory)
             api.delete_item(restricted)
+
+    def test_shared_storage_tree_depths(self):
+        room = self.char1.location
+        for depth in (0, 1, 2):
+            store_box = create_object(Container, key=f"트리 넣기 실측 {depth}", location=room)
+            retrieve_box = create_object(Container, key=f"트리 꺼내기 실측 {depth}", location=room)
+            store_roots = []
+            retrieve_roots = []
+            for size in COUNTS:
+                while len(store_roots) < size:
+                    root = self.create("bandage", quantity=2)
+                    parent = root
+                    for level in range(depth):
+                        parent = api.create_item(
+                            "bandage", location_kind="inside", parent_item=parent, socket="part",
+                        )
+                    store_roots.append(root)
+
+                    root = api.create_item(
+                        "bandage", quantity=2, location_kind="shared_storage", owner_object=retrieve_box,
+                    )
+                    parent = root
+                    for level in range(depth):
+                        parent = api.create_item(
+                            "bandage", location_kind="inside", parent_item=parent, socket="part",
+                        )
+                    retrieve_roots.append(root)
+
+                self.measure_storage(
+                    f"shared_store_tree_depth_{depth}", size, store_box, "넣어", store_roots[:size],
+                )
+                self.measure_storage(
+                    f"shared_retrieve_tree_depth_{depth}", size, retrieve_box, "꺼내", retrieve_roots[:size],
+                )
+
+            for root in store_roots:
+                api.move_item_tree(root, location_kind="personal_storage", owner_object=self.char1, operation="store")
 
     def measure_storage(self, scenario, size, provider, verb, candidates):
         reference = descriptor(provider).reference
