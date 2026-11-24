@@ -228,3 +228,33 @@ uv run python scripts/dev.py test tests.bench_loot_execution --parallel 1
 ```
 
 최종 제품 코드 `9c23c7c98c7f0cb98540a0f1e6dfa6d95588503e`의 전체 검사(`scripts/dev.py test --parallel 4`)는 순수 Python 294개와 격리 통합 1,328개 통과, 원래 종료 코드 0이었다. 이 기록을 추가한 커밋은 문서만 변경했다.
+
+## 공개 거절 응답의 동등성
+
+기준 `main`은 `a4a18d82e4d7a991f121bb2b6c28ab28c71565ec`이다. [최종 종료 감사](https://github.com/wonmin82/primal-zone/issues/109#issuecomment-7132896857)의 P2를 격리 `settings_test`에서 다시 재현했다. 발급된 동일 Typed Reference에 대해 숨김과 부재는 두 경로 모두 `REFUSED`였으나 공개 메시지가 달랐다. 관찰은 `원래 대상이 없어졌거나 위치·권한이 바뀌었습니다.`와 `원래 대상이 없어졌거나 위치가 바뀌었습니다.`로, 전리품은 앞의 Role 오류와 `전리품 출처가 사라졌습니다.`로 구별됐다. 두 동등성 검사는 수정 전 FAIL였다.
+
+### 실행 경로 감사
+
+운영 Manifest의 `room_npc`, `item_shared`, `item_equipment`, `storage`, `firearm_lighting`, `loot`, `global_actions`, `dialogue_actions` 패키지의 실행 경계를 대조했다. 명시적 잠금 Hook은 Loot, 실행 전 관찰 정합화 Hook은 Loot와 Typed 관찰에 등록된다.
+
+| 경로 | 공개 상태 및 검증 경계 | 판정 |
+|---|---|---|
+| 공통 Gateway, Selection Number 및 Resolver | 잠금의 실물·부모·Scope 부재, 잠금 후 Role·가시성·Owner 거절, Provider·Capability·호출 권한 변경의 공개 오류를 Action별로 일치시킨다. 등록·문법·Role 수 오류는 요청 자체의 오류다. | RESOLVED |
+| 웹 `pz_action` 및 텍스트 어댑터 | Gateway가 같은 `REFUSED`와 메시지를 반환하고 공통 출력 경계가 이를 전달한다. 요청 ID, 형식, 입력 제한 및 Session/Puppet 검사는 기존 의미를 유지한다. 텍스트의 정확 인용·Alias·번호 선택은 기존 공개 후보 집합을 사용한다. | SAFE |
+| 효과 실행과 Typed NPC 인사 | 효과 직전의 Role·Capability를 재검증한다. Typed 인사의 도달 불가 응답과 공통 대상 오류를 일치시킨다. 토큰 대화는 Caller·Session·기한을 검증하고 NPC의 부재와 현재 키워드 사용 불가에 공통 응답을 사용한다. | RESOLVED |
+| 관찰, Door, Enemy·Actor, Combat·Duel | Typed 관찰의 최종 시야·생명주기 판정을 같은 공통 거절에 연결했다. 현재 Role에서 접근 가능한 대상의 세대, 대련 참여, 출구 조작 및 공개 상태 오류는 도메인에서 안내한다. | RESOLVED / SAFE |
+| ItemEntity 장비·Storage·Inside·총기·상점·소각 | 현재 Role과 위치·소유권·시설 제공 및 접근을 실제 참조로 검증한다. 공개·접근 가능한 대상의 장비·수량·잔액·확인·처분 제한 메시지는 도메인에서 안내한다. | RESOLVED / SAFE |
+| Corpse·Ground Loot Source와 Entry | 잠금, Role, 현재 보호와 출처 일치 검사에서 `LootUnavailable`을 사용한다. 전체 대상의 접근 가능성을 검증한 뒤 공개 수량 오류를 반환한다. 지급 직전 권리 거절도 수량·지분 변경 안내보다 앞선다. | RESOLVED |
+| Loot 서명과 실제 지급 | 접근 가능한 현재 Entry에만 서명 만료·수량·지분 변경 안내가 도달한다. Owner → Item → Claim → Currency → Share 잠금 및 지급 대상, 수량, 보호, Rollback 정책은 유지한다. | SAFE |
+
+수정 후 일반 Typed 대상 거절은 `원래 대상이 없어졌거나 위치·권한이 바뀌었습니다.`, Loot 거절은 `지금 선택할 수 없는 전리품입니다.`이며, 기존 격리 재현 두 건이 PASS였다. 변경은 기존 조회의 오류 선택 및 순서를 조정한다. 지급 직전에는 기존 권리 판정을 한 번 실행하되, 수량·지분 설명보다 먼저 확인한다. 추가 SQL·임의 지연·잠금·반복 스캔을 도입하지 않는다. 실제 운영 DB, 복수 서버 동시 쓰기, 이미 열린 구형 탭 수동 검사 및 응답 시간 채널 계측은 미실행이다. 실제 OS 한글 IME는 기존 USER-CONFIRMED 기록을 사용한다.
+
+실제 `pz_action` 공개 경계 회귀는 관찰의 숨김·이동·삭제·번호 재사용과 Loot의 숨김·부재·권리 변경·혼합 지급을 비교한다. 요청 자체의 Role 구조는 DB 조회 전에 검증해 같은 비정상 요청의 오류가 대상 상태에 따라 달라지지 않도록 했다. 시설의 호출권 검사를 전투 제한 안내보다 먼저 적용한다. 공개적으로 접근 가능한 시설의 전투 제한 메시지와 접근 가능한 Loot의 수량 오류는 유지된다.
+
+후속 독립 검토에서 시야가 부족해도 이동 방향 자체는 인지되는 문과, 공개 대상 목록에서 제외되는 부활 대기 Actor의 명시적 참조를 확인했다. Typed 참조의 현재 Role을 검사할 때 문 조작에 필요한 시야와 공개 Actor의 생명주기 조건을 반영한다. 문 조작의 최종 대상 검사도 공통 거절을 사용한다. 격리 회귀는 같은 행동에서 이 상태와 참조 부재의 최종 ActionResult 전체를 비교하고, 문 상태 변경 및 전투 시작이 없음을 확인한다. 이동용 Exit 어댑터의 독립적인 `view`·`cmd`·`traverse` 조합 전수 재현은 UNVERIFIED다.
+
+최종 제품 코드의 `scripts/dev.py check`, `git diff --check`, 웹 Contracts 69개와 관찰·문 직접 영향 테스트 70개가 통과했다. `scripts/dev.py test --parallel 4` 감시 작업 `229f7752bb434dc88b046042976d1852`의 원래 종료 코드는 0이며 순수 Python 294개와 격리 통합 1,333개가 통과했다. 독립 Reviewer `reviewer_hazel`과 Auditor `auditor_selma`는 안정 참조 수정 범위를 A, 아래 텍스트 경로를 포함한 전체 I08을 C로 판정했다. PR과 해당 PR의 GitHub Actions는 미실행이다.
+
+### 유지하기로 결정한 텍스트 기본 선택
+
+안정 참조와 별도로, 번호 없는 Loot 명령의 첫 후보가 보호 상태일 때 공개 후속 후보로 넘어가지 않는 기존 계약이 있다. 격리 재현에서 보호된 첫 후보가 있을 때는 거절됐고, 동일한 공개 후보만 남았을 때는 기존 UUID로 정상 지급됐다. `test_mixed_private_number_never_falls_back_to_accessible_entry`는 보호된 후보가 있을 때 기본 요청이 다른 대상에 효과를 내지 않는 동작을 보장한다. 사용자가 기존 선택 규칙 유지를 명시적으로 선택했으므로 이 해석 정책을 유지한다. 이 경로에서는 보호 후보 유무에 따른 응답 차이가 남으므로 I08 전체 검증을 성공으로 기록하지 않는다.

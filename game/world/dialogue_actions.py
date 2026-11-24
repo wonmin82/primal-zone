@@ -3,7 +3,7 @@
 from world import npc_dialogue as dialogue
 from world.rules import RuleError
 
-from .actions.gateway import ActionResult, ResultStatus
+from .actions.gateway import ActionResult, ResultStatus, target_unavailable
 from .actions.schema import (
     ActionBinding,
     ActionDefinition,
@@ -40,7 +40,7 @@ def speech(context):
             intent = next(iter([intent for intent in dialogue.available_intents(caller, npc)
                                 if intent.intent_id == "greeting"]), None)
             if intent is None:
-                raise RuleError("원래 NPC에게 지금 말을 걸 수 없습니다.")
+                raise target_unavailable(context.invocation.action_id)
             request.update(npc=npc, intent=intent)
             original = f"{npc.key}에게 {intent.keyword}"
         else:

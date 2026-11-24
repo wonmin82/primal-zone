@@ -26,7 +26,7 @@ def lock(caller, invocation):
     resolved = resolve_references(refs)
     sources = [resolved.get(ref) for ref in refs]
     if not sources or any([not isinstance(source, (Corpse, DroppedLoot)) for source in sources]):
-        raise rules.RuleError("전리품 출처가 사라졌습니다.")
+        raise LootUnavailable()
     lock_sources(sources, caller)
 
 
@@ -64,7 +64,7 @@ def take(context):
     if expected != fingerprint(caller, selections, now, party=party, recipients=recipients):
         raise rules.RuleError("전리품 수량이나 권리가 바뀌었습니다. 다시 선택하세요.")
     if {source.pk for source, _ in selections} != {source.pk for source in sources}:
-        raise rules.RuleError("선택한 전리품과 출처가 일치하지 않습니다.")
+        raise LootUnavailable()
     received = []
     recovered = 0
     for source, entry in selections:

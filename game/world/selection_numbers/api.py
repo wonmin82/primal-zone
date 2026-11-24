@@ -335,7 +335,7 @@ def records_for(caller, kind=None, scope_id=None, *, scope_ids=None, kinds=None,
         room = descriptor(caller.location)
         if room and room.scope_id in scopes and (references is None or room.reference in references):
             result.append(room)
-    from world.observation import context_for
+    from world.observation import context_for, perceives
 
     @cache
     def observation():
@@ -354,6 +354,12 @@ def records_for(caller, kind=None, scope_id=None, *, scope_ids=None, kinds=None,
                 or record.name != row.name or row.number < 1):
             continue
         carried = require_carried_root and ref.kind == ReferenceKind.ITEM
+        if check_visibility and references is not None:
+            if ref.kind == ReferenceKind.DOOR and not perceives(observation().snapshot, "normal"):
+                continue
+            if (ref.kind in (ReferenceKind.ACTOR, ReferenceKind.ENEMY)
+                    and getattr(entity, "supports_shared_combat", False) and entity.db.state != "alive"):
+                continue
         if (not check_visibility and not carried) or visible_entity(
                 caller, entity, require_carried_root=carried, get_observation=observation):
             result.append(replace(record, number=row.number))

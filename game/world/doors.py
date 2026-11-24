@@ -435,18 +435,20 @@ def operate(caller, value, action, now=None):
 
 
 def operate_endpoint(caller, endpoint, action, now=None):
+    from world.actions.gateway import target_unavailable
+
     with world_change():
-        rules.require_peace(caller.profile_snapshot())
         now = time() if now is None else now
         target = next((target for target in current_doors(caller, now) if target.exit_pk == endpoint.pk), None)
         if target is None or endpoint.location != caller.location or not endpoint.access(caller, "call"):
-            raise rules.RuleError("원래 문이 없어졌거나 위치·권한이 바뀌었습니다.")
+            raise target_unavailable("door")
+        rules.require_peace(caller.profile_snapshot())
         state = effective_door_state(target.identity, now)
         if state == UNAVAILABLE:
             raise rules.RuleError("그 문은 지금 이용할 수 없습니다.")
         door = Door.objects.get(door_id=target.identity)
         if endpoint.pk not in (door.exit_a_id, door.exit_b_id):
-            raise rules.RuleError("원래 문이 없어졌거나 위치·권한이 바뀌었습니다.")
+            raise target_unavailable("door")
         if action in ("잠궈", "풀어"):
             if not door.lockable:
                 raise rules.RuleError("잠글 수 없는 문입니다.")

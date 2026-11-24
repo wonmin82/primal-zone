@@ -214,6 +214,52 @@ class SelectionObservationTests(NativeItemTest):
             self.assertEqual(self.run_action(request).status, ResultStatus.REFUSED)
             observe.assert_not_called()
 
+    def test_web_observation_has_one_public_refusal_for_hidden_moved_and_deleted_targets(self):
+        from server.conf.primal_inputfuncs import pz_action
+        from world.actions.gateway import ActionResult, emit
+
+        room = self.char1.location
+        remote = create_object("typeclasses.rooms.Room", key="다른 방")
+        corpse = create_object(Corpse, key="원래 시체", location=room)
+        corpse.db.decay_at = 500
+        loot_service.populate_source(corpse, [])
+        ref = descriptor(corpse).reference
+        payload = target_action("look_target", ref)
+
+        def click(request_id, action=payload):
+            before = self.atomic_state()
+            with (patch("world.actions.gateway.emit", wraps=emit) as delivery,
+                  patch.object(self.char1, "msg") as output):
+                pz_action(self.session, {**action, "request_id": request_id})
+            delivery.assert_called_once()
+            result = delivery.call_args.args[-1]
+            self.assertEqual(result, ActionResult(ResultStatus.REFUSED, result.messages))
+            events = [(call.kwargs["kind"], str(call.args[0])) for call in output.call_args_list
+                      if call.kwargs.get("kind") in ("error", "event")]
+            self.assertEqual(len(events), 1)
+            self.assertEqual(events[0][0], "error")
+            self.assertFalse(any("pz_action_result" in call.kwargs for call in output.call_args_list))
+            self.assertEqual(self.atomic_state(), before)
+            return result, events
+
+        duplicate = {**payload, "roles": {"subject": payload["roles"]["subject"] * 2}}
+        with patch.object(self.char1, "at_look", wraps=self.char1.at_look) as observe:
+            corpse.locks.add("view:false()")
+            denied = click("look-access-revoked")
+            invalid = click("look-invalid-hidden", duplicate)
+            self.assertEqual(invalid[0].messages, ("행동 대상 수를 확인하세요.",))
+            corpse.locks.add("view:all()")
+            corpse.location = remote
+            self.assertEqual(click("look-moved"), denied)
+            corpse.delete()
+            replacement = create_object(Corpse, key="새 시체", location=room)
+            replacement.db.decay_at = 500
+            loot_service.populate_source(replacement, [])
+            self.assertEqual(number_for(descriptor(replacement).reference), 1)
+            self.assertEqual(click("look-deleted"), denied)
+            self.assertEqual(click("look-invalid-deleted", duplicate), invalid)
+            observe.assert_not_called()
+
     def test_exact_look_does_not_expose_a_ground_sources_raw_asset_name(self):
         source = create_object(DroppedLoot, key="숨은 물품 이름", location=self.char1.location)
         loot_service.populate_source(source, [])
@@ -249,6 +295,42 @@ class SelectionObservationTests(NativeItemTest):
         self.assertEqual(tuple(map(str, web.messages)), tuple(map(str, text.messages)))
         endpoint.locks.add("view:false()")
         self.assertEqual(self.run_action(request).status, ResultStatus.REFUSED)
+
+    def test_door_action_refuses_hidden_and_absent_endpoints_equally(self):
+        from world.actions.presentation import reference_json
+        from world.door_entities.models import Door
+
+        self.char1.location = build_world()["hq_concourse"]
+        door = current_doors(self.char1, 100)[0]
+        endpoint = ObjectDB.objects.get(pk=door.exit_pk)
+        action = {"action_id": "door.open", "variant": "normal", "arguments": {},
+                  "roles": {"provider": [reference_json(descriptor(endpoint).reference)]}}
+        request = from_web({**action, "request_id": "hidden-door"}, self.index)
+        before = list(Door.objects.values())
+        with patch("world.observation.perceives", return_value=False):
+            hidden = self.run_action(request)
+        endpoint.location = None
+        absent = self.run_action(request)
+        self.assertEqual(hidden, absent)
+        self.assertEqual(hidden.status, ResultStatus.REFUSED)
+        self.assertEqual(list(Door.objects.values()), before)
+
+    def test_attack_refuses_respawning_and_absent_actor_equally(self):
+        from world.actors.spawn import create_actor
+
+        enemy = create_actor("scavenger", self.char1.location)
+        action = target_action("attack", descriptor(enemy).reference)
+        action["arguments"] = {"generation": enemy.db.combat_generation or 0,
+                               "lifecycle": enemy.db.combat_lifecycle or 0}
+        request = from_web({**action, "request_id": "hidden-attack"}, self.index)
+        with patch.object(self.char1, "start_combat") as attack:
+            enemy.db.state = "respawning"
+            hidden = self.run_action(request)
+            enemy.location = None
+            absent = self.run_action(request)
+        self.assertEqual(hidden, absent)
+        self.assertEqual(hidden.status, ResultStatus.REFUSED)
+        attack.assert_not_called()
 
     def test_door_observation_and_operation_reject_mismatched_endpoint(self):
         from world.door_entities.models import Door
