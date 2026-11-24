@@ -154,18 +154,53 @@ class LootActionInvariantTests(NativeLootTest):
         before = self.state()
         denied = self.public_errors(command="시체에서 권총탄 1 가져")
         absent = self.public_errors(command="시체에서 권총탄 999 가져")
-        default = self.public_errors(command="시체에서 권총탄 가져")
+        exact = self.public_errors(command='시체에서 "9mm 권총탄" 1 가져')
         self.assertEqual(self.state(), before)
         self.assertEqual([number_for(ref) for ref in refs], [1, 2])
         self.assertTrue(denied)
         self.assertEqual(denied, absent)
-        self.assertEqual(default, denied)
+        self.assertEqual(exact, denied)
         result = self.run_action(self.invocation("시체에서 권총탄 2", self.char2), self.char2)
         self.assertEqual(result.status, ResultStatus.SUCCESS)
         accessible.refresh_from_db()
         private.refresh_from_db()
         self.assertEqual((private.quantity, accessible.quantity), (7, 2))
         self.assertEqual(ItemEntity.objects.get(owner_object=self.char2).quantity, 1)
+
+    def test_default_uses_same_public_entry_when_private_first_entry_exists_or_is_absent(self):
+        from time import time
+
+        private = self.loot_item(quantity=7, deadline=time() + 300)
+        public = self.loot_item(quantity=3, deadline=99)
+        later = self.loot_item(quantity=5, deadline=99)
+        reference = descriptor(public).reference
+        output = self.output[self.char2.pk]
+
+        def take_default():
+            invocation = self.invocation("시체에서 권총탄", self.char2)
+            self.assertEqual(dict(invocation.roles)["subject"], (reference,))
+            output.reset_mock()
+            completed = []
+            self.char2.execute_cmd("시체에서 권총탄 가져", session=self.sessions[self.char2.pk]).addCallback(
+                lambda _: completed.append(True))
+            self.assertEqual(completed, [True])
+            self.assertFalse([call for call in output.call_args_list if call.kwargs.get("kind") == "error"])
+            public_output = [str(call.args[0]) for call in output.call_args_list
+                             if call.args and "챙겼다" in str(call.args[0])]
+            self.assertTrue(public_output)
+            return public_output
+
+        with_private = take_default()
+        private.refresh_from_db()
+        public.refresh_from_db()
+        self.assertEqual((private.quantity, public.quantity), (7, 2))
+        LootClaim.objects.filter(item_entity=private).delete()
+        api.delete_item(private)
+        self.assertEqual(take_default(), with_private)
+        public.refresh_from_db()
+        later.refresh_from_db()
+        self.assertEqual((public.quantity, later.quantity), (1, 5))
+        self.assertEqual(ItemEntity.objects.get(owner_object=self.char2).quantity, 2)
 
     def test_private_alias_collision_and_numeric_name_do_not_change_public_errors(self):
         from time import time

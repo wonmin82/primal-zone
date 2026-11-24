@@ -315,6 +315,8 @@ def traverse(context):
     selected = Exit.objects.select_for_update().filter(pk=identity, db_location_id=caller.db_location_id).first()
     if caller.location is None or selected is None or not selected.destination:
         raise rules.RuleError("출구를 이용할 수 없습니다.")
+    if context.invocation.origin == "web" and not selected.access(caller, "view"):
+        raise rules.RuleError("출구를 이용할 수 없습니다.")
     if not any([command.access(caller, "cmd") for command in selected.create_exit_cmdset(selected) if command.is_exit]):
         raise rules.RuleError("출구를 이용할 수 없습니다.")
     if not selected.access(caller, "traverse"):

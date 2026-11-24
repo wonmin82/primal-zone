@@ -451,12 +451,15 @@ class LootActionTests(NativeLootTest):
                                             reserved_player=self.char1, protection_until=time() + 300)
         session = self.connect_character(self.char2)
         before = [player.profile()["credits"] for player in (self.char1, self.char2)]
-        results = [execute(self.char2, session,
-                           dispatch_text(self.char2, self.index, "game.take", f"시체에서 {amount}칩", "가져"),
-                           self.index) for amount in (1, 999)]
-        self.assertEqual([result.status for result in results], [ResultStatus.REFUSED] * 2)
-        self.assertEqual(results[0].messages, results[1].messages)
-        self.assertEqual(results[0].messages, ("지금 선택할 수 없는 전리품입니다.",))
+        with patch.object(self.char2, "msg") as output:
+            for amount in (1, 999):
+                output.reset_mock()
+                completed = []
+                self.char2.execute_cmd(f"시체에서 {amount}칩 가져", session=session).addCallback(
+                    lambda _: completed.append(True))
+                self.assertEqual(completed, [True])
+                errors = [str(call.args[0]) for call in output.call_args_list if call.kwargs.get("kind") == "error"]
+                self.assertEqual(errors, ["지금 선택할 수 없는 전리품입니다."])
         own = self.run_take("시체에서 999칩")
         self.assertEqual(own.status, ResultStatus.REFUSED)
         self.assertIn("수량이 부족", str(own.messages))
