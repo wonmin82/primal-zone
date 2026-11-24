@@ -3,7 +3,12 @@
 from dataclasses import dataclass
 from time import time
 
-from world.actions.loot_resolution import entry_records, make_invocation
+from world.actions.loot_resolution import (
+    entry_records,
+    make_invocation,
+    read_loot_rights,
+    read_recipients,
+)
 from world.actions.presentation import reference_json
 from world.currency import format_currency
 from world.loot_assets import asset_name
@@ -57,9 +62,12 @@ def payload(caller, selections, *, quantity=0, now=None, display=None):
             return None
         source_refs.append(original.reference)
         subject_refs.append(selected.reference)
+    rights = ({"party": display.party, "recipients": display.recipients}
+              if display is not None and display.caller is caller and display.now == now else {})
     invocation = make_invocation(
         caller, selections, quantity=quantity, now=now,
         references=(tuple(dict.fromkeys(source_refs)), tuple(subject_refs)),
+        **rights,
     )
     return {"action_id": invocation.action_id, "variant": invocation.variant_id,
             "roles": {name: [reference_json(ref) for ref in refs] for name, refs in invocation.roles},
@@ -83,6 +91,8 @@ class _LootDisplay:
     labels: dict
     entries: dict
     obscured: bool
+    party: object
+    recipients: dict
 
     def selections(self, sources):
         return [(source, entry) for source in sources
@@ -97,6 +107,7 @@ class _LootDisplay:
             actual, count = select_loot(
                 self.caller, text, now=self.now, sources=self.sources, entries=self.entries,
                 records=self.selection_records, accessible=self.accessible,
+                party=self.party, recipients=self.recipients,
             )
         except RuleError:
             return False
@@ -136,6 +147,12 @@ def _selection_names(record):
     return f"{record.name} {record.number}", exact_selector(record.name, record.number)
 
 
+def _assigned_ids(entry):
+    if entry.kind == "currency":
+        return tuple(identity for identity, amount in entry.shares if amount > 0)
+    return (entry.assigned_player,)
+
+
 def loot_display(caller, now=None, objects=None, *, snapshot=None):
     from typeclasses.loot import Corpse, DroppedLoot, can_take_entry
     from world.loot_service import loot_snapshots
@@ -150,8 +167,15 @@ def loot_display(caller, now=None, objects=None, *, snapshot=None):
     sources = (*corpses, *ground)
     obscured = not can_inspect_loot(context_for(caller, observed_at=now))
     snapshots = loot_snapshots(sources) if not obscured else {}
-    allowed = {pk: tuple(entry for entry in value.entries if can_take_entry(entry.as_entry(), caller, now))
+    party, recipients = read_loot_rights(
+        caller, (entry for value in snapshots.values() for entry in value.entries), now)
+    allowed = {pk: tuple(entry for entry in value.entries if can_take_entry(
+        entry.as_entry(), caller, now, party=party, recipients=recipients))
                for pk, value in snapshots.items()}
+    recipients.update(read_recipients(
+        identity for rows in allowed.values() for entry in rows for identity in _assigned_ids(entry)
+        if identity not in recipients
+    ))
     pairs = tuple((source, entry) for source in sources
                   if (value := snapshots.get(source.pk)) is not None and value.native for entry in value.entries)
     entry_rows = entry_records(pairs)
@@ -167,13 +191,11 @@ def loot_display(caller, now=None, objects=None, *, snapshot=None):
         caller, now, room, corpses, ground, snapshots, source_records, entry_rows, valid, allowed,
         frozenset(record.reference for record in allowed_records),
         tuple(valid.get(record.reference, record) for record in entry_rows.values()),
-        displays(allowed_records), entries, obscured,
+        displays(allowed_records), entries, obscured, party, recipients,
     )
 
 
 def visible_entries(source, caller, now=None, *, display=None):
-    from world.multiplayer import object_by_id
-
     display = loot_display(caller, now) if display is None else display
     now = display.now
     snapshot = display.snapshots.get(source.pk)
@@ -198,8 +220,7 @@ def visible_entries(source, caller, now=None, *, display=None):
             target = asset_name(entry)
         currency = entry["kind"] == "currency"
         amount = format_currency(entry["quantity"]) if currency else f"×{entry['quantity']}"
-        assigned_ids = entry.get("remaining_shares", {}) if currency else (entry["assigned_player"],)
-        assigned = [object_by_id(identity) for identity in assigned_ids]
+        assigned = [display.recipients.get(identity) for identity in _assigned_ids(selected)]
         display_label = amount if currency and target == asset_name(entry) else target + " " + amount
         rows.append({**entry, "name": asset_name(entry), "label": target, "take_target": target,
                      "amount_label": amount, "display_label": display_label,
