@@ -22,6 +22,8 @@ from world.targets import (
     quoted_name_spans,
 )
 
+_TEXT_ITEMS = ("text_items",)
+
 
 class TargetNotFound(RuleError):
     """유효한 문법이지만 현재 후보가 없는 선택."""
@@ -154,10 +156,12 @@ def role_records(caller, role, bindings=None, *, cache=None, check_visibility=Tr
 
 
 def select_role(caller, role, query=None, *, bindings=None, candidates=None, cache=None):
-    records = role_records(caller, role, bindings, cache=cache)
+    # 이 맵은 문자열 선택에만 쓰이며 표시 문맥이나 실행 Gateway로 넘기지 않는다.
+    items = {} if cache is None else cache.setdefault(_TEXT_ITEMS, {})
+    records = role_records(caller, role, bindings, cache=cache, item_entities=items)
     if candidates is not None:
         records = tuple(record for record in records if record.reference in candidates)
-    return select_records(role, records, query)
+    return select_records(role, records, query, observed_items=items)
 
 
 def record_selector(query, records, *, b1=True):
@@ -188,7 +192,7 @@ def matching_records(records, selector):
     return matches
 
 
-def select_records(role, records, query):
+def select_records(role, records, query, *, observed_items=None):
     """이미 관찰된 Role 후보에서 선택한다. 반환한 참조는 실행 Gateway에서 다시 검증한다."""
     empty = query is None or (isinstance(query, str) and not query.strip())
     if empty:
@@ -211,10 +215,13 @@ def select_records(role, records, query):
     if selector and selector.mode == Mode.ALL or role.default == DefaultTargetPolicy.ALL:
         return tuple(record.reference for record in matches)
     if role.default == DefaultTargetPolicy.FIRST_LEGACY_ORDER:
-        from world.selection_numbers.api import resolve_reference
+        from world.selection_numbers.api import resolve_references
+
+        items = observed_items if observed_items is not None else {}
+        resolved = resolve_references(record.reference for record in matches if record.reference not in items)
 
         def legacy_order(record):
-            entity = resolve_reference(record.reference)
+            entity = items[record.reference] if record.reference in items else resolved.get(record.reference)
             return getattr(entity, "sequence", getattr(entity, "pk", 0))
 
         return (min(matches, key=legacy_order).reference,)
@@ -417,9 +424,10 @@ def dispatch_text(caller, index, verb_id, args, command_name):
     possible = []
     verb = index.verbs[verb_id]
     selections = {}
-    record_cache = {}  # 구문 선택 한 번에만 재사용한다. Gateway는 잠금 뒤 새로 검증한다.
+    items = {}
+    record_cache = {_TEXT_ITEMS: items}  # 구문 선택 한 번에만 사용한다. Gateway는 잠금 뒤 다시 검증한다.
     spans = quoted_name_spans(args)
-    offers = provided(caller, index)
+    offers = provided(caller, index, item_entities=items)
     custom = {index.actions[binding.action_id] for _, binding in offers
               if index.actions[binding.action_id].verb_id == verb_id
               and index.actions[binding.action_id].text_resolver is not None}
