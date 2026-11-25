@@ -92,15 +92,18 @@ def snapshot_entry(entries, entity):
 
 
 def fingerprint(caller, selections, now, *, party=None, recipients=None):
+    from django.utils.crypto import salted_hmac
     from typeclasses.loot import can_take_entry
 
-    return {"caller": caller.pk, "party": caller.db.party_id,
+    data = {"caller": caller.pk, "party": caller.db.party_id,
             "entries": [[source.pk, str(entry.item_id) if entry.item_id else None, entry.currency_id,
                          entry.quantity, entry.reserved_party, entry.reserved_player, entry.assigned_player,
                          entry.protection_until, [list(share) for share in entry.shares],
                          now < entry.protection_until, bool(can_take_entry(
                              entry.as_entry(), caller, now, party=party, recipients=recipients))]
                         for source, entry in selections]}
+    # 서명 토큰에서 내부 권리 정보를 직접 해석할 수 없도록 서버 키로 요약한다.
+    return salted_hmac(f"{SALT}.fingerprint", signing.JSONSerializer().dumps(data), algorithm="sha256").hexdigest()
 
 
 def make_invocation(caller, selections, *, quantity=0, now=None, origin="text", references=None,
@@ -183,11 +186,29 @@ def _source_ids(sources, selector):
     return source_ids
 
 
+def _item_index_candidates(records, name):
+    """현재 실물과 독립적으로 정식 이름 우선 및 고유 Group을 확정한다."""
+    from world.content import ITEMS
+    from world.targets import normalized
+
+    key = normalized(name)
+    identities = {identity for identity, definition in ITEMS.items() if normalized(definition["name"]) == key}
+    if not identities:
+        identities = {identity for identity, definition in ITEMS.items()
+                      if key in {normalized(value) for value in (identity, *definition.get("aliases", ()))}}
+    groups = {ITEMS[identity].get("selection_group_id") or f"item:{identity}" for identity in identities}
+    if len(groups) != 1:
+        raise LootUnavailable()
+    # ItemEntity descriptor의 첫 alias는 Definition ID다. 같은 Group의 다른 이름을 대신 선택하지 않는다.
+    return [record for record in records
+            if record.group_id in groups and record.aliases and record.aliases[0] in identities]
+
+
 def select_loot(caller, args, *, now, sources, entries, records, accessible=None, parts=None,
                 party=None, recipients=None):
     """현재 Source와 Entry Snapshot에서 효과 없이 전체 선택과 수량을 계산한다."""
     from typeclasses.loot import can_take_entry
-    from world.actions.resolver import TargetAmbiguous, matching_records
+    from world.actions.resolver import matching_records
     from world.actions.schema import ReferenceKind
     from world.currency import currency_names, currency_request
     from world.targets import Mode, loot_parts, loot_request
@@ -206,23 +227,18 @@ def select_loot(caller, args, *, now, sources, entries, records, accessible=None
                            [name for record in visible for name in (record.name, *record.aliases)] + list(currency_names()),
                            literal_names=[record.name for record in visible])
     selector = request.target
-    if selector.mode in (Mode.DEFAULT, Mode.ALL):
-        scoped = visible
     currency = None if selector.exact else currency_request(selector)
     if selector.exact or (selector.name, selector.mode) != ("전리품", Mode.ALL):
         from dataclasses import replace
 
         if not selector.exact:
             kind = ReferenceKind.CURRENCY if currency else ReferenceKind.LOOT
-            scoped = [record for record in scoped if record.reference.kind == kind]
+            visible = [record for record in visible if record.reference.kind == kind]
         if currency:
             selector = replace(selector, name="보급칩")
-        try:
-            selected = {record.reference for record in matching_records(scoped, selector)}
-        except TargetAmbiguous:
-            # 같은 오류가 공개 후보에서도 발생할 때만 구체적인 모호성 오류를 보여 준다.
-            matching_records([record for record in scoped if record.reference in accessible], selector)
-            raise LootUnavailable() from None
+        elif selector.mode == Mode.INDEX and not selector.exact:
+            visible = _item_index_candidates(visible, selector.name)
+        selected = {record.reference for record in matching_records(visible, selector)}
         matches = [(pk, entry, ref) for pk, entry, ref in matches if ref in selected]
     if selector.mode != Mode.ALL:
         matches = matches[:1]

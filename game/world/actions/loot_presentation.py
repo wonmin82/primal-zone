@@ -222,7 +222,8 @@ def visible_entries(source, caller, now=None, *, display=None):
         amount = format_currency(entry["quantity"]) if currency else f"×{entry['quantity']}"
         assigned = [display.recipients.get(identity) for identity in _assigned_ids(selected)]
         display_label = amount if currency and target == asset_name(entry) else target + " " + amount
-        rows.append({**entry, "name": asset_name(entry), "label": target, "take_target": target,
+        rows.append({"kind": entry["kind"], "id": entry["id"], "quantity": entry["quantity"],
+                     "name": asset_name(entry), "label": target, "take_target": target,
                      "amount_label": amount, "display_label": display_label,
                      "assigned_name": " · ".join(player.key if player else "탈퇴한 탐사자" for player in assigned),
                      "protected": now < entry["protection_until"], "can_take": True,
