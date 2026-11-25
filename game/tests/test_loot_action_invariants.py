@@ -369,26 +369,28 @@ class LootActionInvariantTests(NativeLootTest):
                 self.assertEqual((item.quantity, item.owner_object_id), (expected, self.source.pk))
 
     def test_public_loot_payload_excludes_internal_rights_and_keeps_zero_share_trigger(self):
-        from django.core import signing
+        from base64 import b85decode
+
         from world.actions.gateway import from_web
-        from world.actions.loot_resolution import SALT
         from world.state import multiplayer_state
 
         currency = self.currency(shares={self.char1: 0, self.char2: 20})
-        self.enterContext(patch("world.actions.loot_resolution.token_hex", return_value="a" * 32))
         required_private_fields = {"reserved_party", "reserved_player", "assigned_player",
                                    "protection_until", "eligible_players", "remaining_shares"}
 
         def public_state():
-            corpse = next(row for row in multiplayer_state(self.char1, 100)["corpses"]
-                          if row["id"] == self.source.pk)
+            with (patch("world.actions.loot_resolution.token_hex", return_value="a" * 32),
+                  patch("django.core.signing.TimestampSigner.timestamp", return_value="1xViBB")):
+                corpse = next(row for row in multiplayer_state(self.char1, 100)["corpses"]
+                              if row["id"] == self.source.pk)
             for row in corpse["loot"]:
                 self.assertFalse(required_private_fields.intersection(row))
             actions = [corpse["take_action"], *(row["action"] for row in corpse["loot"])]
             for action in actions:
-                decoded = signing.loads(action["arguments"]["snapshot"], salt=SALT)
-                self.assertRegex(decoded, r"^[0-9a-f]{32}\.[0-9a-f]{64}$")
-                action["arguments"]["snapshot"] = decoded
+                token = action["arguments"]["snapshot"]
+                self.assertEqual(len(token), 67)
+                self.assertNotIn("$", token)
+                self.assertEqual(len(b85decode(token.replace(".", "$"))), 53)
             return corpse
 
         original = public_state()
@@ -408,6 +410,9 @@ class LootActionInvariantTests(NativeLootTest):
         self.assertEqual((hidden.quantity, hidden.owner_object_id), (7, self.source.pk))
 
     def test_loot_token_does_not_reveal_another_players_party_dissolution(self):
+        from base64 import b85decode, b85encode
+        from types import SimpleNamespace
+
         from django.core import signing
         from world.actions.gateway import from_web
         from world.actions.loot_resolution import SALT
@@ -433,31 +438,92 @@ class LootActionInvariantTests(NativeLootTest):
 
             return without_tokens(state), token
 
-        before, previous = observe()
-        same_public_state, repeated = observe()
-        self.assertEqual(before, same_public_state)
-        party.remove_member(self.char2, now=100)
-        self.assertIsNone(LootClaim.objects.get(item_entity=item).reserved_party_id)
-        after, current = observe()
+        issued_at = 1_795_620_430
+        with patch.object(signing, "time", SimpleNamespace(time=lambda: issued_at)):
+            before, previous = observe()
+            same_public_state, repeated = observe()
+            self.assertEqual(before, same_public_state)
+            party.remove_member(self.char2, now=100)
+            self.assertIsNone(LootClaim.objects.get(item_entity=item).reserved_party_id)
+            after, current = observe()
         self.assertEqual(before, after)
-        digests = {signing.loads(token, salt=SALT).rsplit(".", 1)[-1] for token in (previous, repeated, current)}
-        self.assertEqual(len(digests), 3)
+        raw_tokens = tuple(b85decode(token.replace(".", "$")) for token in (previous, repeated, current))
+        self.assertEqual(len({raw[:16] for raw in raw_tokens}), 3)
+        self.assertEqual(len({raw[21:] for raw in raw_tokens}), 3)
 
         before_payout = self.state()
         action = after["corpses"][0]["loot"][0]["action"]
-        previous_format = signing.dumps("a" * 64, salt=SALT)
+        previous_format = signing.dumps(f"{'a' * 32}.{'b' * 64}", salt=SALT, compress=True)
+        raw = raw_tokens[-1]
+        tampered = b85encode(raw[:-1] + bytes((raw[-1] ^ 1,))).decode("ascii").replace("$", ".")
+        invalid = "전리품 선택이 만료되었거나 수량·권리가 바뀌었습니다. 다시 확인하세요."
+        expired = "전리품 선택이 만료되었습니다. 다시 확인하세요."
         for request, token, message in (
-            ("stale", previous, "전리품 수량이나 권리가 바뀌었습니다. 다시 선택하세요."),
-            ("tampered", current + "x", "전리품 선택이 만료되었습니다. 다시 확인하세요."),
-            ("previous-format", previous_format, "전리품 선택이 만료되었습니다. 다시 확인하세요."),
+            ("stale", previous, invalid),
+            ("tampered-signature", tampered, invalid),
+            ("malformed", current + "x", expired),
+            ("previous-format", previous_format, expired),
         ):
             payload = {**action, "arguments": {**action["arguments"], "snapshot": token}, "request_id": request}
-            result = self.run_action(from_web(payload, self.index))
+            with patch.object(signing, "time", SimpleNamespace(time=lambda: issued_at + 1)):
+                result = self.run_action(from_web(payload, self.index))
             self.assertEqual(result.status, ResultStatus.REFUSED)
             self.assertEqual(result.messages, (message,))
             self.assertEqual(self.state(), before_payout)
         payload = {**action, "arguments": {**action["arguments"], "snapshot": current}, "request_id": "fresh"}
-        self.assertEqual(self.run_action(from_web(payload, self.index)).status, ResultStatus.SUCCESS)
+        with patch.object(signing, "time", SimpleNamespace(time=lambda: issued_at + 301)):
+            for request, token in (("expired-unchanged", current), ("expired-changed", previous)):
+                expired_payload = {**action, "arguments": {**action["arguments"], "snapshot": token},
+                                   "request_id": request}
+                result = self.run_action(from_web(expired_payload, self.index))
+                self.assertEqual((result.status, result.messages), (ResultStatus.REFUSED, (invalid,)))
+                self.assertEqual(self.state(), before_payout)
+        with patch.object(signing, "time", SimpleNamespace(time=lambda: issued_at + 300)):
+            self.assertEqual(self.run_action(from_web(payload, self.index)).status, ResultStatus.SUCCESS)
+
+    def test_large_ground_loot_payload_fits_existing_gateway_limit(self):
+        from json import dumps
+        from types import SimpleNamespace
+        from uuid import UUID
+
+        from world.actions.gateway import from_web
+        from world.actions.loot_presentation import payload
+        from world.actions.schema import ReferenceKind, TargetReference
+        from world.rules import RuleError
+
+        # The references match the layout of the reproduced 1,393-source fixture.
+        caller, now = self.char1, 100
+        sources, entries, valid, selections = {}, {}, set(), []
+        for pk in range(9, 1402):
+            source_ref = TargetReference(ReferenceKind.OBJECT, str(pk), "room:1")
+            if pk < 1387:
+                identity = pk - 7
+                entry = loot_service.LootEntrySnapshot("currency", "credits", 1, currency_id=identity)
+                entry_ref = TargetReference(ReferenceKind.CURRENCY, str(identity), "ground:1")
+            else:
+                identity = UUID(int=pk)
+                entry = loot_service.LootEntrySnapshot("item", "bandage", 1, item_id=identity)
+                entry_ref = TargetReference(ReferenceKind.LOOT, str(identity), "ground:1")
+            sources[pk] = SimpleNamespace(reference=source_ref)
+            entries[pk, entry] = SimpleNamespace(reference=entry_ref)
+            valid.update((source_ref, entry_ref))
+            selections.append((SimpleNamespace(pk=pk), entry))
+        display = SimpleNamespace(caller=caller, now=now, sources=sources, entry_records=entries, valid=valid,
+                                  party=None, recipients={})
+
+        action = {**payload(caller, selections, now=now, display=display), "request_id": "1795620430123-2000"}
+        invocation = from_web(action, self.index)
+        self.assertEqual(tuple(len(refs) for _, refs in invocation.roles), (1393, 1393, 1393))
+        self.assertEqual(len(dumps(action, ensure_ascii=False).encode()), 262064)
+
+        # Multibyte request IDs exercise the Gateway's exact byte boundary.
+        action["request_id"] += "가" * 26 + "12"
+        self.assertEqual(len(dumps(action, ensure_ascii=False).encode()), 262144)
+        from_web(action, self.index)
+        action["request_id"] += "x"
+        self.assertEqual(len(dumps(action, ensure_ascii=False).encode()), 262145)
+        with self.assertRaisesRegex(RuleError, "행동 요청의 형식이나 크기"):
+            from_web(action, self.index)
 
     def test_unrelated_private_entry_preserves_accessible_alias_ambiguity(self):
         from time import time
