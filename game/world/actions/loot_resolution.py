@@ -206,7 +206,7 @@ def select_loot(caller, args, *, now, sources, entries, records, accessible=None
                            [name for record in visible for name in (record.name, *record.aliases)] + list(currency_names()),
                            literal_names=[record.name for record in visible])
     selector = request.target
-    if selector.mode == Mode.DEFAULT:
+    if selector.mode in (Mode.DEFAULT, Mode.ALL):
         scoped = visible
     currency = None if selector.exact else currency_request(selector)
     if selector.exact or (selector.name, selector.mode) != ("전리품", Mode.ALL):
