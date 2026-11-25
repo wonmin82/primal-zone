@@ -228,3 +228,128 @@ uv run python scripts/dev.py test tests.bench_loot_execution --parallel 1
 ```
 
 최종 제품 코드 `9c23c7c98c7f0cb98540a0f1e6dfa6d95588503e`의 전체 검사(`scripts/dev.py test --parallel 4`)는 순수 Python 294개와 격리 통합 1,328개 통과, 원래 종료 코드 0이었다. 이 기록을 추가한 커밋은 문서만 변경했다.
+
+## 공개 거절 응답의 동등성
+
+기준 `main`은 `a4a18d82e4d7a991f121bb2b6c28ab28c71565ec`이다. [최종 종료 감사](https://github.com/wonmin82/primal-zone/issues/109#issuecomment-7132896857)의 P2를 격리 `settings_test`에서 다시 재현했다. 발급된 동일 Typed Reference에 대해 숨김과 부재는 두 경로 모두 `REFUSED`였으나 공개 메시지가 달랐다. 관찰은 `원래 대상이 없어졌거나 위치·권한이 바뀌었습니다.`와 `원래 대상이 없어졌거나 위치가 바뀌었습니다.`로, 전리품은 앞의 Role 오류와 `전리품 출처가 사라졌습니다.`로 구별됐다. 두 동등성 검사는 수정 전 FAIL였다.
+
+### 실행 경로 감사
+
+운영 Manifest의 `room_npc`, `item_shared`, `item_equipment`, `storage`, `firearm_lighting`, `loot`, `global_actions`, `dialogue_actions` 패키지의 실행 경계를 대조했다. 명시적 잠금 Hook은 Loot, 실행 전 관찰 정합화 Hook은 Loot와 Typed 관찰에 등록된다.
+
+| 경로 | 공개 상태 및 검증 경계 | 판정 |
+|---|---|---|
+| 공통 Gateway, Selection Number 및 Resolver | 잠금의 실물·부모·Scope 부재, 잠금 후 Role·가시성·Owner 거절, Provider·Capability·호출 권한 변경의 공개 오류를 Action별로 일치시킨다. 등록·문법·Role 수 오류는 요청 자체의 오류다. | RESOLVED |
+| 웹 `pz_action` 및 텍스트 어댑터 | Gateway가 같은 `REFUSED`와 메시지를 반환하고 공통 출력 경계가 이를 전달한다. 요청 ID, 형식, 입력 제한 및 Session/Puppet 검사는 기존 의미를 유지한다. 텍스트의 정확 인용·Alias·번호 선택은 기존 공개 후보 집합을 사용한다. | SAFE |
+| 효과 실행과 Typed NPC 인사 | 효과 직전의 Role·Capability를 재검증한다. Typed 인사의 도달 불가 응답과 공통 대상 오류를 일치시킨다. 토큰 대화는 Caller·Session·기한을 검증하고 NPC의 부재와 현재 키워드 사용 불가에 공통 응답을 사용한다. | RESOLVED |
+| 관찰, Door, Enemy·Actor, Combat·Duel | Typed 관찰의 최종 시야·생명주기 판정을 같은 공통 거절에 연결했다. 현재 Role에서 접근 가능한 대상의 세대, 대련 참여, 출구 조작 및 공개 상태 오류는 도메인에서 안내한다. | RESOLVED / SAFE |
+| ItemEntity 장비·Storage·Inside·총기·상점·소각 | 현재 Role과 위치·소유권·시설 제공 및 접근을 실제 참조로 검증한다. 공개·접근 가능한 대상의 장비·수량·잔액·확인·처분 제한 메시지는 도메인에서 안내한다. | RESOLVED / SAFE |
+| Corpse·Ground Loot Source와 Entry | 잠금, Role, 현재 보호와 출처 일치 검사에서 `LootUnavailable`을 사용한다. 전체 대상의 접근 가능성을 검증한 뒤 공개 수량 오류를 반환한다. 지급 직전 권리 거절도 수량·지분 변경 안내보다 앞선다. | RESOLVED |
+| Loot 서명과 실제 지급 | 접근 가능한 현재 Entry에만 서명 만료·수량·지분 변경 안내가 도달한다. Owner → Item → Claim → Currency → Share 잠금 및 지급 대상, 수량, 보호, Rollback 정책은 유지한다. | SAFE |
+
+수정 후 일반 Typed 대상 거절은 `원래 대상이 없어졌거나 위치·권한이 바뀌었습니다.`, Loot 거절은 `지금 선택할 수 없는 전리품입니다.`이며, 기존 격리 재현 두 건이 PASS였다. 변경은 기존 조회의 오류 선택 및 순서를 조정한다. 지급 직전에는 기존 권리 판정을 한 번 실행하되, 수량·지분 설명보다 먼저 확인한다. 추가 SQL·임의 지연·잠금·반복 스캔을 도입하지 않는다. 실제 운영 DB, 복수 서버 동시 쓰기, 이미 열린 구형 탭 수동 검사 및 응답 시간 채널 계측은 미실행이다. 실제 OS 한글 IME는 기존 USER-CONFIRMED 기록을 사용한다.
+
+실제 `pz_action` 공개 경계 회귀는 관찰의 숨김·이동·삭제·번호 재사용과 Loot의 숨김·부재·권리 변경·혼합 지급을 비교한다. 요청 자체의 Role 구조는 DB 조회 전에 검증해 같은 비정상 요청의 오류가 대상 상태에 따라 달라지지 않도록 했다. 시설의 호출권 검사를 전투 제한 안내보다 먼저 적용한다. 공개적으로 접근 가능한 시설의 전투 제한 메시지와 접근 가능한 Loot의 수량 오류는 유지된다.
+
+후속 독립 검토에서 시야가 부족해도 이동 방향 자체는 인지되는 문과, 공개 대상 목록에서 제외되는 부활 대기 Actor의 명시적 참조를 확인했다. Typed 참조의 현재 Role을 검사할 때 문 조작에 필요한 시야와 공개 Actor의 생명주기 조건을 반영한다. 문 조작의 최종 대상 검사도 공통 거절을 사용한다. 격리 회귀는 같은 행동에서 이 상태와 참조 부재의 최종 ActionResult 전체를 비교하고, 문 상태 변경 및 전투 시작이 없음을 확인한다. 이동용 Exit 어댑터의 독립적인 `view`·`cmd`·`traverse` 조합 전수 재현은 UNVERIFIED다.
+
+최종 제품 코드의 `scripts/dev.py check`, `git diff --check`, 웹 Contracts 69개와 관찰·문 직접 영향 테스트 70개가 통과했다. `scripts/dev.py test --parallel 4` 감시 작업 `229f7752bb434dc88b046042976d1852`의 원래 종료 코드는 0이며 순수 Python 294개와 격리 통합 1,333개가 통과했다. 독립 Reviewer `reviewer_hazel`과 Auditor `auditor_selma`는 안정 참조 수정 범위를 A, 아래 텍스트 경로를 포함한 전체 I08을 C로 판정했다. PR과 해당 PR의 GitHub Actions는 미실행이다.
+
+### 최초 감사 당시 텍스트 기본 선택
+
+안정 참조와 별도로, 번호 없는 Loot 명령의 첫 후보가 보호 상태일 때 공개 후속 후보로 넘어가지 않는 기존 계약이 있다. 격리 재현에서 보호된 첫 후보가 있을 때는 거절됐고, 동일한 공개 후보만 남았을 때는 기존 UUID로 정상 지급됐다. `test_mixed_private_number_never_falls_back_to_accessible_entry`는 보호된 후보가 있을 때 기본 요청이 다른 대상에 효과를 내지 않는 동작을 보장한다. 사용자가 기존 선택 규칙 유지를 명시적으로 선택했으므로 이 해석 정책을 유지한다. 이 경로에서는 보호 후보 유무에 따른 응답 차이가 남으므로 I08 전체 검증을 성공으로 기록하지 않는다.
+
+### 후속 승인 및 Loot DEFAULT 수정
+
+후속 사용자 승인은 번호 없는 텍스트 Loot의 기본 선택에 한해 비교 대상을 현재 회수 가능한 항목으로 제한한다. 선택한 출처와 후보의 기존 순서는 유지한다. 정식 이름·별칭 비교 전에 기존 권리 집합을 적용해 숨은 후보가 이름 우선순위나 모호성 판정에 영향을 주지 못하게 한다. 명시적 번호와 정확 인용은 영속 번호로 지정된 대상을 유지하고 웹 버튼은 발급된 Typed Reference를 유지한다. 원래 대상의 권리가 없거나 참조가 무효하면 해당 요청은 거절된다.
+
+격리 회귀는 보호된 첫 후보가 있을 때와 제거됐을 때 실제 텍스트 명령이 같은 공개 지급 메시지를 반환하고 같은 공개 UUID에서만 각 1개를 회수하는지 비교한다. 번호 및 인용 회귀는 거절된 명령이 수량·지분·번호와 다른 후보를 변경하지 않는지 확인한다. 정책 판단은 기존 권리 집합을 재사용하며 실행 시 잠금 후 현재 보호 권리를 재검증한다.
+
+구조화 웹 이동 요청도 추가로 검증했다. 수정 전에는 같은 Exit의 부재와 숨김 상태에서 `출구를 이용할 수 없습니다.`와 이동 제한 안내가 각각 전달됐다. Web origin은 현재 방의 Exit를 잠근 뒤 `view`를 확인하고, 숨김은 부재와 같은 공개 오류로 거절한다. 방향 텍스트 명령의 기존 `cmd`·`traverse` 정책과 공개 Exit의 제한 안내는 유지된다.
+
+최종 `scripts/dev.py test --parallel 4`는 순수 Python 294개와 격리 통합 1,335개를 통과했다. 감시 작업 `1350a97becbe4f49873b75cf6ca6c845`의 종료 코드는 0이다. 정적 검사와 웹 Contracts 69개도 통과했다. Reviewer `reviewer_hazel`과 Auditor `auditor_selma`는 확인된 결함을 수정한 코드에 A 판정을 내렸다.
+
+### PR #118 외부 리뷰 후속 — Loot 이름 매칭
+
+기준 PR HEAD는 `bb8d484da38472a3a6666a2bc81d9cf6ea555342`, 대상 main은 `a4a18d82e4d7a991f121bb2b6c28ab28c71565ec`이다. 같은 시체에 공통 별칭을 가진 다른 그룹의 공개 항목 3개와 보호 항목 7개를 구성했다. 수정 전 같은 텍스트 ALL 명령은 보호 항목이 있을 때 `지금 선택할 수 없는 전리품입니다.`로 거절되고, 보호 항목을 제거하자 공개 항목 3개를 지급했다. 수정 후 `select_loot()`는 DEFAULT에 이미 사용하던 회수 가능 후보를 이름이 있는 ALL에도 사용한다. 공유 Resolver와 권리 계산, Source, 번호, 지급 트랜잭션 및 조회 구조는 유지한다.
+
+| 선택 | 이름 매칭 및 권한 경계 | 판정 |
+|---|---|---|
+| DEFAULT | 기존 승인대로 회수 가능 후보에서 이름을 비교하고 기존 순서의 첫 항목을 선택한다. | SAFE |
+| 이름이 있는 ALL | 기존 회수 가능 후보로 정식 이름·별칭·그룹을 비교한다. 공개 그룹 간 충돌은 거절하며 하나의 공개 그룹은 기존 순서대로 회수한다. | RESOLVED |
+| 전리품 모두 | 이름 비교를 생략하고 기존 Source 안에서 회수 가능한 항목을 선정한다. | SAFE |
+| 일반 INDEX | 현재 정식 이름과 별칭 그룹을 권한 필터 전에 비교한다. 같은 번호의 보호 그룹이 공개 별칭을 차단할 수 있다. 명시 대상 대체 방지를 위해 기존 거절을 유지한다. | CONFIRMED DEFECT / HOLD |
+| 정확 인용 | 정식 이름·영속 번호·Scope를 직접 비교하며 별칭으로 대체하지 않는다. | SAFE |
+| 웹 Typed Reference | 발급된 UUID와 Scope의 Role 및 권한을 잠금 후 다시 검증한다. | SAFE |
+
+일반 INDEX의 격리 비교에서 공개 항목의 별칭과 보호 항목의 정식 이름 또는 별칭이 같고 두 그룹의 영속 번호도 같을 때, 보호 후보가 있으면 공개 거절과 상태 불변을 확인했다. 보호 후보를 제거한 뒤 같은 요청은 공개 UUID를 선택해 1개를 지급했다. 공개 후보 필터만 적용하면 구문이 가리킬 수 있었던 보호 대상을 다른 그룹의 UUID로 대체할 수 있다. 재현은 테스트 전용 정의이며 현재 정적 아이템 카탈로그에는 정의 간 별칭 충돌 검사가 있다. 충돌하는 번호 별칭을 실물 유무와 관계없이 거절하고 정확 인용을 안내하는 방안은 기존 명령 결과에 영향을 주므로 별도 정책 결정이 필요하다. 정확 인용 또는 웹 Typed Reference는 기존의 명시 대상 지정 경로다.
+
+표시용 명령 검증도 `select_loot()`를 재사용한다. Source는 이미 정해진 관찰 대상과 범위를 그대로 사용하며, 통화 권리는 기존 `can_take_entry()`의 결과를 사용한다. 개인 지분이 0원인 유효한 회수 트리거 권리도 같은 판정을 받는다. PR 푸시 및 최종 GitHub CI는 미해결 INDEX 결함의 판정에 따라 보류한다.
+
+정적 검사와 `git diff --check`, 웹 Contracts 69개가 통과했다. 직접 영향 검사 141개, 전체 순수 Python 294개 및 격리 통합 1,337개가 통과했으며 감시 작업 `75a601f5795a4f1abf1714c717b50f29`, `312c70f82db94268b858b69b1f348242`의 종료 코드는 모두 0이다. Reviewer `reviewer_fiona`와 Auditor `auditor_mira`는 ALL 수정 범위 A, 일반 INDEX를 포함한 전체 정보 보호 C로 판정했다.
+
+## v1.5.1 FINAL 통합 검증
+
+기준은 main `a4a18d82e4d7a991f121bb2b6c28ab28c71565ec`, 원격 PR #118 `bb8d484da38472a3a6666a2bc81d9cf6ea555342` 및 보존한 로컬 ALL 커밋 `eacb079129bdfca2d234201408ff4730f505cf20`이다. 과거 PR CI는 해당 SHA의 역사적 근거다. [보완 설계](selection-number-display-design-v1.5.1.md)를 우선 적용한다.
+
+### 구현 전 확정한 경로와 검증 조건
+
+`settings.ACTION_CONTENT_PACKAGES` → `actions.manifest.get_index()`와 Command Registry를 기준으로 연결한다. 모드가 등록되지 않은 Role에 그 모드의 테스트는 N/A다. 전체 조합 대신 공통 테스트, 도메인 분기, 실제 공개 실행을 결합한다.
+
+| 그룹 | 경로 / Role 및 지원 모드 | 계약과 기대 결과 | 기존 근거 및 추가 검증 |
+|---|---|---|---|
+| V01 | `targets`, Loot·공통 문법, 비 B-1 Legacy | T06·T19. 인용 우선, 공개 숫자 접미 실명 및 통화 구문 유지 | `test_targets`, `test_selection_exact`, Loot paired fixture |
+| V02 | `resolver`, `loot_resolution`, Role/Source의 DEFAULT·INDEX·ALL·정확 인용 | T01·T04·T05·T07·T08·T23. 저장 번호, 정식 이름 우선, 공개 모호성, 정적 Group 고정 | `test_selection_exact`, `test_targets`, 정적 충돌 재현 및 고유 별칭·ID 회귀 |
+| V03 | Room 공개 Snapshot, Typed look, Loot 텍스트·웹 | T02·T03·T11·T19·T21. 공개 번호를 고정하고 보호 실물만 바꾼 경우 공개 결과 일치 | `test_selection_observation`, `test_loot_action_invariants`, paired 상태·공개 메시지·Payload 추가 |
+| V04 | `selection_numbers`, `selection_text`, Action Controls, Loot `valid_command` | T02·T09·T14·T22·T23. 기존 번호와 순서 유지, 생성 명령 전체 참조 왕복, 읽기 전용 | `test_selection_numbers`, `test_action_presentation_cache`, `test_loot_actions` |
+| V05 | 웹 Typed Role·Combat generation·대화 토큰·장비/Storage | T10·T11·T12·T17. 발급 UUID·Scope·Owner·Session 검증 및 대체 효과 0회 | `test_selection_observation`, `test_npc_dialogue`, `test_storage_actions`, `test_actor_action_foundation` |
+| V06 | Corpse/Ground Source·Entry, 통화 및 보호 권리 | T01–T05·T07·T14·T15·T19·T20. Source 유지, 지분과 지급 및 토큰 공개 범위 | `test_loot_actions`, `test_currency_loot`, `test_loot_action_invariants`, 토큰 디코딩 추가 |
+| V07 | Actor/Enemy/Combat/Duel, NPC/시설/대화, Door/Exit, Inventory/Equipment/Storage/Inside, 총기/조명, 상점/소각, Legacy Party | T01·T11–T13·T21·T23. 현재 Role과 도메인별 권한·정상 오류 유지 | `test_exclusive_duel`, `test_room_npc_actions`, `test_doors`, `test_item_equipment_actions`, `test_storage_actions`, `test_firearm_lighting_actions`, `test_party_overhaul` |
+| V08 | `gateway.execute`/effect 재검증, Loot 잠금 및 지급 | T11–T13·T16·T21. 같은 비공개 오류, 공개 도메인 오류 유지, 원자적 실패 | `test_action_runtime`, `test_loot_action_invariants`, `test_loot_actions` |
+| V09 | 정적 ITEMS, 콘텐츠 무결성, B-1 Flush | T05·T07·T18·T22. 정규화 충돌 검사와 우회 상태 안전 실패를 분리 | `test_firearms` 순수 검사, `test_regions`, `test_selection_numbers`, 정적 INDEX 방어 Fixture |
+| V10 | 기존 Scope·Provider·Item·Loot 일괄 조회 | T02·T14. 신규 후보별 SQL 없음 | PR #114–#117 계측, 변경 코드의 쿼리 경계 검사 |
+| V11 | `DynamicActionCommand`, `pz_action`, `pz_dialogue`, Exit 텍스트 어댑터 | T02·T03·T16·T20·T24. 실제 공개 이벤트·실행 대상 및 구형 웹 호환 경계 | `test_loot_action_invariants`, `test_selection_observation`, `test_doors`, `test_npc_dialogue` |
+| V12 | 전체 Python, Node Contracts, Smoke, Chromium | T01–T24 종합, 최종 PR HEAD에서 CI 네 Job | 최종 HEAD 검증이 필요하며 이전 Run은 별도 |
+
+검증 Fixture는 동일 Caller·Scope·관찰 시각·정의·입력·공개 저장 번호를 고정한다. 독립 Fixture의 공통 공개 역할은 논리적으로 대응시키고, 같은 Fixture에서는 전체 Typed Reference를 비교한다. 요청 ID와 서명 시각은 제외하고, 공개 메시지·선택·지급과 디코딩되는 토큰 의미를 비교한다.
+
+### 구현 및 검증 결과
+
+사전 조사 `scout_mina`, 설계 정합성 검토 `reviewer_ellis`, 정보 보호 감사 `auditor_nina`가 실제 8개 등록 패키지, 텍스트·웹·대화 어댑터 및 콘텐츠 진입점을 대조했다. INDEX P2는 D06/F02의 정적 이름·Group 확정으로 해결했다. 먼저 확정한 정식 이름 또는 별칭과 일치하는 Definition ID까지 제한해 같은 Group의 다른 이름을 대체하지 않는다. 기존 ALL 커밋은 이력에 그대로 포함한다. 카탈로그 충돌 검사는 CI 콘텐츠 테스트에서, 다른 그룹의 같은 정식 이름 검사는 번호 Flush에서 실행된다. 서버 시작의 Manifest/월드 검사와 일반 아이템 생성은 카탈로그 전역 별칭 검사를 강제하지 않는다. 정상 카탈로그와 동작을 재현하기 위해 충돌 정의를 직접 주입한 Fixture를 구분했다.
+
+F06/T20 P2는 기존 공개 행의 내부 권리 필드와 디코딩 가능한 서명 Snapshot에서 확인했다. 공개 Loot 행의 회수 여부·보호 표시·배정 표시 이름·수량·참조는 유지하고 내부 예약/배정 ID 및 개인 지분을 제거했다. 토큰은 기존 검증 상태의 서버 키 HMAC을 서명한다. 서명 만료, 현재 상태 대조, 잘못되거나 이전 형식의 Snapshot 거절, 현재 권리·잠금·지급·Rollback 경계는 유지된다.
+
+| ID | 적용 사례와 증거 | 결과 |
+|---|---|---|
+| T01 | Native 텍스트·Typed·Legacy 경계의 정상 선택. `test_action_runtime`, `test_targets`, `test_loot_actions` | PASS |
+| T02 | 동일 공개 번호·참조에서 보호 실물 추가·삭제. `test_selection_observation`, `test_loot_action_invariants` | PASS |
+| T03 | Loot DEFAULT/ALL/INDEX의 숨은 별칭 충돌과 공개 메시지·지급. `test_loot_action_invariants` | PASS |
+| T04 | 서로 다른 공개 Group의 실제 모호성 및 같은 Group의 ALL 지급. `test_loot_action_invariants` | PASS |
+| T05 | 정적 INDEX의 정식 이름 우선·고유 별칭·Definition ID·공통 거절. `test_loot_action_invariants` | PASS |
+| T06 | 숫자 접미 실명, 인용 예약 및 이스케이프. `test_selection_exact`, `test_targets` | PASS |
+| T07 | 같은 번호의 다른 Group 및 같은 Group의 다른 이름 대체 금지. `test_loot_action_invariants` | PASS |
+| T08 | Inside와 복수 Source의 Scope·저장 번호 독립. `test_selection_exact`, `test_loot_actions`, `test_web_state` | PASS |
+| T09 | 결번, 원 번호와 배열 순서 불일치. `test_selection_numbers`, `test_selection_exact`, `test_action_runtime` | PASS |
+| T10 | 삭제·번호 재사용 이후 Typed 참조 안전 실패. `test_selection_observation`, `test_loot_action_invariants` | PASS |
+| T11 | 가시성·보호 권리·시설 권한 변경 및 현재 권한 확인. `test_selection_observation`, `test_room_npc_actions`, `test_loot_action_invariants` | PASS |
+| T12 | 이동·Scope·Owner 변경 뒤 stale 참조 거절. `test_storage_actions`, `test_loot_action_invariants` | PASS |
+| T13 | 공개 대상의 수량·비용·전투·이동 제한. `test_loot_actions`, `test_room_npc_actions`, `test_doors` | PASS |
+| T14 | Source+Entry 전체 역할과 순서, 생성 명령 왕복. `test_loot_actions`, `test_web_state` | PASS |
+| T15 | 금액·번호·ALL, 0원 지분 트리거, 실제 지급과 수량. `test_currency_loot`, `test_loot_action_invariants` | PASS |
+| T16 | 대상 대체 없음, 두 번째 지급자 실패 및 바깥 트랜잭션 Rollback. `test_loot_action_invariants`, `test_action_runtime` | PASS |
+| T17 | 현재 텍스트 선택과 stale Typed UUID의 서로 다른 보장. `test_selection_observation`, `test_loot_action_invariants` | PASS |
+| T18 | 정적 검사 호출 경계, 번호 등록 및 검증 우회 상태 안전 거절. `test_firearms`(순수), `test_selection_numbers`, `test_loot_action_invariants` | PASS |
+| T19 | 숨은 숫자 접미 실명과 비정상 입력에서 동일한 공개 파싱. `test_loot_action_invariants`, `test_selection_exact` | PASS |
+| T20 | 실제 공개 Loot 행·단건·전체 토큰 디코딩, 보호 실물 추가 시 공개 상태 동등성 및 실제 지급. `test_loot_action_invariants` | PASS |
+| T21 | 공개되지만 제한된 출구와 도메인 오류의 정상 안내. `test_doors`, `test_room_npc_actions`, `test_loot_actions` | PASS |
+| T22 | 번호 이력, 권리 변화에도 같은 저장 번호, 결번 유지. `test_selection_numbers`, `test_web_state`, `test_loot_action_invariants` | PASS |
+| T23 | 동일 이름·번호 다른 Scope의 유일성 또는 안전 거절. `test_selection_exact`, `test_loot_actions`, `test_action_runtime` | PASS |
+| T24 | Legacy 입력·현재 Typed 요청·구형 문자열 갱신 경계. `test_action_runtime`, `test_web_state`, Contracts, Chromium 자동 회귀 | 로컬 PASS. 최종 GitHub Chromium 별도 |
+
+운영 DB, 복수 서버 동시 쓰기 및 이미 열린 구형 탭의 수동 검증은 NOT RUN이다. 실제 OS 한글 IME는 기존 USER-CONFIRMED를 재사용한다. 응답 시간 완전 동일화는 OUT OF SCOPE다. PR 병합 및 병합 후 main CI와 Closeout은 별도 승인에 따른다.
+
+최종 로컬 제품 Diff에서 정적 검사와 `git diff --check`, 웹 Contracts 69개가 통과했다. 전체 Python 순수 294개 및 격리 통합 1,339개가 통과했으며 감시 작업 `423ba1a0582f48f59b7a44805cfd4c58`의 원래 종료 코드는 0이다. 직접 영향 검사 중 이전 보호 INDEX가 Invocation 단계까지 진행한다고 가정한 테스트 한 건은 실제 텍스트 거절과 원래 참조의 Gateway 거절을 모두 검사하도록 갱신했고 단일 및 전체 검사에서 통과했다. Reviewer `reviewer_heidi`와 Auditor `auditor_zoe`는 변경 범위와 승인된 전체 제품 계약 모두 코드 A로 판정했다. 확인된 미해결 P0/P1/P2는 0건이다.
+
+기존 `tests.bench_loot_execution`에서 1·10·100개 지급 직전 검증 SQL은 각각 95·104·194, ItemEntity SELECT는 19·28·118, 동일 ItemEntity 반복 SELECT는 각각 7회로 PR #117 기록과 같았다. 쓰기는 각각 0회였다. 현재 단건 검증은 각각 SQL 1회였다. 실행 시점 권리 검증까지 포함하는 계측이며 실제 지급 단계는 제외했다. INDEX 이름 판정은 정적 사전만 읽는다.
+
+V01–V11의 로컬 근거는 위 표와 전체 검사에 있다. V12의 Smoke·Chromium을 포함한 필수 CI, 최종 SHA와 Run ID/Attempt는 [PR #118 검증 기록](https://github.com/wonmin82/primal-zone/pull/118) 및 [Phase 2 #109](https://github.com/wonmin82/primal-zone/issues/109)에 최종 실행 결과를 연결한다.

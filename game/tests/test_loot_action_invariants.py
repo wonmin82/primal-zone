@@ -154,18 +154,53 @@ class LootActionInvariantTests(NativeLootTest):
         before = self.state()
         denied = self.public_errors(command="시체에서 권총탄 1 가져")
         absent = self.public_errors(command="시체에서 권총탄 999 가져")
-        default = self.public_errors(command="시체에서 권총탄 가져")
+        exact = self.public_errors(command='시체에서 "9mm 권총탄" 1 가져')
         self.assertEqual(self.state(), before)
         self.assertEqual([number_for(ref) for ref in refs], [1, 2])
         self.assertTrue(denied)
         self.assertEqual(denied, absent)
-        self.assertEqual(default, denied)
+        self.assertEqual(exact, denied)
         result = self.run_action(self.invocation("시체에서 권총탄 2", self.char2), self.char2)
         self.assertEqual(result.status, ResultStatus.SUCCESS)
         accessible.refresh_from_db()
         private.refresh_from_db()
         self.assertEqual((private.quantity, accessible.quantity), (7, 2))
         self.assertEqual(ItemEntity.objects.get(owner_object=self.char2).quantity, 1)
+
+    def test_default_uses_same_public_entry_when_private_first_entry_exists_or_is_absent(self):
+        from time import time
+
+        private = self.loot_item(quantity=7, deadline=time() + 300)
+        public = self.loot_item(quantity=3, deadline=99)
+        later = self.loot_item(quantity=5, deadline=99)
+        reference = descriptor(public).reference
+        output = self.output[self.char2.pk]
+
+        def take_default():
+            invocation = self.invocation("시체에서 권총탄", self.char2)
+            self.assertEqual(dict(invocation.roles)["subject"], (reference,))
+            output.reset_mock()
+            completed = []
+            self.char2.execute_cmd("시체에서 권총탄 가져", session=self.sessions[self.char2.pk]).addCallback(
+                lambda _: completed.append(True))
+            self.assertEqual(completed, [True])
+            self.assertFalse([call for call in output.call_args_list if call.kwargs.get("kind") == "error"])
+            public_output = [str(call.args[0]) for call in output.call_args_list
+                             if call.args and "챙겼다" in str(call.args[0])]
+            self.assertTrue(public_output)
+            return public_output
+
+        with_private = take_default()
+        private.refresh_from_db()
+        public.refresh_from_db()
+        self.assertEqual((private.quantity, public.quantity), (7, 2))
+        LootClaim.objects.filter(item_entity=private).delete()
+        api.delete_item(private)
+        self.assertEqual(take_default(), with_private)
+        public.refresh_from_db()
+        later.refresh_from_db()
+        self.assertEqual((public.quantity, later.quantity), (1, 5))
+        self.assertEqual(ItemEntity.objects.get(owner_object=self.char2).quantity, 2)
 
     def test_private_alias_collision_and_numeric_name_do_not_change_public_errors(self):
         from time import time
@@ -188,6 +223,89 @@ class LootActionInvariantTests(NativeLootTest):
             self.assertNotEqual(malformed[0], absent)
             self.assertEqual(self.state(), before)
 
+    def test_all_private_alias_collision_has_same_public_payout_as_absence(self):
+        from world.actions.gateway import emit
+        from world.content import ITEMS
+
+        definitions = {
+            "public_part": {**deepcopy(ITEMS["ammo_9"]), "name": "공개부품A", "aliases": ["회수시험부품"]},
+            "private_part": {**deepcopy(ITEMS["ammo_9"]), "name": "비공개부품B", "aliases": ["회수시험부품"]},
+        }
+        query = "시체에서 회수시험부품 모두"
+        output = self.output[self.char2.pk]
+
+        def take():
+            output.reset_mock()
+            completed = []
+            with patch("commands.action_command.emit", wraps=emit) as delivery:
+                self.char2.execute_cmd(f"{query} 가져", session=self.sessions[self.char2.pk]).addCallback(
+                    lambda _: completed.append(True))
+            self.assertEqual(completed, [True])
+            errors = [str(call.args[0]) for call in output.call_args_list if call.kwargs.get("kind") == "error"]
+            payout = [str(call.args[0]) for call in output.call_args_list
+                      if call.args and "챙겼다" in str(call.args[0])]
+            return errors, payout, delivery.call_args
+
+        with patch.dict(ITEMS, definitions):
+            public = self.loot_item("public_part", quantity=3, deadline=99)
+            private = self.loot_item("private_part", quantity=7)
+            private_ref = descriptor(private).reference
+            first_ref = descriptor(public).reference
+            self.assertEqual(number_for(private_ref), number_for(first_ref))
+            protected = take()
+            private.refresh_from_db()
+            self.assertEqual((private.quantity, private.owner_object_id), (7, self.source.pk))
+            self.assertEqual(number_for(private_ref), 1)
+            LootClaim.objects.filter(item_entity=private).delete()
+            api.delete_item(private)
+
+            if not ItemEntity.objects.filter(pk=public.pk, owner_object=self.source).exists():
+                public = self.loot_item("public_part", quantity=3, deadline=99)
+            second_ref = descriptor(public).reference
+            absent = take()
+            self.assertEqual(protected[:2], absent[:2])
+            self.assertEqual(absent[0], [])
+            self.assertEqual(len(absent[1]), 1)
+            for result, reference in ((protected, first_ref), (absent, second_ref)):
+                invocation, action_result = result[2].args[-2:]
+                self.assertEqual(dict(invocation.roles)["subject"], (reference,))
+                self.assertEqual(action_result.status, ResultStatus.SUCCESS)
+            self.assertEqual(ItemEntity.objects.get(owner_object=self.char2, definition_id="public_part").quantity, 6)
+
+    def test_all_preserves_public_ambiguity_and_excludes_private_only_matches(self):
+        from world.content import ITEMS
+
+        definitions = {
+            "all_a": {**deepcopy(ITEMS["ammo_9"]), "name": "공개부품A", "aliases": ["회수시험부품"]},
+            "all_b": {**deepcopy(ITEMS["ammo_9"]), "name": "공개부품B", "aliases": ["회수시험부품"]},
+            "all_hidden": {**deepcopy(ITEMS["ammo_9"]), "name": "회수시험부품",
+                           "aliases": ["비공개전용별칭"]},
+        }
+        command = "시체에서 회수시험부품 모두 가져"
+        with patch.dict(ITEMS, definitions):
+            first = self.loot_item("all_a", quantity=3, deadline=99)
+            second = self.loot_item("all_b", quantity=4, deadline=99)
+            ambiguous = self.public_errors(command=command)
+            self.assertEqual(ambiguous, ["서로 다른 선택 그룹의 별칭이 겹칩니다. 실제 이름을 지정하세요."])
+            private = self.loot_item("all_hidden", quantity=9)
+            loot_service.reconcile_claims(self.source, now=100)
+            before = self.state()
+            self.assertEqual(self.public_errors(command=command), ambiguous)
+            self.assertEqual(self.public_errors(command="시체에서 비공개전용별칭 모두 가져"),
+                             self.public_errors(command="시체에서 없는부품 모두 가져"))
+            self.assertEqual(self.state(), before)
+
+            LootClaim.objects.filter(item_entity=second).delete()
+            api.delete_item(second)
+            same_group = self.loot_item("all_a", quantity=2, deadline=99)
+            invocation = self.invocation("시체에서 회수시험부품 모두", self.char2)
+            self.assertEqual(dict(invocation.roles)["subject"],
+                             (descriptor(first).reference, descriptor(same_group).reference))
+            self.assertEqual(self.run_action(invocation, self.char2).status, ResultStatus.SUCCESS)
+            private.refresh_from_db()
+            self.assertEqual((private.quantity, private.owner_object_id), (9, self.source.pk))
+            self.assertEqual(ItemEntity.objects.get(owner_object=self.char2, definition_id="all_a").quantity, 5)
+
     def test_authorized_quantity_error_and_success_keep_domain_behavior(self):
         row = self.currency(shares={self.char1: 20})
         before = self.state()
@@ -198,6 +316,85 @@ class LootActionInvariantTests(NativeLootTest):
         self.assertEqual(self.run_action(self.invocation("시체에서 5칩")).status, ResultStatus.SUCCESS)
         row.refresh_from_db()
         self.assertEqual(row.quantity, 15)
+
+    def test_index_uses_static_name_and_group_when_protected_entries_appear(self):
+        from world.content import ITEMS
+        from world.targets import exact_selector
+
+        base = deepcopy(ITEMS["ammo_9"])
+        definitions = {
+            "index_public": {**base, "name": "공개부품", "aliases": ["공개별칭", "공유별칭", "우선부품"]},
+            "index_alias": {**base, "name": "별도부품", "aliases": ["공유별칭"]},
+            "index_canonical": {**base, "name": "우선부품", "aliases": []},
+            "index_shared_a": {**base, "name": "공유그룹 A", "aliases": [], "selection_group_id": "test:shared"},
+            "index_shared_b": {**base, "name": "공유그룹 B", "aliases": [], "selection_group_id": "test:shared"},
+        }
+        with patch.dict(ITEMS, definitions):
+            public = self.loot_item("index_public", quantity=3, deadline=99)
+            sibling = self.loot_item("index_shared_b", quantity=4, deadline=99)
+            loot_service.reconcile_claims(self.source, now=100)
+            public_ref = descriptor(public).reference
+            public_number = number_for(public_ref)
+            sibling_number = number_for(descriptor(sibling).reference)
+            denied = [f"공유별칭 {public_number}", f"우선부품 {public_number}", f"공유그룹 A {sibling_number}"]
+            allowed = [f"{name} {public_number}" for name in ("공개부품", "공개별칭", "index_public")]
+            allowed.append(exact_selector("공개부품", public_number))
+
+            def observe():
+                before = self.state()
+                errors = [self.public_errors(command=f"시체에서 {query} 가져") for query in denied]
+                self.assertEqual(errors, [["지금 선택할 수 없는 전리품입니다."]] * len(denied))
+                self.assertEqual(self.state(), before)
+                refs = [dict(self.invocation(f"시체에서 {query}", self.char2).roles)["subject"] for query in allowed]
+                self.assertEqual(refs, [(public_ref,)] * len(allowed))
+                return errors, refs, number_for(public_ref)
+
+            absent = observe()
+            protected = [self.loot_item(identity, quantity=7) for identity in ("index_alias", "index_canonical")]
+            self.assertEqual(observe(), absent)
+            selected = self.invocation(f"시체에서 공개별칭 {public_number}", self.char2)
+            self.assertEqual(self.run_action(selected, self.char2).status, ResultStatus.SUCCESS)
+            for item, expected in [(public, 2), (sibling, 4), *((item, 7) for item in protected)]:
+                item.refresh_from_db()
+                self.assertEqual((item.quantity, item.owner_object_id), (expected, self.source.pk))
+
+    def test_public_loot_payload_excludes_internal_rights_and_keeps_zero_share_trigger(self):
+        from django.core import signing
+        from world.actions.gateway import from_web
+        from world.actions.loot_resolution import SALT
+        from world.state import multiplayer_state
+
+        currency = self.currency(shares={self.char1: 0, self.char2: 20})
+        required_private_fields = {"reserved_party", "reserved_player", "assigned_player",
+                                   "protection_until", "eligible_players", "remaining_shares"}
+
+        def public_state():
+            corpse = next(row for row in multiplayer_state(self.char1, 100)["corpses"]
+                          if row["id"] == self.source.pk)
+            for row in corpse["loot"]:
+                self.assertFalse(required_private_fields.intersection(row))
+            actions = [corpse["take_action"], *(row["action"] for row in corpse["loot"])]
+            for action in actions:
+                decoded = signing.loads(action["arguments"]["snapshot"], salt=SALT)
+                self.assertRegex(decoded, r"^[0-9a-f]{64}$")
+                action["arguments"]["snapshot"] = decoded
+            return corpse
+
+        original = public_state()
+        hidden = api.create_item("ammo_9", quantity=7, location_kind="corpse_loot", owner_object=self.source)
+        loot_service.create_claim(hidden, reserved_player=self.char2, assigned_player=self.char2, protection_until=300)
+        self.assertEqual(public_state(), original)
+        # 공개 합계와 배정 표시가 같아도 내부 지분의 상세 값은 공개되지 않는다.
+        shares = currency.shares.order_by("remaining_amount")
+        self.assertEqual(list(shares.values_list("remaining_amount", flat=True)), [0, 20])
+        action = source_controls(self.char1, 100)[self.source.pk]["loot"][0]["action"]
+        self.assertEqual(action["roles"]["subject"][0]["identity"], str(currency.pk))
+        invocation = from_web({**action, "request_id": "opaque-loot-rights"}, self.index)
+        balances = self.balances()
+        self.assertEqual(self.run_action(invocation).status, ResultStatus.SUCCESS)
+        self.assertEqual(self.balances(), (balances[0], balances[1] + 1))
+        hidden.refresh_from_db()
+        self.assertEqual((hidden.quantity, hidden.owner_object_id), (7, self.source.pk))
 
     def test_unrelated_private_entry_preserves_accessible_alias_ambiguity(self):
         from time import time
@@ -242,8 +439,9 @@ class LootActionInvariantTests(NativeLootTest):
         self.assertEqual(dict(two.roles)["subject"], (refs[1],))
         self.assertEqual(self.state(), before)
         # 선택권이 없는 1번을 2번으로 대체하거나 권한별로 번호를 앞당기지 않는다.
-        denied = self.invocation("시체에서 권총탄 1", self.char2)
-        self.assertEqual(self.run_action(denied, self.char2).status, ResultStatus.REFUSED)
+        self.assertEqual(self.public_errors(command="시체에서 권총탄 1 가져"),
+                         ["지금 선택할 수 없는 전리품입니다."])
+        self.assertEqual(self.run_action(one, self.char2).status, ResultStatus.REFUSED)
         self.assertEqual(self.state(), before)
         self.assertEqual(self.run_action(two, self.char2).status, ResultStatus.SUCCESS)
         self.assertEqual(number_for(refs[0]), 1)

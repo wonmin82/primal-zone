@@ -590,6 +590,37 @@ class DoorTest(WorldCommandTest):
         failed.assert_called_once_with(self.char1)
         signal.assert_not_called()
 
+    def test_web_traverse_refuses_hidden_and_absent_exit_equally(self):
+        from server.conf.primal_inputfuncs import pz_action
+        from world.actions.global_actions import invoke
+
+        origin = self.rooms["hq_concourse"]
+        endpoint = next(obj for obj in origin.exits if obj.destination == self.rooms["dock"])
+        endpoint.db.err_traverse = "공개 출구의 이동 제한"
+        endpoint.locks.add("view:false();traverse:false()")
+
+        def web_click(request_id):
+            self.char1.msg.reset_mock()
+            pz_action(self.session, {"action_id": "global.traverse", "variant": "adapter",
+                                     "roles": {}, "arguments": {"exit_id": endpoint.pk},
+                                     "request_id": request_id})
+            self.assertEqual(self.char1.location, origin)
+            errors = [str(call.args[0]) for call in self.char1.msg.call_args_list
+                      if call.kwargs.get("kind") == "error"]
+            self.assertEqual(len(errors), 1)
+            return errors
+
+        with patch.object(SIGNAL_EXIT_TRAVERSED, "send") as signal:
+            hidden = web_click("hidden-exit")
+            self.assertEqual(invoke(self.char1, self.session, "traverse", exit_id=endpoint.pk).messages,
+                             ("공개 출구의 이동 제한",))
+            endpoint.location = None
+            self.assertEqual(web_click("absent-exit"), hidden)
+            endpoint.location = origin
+            endpoint.locks.add("view:all()")
+            self.assertIn("공개 출구의 이동 제한", web_click("visible-exit")[0])
+            signal.assert_not_called()
+
     def test_gateway_door_signal_requires_outer_commit_and_extends_deadline_once(self):
         door = self.opened()
         origin = self.rooms["hq_concourse"]

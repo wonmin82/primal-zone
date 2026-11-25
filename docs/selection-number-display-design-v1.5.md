@@ -1,5 +1,7 @@
 # Primal Zone — 객체 선택 번호 조건부 표시 설계 v1.5 FINAL
 
+이 문서는 원래 Design Freeze 전문을 보존한다. 함께 적용하는 [v1.5.1 FINAL 규범적 보완 설계](selection-number-display-design-v1.5.1.md)가 충돌하는 조항에 우선한다.
+
 > **문서:** Primal Zone — 객체 선택 번호 조건부 표시 설계 v1.5 FINAL\
 > **기준일:** 2026-11-22\
 > **저장소:** wonmin82/primal-zone\

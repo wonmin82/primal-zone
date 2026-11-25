@@ -59,7 +59,14 @@ def _room_appearance(caller, entity, observed_at):
                     *duel_observation(entity, caller, observed_at)), "\n")
 
 
-def _observe_target(caller, entity, kind, observed_at):
+def _observe_target(caller, entity, kind, observed_at, *, typed=False):
+    from world.actions.gateway import target_unavailable
+
+    def unavailable():
+        if typed:
+            return target_unavailable("global.look_target")
+        return rules.RuleError("지금 살펴볼 수 없는 대상입니다.")
+
     if kind == ReferenceKind.ITEM:
         return _item_appearance(caller, entity, observed_at)
     from world.observation import can_perceive, context_for, perceives
@@ -67,14 +74,14 @@ def _observe_target(caller, entity, kind, observed_at):
     observation = context_for(caller, observed_at=observed_at)
     if not can_perceive(entity, observation) or (
             getattr(entity, "supports_shared_combat", False) and entity.db.state != "alive"):
-        raise rules.RuleError("지금 살펴볼 수 없는 대상입니다.")
+        raise unavailable()
     if kind == ReferenceKind.DOOR:
         from world.content.doors import DOORS
         from world.doors import DoorTarget, describe_door, identity_for_exit
 
         identity = identity_for_exit(entity)
         if identity not in DOORS or not perceives(observation.snapshot, "normal"):
-            raise rules.RuleError("지금 살펴볼 수 없는 대상입니다.")
+            raise unavailable()
         target = DoorTarget(identity, entity.key, entity.pk)
         return describe_door(caller, target, observed_at)
     return _room_appearance(caller, entity, observed_at)
@@ -93,7 +100,7 @@ def look_target(context):
     entity, = context.roles["subject"]
     reference, = dict(context.invocation.roles)["subject"]
     observed_at = time()
-    output = _observe_target(context.caller, entity, reference.kind, observed_at)
+    output = _observe_target(context.caller, entity, reference.kind, observed_at, typed=True)
     after_change(lambda: context.caller.push_state(observed_at=observed_at))
     return ActionResult(messages=(output,))
 
@@ -307,6 +314,8 @@ def traverse(context):
     identity = context.arguments["exit_id"]
     selected = Exit.objects.select_for_update().filter(pk=identity, db_location_id=caller.db_location_id).first()
     if caller.location is None or selected is None or not selected.destination:
+        raise rules.RuleError("출구를 이용할 수 없습니다.")
+    if context.invocation.origin == "web" and not selected.access(caller, "view"):
         raise rules.RuleError("출구를 이용할 수 없습니다.")
     if not any([command.access(caller, "cmd") for command in selected.create_exit_cmdset(selected) if command.is_exit]):
         raise rules.RuleError("출구를 이용할 수 없습니다.")

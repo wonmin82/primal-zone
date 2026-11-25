@@ -70,6 +70,28 @@ class RoomNpcActionsTests(NativeItemTest, WorldCommandTest):
         self.assertEqual(self.char1.profile_snapshot(), after)
         self.assertEqual(after["hp"], 60)
 
+    def test_call_access_precedes_combat_error_for_stale_provider(self):
+        from evennia.objects.models import ObjectDB
+
+        self.char1.change(lambda profile: profile.update(hp=1, credits=1000))
+        control = next(row for row in action_controls(self.char1, self.index)
+                       if row["action"]["action_id"] == "medical.treat")
+        invocation = from_web({**control["action"], "request_id": "medical-stale-provider"}, self.index)
+        provider_ref = dict(invocation.roles)["provider"][0]
+        provider = ObjectDB.objects.get(pk=provider_ref.identity)
+        self.char1.change(lambda profile: profile.update(combat_target=provider.pk))
+        visible = execute(self.char1, self.session, invocation, self.index)
+        self.assertEqual(visible.messages, ("전투 중입니다. 먼저 승리하거나 도망하세요.",))
+
+        balances = self.char1.profile_snapshot()
+        provider.locks.add("call:false()")
+        denied = execute(self.char1, self.session, invocation, self.index)
+        provider.location = self.rooms["dock"]
+        absent = execute(self.char1, self.session, invocation, self.index)
+        self.assertEqual(denied, absent)
+        self.assertEqual(denied.status, ResultStatus.REFUSED)
+        self.assertEqual(self.char1.profile_snapshot(), balances)
+
     def test_shop_purchase_alias_single_service_and_stable_sale(self):
         self.char1.location = self.rooms["supply_shop"]
         self.char1.change(lambda p: p.update(credits=1000))

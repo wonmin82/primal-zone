@@ -396,16 +396,16 @@ class TargetIntegrationTests(WorldCommandTest):
         self.action_take("모두")
         self.assertEqual(room_loot(self.char1.location, False), [])
 
-    def test_entry_index_and_default_do_not_skip_protected_items(self):
+    def test_entry_index_refuses_protected_item_and_default_uses_accessible_item(self):
         source = self.native_source([self.entry(player=self.char2), self.entry(quantity=2)])
         before = self.char1.profile()
         with self.assertRaises(rules.RuleError):
-            self.action_take("시체에서 회수부품")
+            self.action_take("시체에서 회수부품 1")
         self.assertEqual(self.char1.profile(), before)
         controls = multiplayer_state(self.char1, 100)["corpses"][0]["loot"]
         self.assertEqual(len(controls), 1)
         self.assertEqual(controls[0]["take_command"], "시체 1에서 회수부품 2 가져")
-        self.action_take("시체에서 회수부품 2")
+        self.action_take("시체에서 회수부품")
         self.assertEqual([e["quantity"] for e in self.entries(source)], [3, 1])
         self.action_take("시체에서 회수부품 모두")
         self.assertEqual([e["quantity"] for e in self.entries(source)], [3])

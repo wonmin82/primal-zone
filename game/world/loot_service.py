@@ -7,6 +7,7 @@ from evennia import create_object
 from evennia.objects.models import ObjectDB
 
 from world import rules
+from world.actions.loot_errors import LootUnavailable
 from world.content import ITEMS
 from world.content.economy import CURRENCY
 from world.item_entities import api
@@ -142,7 +143,7 @@ def source_entries(source):
 def lock_sources(sources, caller=None, extra_owners=()):
     """모든 owner → UUID item → claim → currency → share의 공통 순서. 선택 후 재검증한다."""
     if any(source is None or source.pk is None for source in sources):
-        raise rules.RuleError("전리품 출처가 사라졌습니다.")
+        raise LootUnavailable()
     owners = {owner.pk for owner in sources} | set(extra_owners)
     if caller:
         owners.add(caller.pk)
@@ -159,7 +160,7 @@ def lock_sources(sources, caller=None, extra_owners=()):
     for identity in sorted(owners):
         obj = ObjectDB.objects.select_for_update().filter(pk=identity).first()
         if obj is None:
-            raise rules.RuleError("전리품 공간이나 지급 대상이 사라졌습니다.")
+            raise LootUnavailable()
         locked_owners[identity] = obj
     current_claims = LootClaim.objects.filter(item_entity__owner_object__in=sources)
     current_currency = CurrencyLoot.objects.filter(owner_object__in=sources)
@@ -170,12 +171,15 @@ def lock_sources(sources, caller=None, extra_owners=()):
                         .values_list("player_id", flat=True))
     if not current_refs <= owners:
         # lock 순서를 뒤집어 새 owner를 추가하지 않는다. 호출자가 fresh snapshot으로 재시도한다.
-        raise rules.RuleError("전리품 지급 대상이 바뀌었습니다. 다시 선택하세요.")
+        raise LootUnavailable()
     # owner lock 이후 집합을 다시 읽어 동시에 추가된 loot/inventory도 포함한다.
     identities = set()
     for owner in locked_owners.values():
         identities.update(api.items_owned_by(owner).values_list("pk", flat=True))
-    api.lock_items(identities)
+    try:
+        api.lock_items(identities)
+    except ValidationError:
+        raise LootUnavailable() from None
     list(LootClaim.objects.select_for_update().filter(item_entity_id__in=identities).order_by("item_entity_id"))
     currencies = list(CurrencyLoot.objects.select_for_update().filter(owner_object__in=sources).order_by("pk"))
     list(CurrencyLootShare.objects.select_for_update().filter(currency_loot__in=currencies)
@@ -269,7 +273,9 @@ def populate_source(source, entries):
                                   **_reservation(entry)).save()
 
 
-def _current_entry(source, selected):
+def _current_entry(source, selected, *, caller=None, now=None):
+    from typeclasses.loot import can_take_entry
+
     from world.item_runtime import require_runtime
 
     if not native_source(source):
@@ -289,7 +295,9 @@ def _current_entry(source, selected):
         if currency is not None:
             entry = _currency_snapshot(currency)
     if entry is None or (entry.item_id, entry.currency_id) != (selected.item_id, selected.currency_id):
-        raise rules.RuleError("전리품의 출처가 바뀌었거나 이미 회수되었습니다.")
+        raise LootUnavailable()
+    if caller is not None and not can_take_entry(entry.as_entry(), caller, now):
+        raise LootUnavailable()
     if (entry.reserved_party, entry.reserved_player, entry.assigned_player, entry.protection_until) != (
             selected.reserved_party, selected.reserved_player, selected.assigned_player, selected.protection_until):
         raise rules.RuleError("전리품 권리가 바뀌었습니다. 다시 선택하세요.")
@@ -300,7 +308,7 @@ def _current_entry(source, selected):
 
 def pickup(source, selected, caller, quantity, *, now, locked=False):
     """권리를 lock 후 재검증하고 실물/화폐와 모든 지급 대상을 함께 갱신한다."""
-    from typeclasses.loot import can_take_entry, recipient_for_item
+    from typeclasses.loot import recipient_for_item
 
     from world.equipment_service import entity_runtime
 
@@ -308,13 +316,11 @@ def pickup(source, selected, caller, quantity, *, now, locked=False):
         if not locked:
             lock_sources([source], caller)
         if source.location != caller.location:
-            raise rules.RuleError("같은 장소의 전리품만 회수할 수 있습니다.")
-        current = _current_entry(source, selected)
+            raise LootUnavailable()
+        current = _current_entry(source, selected, caller=caller, now=now)
         entry = current.as_entry()
         if type(quantity) is not int or not 0 < quantity <= current.quantity:
             raise rules.RuleError("회수할 수량을 확인하세요.")
-        if not can_take_entry(entry, caller, now):
-            raise rules.RuleError("다른 탐사자의 보호된 전리품입니다.")
         if current.kind == "currency":
             rules.require_peace(caller.profile())
             payouts = currency_payouts(entry, quantity, caller.pk, now)

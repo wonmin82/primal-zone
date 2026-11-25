@@ -9,6 +9,7 @@ from time import time
 from types import CoroutineType, MappingProxyType
 from uuid import uuid4
 
+from django.core.exceptions import ValidationError
 from evennia.objects.models import ObjectDB
 from world import rules
 from world import text as ft
@@ -153,36 +154,50 @@ def from_web(payload, index):
     return ActionInvocation(action.id, variant_id, tuple(output), argument_values(action, arguments), "web", token, request_id)
 
 
-def _roles(caller, action, invocation):
-    from world.actions.resolver import role_records
-    from world.selection_numbers.api import resolve_reference
+def target_unavailable(action_id):
+    """같은 행동의 비공개·부재·이동 대상은 같은 공개 거절을 사용한다."""
+    if action_id == "loot.take":
+        from world.actions.loot_errors import LootUnavailable
 
+        return LootUnavailable()
+    return rules.RuleError("원래 대상이 없어졌거나 위치·권한이 바뀌었습니다.")
+
+
+def _role_bindings(action, invocation):
+    """대상 조회 전에 요청 자체에서 확정할 수 있는 역할 구조를 검증한다."""
     declarations = {role.name: role for role in action.roles}
     bindings = dict(invocation.roles)
     if len(bindings) != len(invocation.roles) or set(bindings) - declarations.keys():
         raise rules.RuleError("행동 역할이 일치하지 않습니다.")
+    for name, role in declarations.items():
+        refs = bindings.get(name, ())
+        if (role.required and not refs or
+                not role.allow_all and role.default != DefaultTargetPolicy.ALL and len(refs) > 1 or
+                len(refs) != len(set(refs))):
+            raise rules.RuleError("행동 대상 수를 확인하세요.")
+    if action.provider_from and bindings.get("provider") != bindings.get(action.provider_from):
+        raise rules.RuleError("행동 제공자와 대상이 일치하지 않습니다.")
+    return declarations, bindings
+
+
+def _roles(caller, action, invocation):
+    from world.actions.resolver import role_records
+    from world.selection_numbers.api import resolve_reference
+
+    declarations, bindings = _role_bindings(action, invocation)
     entities = {}
     loot_entities = {} if action.id == "loot.take" else None
     for name, role in declarations.items():
         refs = bindings.get(name, ())
-        if (role.required and not refs) or (not role.allow_all and role.default != DefaultTargetPolicy.ALL and len(refs) > 1) or len(refs) != len(set(refs)):
-            raise rules.RuleError("행동 대상 수를 확인하세요.")
         current = {record.reference for record in role_records(
             caller, role, bindings, references=refs, provider_entities=loot_entities,
         )} if refs else set()
         if any(ref.kind not in role.kinds or ref not in current for ref in refs):
-            if (action.id == "loot.take" and name == "subject"
-                    and all(ref.kind in role.kinds for ref in refs)):
-                from world.actions.loot_errors import LootUnavailable
-
-                raise LootUnavailable()
-            raise rules.RuleError("원래 대상이 없어졌거나 위치·권한이 바뀌었습니다.")
+            raise target_unavailable(action.id)
         resolve = resolve_reference if loot_entities is None else loot_entities.get
         entities[name] = tuple(resolve(ref) for ref in refs)
         if any(entity is None for entity in entities[name]):
-            raise rules.RuleError("원래 대상이 없어졌거나 위치·권한이 바뀌었습니다.")
-    if action.provider_from and bindings.get("provider") != bindings.get(action.provider_from):
-        raise rules.RuleError("행동 제공자와 대상이 일치하지 않습니다.")
+            raise target_unavailable(action.id)
     return entities
 
 
@@ -202,16 +217,15 @@ def _validate_quantities(caller, invocation, entities, quantity):
         )
 
         entries = snapshot_entry_index({entity.owner_object_id: entity.owner_object for entity in loot}.values())
-        matches = {entity: snapshot_entry(entries, entity) for entity in loot}
+        matches = [snapshot_entry(entries, entity) for entity in loot]
         now = time()
-        party, recipients = read_loot_rights(caller, [match for match in matches.values() if match is not None], now)
-    for ref, entity in targets:
-        if ref.kind in loot_kinds:
-            match = matches[entity]
-            if match is None or not can_take_entry(match.as_entry(), caller, now, party=party, recipients=recipients):
-                if invocation.action_id == "loot.take":
-                    raise LootUnavailable()
-                raise rules.RuleError("원래 전리품을 회수할 권한이 없습니다.")
+        party, recipients = read_loot_rights(caller, [match for match in matches if match is not None], now)
+        if any(match is None or not can_take_entry(match.as_entry(), caller, now, party=party,
+                                                  recipients=recipients) for match in matches):
+            if invocation.action_id == "loot.take":
+                raise LootUnavailable()
+            raise rules.RuleError("원래 전리품을 회수할 권한이 없습니다.")
+    for _, entity in targets:
         if hasattr(entity, "quantity") and quantity is not None and quantity > entity.quantity:
             raise rules.RuleError("원래 대상의 수량이 부족합니다.")
 
@@ -227,7 +241,7 @@ def _lock_roles(caller, invocation):
         for ref in refs:
             entity = resolve_reference(ref)
             if entity is None:
-                raise rules.RuleError("원래 대상이 없어졌거나 위치가 바뀌었습니다.")
+                raise target_unavailable(invocation.action_id)
             if isinstance(entity, ObjectDB):
                 identities.add(entity.pk)
             elif isinstance(entity, ItemEntity):
@@ -235,7 +249,7 @@ def _lock_roles(caller, invocation):
                 trail = set()
                 while current is not None:
                     if current.pk in trail:
-                        raise rules.RuleError("원래 대상의 아이템 부모 관계를 확인할 수 없습니다.")
+                        raise target_unavailable(invocation.action_id)
                     trail.add(current.pk)
                     items.add(current.pk)
                     if current.owner_object_id:
@@ -243,7 +257,7 @@ def _lock_roles(caller, invocation):
                     try:
                         current = current.parent_item
                     except ItemEntity.DoesNotExist:
-                        raise rules.RuleError("원래 대상의 아이템 부모 관계를 확인할 수 없습니다.") from None
+                        raise target_unavailable(invocation.action_id) from None
                 if ref.kind == ReferenceKind.LOOT:
                     sources[entity.owner_object_id] = entity.owner_object
             elif isinstance(entity, CurrencyLoot):
@@ -257,7 +271,10 @@ def _lock_roles(caller, invocation):
     else:
         list(ObjectDB.objects.select_for_update().filter(pk__in=sorted(identities)).order_by("pk"))
         if items:
-            api.lock_items(items)
+            try:
+                api.lock_items(items)
+            except ValidationError:
+                raise target_unavailable(invocation.action_id) from None
 
 
 def revalidate_context(context):
@@ -271,10 +288,12 @@ def revalidate_context(context):
               if binding.id == context.binding.id]
     expected = set(provider_refs) if provider_refs else {None}
     if {ref for ref, _ in offers} != expected:
+        if provider_refs:
+            raise target_unavailable(action.id)
         raise rules.RuleError("행동 제공 상태나 권한이 바뀌었습니다.")
     if any(hasattr(provider, "access") and not provider.access(context.caller, context.config.get("access", "call"))
            for provider in current.get("provider", ())):
-        raise rules.RuleError("이 행동을 실행할 권한이 없습니다.")
+        raise target_unavailable(action.id)
     return current
 
 
@@ -291,6 +310,7 @@ def execute(caller, session, invocation, index):
             raise rules.RuleError("행동 문법을 확인하세요.")
         if variant.confirmation_required and invocation.origin == "web":
             _confirmation(caller, session, invocation, variant)
+        _role_bindings(action, invocation)
         services = {index.services[binding.service_id] for binding in index.bindings.values()
                     if binding.action_id == action.id}
         if has_external_transaction() or in_world_change() and any(service.effects for service in services):
@@ -325,6 +345,8 @@ def execute(caller, session, invocation, index):
             offered = [(ref, binding) for ref, binding in provided(caller, index, action_id=action.id)
                        if ref in provider_refs or ref is None and not provider_refs]
             if {ref for ref, _ in offered} != (set(provider_refs) if provider_refs else {None}):
+                if provider_refs:
+                    raise target_unavailable(action.id)
                 raise rules.RuleError("행동 제공자를 확정할 수 없습니다.")
             candidates = tuple(dict.fromkeys(binding for _, binding in offered))
             if len(candidates) != 1:
@@ -334,11 +356,11 @@ def execute(caller, session, invocation, index):
             service = index.services[binding.service_id]
             config = {arg.name: arg.default for arg in service.config_schema if arg.default is not None}
             config.update(binding.config)
-            if config.get("peaceful"):
-                rules.require_peace(caller.profile_snapshot())
             if any(hasattr(provider, "access") and not provider.access(caller, config.get("access", "call"))
                    for provider in entities.get("provider", ())):
-                raise rules.RuleError("이 행동을 실행할 권한이 없습니다.")
+                raise target_unavailable(action.id)
+            if config.get("peaceful"):
+                rules.require_peace(caller.profile_snapshot())
             _validate_quantities(caller, invocation, entities, dict(arguments).get("quantity"))
             from world.actions.effects import invoke_service
             from world.domain_context import for_player

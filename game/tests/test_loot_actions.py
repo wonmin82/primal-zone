@@ -99,6 +99,80 @@ class LootActionTests(NativeLootTest):
             self.assertEqual(execute(self.char1, self.session, invocation, self.index).status, ResultStatus.REFUSED)
             self.assertEqual(self.all_state(), before)
 
+    def test_web_loot_refusals_do_not_distinguish_hidden_missing_and_protected_targets(self):
+        from server.conf.primal_inputfuncs import pz_action
+        from world.actions.gateway import ActionResult, emit
+        from world.actions.loot_presentation import source_controls
+        from world.loot_entities.models import LootClaim
+        from world.multiplayer import world_change
+
+        room = self.char1.location
+        remote = create_object("typeclasses.rooms.Room", key="다른 방")
+        source = self.corpse()
+        item = api.create_item("ammo_9", quantity=2, location_kind="corpse_loot", owner_object=source)
+        loot_service.create_claim(item, reserved_player=self.char1, assigned_player=self.char1,
+                                  protection_until=10**10)
+        credits = loot_service.create_currency(source, 6, shares={self.char1: 2, self.char2: 4},
+                                               reserved_player=self.char1, protection_until=10**10)
+        controls = source_controls(self.char1, 100)[source.pk]
+        aggregate = controls["take_action"]
+        individual = {row["action"]["roles"]["subject"][0]["kind"]: row["action"] for row in controls["loot"]}
+        self.assertEqual(set(individual), {"loot", "currency"})
+
+        def click(payload, request_id):
+            before = self.all_state()
+            self.output.reset_mock()
+            with patch("world.actions.gateway.emit", wraps=emit) as delivery:
+                pz_action(self.session, {**payload, "request_id": request_id})
+            delivery.assert_called_once()
+            result = delivery.call_args.args[-1]
+            self.assertEqual(result, ActionResult(ResultStatus.REFUSED, result.messages))
+            events = [(call.kwargs["kind"], str(call.args[0])) for call in self.output.call_args_list
+                      if call.kwargs.get("kind") in ("error", "event")]
+            self.assertEqual(len(events), 1)
+            self.assertEqual(events[0][0], "error")
+            self.assertFalse(any("pz_action_result" in call.kwargs for call in self.output.call_args_list))
+            self.assertEqual(self.all_state(), before)
+            return result, events
+
+        def with_quantity(payload, quantity):
+            return {**payload, "arguments": {**payload["arguments"], "quantity": quantity}}
+
+        shortage, _ = click(with_quantity(individual["loot"], 3), "loot-visible-shortage")
+        self.assertEqual(shortage.messages, ("원래 대상의 수량이 부족합니다.",))
+        source.locks.add("view:false()")
+        denied = click(aggregate, "loot-hidden-source")
+        source.locks.add("view:all()")
+        source.location = remote
+        self.assertEqual(click(aggregate, "loot-moved-source"), denied)
+        source.location = room
+
+        with world_change():
+            claim = LootClaim.objects.get(item_entity=item)
+            claim.reserved_player = self.char2
+            claim.assigned_player = self.char2
+            claim.save()
+        self.assertEqual(click(aggregate, "loot-partially-accessible"), denied)
+        self.assertEqual(click(individual["loot"], "loot-protected-item"), denied)
+        with world_change():
+            claim.reserved_player = self.char1
+            claim.assigned_player = self.char1
+            claim.save()
+            credits.reserved_player = self.char2
+            credits.shares.filter(player=self.char1).delete()
+            credits.save()
+        self.assertEqual(click(individual["currency"], "loot-protected-currency"), denied)
+        self.assertEqual([ref["kind"] for ref in aggregate["roles"]["subject"]], ["loot", "currency"])
+        self.assertEqual(click(with_quantity(aggregate, 3), "loot-shortage-with-protected-currency"), denied)
+
+        with world_change():
+            LootClaim.objects.filter(item_entity=item).delete()
+            api.delete_item(item)
+        self.assertEqual(click(individual["loot"], "loot-deleted-item"), denied)
+        source.db.decay_at = 0
+        source.reconcile(100)
+        self.assertEqual(click(aggregate, "loot-deleted-source"), denied)
+
     def test_public_evennia_command_and_alias_change_real_inventory(self):
         item = self.loot_item(quantity=3)
         for command in ("시체에서 9mm 권총탄 가져", "시체에서 9mm 권총탄 집"):
@@ -377,12 +451,15 @@ class LootActionTests(NativeLootTest):
                                             reserved_player=self.char1, protection_until=time() + 300)
         session = self.connect_character(self.char2)
         before = [player.profile()["credits"] for player in (self.char1, self.char2)]
-        results = [execute(self.char2, session,
-                           dispatch_text(self.char2, self.index, "game.take", f"시체에서 {amount}칩", "가져"),
-                           self.index) for amount in (1, 999)]
-        self.assertEqual([result.status for result in results], [ResultStatus.REFUSED] * 2)
-        self.assertEqual(results[0].messages, results[1].messages)
-        self.assertEqual(results[0].messages, ("지금 선택할 수 없는 전리품입니다.",))
+        with patch.object(self.char2, "msg") as output:
+            for amount in (1, 999):
+                output.reset_mock()
+                completed = []
+                self.char2.execute_cmd(f"시체에서 {amount}칩 가져", session=session).addCallback(
+                    lambda _: completed.append(True))
+                self.assertEqual(completed, [True])
+                errors = [str(call.args[0]) for call in output.call_args_list if call.kwargs.get("kind") == "error"]
+                self.assertEqual(errors, ["지금 선택할 수 없는 전리품입니다."])
         own = self.run_take("시체에서 999칩")
         self.assertEqual(own.status, ResultStatus.REFUSED)
         self.assertIn("수량이 부족", str(own.messages))
