@@ -221,17 +221,12 @@ class Actor(NumberedObjectMixin, DistantPresenceMixin, DefaultObject):
             )
         lines = [presentation.description]
         if self.capability_active("settlement") or self.capability_active("shop"):
-            from world.actions.presentation import provider_verbs
+            from typeclasses.interactables import service_usage
 
-            from typeclasses.interactables import service_commands
-
-            actions = set(provider_verbs(looker, self, kwargs.get("observed_at")))
-            if actions:
-                commands = service_commands(self, looker, actions, kwargs.get("observed_at"),
-                                            shop=self.capability_active("shop"))
-                lines.extend(("", ft.join(
-                    [ft.usage(command, actions) for command in commands], " · ",
-                )))
+            usage = service_usage(self, looker, kwargs.get("observed_at"),
+                                  shop=self.capability_active("shop"))
+            if usage:
+                lines.extend(("", usage))
         if self.capability_active("medical"):
             from world.actions.presentation import provider_verbs
 

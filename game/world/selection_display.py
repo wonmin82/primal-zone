@@ -92,25 +92,11 @@ class RoomSnapshot:
     references: dict
 
 
-def door_rows_by_endpoint(objects):
-    """같은 방에서 확인할 문 endpoint의 실물을 함께 읽는다."""
-    from django.db.models import Q
-
-    from world.door_entities.models import Door
-
-    endpoints = {obj.pk for obj in objects if obj.db_destination_id}
-    doors_by_endpoint = {}
-    if endpoints:
-        for door in Door.objects.filter(Q(exit_a_id__in=endpoints) | Q(exit_b_id__in=endpoints)).order_by("pk"):
-            doors_by_endpoint.setdefault(door.exit_a_id, door)
-            doors_by_endpoint.setdefault(door.exit_b_id, door)
-    return doors_by_endpoint
-
-
 def room_snapshot(caller, observed_at=None, *, objects=None):
     from typeclasses.loot import DroppedLoot
 
     from world.actions.schema import ReferenceKind
+    from world.doors import door_rows_by_endpoint
     from world.observation import context_for, perceives
     from world.selection_numbers.api import descriptor, numbered_records
     from world.targets import room_objects

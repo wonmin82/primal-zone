@@ -31,6 +31,7 @@ def lock(caller, invocation):
 
 
 def take(context):
+    from django.utils.crypto import constant_time_compare
     from typeclasses.loot import Corpse, can_take_entry
     from world import loot_service
     from world.actions import loot_services as clock
@@ -58,10 +59,14 @@ def take(context):
             for _, entry in selections]):
         raise LootUnavailable()
     try:
-        expected = signing.loads(context.arguments["snapshot"], salt=SALT, max_age=300)
+        snapshot = signing.loads(context.arguments["snapshot"], salt=SALT, max_age=300)
     except signing.BadSignature:
         raise rules.RuleError("전리품 선택이 만료되었습니다. 다시 확인하세요.") from None
-    if expected != fingerprint(caller, selections, now, party=party, recipients=recipients):
+    nonce, _, expected = snapshot.partition(".") if isinstance(snapshot, str) else ("", "", "")
+    if len(nonce) != 32 or len(expected) != 64:
+        raise rules.RuleError("전리품 선택이 만료되었습니다. 다시 확인하세요.")
+    current = fingerprint(caller, selections, now, nonce=nonce, party=party, recipients=recipients)
+    if not constant_time_compare(expected, current):
         raise rules.RuleError("전리품 수량이나 권리가 바뀌었습니다. 다시 선택하세요.")
     if {source.pk for source, _ in selections} != {source.pk for source in sources}:
         raise LootUnavailable()

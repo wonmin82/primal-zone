@@ -63,7 +63,7 @@ def execute(context):
         lights.insert_power(context.caller, provider, source)
         changed, message = True, "광원에 전원 하나를 넣었다."
     elif operation == "light_status":
-        return ActionResult(messages=(item_label(provider) + "\n" + lights.status(context.caller, provider),))
+        return ActionResult(messages=(lights.status(context.caller, provider, with_label=True),))
     elif operation in ("light_on", "light_off"):
         enabled = operation == "light_on"
         lights.switch(context.caller, provider, enabled)

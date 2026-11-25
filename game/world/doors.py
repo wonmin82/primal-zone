@@ -20,6 +20,17 @@ logger = logging.getLogger(__name__)
 UNAVAILABLE = "UNAVAILABLE"
 
 
+def door_rows_by_endpoint(objects):
+    """Read the Door rows for the supplied exits, keyed by either endpoint."""
+    endpoints = {obj.pk for obj in objects if obj.db_destination_id}
+    doors = {}
+    if endpoints:
+        for door in Door.objects.filter(Q(exit_a_id__in=endpoints) | Q(exit_b_id__in=endpoints)).order_by("pk"):
+            doors.setdefault(door.exit_a_id, door)
+            doors.setdefault(door.exit_b_id, door)
+    return doors
+
+
 def timestamp(value):
     return isinstance(value, Real) and not isinstance(value, bool) and isfinite(value) and value >= 0
 

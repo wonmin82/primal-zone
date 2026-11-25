@@ -38,7 +38,8 @@ def equipped_items(character):
     return ItemEntity.objects.filter(owner_object=character, location_kind="equipment").order_by("sequence")
 
 
-def _item_display_records(owned):
+def item_display_records(owned):
+    """Read stored numbers and labels for the supplied item display context in one batch."""
     from world.selection_display import displays
     from world.selection_numbers.api import descriptor, numbered_records
 
@@ -65,7 +66,7 @@ def entity_snapshot(character):
     owned = carried_items(character)
     items = {row.pk: row for row in owned}
     mounted = {row.parent_item_id: row for row in owned if row.socket == "magazine"}
-    numbers, labels = _item_display_records(owned)
+    numbers, labels = item_display_records(owned)
 
     def definition_id(row):
         return LEGACY_ITEM_MAPPING.get(row.definition_id, row.definition_id) if maintenance.get() else row.definition_id
@@ -265,7 +266,7 @@ def selector_label(character, item, *, with_parents=False):
     if not isinstance(item, ItemEntity):
         return ITEMS[item]["name"]
     owned = carried_items(character)
-    _, labels = _item_display_records(owned)
+    _, labels = item_display_records(owned)
 
     def display_name(row):
         return labels.get(str(row.pk)) or ITEMS[row.definition_id]["name"]

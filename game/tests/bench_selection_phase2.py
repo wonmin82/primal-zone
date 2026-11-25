@@ -86,6 +86,7 @@ class SelectionPhase2Benchmark(NativeItemTest):
         self.enterContext(patch.object(ItemEntity._meta.pk, "_get_default",
                                        new=lambda: UUID(int=next(identities))))
         self.enterContext(patch("django.core.signing.TimestampSigner.timestamp", return_value="1xViBB"))
+        self.enterContext(patch("world.actions.loot_resolution.token_hex", return_value="a" * 32))
         source = create_object(Corpse, key="배정 전리품 계측", location=self.room)
         source.db.decay_at = NOW + 100
         loot_service.populate_source(source, [])

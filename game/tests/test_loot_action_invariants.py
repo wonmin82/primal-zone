@@ -352,6 +352,16 @@ class LootActionInvariantTests(NativeLootTest):
             absent = observe()
             protected = [self.loot_item(identity, quantity=7) for identity in ("index_alias", "index_canonical")]
             self.assertEqual(observe(), absent)
+
+            def reversed_item_aliases(entity):
+                record = descriptor(entity)
+                if record and isinstance(entity, ItemEntity):
+                    return replace(record, aliases=tuple(reversed(record.aliases)))
+                return record
+
+            with patch("world.actions.loot_resolution.descriptor", side_effect=reversed_item_aliases):
+                self.assertEqual(observe(), absent)
+
             selected = self.invocation(f"시체에서 공개별칭 {public_number}", self.char2)
             self.assertEqual(self.run_action(selected, self.char2).status, ResultStatus.SUCCESS)
             for item, expected in [(public, 2), (sibling, 4), *((item, 7) for item in protected)]:
@@ -365,6 +375,7 @@ class LootActionInvariantTests(NativeLootTest):
         from world.state import multiplayer_state
 
         currency = self.currency(shares={self.char1: 0, self.char2: 20})
+        self.enterContext(patch("world.actions.loot_resolution.token_hex", return_value="a" * 32))
         required_private_fields = {"reserved_party", "reserved_player", "assigned_player",
                                    "protection_until", "eligible_players", "remaining_shares"}
 
@@ -376,7 +387,7 @@ class LootActionInvariantTests(NativeLootTest):
             actions = [corpse["take_action"], *(row["action"] for row in corpse["loot"])]
             for action in actions:
                 decoded = signing.loads(action["arguments"]["snapshot"], salt=SALT)
-                self.assertRegex(decoded, r"^[0-9a-f]{64}$")
+                self.assertRegex(decoded, r"^[0-9a-f]{32}\.[0-9a-f]{64}$")
                 action["arguments"]["snapshot"] = decoded
             return corpse
 
@@ -395,6 +406,58 @@ class LootActionInvariantTests(NativeLootTest):
         self.assertEqual(self.balances(), (balances[0], balances[1] + 1))
         hidden.refresh_from_db()
         self.assertEqual((hidden.quantity, hidden.owner_object_id), (7, self.source.pk))
+
+    def test_loot_token_does_not_reveal_another_players_party_dissolution(self):
+        from django.core import signing
+        from world.actions.gateway import from_web
+        from world.actions.loot_resolution import SALT
+        from world.state import multiplayer_state
+
+        party = create_party(self.char2, now=100)
+        invite(self.char2, self.char1, now=100)
+        respond(self.char1, True, now=100)
+        item = self.loot_item(party=party, assigned=self.char1)
+        party.remove_member(self.char1, now=100)
+
+        def observe():
+            state = multiplayer_state(self.char1, 100)
+            corpse, = state["corpses"]
+            token = corpse["loot"][0]["action"]["arguments"]["snapshot"]
+
+            def without_tokens(value):
+                if isinstance(value, dict):
+                    return {key: without_tokens(child) for key, child in value.items() if key != "snapshot"}
+                if isinstance(value, list):
+                    return [without_tokens(child) for child in value]
+                return value
+
+            return without_tokens(state), token
+
+        before, previous = observe()
+        same_public_state, repeated = observe()
+        self.assertEqual(before, same_public_state)
+        party.remove_member(self.char2, now=100)
+        self.assertIsNone(LootClaim.objects.get(item_entity=item).reserved_party_id)
+        after, current = observe()
+        self.assertEqual(before, after)
+        digests = {signing.loads(token, salt=SALT).rsplit(".", 1)[-1] for token in (previous, repeated, current)}
+        self.assertEqual(len(digests), 3)
+
+        before_payout = self.state()
+        action = after["corpses"][0]["loot"][0]["action"]
+        previous_format = signing.dumps("a" * 64, salt=SALT)
+        for request, token, message in (
+            ("stale", previous, "전리품 수량이나 권리가 바뀌었습니다. 다시 선택하세요."),
+            ("tampered", current + "x", "전리품 선택이 만료되었습니다. 다시 확인하세요."),
+            ("previous-format", previous_format, "전리품 선택이 만료되었습니다. 다시 확인하세요."),
+        ):
+            payload = {**action, "arguments": {**action["arguments"], "snapshot": token}, "request_id": request}
+            result = self.run_action(from_web(payload, self.index))
+            self.assertEqual(result.status, ResultStatus.REFUSED)
+            self.assertEqual(result.messages, (message,))
+            self.assertEqual(self.state(), before_payout)
+        payload = {**action, "arguments": {**action["arguments"], "snapshot": current}, "request_id": "fresh"}
+        self.assertEqual(self.run_action(from_web(payload, self.index)).status, ResultStatus.SUCCESS)
 
     def test_unrelated_private_entry_preserves_accessible_alias_ambiguity(self):
         from time import time

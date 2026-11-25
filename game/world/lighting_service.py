@@ -5,7 +5,12 @@ from uuid import UUID
 
 from world import lighting, rules
 from world.content import ITEMS
-from world.equipment_service import entity_runtime, resolve_item, selector_label
+from world.equipment_service import (
+    entity_runtime,
+    item_display_records,
+    resolve_item,
+    selector_label,
+)
 from world.item_entities import api
 from world.item_entities.models import ItemEntity
 from world.item_entities.services import carried, domain_errors, lock_character_items, selected
@@ -24,19 +29,28 @@ def lighting_snapshot(character, profile=None, now=None):
     now = time() if now is None else now
     if not entity_runtime(character):
         return lighting.legacy_snapshot(profile if profile is not None else character.profile_snapshot(), now)
-    from world.actions.firearm_lighting_presentation import item_label
 
-    rows = api.items_in_location("inventory", owner_object=character)
+    rows = list(api.items_in_location("inventory", owner_object=character))
+    lights = [row for row in rows if ITEMS[row.definition_id].get("light_source")]
+    if not lights:
+        return lighting.LightSnapshot(source="item_entities")
+
+    equipment = getattr(profile, "equipment_context", None)
+    if equipment is not None and equipment.source == "item_entities":
+        labels = {item.identity: equipment.label(item) for item in equipment.carried
+                  if item.location == "inventory" and ITEMS[item.definition_id].get("light_source")}
+    else:
+        _, labels = item_display_records(rows)
+
+    active_id = character.db.active_light_item_id
     items = []
-    for row in rows:
+    for row in lights:
         definition = ITEMS[row.definition_id]
-        if not definition.get("light_source"):
-            continue
-        label = item_label(row)
+        identity = str(row.pk)
+        label = labels.get(identity) or definition["name"]
         state = lighting.project_power(row.state, now)
-        active = (str(row.pk) == character.db.active_light_item_id and state["enabled"]
-                  and state["remaining_power"] > 0)
-        items.append(lighting.LightItem(row.definition_id, str(row.pk), row.sequence, label,
+        active = identity == active_id and state["enabled"] and state["remaining_power"] > 0
+        items.append(lighting.LightItem(row.definition_id, identity, row.sequence, label,
                                         state["remaining_power"], active, state["power_type"],
                                         capacity=definition["light_source"].get("max_power_seconds", 1800)))
     return lighting.LightSnapshot(tuple(items), next((item for item in items if item.enabled), None), "item_entities")
@@ -149,17 +163,21 @@ def insert_power(character, item, power, now=None):
             character.db.active_light_item_id = None
 
 
-def status(character, item, now=None):
+def status(character, item, now=None, *, with_label=False):
     now = time() if now is None else now
     if not entity_runtime(character):
-        return lighting.status(character.profile_snapshot(), item, now)
+        detail = lighting.status(character.profile_snapshot(), item, now)
+        return f"{ITEMS[item]['name']}\n{detail}" if with_label else detail
     selected_item = next((entry for entry in lighting_snapshot(character, now=now).items
                           if entry.identity == str(api.item_id(item))), None)
     if selected_item is None:
         raise rules.RuleError("소지한 광원을 선택하세요.")
-    return (f"상태 {'켜짐' if selected_item.enabled else '꺼짐'}\n"
-            f"전원 {lighting.snapshot_display(selected_item)['power_source']['name'] if selected_item.remaining_power > 0 else '없음'}\n"
-            f"잔량 약 {lighting.snapshot_display(selected_item)['remaining_minutes']}분")
+    display = lighting.snapshot_display(selected_item)
+    power = display["power_source"]
+    detail = (f"상태 {'켜짐' if selected_item.enabled else '꺼짐'}\n"
+              f"전원 {power['name'] if power else '없음'}\n"
+              f"잔량 약 {display['remaining_minutes']}분")
+    return f"{selected_item.label}\n{detail}" if with_label else detail
 
 
 def resolve_light(character, value, action):

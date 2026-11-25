@@ -1,5 +1,6 @@
 """기존 후치형 Loot 문법을 실제 Source와 영속 Entry 참조로 확정한다."""
 
+from secrets import token_hex
 from time import time  # noqa: F401 -- 테스트와 실행 Adapter가 공유하는 관찰 시각
 
 from django.core import signing
@@ -91,18 +92,18 @@ def snapshot_entry(entries, entity):
     return entries.get((entity.owner_object_id, kind, entity.pk))
 
 
-def fingerprint(caller, selections, now, *, party=None, recipients=None):
+def fingerprint(caller, selections, now, *, nonce, party=None, recipients=None):
     from django.utils.crypto import salted_hmac
     from typeclasses.loot import can_take_entry
 
-    data = {"caller": caller.pk, "party": caller.db.party_id,
+    data = {"nonce": nonce, "caller": caller.pk, "party": caller.db.party_id,
             "entries": [[source.pk, str(entry.item_id) if entry.item_id else None, entry.currency_id,
                          entry.quantity, entry.reserved_party, entry.reserved_player, entry.assigned_player,
                          entry.protection_until, [list(share) for share in entry.shares],
                          now < entry.protection_until, bool(can_take_entry(
                              entry.as_entry(), caller, now, party=party, recipients=recipients))]
                         for source, entry in selections]}
-    # 서명 토큰에서 내부 권리 정보를 직접 해석할 수 없도록 서버 키로 요약한다.
+    # A fresh nonce prevents comparing rights digests across observations.
     return salted_hmac(f"{SALT}.fingerprint", signing.JSONSerializer().dumps(data), algorithm="sha256").hexdigest()
 
 
@@ -118,8 +119,9 @@ def make_invocation(caller, selections, *, quantity=0, now=None, origin="text", 
         subjects = tuple([entry_reference(entry) for _, entry in selections])
     else:
         sources, subjects = references
-    token = signing.dumps(fingerprint(caller, selections, now, party=party, recipients=recipients),
-                          salt=SALT, compress=True)
+    nonce = token_hex(16)
+    digest = fingerprint(caller, selections, now, nonce=nonce, party=party, recipients=recipients)
+    token = signing.dumps(f"{nonce}.{digest}", salt=SALT, compress=True)
     return ActionInvocation("loot.take", "take", (("provider", sources), ("source", sources),
                             ("subject", subjects)), (("quantity", quantity), ("snapshot", token)), origin)
 
@@ -199,9 +201,7 @@ def _item_index_candidates(records, name):
     groups = {ITEMS[identity].get("selection_group_id") or f"item:{identity}" for identity in identities}
     if len(groups) != 1:
         raise LootUnavailable()
-    # ItemEntity descriptor의 첫 alias는 Definition ID다. 같은 Group의 다른 이름을 대신 선택하지 않는다.
-    return [record for record in records
-            if record.group_id in groups and record.aliases and record.aliases[0] in identities]
+    return [record for record in records if record.group_id in groups and record.definition_id in identities]
 
 
 def select_loot(caller, args, *, now, sources, entries, records, accessible=None, parts=None,
