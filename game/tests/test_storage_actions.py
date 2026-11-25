@@ -69,6 +69,37 @@ class StorageActionsTests(NativeItemTest):
         row.refresh_from_db()
         self.assertEqual((row.location_kind, row.owner_object_id), ("inventory", self.char1.pk))
 
+    def test_storage_usage_resolves_to_same_items_and_quantities_as_web_controls(self):
+        from world.actions.presentation import provider_controls
+
+        carried = self.create("bandage", quantity=3)
+        stored = api.create_item("battery", quantity=4, location_kind="personal_storage", owner_object=self.char1)
+        payloads = [row["action"] for row in provider_controls(self.char1, self.locker, 100)]
+        appearance = self.locker.return_appearance(self.char1, observed_at=100)
+        commands = {}
+        for prompt, verb, action_id, subject in (
+            ("보관: ", "넣어", "storage.store", carried), ("회수: ", "꺼내", "storage.retrieve", stored),
+        ):
+            with self.subTest(action_id=action_id):
+                command = next(line.removeprefix(prompt) for line in appearance.splitlines()
+                               if line.startswith(prompt))
+                args, _, key = command.rpartition(" ")
+                self.assertEqual(key, verb)
+                payload = next(row for row in payloads if row["action_id"] == action_id
+                               and row["arguments"]["count"] == "1")
+                web = from_web({**payload, "request_id": action_id}, self.index)
+                text = dispatch_text(self.char1, self.index, self.index.actions[action_id].verb_id, args, verb)
+                self.assertEqual((text.action_id, text.variant_id, dict(text.roles), dict(text.arguments)),
+                                 (web.action_id, web.variant_id, dict(web.roles), dict(web.arguments)))
+                self.assertEqual(dict(text.roles)["subject"][0].identity, str(subject.pk))
+                commands[verb] = command
+
+        self.assertIn("보관했다", self.raw(commands["넣어"]))
+        self.assertIn("꺼냈다", self.raw(commands["꺼내"]))
+        carried.refresh_from_db()
+        stored.refresh_from_db()
+        self.assertEqual((carried.quantity, stored.quantity), (2, 3))
+
     def test_number_quantity_and_partial_split_keep_source_number(self):
         first = self.create("bandage", quantity=4)
         second = self.create("bandage", quantity=5)

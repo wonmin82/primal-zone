@@ -34,6 +34,7 @@ class SelectionRecord:
     aliases: tuple[str, ...] = ()
     unique_names: tuple[str, ...] = ()
     number: int | None = None
+    definition_id: str | None = None
 
     def __post_init__(self):
         object.__setattr__(self, "aliases", tuple(self.aliases))
@@ -73,8 +74,9 @@ def descriptor(value, *, doors_by_endpoint=None):
         else:
             scope = f"{location}:{value.owner_object_id}"
         group = definition.get("selection_group_id") or f"item:{value.definition_id}"
+        aliases = tuple(dict.fromkeys((value.definition_id, *definition.get("aliases", ()))))
         return SelectionRecord(TargetReference(kind, str(value.pk), scope), scope, group,
-                               definition["name"], tuple(dict.fromkeys((value.definition_id, *definition.get("aliases", ())))))
+                               definition["name"], aliases, definition_id=value.definition_id)
     if isinstance(value, CurrencyLoot):
         source = value.owner_object
         if isinstance(source, Corpse):
@@ -252,7 +254,7 @@ def _reference_key(reference):
 
 
 def _numbered_entities(rows, *, include_parents):
-    from world.door_entities.models import Door
+    from world.doors import door_rows_by_endpoint
     from world.item_entities.models import ItemEntity
     from world.loot_entities.models import CurrencyLoot
 
@@ -269,12 +271,7 @@ def _numbered_entities(rows, *, include_parents):
     if include_parents:
         _load_item_parents(items)
 
-    endpoints = {obj.pk for obj in objects.values() if obj.db_destination_id}
-    doors = {}
-    if endpoints:
-        for door in Door.objects.filter(Q(exit_a_id__in=endpoints) | Q(exit_b_id__in=endpoints)).order_by("pk"):
-            doors.setdefault(door.exit_a_id, door)
-            doors.setdefault(door.exit_b_id, door)
+    doors = door_rows_by_endpoint(objects.values())
 
     result = []
     for ref, key, row in rows:

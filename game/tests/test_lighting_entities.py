@@ -6,6 +6,7 @@ from uuid import uuid4
 from django.core.exceptions import ValidationError
 from django.db import connection
 from evennia.utils.create import create_object
+from typeclasses.explorers import Explorer
 from typeclasses.loot import DroppedLoot
 from world import lighting_service as service
 from world import observation, recovery, rules
@@ -13,6 +14,8 @@ from world.content import ITEMS
 from world.environment import EnvironmentSnapshot
 from world.item_entities import api
 from world.item_entities.models import ItemEntity
+from world.selection_numbers.api import number_for
+from world.selection_numbers.models import SelectionNumber
 
 from tests.item_entity_fixture import NativeItemTest
 
@@ -202,6 +205,38 @@ class LightingEntityTests(NativeItemTest):
         service.reconcile(self.char1, 101)
         self.assertIsNone(self.char1.db.active_light_item_id)
 
+    def test_web_light_status_uses_same_labels_as_inventory(self):
+        self.connect_character(self.char1)
+        first, removed, active = self.create("flashlight"), self.create("flashlight"), self.charged()
+        api.delete_item(removed)
+        service.switch(self.char1, active, True, 100)
+        name = ITEMS["flashlight"]["name"]
+
+        def payload():
+            with patch.object(self.char1, "msg") as output:
+                Explorer.push_state(self.char1, observed_at=161)
+            return output.call_args.kwargs["pz_state"][0][0]
+
+        state = payload()
+        labels = {row["identity"]: row["selector"] for row in state["inventory"] if row["light_source"]}
+        self.assertEqual(labels, {str(first.pk): f"{name} 1", str(active.pk): f"{name} 3"})
+        light = state["observation"]["light_source"]
+        self.assertEqual(light["name"], labels[str(active.pk)])
+        self.assertTrue(light["active"])
+        self.assertEqual(light["remaining_minutes"], 29)
+        with patch.object(self.char1, "msg") as output:
+            self.char1.execute_cmd("손전등 3 확인")
+        self.assertTrue(any(f"{labels[str(active.pk)]}\n상태 켜짐" in str(call.args[0])
+                            for call in output.call_args_list if call.args))
+
+        api.delete_item(first)
+        state = payload()
+        self.assertEqual(state["observation"]["light_source"]["name"], name)
+        remaining = next(row for row in state["inventory"] if row["identity"] == str(active.pk))
+        self.assertEqual(remaining["selector"], name)
+        self.assertEqual(self.char1.db.active_light_item_id, str(active.pk))
+        self.assertEqual(number_for("item", active.pk), 3)
+
     def test_nested_lights_do_not_add_snapshot_queries(self):
         spare, active = self.create("flashlight"), self.charged()
         service.switch(self.char1, active, True, 100)
@@ -211,7 +246,7 @@ class LightingEntityTests(NativeItemTest):
         api.move_item(stored, location_kind="personal_storage", owner_object=self.char1, operation="store")
         api.create_item("flashlight", location_kind="inventory", owner_object=self.char2)
 
-        def read():
+        def read(profile=None):
             statements = []
 
             def capture(execute, sql, params, many, context):
@@ -219,19 +254,26 @@ class LightingEntityTests(NativeItemTest):
                 return execute(sql, params, many, context)
 
             with connection.execute_wrapper(capture):
-                snapshot = service.lighting_snapshot(self.char1, now=101)
+                snapshot = service.lighting_snapshot(self.char1, profile, now=101)
             self.assertTrue(all(sql.startswith("SELECT") for sql in statements))
-            return snapshot, sum(ItemEntity._meta.db_table.upper() in sql for sql in statements)
+            return snapshot, sum(ItemEntity._meta.db_table.upper() in sql for sql in statements), sum(
+                SelectionNumber._meta.db_table.upper() in sql for sql in statements)
 
         api.create_item("flashlight", location_kind="inside", parent_item=middle, socket="first")
-        baseline, selects = read()
+        baseline, selects, number_selects = read()
         for index in range(8):
             api.create_item("flashlight", location_kind="inside", parent_item=middle, socket=f"item_{index}")
-        updated, updated_selects = read()
+        updated, updated_selects, updated_number_selects = read()
         self.assertEqual(updated, baseline)
         self.assertEqual(updated_selects, selects)
+        self.assertEqual((number_selects, updated_number_selects), (1, 1))
         self.assertEqual([row.identity for row in updated.items], [str(spare.pk), str(active.pk)])
         self.assertEqual((updated.active.identity, updated.active.remaining_power), (str(active.pk), 1799))
+        more_lights = [self.create("flashlight") for _ in range(8)]
+        updated, updated_selects, updated_number_selects = read()
+        self.assertEqual([row.identity for row in updated.items], [str(row.pk) for row in (spare, active, *more_lights)])
+        self.assertEqual((updated_selects, updated_number_selects), (selects, 1))
+        self.assertEqual(read(self.char1.profile_snapshot()), (updated, selects, 0))
 
     def test_invalid_flashlight_state_rejected(self):
         row = self.create("flashlight")

@@ -10,11 +10,31 @@ from world.actions.presentation_context import (
     profile_snapshot,
 )
 from world.actions.resolver import cached_item_scopes, provided
-from world.actions.schema import ReferenceKind, TargetScope
+from world.actions.schema import ReferenceKind, TargetReference, TargetScope
 from world.selection_display import displays, room_snapshot
-from world.selection_numbers.api import descriptor, numbered_records
+from world.selection_numbers.api import SelectionRecord, descriptor, numbered_records
 
 _current_labels = ContextVar("action_selection_labels", default=None)
+
+
+@dataclass(frozen=True)
+class ItemActionControl:
+    """Validated sale or storage candidate shared by text examples and web controls."""
+
+    label: str
+    description: str
+    action_id: str
+    variant: str
+    provider: TargetReference
+    subject: SelectionRecord
+    count: str
+
+    def as_web(self):
+        return {"label": self.label, "description": self.description,
+                "action": {"action_id": self.action_id, "variant": self.variant,
+                           "roles": {"provider": [reference_json(self.provider)],
+                                     "subject": [reference_json(self.subject.reference)]},
+                           "arguments": {"count": self.count}}}
 
 
 @dataclass
@@ -118,6 +138,12 @@ def help_metadata(index):
 
 
 def action_controls(caller, index, observed_at=None, *, provider_reference=None, verb_key=None, snapshot=None):
+    return [row.as_web() if isinstance(row, ItemActionControl) else row for row in
+            _presented_controls(caller, index, observed_at, provider_reference=provider_reference,
+                                verb_key=verb_key, snapshot=snapshot)]
+
+
+def _presented_controls(caller, index, observed_at=None, *, provider_reference=None, verb_key=None, snapshot=None):
     token = _current_labels.set(_DisplayContexts(caller, snapshot))
     try:
         with presentation_scope(caller):
@@ -199,18 +225,38 @@ def _action_controls(caller, index, observed_at, *, provider_reference, verb_key
     return controls
 
 
-def provider_controls(caller, provider, observed_at=None, *, rows=None, verb_key=None):
-    """객체 상세와 웹이 동일한 현재 Binding·Presenter 결과를 사용한다."""
+def _for_provider(rows, reference):
+    if reference is None:
+        return []
+    serialized = reference_json(reference)
+    return [row for row in rows if (row.provider == reference if isinstance(row, ItemActionControl)
+            else row.get("action", {}).get("roles", {}).get("provider") == [serialized])]
+
+
+def provider_action_rows(caller, provider, observed_at=None, *, verb_key=None, snapshot=None):
+    """Keep the validated item records available to text examples."""
     from world.actions.manifest import get_index
 
-    record = descriptor(provider)
-    if record is None:
+    if snapshot is not None:
+        reference = snapshot.references.get(provider.pk)
+    else:
+        record = descriptor(provider)
+        reference = record.reference if record else None
+    if reference is None:
         return []
-    reference = reference_json(record.reference)
+    rows = _presented_controls(caller, get_index(), observed_at, provider_reference=reference,
+                               verb_key=verb_key, snapshot=snapshot)
+    return _for_provider(rows, reference)
+
+
+def provider_controls(caller, provider, observed_at=None, *, rows=None, verb_key=None):
+    """객체 상세와 웹이 동일한 현재 Binding·Presenter 결과를 사용한다."""
     if rows is None:
-        rows = action_controls(caller, get_index(), observed_at,
-                               provider_reference=record.reference, verb_key=verb_key)
-    return [row for row in rows if row.get("action", {}).get("roles", {}).get("provider") == [reference]]
+        rows = provider_action_rows(caller, provider, observed_at, verb_key=verb_key)
+    else:
+        record = descriptor(provider)
+        rows = _for_provider(rows, record.reference if record else None)
+    return [row.as_web() if isinstance(row, ItemActionControl) else row for row in rows]
 
 
 def provider_verbs(caller, provider, observed_at=None, *, verb_key=None, rows=None):
@@ -218,6 +264,11 @@ def provider_verbs(caller, provider, observed_at=None, *, verb_key=None, rows=No
     from world.actions.manifest import get_index
 
     index = get_index()
-    verbs = (index.verbs[index.actions[row["action"]["action_id"]].verb_id].key
-             for row in provider_controls(caller, provider, observed_at, verb_key=verb_key, rows=rows))
+    if rows is None:
+        rows = provider_action_rows(caller, provider, observed_at, verb_key=verb_key)
+    else:
+        record = descriptor(provider)
+        rows = _for_provider(rows, record.reference if record else None)
+    verbs = (index.verbs[index.actions[row.action_id if isinstance(row, ItemActionControl)
+                                    else row["action"]["action_id"]].verb_id].key for row in rows)
     return tuple(dict.fromkeys(verb for verb in verbs if verb_key is None or verb == verb_key))

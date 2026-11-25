@@ -1,6 +1,6 @@
 """M01/M02 서비스의 순수 화면. 실행 문장을 만들지 않고 안정 참조를 전달한다."""
 
-from world.actions.presentation import reference_json, target_label
+from world.actions.presentation import ItemActionControl, reference_json, target_label
 from world.actions.presentation_context import (
     available,
     door_action_labels,
@@ -40,7 +40,8 @@ def render(caller, index, reference, binding, observed_at=None):
             restored, cost = rules.treatment_quote(profile_snapshot(caller), safe=ROOMS.get(caller.zone, {}).get("safe", False))
         except rules.RuleError:
             return []
-    roles = {"provider": [reference_json(reference)]}
+    key = index.verbs[action.verb_id].key
+    roles = {"provider": [reference_json(reference)]} if key != "팔아" else {}
     subjects = next(iter([role for role in action.roles if role.name == "subject"]), None)
     if subjects and subjects.kinds == (ReferenceKind.ITEM,):
         items = view
@@ -63,7 +64,6 @@ def render(caller, index, reference, binding, observed_at=None):
     for record in candidates:
         args = dict(defaults)
         current_roles = dict(roles)
-        key = index.verbs[action.verb_id].key
         label = key
         if config.get("effect") == "doctor":
             label = f"HP {restored} 회복 · 예상 {cost}칩"
@@ -81,7 +81,8 @@ def render(caller, index, reference, binding, observed_at=None):
             if key != "가치" and (item.location_kind != "inventory" or not can_item_operation(
                     item, operation, loaded_magazine_item=view.loaded_magazine_item)):
                 continue
-            current_roles["subject"] = [reference_json(record.reference)]
+            if key != "팔아":
+                current_roles["subject"] = [reference_json(record.reference)]
             label = item_label + " " + key
             if key == "팔아":
                 from world.currency import format_currency
@@ -107,12 +108,19 @@ def render(caller, index, reference, binding, observed_at=None):
         for variant in action.variants:
             if variant.confirmation_required or not variant.show_control:
                 continue
+            if key == "팔아" and record:
+                output.append(ItemActionControl(label, action.help, action.id, variant.id,
+                                                reference, record, args["count"]))
+                if item.quantity > 1 and ITEMS[item.definition_id]["stackable"]:
+                    all_label = f"{item_label} 모두 팔아 · 총 {format_currency(item.quantity * price)}"
+                    output.append(ItemActionControl(all_label, action.help, action.id, variant.id,
+                                                    reference, record, "모두"))
+                continue
             output.append({"label": label, "description": action.help,
                            "action": {"action_id": action.id, "variant": variant.id,
                                       "roles": current_roles, "arguments": args}})
             if record and "count" in args and item.quantity > 1 and ITEMS[item.definition_id]["stackable"]:
-                all_label = (f"{item_label} 모두 팔아 · 총 {format_currency(item.quantity * price)}"
-                             if key == "팔아" else label.replace(" " + key, " 모두 " + key))
+                all_label = label.replace(" " + key, " 모두 " + key)
                 output.append({"label": all_label, "description": action.help,
                                "action": {"action_id": action.id, "variant": variant.id,
                                           "roles": current_roles, "arguments": {**args, "count": "모두"}}})

@@ -10,12 +10,10 @@ from time import perf_counter
 from unittest.mock import patch
 from uuid import UUID
 
-from django.core import signing
 from django.db import connection
 from world import loot_service
 from world.actions.gateway import ResultStatus, execute, from_web
 from world.actions.loot_presentation import source_controls
-from world.actions.loot_resolution import SALT
 from world.actions.manifest import get_index
 from world.item_entities.models import ItemEntity
 
@@ -76,8 +74,8 @@ class LootExecutionBenchmark(NativeLootTest):
             self.assertEqual([ref.identity for ref in dict(invocation.roles)["subject"]],
                              [str(item.pk) for item in items])
             data = asdict(invocation)
-            data["arguments"] = dict(data["arguments"])
-            data["arguments"]["snapshot"] = signing.loads(data["arguments"]["snapshot"], salt=SALT)
+            # The independently randomized signature is excluded from the fixture digest.
+            data["arguments"] = {key: value for key, value in data["arguments"] if key != "snapshot"}
             queries = Counter()
             item_reads = Counter()
 

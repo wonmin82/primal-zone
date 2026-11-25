@@ -1,5 +1,7 @@
 """기존 후치형 Loot 문법을 실제 Source와 영속 Entry 참조로 확정한다."""
 
+import base64
+from secrets import token_hex
 from time import time  # noqa: F401 -- 테스트와 실행 Adapter가 공유하는 관찰 시각
 
 from django.core import signing
@@ -9,6 +11,11 @@ from world.actions.resolver import ActionInvocation
 from world.selection_numbers.api import descriptor
 
 SALT = "primal-zone.loot-selection.v1"
+_NONCE_BYTES = 16
+_TIMESTAMP_BYTES = 5
+_SIGNATURE_BYTES = 32
+# A fixed 53-byte body occupies 67 ASCII bytes without compression.
+_SNAPSHOT_LENGTH = 67
 
 
 def entry_reference(entry):
@@ -91,19 +98,60 @@ def snapshot_entry(entries, entity):
     return entries.get((entity.owner_object_id, kind, entity.pk))
 
 
-def fingerprint(caller, selections, now, *, party=None, recipients=None):
+def fingerprint(caller, selections, now, *, nonce, party=None, recipients=None):
     from django.utils.crypto import salted_hmac
     from typeclasses.loot import can_take_entry
 
-    data = {"caller": caller.pk, "party": caller.db.party_id,
+    data = {"nonce": nonce, "caller": caller.pk, "party": caller.db.party_id,
             "entries": [[source.pk, str(entry.item_id) if entry.item_id else None, entry.currency_id,
                          entry.quantity, entry.reserved_party, entry.reserved_player, entry.assigned_player,
                          entry.protection_until, [list(share) for share in entry.shares],
                          now < entry.protection_until, bool(can_take_entry(
                              entry.as_entry(), caller, now, party=party, recipients=recipients))]
                         for source, entry in selections]}
-    # 서명 토큰에서 내부 권리 정보를 직접 해석할 수 없도록 서버 키로 요약한다.
+    # A fresh nonce prevents comparing rights digests across observations.
     return salted_hmac(f"{SALT}.fingerprint", signing.JSONSerializer().dumps(data), algorithm="sha256").hexdigest()
+
+
+def _encode_snapshot(raw):
+    # Evennia can interpret a dollar sign as an inline function prefix.
+    return base64.b85encode(raw).decode("ascii").replace("$", ".")
+
+
+def _issue_snapshot(caller, selections, now, *, party, recipients):
+    nonce = token_hex(_NONCE_BYTES)
+    digest = fingerprint(caller, selections, now, nonce=nonce, party=party, recipients=recipients)
+    signer = signing.TimestampSigner(salt=SALT)
+    _, timestamp, signature = signer.sign(f"{nonce}.{digest}").rsplit(signer.sep, 2)
+    return _encode_snapshot(
+        bytes.fromhex(nonce) + signing.b62_decode(timestamp).to_bytes(_TIMESTAMP_BYTES, "big")
+        + signing.b64_decode(signature.encode("ascii"))
+    )
+
+
+def verify_snapshot(token, caller, selections, now, *, party, recipients):
+    """Verify the detached signature over the currently locked rights snapshot."""
+    expired = "전리품 선택이 만료되었습니다. 다시 확인하세요."
+    if len(token) != _SNAPSHOT_LENGTH or not token.isascii():
+        raise rules.RuleError(expired)
+    try:
+        raw = base64.b85decode(token.replace(".", "$"))
+    except ValueError:
+        raise rules.RuleError(expired) from None
+    if len(raw) != _NONCE_BYTES + _TIMESTAMP_BYTES + _SIGNATURE_BYTES or _encode_snapshot(raw) != token:
+        raise rules.RuleError(expired)
+
+    signature_start = _NONCE_BYTES + _TIMESTAMP_BYTES
+    nonce = raw[:_NONCE_BYTES].hex()
+    timestamp = signing.b62_encode(int.from_bytes(raw[_NONCE_BYTES:signature_start], "big"))
+    signature = signing.b64_encode(raw[signature_start:]).decode("ascii")
+    digest = fingerprint(caller, selections, now, nonce=nonce, party=party, recipients=recipients)
+    signer = signing.TimestampSigner(salt=SALT)
+    try:
+        signer.unsign(signer.sep.join((f"{nonce}.{digest}", timestamp, signature)), max_age=300)
+    except signing.BadSignature:
+        # An expired token must not reveal whether its rights still match.
+        raise rules.RuleError("전리품 선택이 만료되었거나 수량·권리가 바뀌었습니다. 다시 확인하세요.") from None
 
 
 def make_invocation(caller, selections, *, quantity=0, now=None, origin="text", references=None,
@@ -118,8 +166,7 @@ def make_invocation(caller, selections, *, quantity=0, now=None, origin="text", 
         subjects = tuple([entry_reference(entry) for _, entry in selections])
     else:
         sources, subjects = references
-    token = signing.dumps(fingerprint(caller, selections, now, party=party, recipients=recipients),
-                          salt=SALT, compress=True)
+    token = _issue_snapshot(caller, selections, now, party=party, recipients=recipients)
     return ActionInvocation("loot.take", "take", (("provider", sources), ("source", sources),
                             ("subject", subjects)), (("quantity", quantity), ("snapshot", token)), origin)
 
@@ -199,9 +246,7 @@ def _item_index_candidates(records, name):
     groups = {ITEMS[identity].get("selection_group_id") or f"item:{identity}" for identity in identities}
     if len(groups) != 1:
         raise LootUnavailable()
-    # ItemEntity descriptor의 첫 alias는 Definition ID다. 같은 Group의 다른 이름을 대신 선택하지 않는다.
-    return [record for record in records
-            if record.group_id in groups and record.aliases and record.aliases[0] in identities]
+    return [record for record in records if record.group_id in groups and record.definition_id in identities]
 
 
 def select_loot(caller, args, *, now, sources, entries, records, accessible=None, parts=None,

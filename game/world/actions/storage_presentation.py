@@ -1,6 +1,6 @@
 """Storage 버튼은 현재 접근 가능한 실제 UUID를 전달한다. 조회 중 이동하지 않는다."""
 
-from world.actions.presentation import reference_json, target_label
+from world.actions.presentation import ItemActionControl, target_label
 from world.actions.presentation_context import (
     item_presentation,
     observation_snapshot,
@@ -60,10 +60,7 @@ def render(caller, index, reference, binding, observed_at=None):
             continue
         quantities = ("1", "모두") if ITEMS[item.definition_id]["stackable"] and item.quantity > 1 else ("1",)
         for count in quantities:
-            output.append({"label": label + (" 스택 전부" if count == "모두" else "") + (" 꺼내" if withdraw else " 넣어"),
-                           "description": action.help,
-                           "action": {"action_id": action.id, "variant": "normal",
-                                      "roles": {"provider": [reference_json(reference)],
-                                                "subject": [reference_json(record.reference)]},
-                                      "arguments": {"count": count}}})
+            control_label = label + (" 스택 전부" if count == "모두" else "") + (" 꺼내" if withdraw else " 넣어")
+            output.append(ItemActionControl(control_label, action.help, action.id, "normal",
+                                            reference, record, count))
     return output

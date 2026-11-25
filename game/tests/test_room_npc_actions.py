@@ -285,6 +285,44 @@ class RoomNpcActionsTests(NativeItemTest, WorldCommandTest):
         self.assertEqual(self.char1.profile()["inventory"]["scrap"], 6)
         self.assertEqual(self.char1.profile()["credits"], before + 40)
 
+    def test_settlement_usage_keeps_provider_source_and_normalized_amounts(self):
+        from world.actions.presentation import provider_controls
+        from world.selection_numbers.api import descriptor
+
+        self.char1.location = self.rooms["salvage_office"]
+        officer = next(obj for obj in self.char1.location.contents
+                       if getattr(obj, "action_provider_definition", None) == "world.settlementofficer")
+        self.create("scrap", quantity=12)
+        appearance = officer.return_appearance(self.char1, observed_at=100)
+        commands = [command for line in appearance.splitlines() for command in line.split(" · ")
+                    if command.endswith((" 환율", " 교환"))]
+        self.assertEqual(len(commands), 5)
+        rows = [row["action"] for row in provider_controls(self.char1, officer, 100)]
+        web = {row["action_id"]: from_web({**row, "request_id": row["action_id"]}, self.index) for row in rows}
+        rate = web["settlement.rate"]
+        all_exchange = web["settlement.all"]
+        amounts = []
+        for command in commands:
+            args, _, verb = command.rpartition(" ")
+            verb_id = "game.rate" if verb == "환율" else "game.exchange"
+            text = dispatch_text(self.char1, self.index, verb_id, args, verb)
+            self.assertEqual(text.variant_id, "normal")
+            self.assertEqual(dict(text.roles)["provider"], (descriptor(officer).reference,))
+            if verb == "환율":
+                self.assertEqual((text.action_id, dict(text.roles), text.arguments),
+                                 (rate.action_id, dict(rate.roles), rate.arguments))
+                continue
+            self.assertEqual(dict(text.roles), dict(all_exchange.roles))
+            arguments = dict(text.arguments)
+            self.assertEqual(arguments.pop("snapshot"), "")
+            if text.action_id == all_exchange.action_id:
+                self.assertEqual(arguments, {})
+                self.assertTrue(dict(all_exchange.arguments)["snapshot"])
+            else:
+                self.assertEqual(text.action_id, "settlement.exchange")
+                amounts.append(arguments["value"])
+        self.assertCountEqual(amounts, [1, 10, 10])
+
     def test_two_merchants_require_explicit_provider_and_do_not_fallback(self):
         from world.actors.spawn import create_actor
 

@@ -99,6 +99,37 @@ class NativeShopTests(Phase5Test):
         self.assertFalse(ItemEntity.objects.filter(pk=identity).exists())
         self.assertFalse(ItemEntity.objects.filter(owner_object=self.seller).exists())
 
+    def test_shop_usage_resolves_to_same_actions_as_web_controls(self):
+        from world.actions.gateway import from_web
+        from world.actions.manifest import get_index
+        from world.actions.presentation import provider_controls
+        from world.actions.resolver import dispatch_text
+
+        first, second = self.create("flashlight"), self.create("flashlight")
+        controls = [row["action"] for row in provider_controls(self.char1, self.seller, 100)]
+        appearance = self.seller.return_appearance(self.char1, observed_at=100)
+        examples = {example.rsplit(" ", 1)[-1]: example.rpartition(" ")[0]
+                    for line in appearance.splitlines() for example in line.split(" · ")
+                    if example.endswith((" 목록", " 사", " 가치", " 팔아"))}
+        index = get_index()
+        expected_actions = {"목록": "shop.menu.supply", "사": "shop.buy.flashlight",
+                            "가치": "shop.value.flashlight", "팔아": "shop.sell.supply"}
+        self.assertEqual(set(examples), expected_actions.keys())
+        for verb, action_id in expected_actions.items():
+            with self.subTest(verb=verb):
+                payload = next(row for row in controls
+                               if row["action_id"] == action_id and row["arguments"].get("count", "1") == "1")
+                web = from_web({**payload, "request_id": "shop-usage"}, index)
+                text = dispatch_text(self.char1, index, index.actions[action_id].verb_id, examples[verb], verb)
+                self.assertEqual((text.action_id, text.variant_id, dict(text.roles), dict(text.arguments)),
+                                 (web.action_id, web.variant_id, dict(web.roles), dict(web.arguments)))
+                if verb == "팔아":
+                    self.assertEqual(dict(text.roles)["subject"][0].identity, str(first.pk))
+
+        self.assertIn("매입", self.command(f"{examples['팔아']} 팔아"))
+        self.assertFalse(ItemEntity.objects.filter(pk=first.pk).exists())
+        self.assertTrue(ItemEntity.objects.filter(pk=second.pk).exists())
+
     def test_duplicate_weapon_instance_advanced_resale_and_catalog_separation(self):
         first, second = self.create("jungle_longblade"), self.create("jungle_longblade")
         seller = self.obj("weapon_shopkeeper")

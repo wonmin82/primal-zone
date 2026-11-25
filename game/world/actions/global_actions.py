@@ -107,10 +107,10 @@ def look_target(context):
 
 def select_look_reference(caller, selector, observed_at):
     from typeclasses.loot import DroppedLoot
+    from world.doors import door_rows_by_endpoint
     from world.equipment_service import entity_runtime
     from world.item_entities.api import carried_items
     from world.observation import context_for, perceives
-    from world.selection_display import door_rows_by_endpoint
     from world.selection_numbers.api import descriptor, numbered_records
     from world.targets import room_objects
 

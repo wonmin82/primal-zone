@@ -24,15 +24,15 @@ def dialogue_appearance(method):
     return appearance
 
 
-def service_commands(provider, looker, actions, observed_at, *, shop=False):
-    from world.actions.presentation import provider_controls
-    from world.actions.schema import ReferenceKind, TargetReference
+def service_usage(provider, looker, observed_at, *, shop=False):
+    from world.actions.presentation import ItemActionControl, provider_action_rows, provider_verbs
     from world.content import ITEMS
     from world.selection_display import action_command, provider_command, room_snapshot
-    from world.selection_numbers.api import descriptor, numbered_records, resolve_reference
 
     snapshot = room_snapshot(looker, observed_at)
     record = snapshot.records.get(snapshot.references.get(provider.pk))
+    rows = provider_action_rows(looker, provider, observed_at, snapshot=snapshot)
+    actions = set(provider_verbs(looker, provider, observed_at, rows=rows))
     sale = None
     if shop:
         items = SHOP_CATALOGS.get(provider.db.shop_id, {}).get("purchase_catalog", ())
@@ -40,17 +40,11 @@ def service_commands(provider, looker, actions, observed_at, *, shop=False):
         if items:
             name = ITEMS[items[0]]["name"]
             examples.extend((verb, lambda target: f"{target}에게 {name}") for verb in ("사", "가치"))
-        if "팔아" in actions:
-            controls = provider_controls(looker, provider, observed_at)
-            invocation = next((row["action"] for row in controls if row["action"]["action_id"].startswith("shop.sell.")
-                               and row["action"]["arguments"].get("count") == "1"), None)
-            if invocation:
-                subject = invocation["roles"]["subject"][0]
-                reference = TargetReference(ReferenceKind(subject["kind"]), subject["identity"], subject["scope_id"])
-                items = numbered_records((descriptor(resolve_reference(reference)),))
-                if items:
-                    sale = action_command(looker, {"provider": record, "subject": items[0]}, "팔아",
-                                          lambda seller, name: f"{seller}에게 {name}")
+        candidate = next((row for row in rows if isinstance(row, ItemActionControl)
+                          and row.action_id.startswith("shop.sell.") and row.count == "1"), None)
+        if candidate is not None:
+            sale = action_command(looker, {"provider": record, "subject": candidate.subject}, "팔아",
+                                  lambda seller, name: f"{seller}에게 {name}")
     else:
         examples = [
             ("환율", lambda target: target), ("교환", lambda _: "회수부품"),
@@ -59,7 +53,9 @@ def service_commands(provider, looker, actions, observed_at, *, shop=False):
         ]
     commands = [command for verb, arguments in examples if verb in actions
                 and (command := provider_command(looker, record, verb, arguments))]
-    return [*commands, sale] if sale else commands
+    if sale:
+        commands.append(sale)
+    return ft.join([ft.usage(command, actions) for command in commands], " · ")
 
 
 class ActionObject(NumberedObjectMixin, DistantPresenceMixin, DefaultObject):
@@ -137,11 +133,9 @@ class Container(ActionObject):
 
     def return_appearance(self, looker, **kwargs):
         from evennia.utils.dbserialize import deserialize
-        from world.actions.presentation import provider_controls
-        from world.actions.schema import ReferenceKind, TargetReference
+        from world.actions.presentation import ItemActionControl, provider_action_rows
         from world.equipment_service import entity_runtime
         from world.selection_display import action_command, room_snapshot
-        from world.selection_numbers.api import descriptor, numbered_records, resolve_reference
 
         if entity_runtime(looker):
             from world.item_transfer_native import stored_items
@@ -160,22 +154,17 @@ class Container(ActionObject):
         )
         if not contents:
             lines.append("비어 있다.")
-        controls = provider_controls(looker, self, observed_at)
+        controls = provider_action_rows(looker, self, observed_at, snapshot=snapshot)
+        provider_record = snapshot.records.get(snapshot.references.get(self.pk))
         for operation, verb, particle, prompt in (("store", "넣어", "에", "보관"), ("retrieve", "꺼내", "에서", "회수")):
-            row = next((row["action"] for row in controls if row["action"]["action_id"] == f"storage.{operation}"
-                        and row["action"]["arguments"].get("count") == "1"), None)
+            row = next((row for row in controls if isinstance(row, ItemActionControl)
+                        and row.action_id == f"storage.{operation}" and row.count == "1"), None)
             if row is None:
                 continue
-            subject = row["roles"]["subject"][0]
-            reference = TargetReference(ReferenceKind(subject["kind"]), subject["identity"], subject["scope_id"])
-            item = resolve_reference(reference)
-            records = numbered_records((descriptor(item),))
-            if records:
-                command = action_command(looker, {
-                    "provider": snapshot.records.get(snapshot.references.get(self.pk)), "subject": records[0],
-                }, verb, lambda source, name: f"{source}{particle} {name}")
-                if command:
-                    lines.append(ft.text(prompt, ": ", ft.usage(command, {verb})))
+            command = action_command(looker, {"provider": provider_record, "subject": row.subject},
+                                     verb, lambda source, name: f"{source}{particle} {name}")
+            if command:
+                lines.append(ft.text(prompt, ": ", ft.usage(command, {verb})))
         return ft.compact(ft.token("object", label or self.key), *lines)
 
 
@@ -346,9 +335,7 @@ class SettlementOfficer(ActionObject):
 
     @dialogue_appearance
     def return_appearance(self, looker, **kwargs):
-        actions = self.current_actions(looker, kwargs.get("observed_at"))
-        usage = ft.join([ft.usage(command, set(actions)) for command in
-                         service_commands(self, looker, actions, kwargs.get("observed_at"))], " · ")
+        usage = service_usage(self, looker, kwargs.get("observed_at"))
         return ft.sheet(ft.token(self.semantic_role, self.key), self.description, "", usage)
 
 
@@ -371,9 +358,7 @@ class Shopkeeper(ActionObject):
 
     @dialogue_appearance
     def return_appearance(self, looker, **kwargs):
-        actions = self.current_actions(looker, kwargs.get("observed_at"))
-        usage = ft.join([ft.usage(command, set(actions)) for command in
-                         service_commands(self, looker, actions, kwargs.get("observed_at"), shop=True)], " · ")
+        usage = service_usage(self, looker, kwargs.get("observed_at"), shop=True)
         return ft.sheet(ft.token("npc", self.key), self.description, "", usage)
 
 
