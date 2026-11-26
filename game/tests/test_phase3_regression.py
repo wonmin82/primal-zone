@@ -123,7 +123,7 @@ class Phase3ItemDoorTests(NativeItemTest):
         reference = descriptor(second).reference
         from world.equipment import inventory_rows
 
-        initial = {row["identity"]: row for row in inventory_rows(self.char1.profile())}
+        initial = {row["identity"]: row for row in inventory_rows(self.char1.profile(with_equipment_display=True))}
         self.assertEqual(initial[str(first.pk)]["selector"], "붕대 1")
         self.assertEqual(initial[str(second.pk)]["selector"], "붕대 2")
         api.delete_item(first)
@@ -131,7 +131,7 @@ class Phase3ItemDoorTests(NativeItemTest):
                       if record.reference == reference)
         self.assertEqual(label(record, 1), "붕대 2")
         # 실제 텍스트/Web 소지품 Presenter가 같은 UUID의 영속 번호와 수량을 결합한다.
-        row = next(row for row in inventory_rows(self.char1.profile()) if row["identity"] == str(second.pk))
+        row = next(row for row in inventory_rows(self.char1.profile(with_equipment_display=True)) if row["identity"] == str(second.pk))
         self.assertEqual((row["selector"], row["count"]), ("붕대", 5))
         self.assertEqual(second.quantity, 5)
         role = RoleDefinition("subject", (ReferenceKind.ITEM,), DefaultTargetPolicy.FIRST_LEGACY_ORDER)
@@ -144,7 +144,7 @@ class Phase3ItemDoorTests(NativeItemTest):
         api.delete_item(third)
         fresh = self.create("bandage")
         self.assertEqual(number_for(descriptor(fresh).reference), 1)
-        only = next(row for row in inventory_rows(self.char1.profile()) if row["identity"] == str(fresh.pk))
+        only = next(row for row in inventory_rows(self.char1.profile(with_equipment_display=True)) if row["identity"] == str(fresh.pk))
         self.assertEqual(only["selector"], "붕대")
         fresh_record = next(record for record in records_for(self.char1, ReferenceKind.ITEM)
                             if record.reference == descriptor(fresh).reference)

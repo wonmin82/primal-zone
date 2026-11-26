@@ -35,10 +35,10 @@ def lighting_snapshot(character, profile=None, now=None):
     if not lights:
         return lighting.LightSnapshot(source="item_entities")
 
-    equipment = getattr(profile, "equipment_context", None)
-    if equipment is not None and equipment.source == "item_entities":
-        labels = {item.identity: equipment.label(item) for item in equipment.carried
-                  if item.location == "inventory" and ITEMS[item.definition_id].get("light_source")}
+    display = getattr(profile, "equipment_display", None)
+    if display is not None:
+        labels = {identity: display[identity].label for row in lights
+                  if (identity := str(row.pk)) in display}
     else:
         _, labels = item_display_records(rows)
 

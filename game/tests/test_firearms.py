@@ -328,7 +328,7 @@ class FirearmTests(NativeItemTest):
         self.char1.execute_cmd(f"{mag_name} 3에서 카빈탄 꺼내")
         magazine.refresh_from_db()
         self.assertEqual(magazine.state["rounds"], 0)
-        rows = equipment.eq.inventory_rows(self.char1.profile())
+        rows = equipment.eq.inventory_rows(self.char1.profile(with_equipment_display=True))
         self.assertIn(str(magazine.pk), {row["identity"] for row in rows})
         self.assertIn("0/20", str(rows))
 

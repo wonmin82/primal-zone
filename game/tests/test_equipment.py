@@ -119,7 +119,7 @@ class EquipmentTests(NativeItemTest, WorldCommandTest):
         self.assertIsNone(Explorer.profile(self.char1).equipment_context.active)
         self.char1.execute_cmd("절단마체테 무장")
         self.assertEqual(list(equipped_items(self.char1).values_list("pk", flat=True)), [target.pk])
-        self.assertIn(ITEMS[target.definition_id]["name"] + " [주무기]", view.equipment(self.char1.profile()))
+        self.assertIn(ITEMS[target.definition_id]["name"] + " [주무기]", view.equipment(self.char1.profile(with_equipment_display=True)))
 
     def test_spaced_names_aliases_and_combat_restriction(self):
         self.char1.change(lambda p: p.update(credits=1000))
@@ -173,12 +173,12 @@ class EquipmentTests(NativeItemTest, WorldCommandTest):
                                 and index.verbs[index.actions[c["action"]["action_id"]].verb_id].key == entry["equip_action"]
                                 for c in controls))
             self.assertNotIn("+0", output)
-        bag = view.inventory(self.char1.profile())
+        bag = view.inventory(self.char1.profile(with_equipment_display=True))
         self.assertEqual(set(tokens(bag, "item")), {row["selector"] for row in state["inventory"]})
         self.clear_equipment()
         for identity in ("jungle_longblade", "tactical_protective_suit"):
             equip_item(self.char1, self.item(identity))
-        self.assertIn(ITEMS["jungle_longblade"]["name"] + " [주무기]", view.equipment(self.char1.profile()))
+        self.assertIn(ITEMS["jungle_longblade"]["name"] + " [주무기]", view.equipment(self.char1.profile(with_equipment_display=True)))
         self.assertEqual((rules.stats(self.char1.profile())["attack"], rules.stats(self.char1.profile())["defense"]), (14, 4))
         for shop_id, catalog in SHOP_CATALOGS.items():
             self.assertEqual({ITEMS[i]["name"] for i in catalog["purchase_catalog"]}, set(tokens(view.shop(shop_id, "상인"), "item")))

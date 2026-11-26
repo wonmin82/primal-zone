@@ -243,13 +243,18 @@ def player_attack(character, profile, enemy_id, now, interval, rng=None, target_
                 return rules.player_attack(profile, enemy_id, now, interval, rng, target_profile,
                                            enemy_profile=enemy_profile)
             lock_character_items(character)
-            from world.equipment_service import equipment_snapshot
+            from world.equipment_service import entity_snapshot, item_display_records
 
-            profile.equipment_context = equipment_snapshot(character)
+            owned = api.carried_items(character)
+            profile.equipment_context = entity_snapshot(character, owned=owned)
+            bandage_label = None
             if profile.get("queued_action") == "bandage" and profile.get("queued_item_id"):
                 from world.item_inventory import bind_consumption
 
-                bind_consumption(character, profile, "bandage", profile.pop("queued_item_id"))
+                item_id = profile.pop("queued_item_id")
+                if bind_consumption(character, profile, "bandage", item_id):
+                    _, labels = item_display_records(owned)
+                    bandage_label = labels.get(str(item_id)) or ITEMS["bandage"]["name"]
             firearm = active_weapon_item(character)
             magazine = None
             available = True
@@ -258,6 +263,8 @@ def player_attack(character, profile, enemy_id, now, interval, rng=None, target_
                 available = magazine is not None and magazine.state["rounds"] > 0
             damage, outcome = rules.player_attack(profile, enemy_id, now, interval, rng, target_profile,
                                                    shot_available=available, enemy_profile=enemy_profile)
+            if outcome["action"] == "bandage" and bandage_label is not None:
+                outcome["bandage_label"] = bandage_label
             consume_shot(magazine, outcome)
             return damage, outcome
     except Exception:

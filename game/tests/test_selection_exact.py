@@ -89,7 +89,8 @@ class NativeSelectionNumberTests(NativeItemTest):
         from world.actions.global_actions import LOOK_TARGET
         from world.actions.presentation import _carried_labels
         from world.actions.resolver import role_records
-        from world.equipment_service import entity_snapshot
+        from world.equipment_service import equipment_display
+        from world.item_entities.api import carried_items
 
         root = self.create("bandage")
         child = api.create_item("flashlight", location_kind="inside", parent_item=root, socket="tool")
@@ -101,13 +102,12 @@ class NativeSelectionNumberTests(NativeItemTest):
             with CaptureQueriesContext(connection) as queries:
                 labels = _carried_labels(self.char1)
                 records = role_records(self.char1, LOOK_TARGET)
-                snapshot = entity_snapshot(self.char1)
-            return (labels[scope], {record.reference for record in records}, snapshot, len(queries))
+                display = equipment_display(carried_items(self.char1), observed_at=100)
+            return (labels[scope], {record.reference for record in records}, display, len(queries))
 
-        first, first_refs, snapshot, small = observations()
+        first, first_refs, display, small = observations()
         names = [descriptor(row).name for row in (root, child, target)]
-        item = next(item for item in snapshot.carried if item.identity == str(target.pk))
-        self.assertEqual(snapshot.label(item), "의 ".join(names))
+        self.assertEqual(display[str(target.pk)].label, "의 ".join(names))
         self.assertEqual(first, {reference: names[-1]})
         self.assertIn(reference, first_refs)
         siblings = [api.create_item("battery", location_kind="inside", parent_item=child, socket="power")
@@ -116,16 +116,17 @@ class NativeSelectionNumberTests(NativeItemTest):
         self.assertEqual(expanded[reference], f"{names[-1]} 1")
         self.assertTrue({descriptor(item).reference for item in siblings} <= refs)
         self.assertEqual(small, large)
-        print(f"Inside 표시·관찰·장비 Snapshot SQL (같은 깊이의 자식 1개/10개) {small}/{large}")
+        print(f"Inside 표시·관찰·장비 Projection SQL (같은 깊이의 자식 1개/10개) {small}/{large}")
 
     def test_same_inside_name_has_its_own_parent_display_context(self):
-        from world.equipment_service import entity_snapshot
+        from world.equipment_service import equipment_display
+        from world.item_entities.api import carried_items
 
         parents = [self.create("guard_carbine") for _ in range(2)]
         magazines = [api.create_item("mag_556_standard", location_kind="inside", parent_item=parent, socket="magazine")
                      for parent in parents]
-        snapshot = entity_snapshot(self.char1)
-        inside = {item.identity: snapshot.label(item) for item in snapshot.carried if item.location == "inside"}
+        display = equipment_display(carried_items(self.char1), observed_at=100)
+        inside = {str(item.pk): display[str(item.pk)].label for item in magazines}
         self.assertEqual(inside, {str(magazine.pk): f"경비카빈 {number}의 5.56mm 표준탄창"
                                   for number, magazine in enumerate(magazines, 1)})
 

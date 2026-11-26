@@ -313,7 +313,6 @@ def receive_attack(enemy, player, now=None, rng=None):
                     recipient.accrue_recovery(recipient_profile, now)
             except rules.RuleError as failure:
                 error = str(failure)
-        queued_item_id = profile.get("queued_item_id")
         if error:
             profile.update(queued_action="attack", next_attack_at=now + COMBAT_INTERVAL)
             profile["player_round"] += 1
@@ -358,21 +357,16 @@ def receive_attack(enemy, player, now=None, rng=None):
         threat[player.id] = threat.get(player.id, 0) + applied_damage
         enemy.db.threat = threat
         player.save_profile(profile)
-        message = _player_round_message(enemy, equipment_snapshot, outcome, applied_damage,
-                                        profile["player_round"], queued_item_id=queued_item_id)
+        message = _player_round_message(enemy, equipment_snapshot, outcome, applied_damage, profile["player_round"])
         deliver_combat_message(player, message)
         if enemy.hp <= 0:
             _finish_death(enemy, now, rng)
     after_change(lambda: broadcast_state(enemy))
 
 
-def _player_round_message(actor, snapshot, outcome, applied_damage, round_index, *, queued_item_id=None, duel=False):
+def _player_round_message(actor, snapshot, outcome, applied_damage, round_index, *, duel=False):
     if outcome["action"] in ("heal", "breathing", "bandage"):
-        label = None
-        if outcome["action"] == "bandage" and queued_item_id is not None:
-            item = next(entry for entry in snapshot.carried if str(entry.identity) == queued_item_id)
-            label = snapshot.label(item)
-        return view.support_result(outcome, outcome.get("recipient"), bandage_label=label)
+        return view.support_result(outcome, outcome.get("recipient"), bandage_label=outcome.get("bandage_label"))
     return narration.outgoing(actor.key, snapshot.active, outcome, applied_damage, actor.max_hp,
                               round_index, duel=duel)
 

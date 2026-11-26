@@ -28,8 +28,8 @@ from world.actions.schema import ReferenceKind
 from world.actors.spawn import create_actor
 from world.content import ENEMIES
 from world.door_entities.models import Door, DoorInstallation
-from world.equipment_service import entity_snapshot, equip_item, resolve_item
-from world.item_entities.api import create_item
+from world.equipment_service import entity_snapshot, equip_item, equipment_display, resolve_item
+from world.item_entities.api import carried_items, create_item
 from world.item_entities.models import ItemEntity
 from world.selection_display import room_snapshot
 from world.selection_numbers.api import descriptor, number_for
@@ -246,13 +246,18 @@ class SelectionPhase2Benchmark(NativeItemTest):
                          "reference": asdict(reference), "payload_sha256": sha256(identity.encode()).hexdigest()}),
                   flush=True)
 
+    def equipment_observation(self):
+        owned = carried_items(self.char1)
+        return (entity_snapshot(self.char1, owned=owned), equipment_display(owned, observed_at=NOW))
+
     def test_inventory_equipment_and_explicit_number(self):
         equipped = equip_item(self.char1, self.create("guard_carbine"))
         rows = []
         for count in COUNTS:
             rows.extend(self.create("bandage", quantity=2) for _ in range(len(rows), count))
-            snapshot = self.measure("inventory_equipment", count, lambda: entity_snapshot(self.char1))
+            snapshot, display = self.measure("inventory_equipment", count, self.equipment_observation)
             self.assertEqual(len(snapshot.carried), count + 1)
+            self.assertEqual(set(display), {item.identity for item in snapshot.carried})
             self.assertEqual([item.identity for item in snapshot.items], [str(equipped.pk)])
             selected = self.measure(
                 "explicit_number", count, lambda: resolve_item(self.char1, exact_selector("붕대", count), "봐"),
@@ -268,8 +273,9 @@ class SelectionPhase2Benchmark(NativeItemTest):
             for _ in range(len(children), count):
                 create_item("bandage", location_kind="personal_storage", owner_object=self.char1)
                 children.append(create_item("battery", location_kind="inside", parent_item=root, socket="power"))
-            inside = self.measure("inside_item_display", count, lambda: entity_snapshot(self.char1))
+            inside, display = self.measure("inside_item_display", count, self.equipment_observation)
             self.assertEqual(sum(item.location == "inside" for item in inside.carried), count)
+            self.assertTrue({str(child.pk) for child in children} <= display.keys())
             controls = self.measure(
                 "storage_controls", count,
                 lambda: action_controls(self.char1, self.index, NOW, provider_reference=provider, verb_key="꺼내"),

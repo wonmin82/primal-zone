@@ -85,10 +85,7 @@ class EquipmentItem:
     hands_required: int = 0
     weapon_attack: float = 0
     modifiers: tuple = ()
-    state_summary: str = ""
     firearm_family: str | None = None
-    selection_number: int | None = None
-    display_label: str | None = None
 
     @property
     def equip_action(self):
@@ -99,7 +96,7 @@ class EquipmentItem:
         return "해제" if self.role == "weapon" else "벗어"
 
 
-def item_snapshot(identity, definition, *, item_id=None, sequence=0, quantity=1, location="equipment", slot=None, state_summary="", selection_number=None, display_label=None):
+def item_snapshot(identity, definition, *, item_id=None, sequence=0, quantity=1, location="equipment", slot=None):
     errors = definition_errors(identity, definition)
     if errors:
         reject(" / ".join(errors))
@@ -111,7 +108,7 @@ def item_snapshot(identity, definition, *, item_id=None, sequence=0, quantity=1,
         slot or properties.get("slot"), location, properties.get("role"),
         properties.get("weapon_type"), properties.get("hands_required", 0),
         properties.get("weapon_attack", 0), tuple(Modifier(**modifier) for modifier in modifiers),
-        state_summary, definition.get("firearm_family"), selection_number, display_label,
+        definition.get("firearm_family"),
     )
 
 
@@ -154,20 +151,14 @@ class EquipmentSnapshot:
     def hand_usage(self):
         return sum(item.hands_required for item in self.items if item.slot == "hands")
 
-    def label(self, item):
-        if self.source == "item_entities":
-            return item.display_label or item.name
-        candidates = [entry for entry in self.carried if entry.definition_id == item.definition_id]
-        index = candidates.index(item) + 1 if item in candidates else 1
-        return item.name if index == 1 else f"{item.name} {index}"
-
 
 class EquipmentProfile(dict):
     """계산용 일시 context. 저장할 때 일반 dict로 바꾸어 profile schema를 유지한다."""
 
-    def __init__(self, profile, equipment_context):
+    def __init__(self, profile, equipment_context, *, equipment_display=None):
         super().__init__(profile)
         self.equipment_context = equipment_context
+        self.equipment_display = equipment_display
 
 
 def context(profile, snapshot=None):
@@ -198,11 +189,26 @@ def refresh_legacy_context(profile):
         profile.equipment_context = legacy_snapshot(profile)
 
 
+def item_label(snapshot, item, display=None):
+    if snapshot.source == "item_entities":
+        projected = display.get(item.identity) if display is not None else None
+        return projected.label if projected is not None else item.name
+    candidates = [entry for entry in snapshot.carried if entry.definition_id == item.definition_id]
+    index = candidates.index(item) + 1 if item in candidates else 1
+    return item.name if index == 1 else f"{item.name} {index}"
+
+
+def item_state(item, display=None):
+    projected = display.get(item.identity) if display is not None else None
+    return projected.state_summary if projected is not None else ""
+
+
 def inventory_rows(profile):
-    """텍스트와 Web에서 동일한 snapshot의 selector·착용·주무기 정보를 사용한다."""
+    """텍스트와 Web에서 동일한 표시와 도메인 상태를 사용한다."""
     from world.content import ITEMS
 
     selected = context(profile)
+    display = getattr(profile, "equipment_display", None)
     if selected.source == "item_entities":
         candidates = selected.carried
     else:
@@ -219,14 +225,14 @@ def inventory_rows(profile):
             selected.active.identity == item.identity if selected.source == "item_entities"
             else selected.active.definition_id == item.definition_id)
         rows.append({"identity": str(item.identity) if item.identity else None,
-                     "id": item.definition_id, "name": item.name, "selector": selected.label(item),
+                     "id": item.definition_id, "name": item.name, "selector": item_label(selected, item, display),
                      "count": item.quantity, "slot": item.slot or data.get("slot"),
                      "equip_action": item.equip_action if item.slot else None,
                      "remove_action": item.remove_action if item.slot else None,
                      "consume_action": data.get("consume_action"), "equipped": equipped,
                      "active_weapon": active, "weapon": item.role == "weapon",
                      "light_source": data.get("light_source"), "power_source": data.get("power_source"),
-                     "state_summary": item.state_summary, "location": item.location})
+                     "state_summary": item_state(item, display), "location": item.location})
         if selected.source == "item_entities":
             rows[-1]["firearm"] = bool(data.get("firearm_family"))
             rows[-1]["magazine"] = bool(data.get("magazine"))
@@ -238,7 +244,12 @@ def inventory_rows(profile):
 
 def equipment_rows(profile):
     selected = context(profile)
-    return {slot: " · ".join(selected.label(item) + (" [주무기]" if item is selected.active else "")
-                             + (f" · {item.state_summary}" if item.state_summary else "")
-                             for item in selected.items if item.slot == slot) or None
+    display = getattr(profile, "equipment_display", None)
+
+    def item_text(item):
+        state = item_state(item, display)
+        return (item_label(selected, item, display) + (" [주무기]" if item is selected.active else "")
+                + (f" · {state}" if state else ""))
+
+    return {slot: " · ".join(item_text(item) for item in selected.items if item.slot == slot) or None
             for slot in SLOT_CAPACITY}

@@ -112,7 +112,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         else:
             self.db.profile = profile
 
-    def profile(self):
+    def profile(self, *, with_equipment_display=False):
         from world.equipment_service import bind_profile, entity_runtime
 
         if self.db.profile is None:
@@ -122,7 +122,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         profile = deserialize(self.db.profile)
 
         if entity_runtime(self):
-            bound = bind_profile(self, profile)
+            bound = bind_profile(self, profile, with_equipment_display=with_equipment_display)
             if profile.get("version", 1) < rules.PROFILE_VERSION:
                 bound = rules.migrate_profile(bound)
                 self.save_profile(bound)
@@ -136,7 +136,7 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
             rules.normalize_growth(profile)
         return bind_profile(self, profile)
 
-    def profile_snapshot(self):
+    def profile_snapshot(self, *, with_equipment_display=False, observed_at=None):
         """관찰용 사본만 변환한다. 구버전 profile도 저장하거나 진행하지 않는다."""
         saved = deserialize(self.db.profile)
         from world.equipment_service import bind_profile, entity_runtime
@@ -144,7 +144,8 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
         if saved is None and entity_runtime(self):
             raise rules.RuleError("native 캐릭터의 profile이 없습니다. 무결성 검사가 필요합니다.")
 
-        profile = bind_profile(self, saved if saved is not None else rules.new_profile())
+        profile = bind_profile(self, saved if saved is not None else rules.new_profile(),
+                               with_equipment_display=with_equipment_display, observed_at=observed_at)
         return rules.migrate_profile(profile)
 
     def save_profile(self, profile):
@@ -312,11 +313,11 @@ class Explorer(DistantPresenceMixin, DefaultCharacter):
 
         observed_at = time() if observed_at is None else observed_at
         environment = snapshot_for(self.location, observed_at)
-        profile = self.profile_snapshot()
+        profile = self.profile_snapshot(with_equipment_display=True)
         from world.observation import context_for, perceives
         from world.observation import display as observation_display
 
-        observation = context_for(self, observed_at=observed_at, environment=environment)
+        observation = context_for(self, observed_at=observed_at, environment=environment, profile=profile)
         values = rules.stats(profile)
         zone = self.zone
         room = ROOMS.get(zone, {})
