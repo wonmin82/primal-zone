@@ -156,6 +156,30 @@ class NativeSelectionNumberTests(NativeItemTest):
             self.assertEqual(dict(invocation.roles)["subject"], (descriptor(second).reference,))
         self.assertNotEqual(descriptor(first).reference, descriptor(second).reference)
 
+    def test_native_and_role_keep_distinct_all_rules_for_a_canonical_name_and_alias(self):
+        from unittest.mock import patch
+
+        from world.actions.global_actions import LOOK_TARGET
+        from world.actions.resolver import select_role
+        from world.content import ITEMS
+        from world.targets import select_native_items
+
+        alias = self.create("flashlight")
+        canonical = self.create("bandage")
+        reference = descriptor(canonical).reference
+        alias_definition = {**ITEMS["flashlight"], "aliases": ("붕대",)}
+
+        with patch.dict(ITEMS, {"flashlight": alias_definition}):
+            for query in ("붕-대", "붕대 1", '"붕대" 1'):
+                with self.subTest(query=query):
+                    self.assertEqual(resolve_item(self.char1, query, "봐").pk, canonical.pk)
+                    self.assertEqual(select_role(self.char1, LOOK_TARGET, query), (reference,))
+
+            matches, selector = select_native_items((alias, canonical), "붕대 모두")
+            self.assertEqual((matches, selector.mode), ([alias, canonical], Mode.ALL))
+            with self.assertRaisesMessage(TargetAmbiguous, "서로 다른 선택 그룹의 별칭이 겹칩니다."):
+                select_role(self.char1, LOOK_TARGET, "붕대 모두")
+
     def test_text_default_keeps_sequence_over_uuid_and_number_order(self):
         from unittest.mock import patch
         from uuid import UUID

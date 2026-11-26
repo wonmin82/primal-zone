@@ -16,7 +16,8 @@ from world.rules import RuleError
 from world.targets import (
     MAX_SELECTION_LENGTH,
     Mode,
-    normalized,
+    TargetAmbiguous,
+    matching_records,
     parse_exact_selector,
     parse_selector,
     quoted_name_spans,
@@ -27,10 +28,6 @@ _TEXT_ITEMS = ("text_items",)
 
 class TargetNotFound(RuleError):
     """유효한 문법이지만 현재 후보가 없는 선택."""
-
-
-class TargetAmbiguous(RuleError):
-    """실제 후보의 이름·번호 충돌. 문법 오류와 구분한다."""
 
 
 @dataclass(frozen=True)
@@ -180,28 +177,6 @@ def record_selector(query, records, *, b1=True):
     primary = [record.name for record in records]
     aliases = [alias for record in records for alias in record.aliases]
     return parse_selector(query, (*primary, *aliases), b1=b1, literal_names=primary)
-
-
-def matching_records(records, selector):
-    records = tuple(records)
-    if selector.exact:
-        matches = [record for record in records
-                   if record.name == selector.name and record.number == selector.index]
-    else:
-        name = normalized(selector.name)
-        matches = [record for record in records if normalized(record.name) == name]
-        if not matches or selector.mode == Mode.ALL:
-            matches = [record for record in records if name in
-                       {normalized(value) for value in (record.name, *record.aliases)}]
-        elif selector.mode == Mode.DEFAULT and len(matches) > 1 and selector.name[-1:].isdecimal():
-            raise TargetAmbiguous("숫자로 끝나는 실제 이름이 여러 대상과 일치합니다. 다른 고유 이름을 지정하세요.")
-        if len({record.group_id for record in matches}) > 1:
-            raise TargetAmbiguous("서로 다른 선택 그룹의 별칭이 겹칩니다. 실제 이름을 지정하세요.")
-        if selector.mode == Mode.INDEX:
-            matches = [record for record in matches if record.number == selector.index]
-    if selector.mode == Mode.INDEX and len(matches) > 1:
-        raise TargetAmbiguous("대상 번호가 겹칩니다. 대상을 고유하게 지정하세요.")
-    return matches
 
 
 def select_records(role, records, query, *, observed_items=None):

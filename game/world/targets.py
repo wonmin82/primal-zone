@@ -27,6 +27,10 @@ class LootRequest:
     source: TargetSelector | None = None
 
 
+class TargetAmbiguous(RuleError):
+    """실제 후보의 이름·번호 충돌. 문법 오류와 구분한다."""
+
+
 def normalized(value):
     return "".join(str(value).split()).translate(str.maketrans("", "", ".-_" )).casefold()
 
@@ -251,11 +255,40 @@ def matching(objects, selector, name_values=names):
         from world.selection_numbers.api import descriptor
 
         return [obj for obj in objects if (record := descriptor(obj)) and record.name == selector.name]
-    return [
-        obj
-        for obj in objects
-        if normalized(selector.name) in {normalized(name) for name in name_values(obj)}
-    ]
+    return matching_names_or_aliases(objects, normalized(selector.name), name_values)
+
+
+def matching_formal_names(candidates, name_key, name_value):
+    """Filter by a normalized canonical name, preserving candidate order."""
+    return [candidate for candidate in candidates if normalized(name_value(candidate)) == name_key]
+
+
+def matching_names_or_aliases(candidates, name_key, name_values):
+    """Filter by any supplied name or alias, preserving candidate order."""
+    return [candidate for candidate in candidates
+            if name_key in {normalized(value) for value in name_values(candidate)}]
+
+
+def matching_records(records, selector):
+    """Match supplied records without looking up visibility, identity, or numbers."""
+    records = tuple(records)
+    if selector.exact:
+        matches = [record for record in records
+                   if record.name == selector.name and record.number == selector.index]
+    else:
+        name = normalized(selector.name)
+        matches = matching_formal_names(records, name, lambda record: record.name)
+        if not matches or selector.mode == Mode.ALL:
+            matches = matching_names_or_aliases(records, name, lambda record: (record.name, *record.aliases))
+        elif selector.mode == Mode.DEFAULT and len(matches) > 1 and selector.name[-1:].isdecimal():
+            raise TargetAmbiguous("숫자로 끝나는 실제 이름이 여러 대상과 일치합니다. 다른 고유 이름을 지정하세요.")
+        if len({record.group_id for record in matches}) > 1:
+            raise TargetAmbiguous("서로 다른 선택 그룹의 별칭이 겹칩니다. 실제 이름을 지정하세요.")
+        if selector.mode == Mode.INDEX:
+            matches = [record for record in matches if record.number == selector.index]
+    if selector.mode == Mode.INDEX and len(matches) > 1:
+        raise TargetAmbiguous("대상 번호가 겹칩니다. 대상을 고유하게 지정하세요.")
+    return matches
 
 
 def select(candidates, selector):
@@ -282,7 +315,6 @@ def strict_single(candidates, selector, action):
 
 def select_native_items(items, query, action=None):
     """Native Root/Inside 후보의 순서를 유지하고 명시 번호는 저장 행으로만 해석한다."""
-    from world.actions.resolver import matching_records
     from world.content import ITEMS
     from world.selection_numbers.api import descriptor, numbered_records
 
@@ -301,10 +333,9 @@ def select_native_items(items, query, action=None):
     if selector.mode != Mode.INDEX:
         candidates = matching(items, selector, item_names)
         if selector.mode == Mode.DEFAULT:
-            formal = [item for item in candidates
-                      if normalized(ITEMS[item.definition_id]["name"]) == normalized(selector.name)]
-            if formal:
-                candidates = formal
+            candidates = matching_formal_names(
+                candidates, normalized(selector.name), lambda item: ITEMS[item.definition_id]["name"],
+            ) or candidates
         return select(candidates, selector), selector
 
     pairs = [(item, record) for item in items if (record := descriptor(item)) is not None]
@@ -329,11 +360,10 @@ def resolve(objects, selector, caller, action=None, supports=None, *, observed_a
     if not selector.exact and any(getattr(obj, "supports_shared_combat", False) for obj in candidates):
         # 실제 이름이 먼저다. 특히 숫자 접미 실명을 다른 실물의 별칭이나
         # INDEX로 바꿔 해석하지 않는다(§4.14).
-        exact = [(obj, record) for obj, record in zip(candidates, records)
-                 if normalized(obj.key) == normalized(selector.name)]
-        if exact:
-            candidates, records = map(list, zip(*exact))
-            if selector.mode == Mode.DEFAULT and selector.name[-1:].isdecimal() and len(exact) > 1:
+        formal = matching_formal_names(zip(candidates, records), normalized(selector.name), lambda pair: pair[0].key)
+        if formal:
+            candidates, records = map(list, zip(*formal))
+            if selector.mode == Mode.DEFAULT and selector.name[-1:].isdecimal() and len(formal) > 1:
                 raise RuleError("숫자로 끝나는 실제 이름이 여러 대상과 일치합니다. 다른 고유 이름을 지정하세요.")
     if supports and selector.mode == Mode.DEFAULT:
         candidates = [obj for obj in candidates if supports(obj)]
@@ -341,8 +371,6 @@ def resolve(objects, selector, caller, action=None, supports=None, *, observed_a
     by_reference = {record.reference: obj for obj, record in zip(candidates, records)
                     if record and record.reference.kind != ReferenceKind.ROOM}
     if selector.mode == Mode.INDEX and (selector.exact or by_reference):
-        from world.actions.resolver import matching_records
-
         if not selector.exact and len(by_reference) != len(candidates):
             raise RuleError("대상 번호가 겹칩니다. 대상을 고유하게 지정하세요.")
         available = (numbered_records(records) if numbered is None else
