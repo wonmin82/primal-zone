@@ -216,9 +216,8 @@ def resolve(caller, index, action, args, command_name):
 
 
 def _source_ids(sources, selector):
-    from world.actions.resolver import matching_records
     from world.actions.schema import ReferenceKind
-    from world.targets import Mode
+    from world.targets import Mode, matching_records
 
     source_kind = ReferenceKind.CORPSE if selector else ReferenceKind.OBJECT
     source_ids = [pk for pk, record in sources.items() if record.reference.kind == source_kind]
@@ -253,10 +252,9 @@ def select_loot(caller, args, *, now, sources, entries, records, accessible=None
                 party=None, recipients=None):
     """현재 Source와 Entry Snapshot에서 효과 없이 전체 선택과 수량을 계산한다."""
     from typeclasses.loot import can_take_entry
-    from world.actions.resolver import matching_records
     from world.actions.schema import ReferenceKind
     from world.currency import currency_names, currency_request
-    from world.targets import Mode, loot_parts, loot_request
+    from world.targets import Mode, loot_parts, loot_request, matching_records
 
     query, source_selector = loot_parts(args) if parts is None else parts
     source_ids = _source_ids(sources, source_selector)

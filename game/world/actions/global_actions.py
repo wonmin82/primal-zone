@@ -421,6 +421,7 @@ def party_attack(context):
     from world.targets import (
         Mode,
         matching,
+        matching_formal_names,
         names,
         normalized,
         parse_selector,
@@ -439,8 +440,8 @@ def party_attack(context):
         # 일행공격의 무번호 복수 후보 거절은 일반 공격의 기본 첫 대상과 다르다.
         if selector.mode == Mode.DEFAULT:
             matches = matching(pool, selector)
-            exact = [obj for obj in matches if normalized(obj.key) == normalized(selector.name)]
-            strict_single(exact or matches, selector, "일행공격")
+            formal = matching_formal_names(matches, normalized(selector.name), lambda obj: obj.key)
+            strict_single(formal or matches, selector, "일행공격")
         target = resolve_target(pool, selector, caller, "일행공격")[0]
     party.attack(caller, target)
     return ActionResult(changed=True)
