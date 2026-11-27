@@ -92,23 +92,35 @@ class RoomSnapshot:
     references: dict
 
 
-def room_snapshot(caller, observed_at=None, *, objects=None):
+def room_snapshot(caller, observed_at=None, *, objects=None, observation=None):
     from typeclasses.loot import DroppedLoot
 
     from world.actions.schema import ReferenceKind
     from world.doors import door_rows_by_endpoint
     from world.observation import context_for, perceives
     from world.selection_numbers.api import descriptor, numbered_records
-    from world.targets import room_objects
+    from world.targets import observed_room_objects, room_objects
 
-    objects = tuple(room_objects(caller, observed_at=observed_at) if objects is None else objects)
+    if observation is not None and (
+        observation.viewer is not caller
+        or getattr(observation.room, "pk", None) != caller.db_location_id
+        or observation.observed_at != observed_at
+        or observation.distance != 0
+    ):
+        raise ValueError("방 표시와 관찰 범위가 일치해야 합니다.")
+    if objects is None:
+        objects = (room_objects(caller, observed_at=observed_at) if observation is None
+                   else observed_room_objects(observation))
+    objects = tuple(objects)
     doors_by_endpoint = door_rows_by_endpoint(objects)
     by_id = {obj.pk: record for obj in objects if (record := descriptor(obj, doors_by_endpoint=doors_by_endpoint))
              and record.reference.kind != ReferenceKind.ROOM}
     doors = [pk for pk, record in by_id.items() if record.reference.kind == ReferenceKind.DOOR]
-    if doors and not perceives(context_for(caller, observed_at=observed_at).snapshot, "normal"):
-        for pk in doors:
-            del by_id[pk]
+    if doors:
+        sight = context_for(caller, observed_at=observed_at) if observation is None else observation
+        if not perceives(sight.snapshot, "normal"):
+            for pk in doors:
+                del by_id[pk]
     valid = {record.reference: record for record in numbered_records(by_id.values())}
     ground_names = {obj.pk: obj.get_display_name(caller) for obj in objects if isinstance(obj, DroppedLoot)}
     labels = {obj.pk: ground_names.get(obj.pk, obj.key) for obj in objects if obj.pk not in by_id}

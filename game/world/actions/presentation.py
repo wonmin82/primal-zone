@@ -4,10 +4,10 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 
 from world.actions.presentation_context import (
-    item_presentation,
     observation_snapshot,
     presentation_scope,
     profile_snapshot,
+    scoped_reads,
 )
 from world.actions.resolver import cached_item_scopes, provided
 from world.actions.schema import ReferenceKind, TargetReference, TargetScope
@@ -40,9 +40,17 @@ class ItemActionControl:
 @dataclass
 class _DisplayContexts:
     caller: object
-    room: object
+    rooms: dict = field(default_factory=dict)
     scopes: dict = field(default_factory=dict)
     carried: dict | None = None
+
+    def room_at(self, observed_at):
+        caller = self.caller
+        key = (caller.db_location_id, observed_at)
+        if key not in self.rooms:
+            observation = None if observed_at is None else observation_snapshot(caller, observed_at)
+            self.rooms[key] = room_snapshot(caller, observed_at, observation=observation)
+        return self.rooms[key]
 
     def for_scope(self, scope):
         if scope.startswith(("character:", "inside:")):
@@ -96,13 +104,12 @@ def target_label(caller, reference, observed_at=None):
         return record.name if record and record.reference == reference else None
     contexts = _current_labels.get()
     if contexts is None or contexts.caller is not caller:
-        contexts = _DisplayContexts(caller, room_snapshot(caller, observed_at) if reference.scope_id.startswith("room:") else None)
+        contexts = _DisplayContexts(caller)
     if reference.scope_id.startswith("room:"):
-        if contexts.room is None:
-            contexts.room = room_snapshot(caller, observed_at)
-        if reference not in contexts.room.records:
+        room = contexts.room_at(observed_at)
+        if reference not in room.records:
             return None
-        return contexts.room.labels[int(reference.identity)]
+        return room.labels[int(reference.identity)]
     return contexts.for_scope(reference.scope_id).get(reference)
 
 
@@ -144,7 +151,10 @@ def action_controls(caller, index, observed_at=None, *, provider_reference=None,
 
 
 def _presented_controls(caller, index, observed_at=None, *, provider_reference=None, verb_key=None, snapshot=None):
-    token = _current_labels.set(_DisplayContexts(caller, snapshot))
+    labels = _DisplayContexts(caller)
+    if snapshot is not None:
+        labels.rooms[caller.db_location_id, observed_at] = snapshot
+    token = _current_labels.set(labels)
     try:
         with presentation_scope(caller):
             return _action_controls(caller, index, observed_at,
@@ -154,7 +164,7 @@ def _presented_controls(caller, index, observed_at=None, *, provider_reference=N
 
 
 def _action_controls(caller, index, observed_at, *, provider_reference, verb_key):
-    items = item_presentation(caller, observed_at)
+    items = scoped_reads(caller, observed_at)
     pairs = provided(caller, index, item_entities=items.entities, provider_entities=items.entities,
                      get_observation=lambda: observation_snapshot(caller, observed_at))
     if provider_reference is not None:
@@ -179,7 +189,7 @@ def _action_controls(caller, index, observed_at, *, provider_reference, verb_key
             continue
         provider = None
         if reference is not None:
-            provider = items.item(reference)
+            provider = items.resolve_entity(reference)
         service = index.services[binding.service_id]
         config = {argument.name: argument.default for argument in service.config_schema if argument.default is not None}
         config.update(binding.config)

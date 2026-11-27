@@ -187,10 +187,15 @@ def names(obj):
 
 def room_objects(caller, room=None, observed_at=None):
 
-    from world.observation import can_perceive, context_for
+    from world.observation import context_for
 
-    room = caller.location if room is None else room
-    context = context_for(caller, room, observed_at)
+    return observed_room_objects(context_for(caller, room, observed_at))
+
+
+def observed_room_objects(context):
+    from world.observation import can_perceive
+
+    room = context.room
     return (
         ordered(
             obj

@@ -4,8 +4,8 @@ from world.actions.presentation import ItemActionControl, reference_json, target
 from world.actions.presentation_context import (
     available,
     door_action_labels,
-    item_presentation,
     profile_snapshot,
+    scoped_reads,
 )
 from world.actions.schema import ReferenceKind
 
@@ -17,8 +17,8 @@ def render(caller, index, reference, binding, observed_at=None):
     from world.selection_numbers.api import resolve_reference
 
     action = index.actions[binding.action_id]
-    view = item_presentation(caller, observed_at)
-    provider = view.item(reference)
+    view = scoped_reads(caller, observed_at)
+    provider = view.resolve_entity(reference)
     config = dict(binding.config)
     if not available(provider, caller, observed_at):
         return []

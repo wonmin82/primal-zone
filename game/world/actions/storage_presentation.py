@@ -2,9 +2,9 @@
 
 from world.actions.presentation import ItemActionControl, target_label
 from world.actions.presentation_context import (
-    item_presentation,
     observation_snapshot,
     profile_snapshot,
+    scoped_reads,
 )
 
 
@@ -16,8 +16,8 @@ def render(caller, index, reference, binding, observed_at=None):
     from world.item_entities.policy import can_item_operation
     from world.selection_numbers.api import descriptor
 
-    items = item_presentation(caller, observed_at)
-    provider = items.item(reference)
+    items = scoped_reads(caller, observed_at)
+    provider = items.resolve_entity(reference)
 
     def observation():
         return observation_snapshot(caller, observed_at)
@@ -48,10 +48,12 @@ def render(caller, index, reference, binding, observed_at=None):
 
     destination = caller if withdraw or provider.personal else provider
     transfers = [item for _, _, item in candidates if item.owner_object_id != destination.pk]
-    children = items.read(
-        ("ownership_transfer_children", frozenset({item.pk for item in transfers})),
-        lambda: domain.ownership_transfer_children(transfers),
-    ) if transfers else None
+    children = None
+    if transfers:
+        roots = frozenset({item.pk for item in transfers})
+        if roots not in items.transfer_children:
+            items.transfer_children[roots] = domain.ownership_transfer_children(transfers)
+        children = items.transfer_children[roots]
     output = []
     for record, label, item in candidates:
         try:
