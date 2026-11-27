@@ -135,7 +135,7 @@ def shop_snapshot(character, shop, observed_at=None):
 
     catalog = SHOP_CATALOGS[shop.db.shop_id]["purchase_catalog"]
     sales = []
-    profile = character.profile_snapshot()
+    profile = character.profile_snapshot(with_equipment_display=True)
     snapshot = context(profile)
     for row in inventory_rows(profile):
         quantity = row["count"]

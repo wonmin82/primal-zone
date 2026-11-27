@@ -58,44 +58,58 @@ def _item_context_label(row, items, label_of):
     return "의 ".join(reversed(names))
 
 
-def entity_snapshot(character):
+def _definition_id(row):
     from world.content.item_mapping import LEGACY_ITEM_MAPPING
-    from world.firearm_service import magazine_snapshot
     from world.item_runtime import maintenance
 
-    owned = carried_items(character)
+    return LEGACY_ITEM_MAPPING.get(row.definition_id, row.definition_id) if maintenance.get() else row.definition_id
+
+
+def entity_snapshot(character, *, owned=None):
+    owned = carried_items(character) if owned is None else owned
+    carried = []
+    for row in owned:
+        identity = _definition_id(row)
+        carried.append(eq.item_snapshot(identity, ITEMS[identity], item_id=row.pk, sequence=row.sequence,
+                                        quantity=row.quantity, location=row.location_kind, slot=row.slot))
+    return eq.EquipmentSnapshot(tuple(item for item in carried if item.location == "equipment"),
+                                tuple(carried), character.db.active_weapon_item_id)
+
+
+@dataclass(frozen=True)
+class ItemDisplay:
+    label: str
+    state_summary: str
+    selection_number: int | None
+
+
+def equipment_display(owned, *, observed_at=None):
+    """Project labels and status from the same carried rows as the domain snapshot."""
+    from world.firearm_service import magazine_snapshot
+
     items = {row.pk: row for row in owned}
     mounted = {row.parent_item_id: row for row in owned if row.socket == "magazine"}
     numbers, labels = item_display_records(owned)
 
-    def definition_id(row):
-        return LEGACY_ITEM_MAPPING.get(row.definition_id, row.definition_id) if maintenance.get() else row.definition_id
-
     def display_name(row):
-        return labels.get(str(row.pk)) or ITEMS[definition_id(row)]["name"]
+        return labels.get(str(row.pk)) or ITEMS[_definition_id(row)]["name"]
 
     def read_magazine(row):
         magazine = mounted.get(row.pk)
         return magazine_snapshot(magazine) if magazine is not None else None
 
-    carried = tuple(
-        eq.item_snapshot(definition_id(row), ITEMS[definition_id(row)], item_id=row.pk,
-                         sequence=row.sequence, quantity=row.quantity, location=row.location_kind,
-                         slot=row.slot, state_summary=state_summary(row, read_magazine=read_magazine),
-                         selection_number=numbers.get(str(row.pk)),
-                         display_label=_item_context_label(row, items, display_name))
+    return {
+        str(row.pk): ItemDisplay(
+            label=_item_context_label(row, items, display_name),
+            state_summary=state_summary(row, observed_at=observed_at, read_magazine=read_magazine),
+            selection_number=numbers.get(str(row.pk)),
+        )
         for row in owned
-    )
-    return eq.EquipmentSnapshot(tuple(item for item in carried if item.location == "equipment"),
-                                carried, character.db.active_weapon_item_id)
+    }
 
 
 def state_summary(row, *, observed_at=None, read_magazine=None):
-    from world.content.item_mapping import LEGACY_ITEM_MAPPING
-    from world.item_runtime import maintenance
-
-    identity = LEGACY_ITEM_MAPPING.get(row.definition_id, row.definition_id) if maintenance.get() else row.definition_id
-    definition = ITEMS[identity]
+    definition = ITEMS[_definition_id(row)]
     if definition.get("magazine"):
         return f"{row.state['rounds']}/{definition['magazine']['capacity']}"
     if definition.get("firearm_family"):
@@ -124,19 +138,24 @@ def equipment_snapshot(character, profile=None):
     return snapshot(profile if profile is not None else character.profile_snapshot())
 
 
-def bind_profile(character, profile):
-    bound = eq.EquipmentProfile(profile, equipment_snapshot(character, profile))
+def bind_profile(character, profile, *, with_equipment_display=False, observed_at=None):
     if entity_runtime(character):
         from world.item_inventory import bind
 
+        owned = carried_items(character)
+        snapshot = entity_snapshot(character, owned=owned)
+        display = equipment_display(owned, observed_at=observed_at) if with_equipment_display else None
+        bound = eq.EquipmentProfile(profile, snapshot, equipment_display=display)
         return bind(character, bound)
-    else:
-        from world.credential_service import credential_items
 
-        bound.credential_items = tuple(eq.item_snapshot(row.definition_id, ITEMS[row.definition_id],
-                                      item_id=row.pk, sequence=row.sequence, quantity=1, location="inventory")
-                                      for row in credential_items(character)
-                                      if row.location_kind == "inventory")
+    from world.credential_service import credential_items
+    from world.equipment_legacy import snapshot
+
+    bound = eq.EquipmentProfile(profile, snapshot(profile))
+    bound.credential_items = tuple(eq.item_snapshot(row.definition_id, ITEMS[row.definition_id],
+                                  item_id=row.pk, sequence=row.sequence, quantity=1, location="inventory")
+                                  for row in credential_items(character)
+                                  if row.location_kind == "inventory")
     return bound
 
 

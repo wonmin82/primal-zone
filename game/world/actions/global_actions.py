@@ -296,7 +296,7 @@ def help_page(context):
 
 def status(context):
     caller = context.caller
-    return ActionResult(messages=(view.status(caller.key, caller.profile_snapshot()),))
+    return ActionResult(messages=(view.status(caller.key, caller.profile_snapshot(with_equipment_display=True)),))
 
 
 def return_home(context):

@@ -11,17 +11,19 @@ from world.progression import (
 )
 
 
-def _equipment_item_name(snapshot, item):
-    return ft.text(ft.token("item", snapshot.label(item)), " [주무기]" if item is snapshot.active else "",
-                   f" · {item.state_summary}" if item.state_summary else "")
+def _equipment_item_name(snapshot, item, display):
+    state = eq.item_state(item, display)
+    return ft.text(ft.token("item", eq.item_label(snapshot, item, display)),
+                   " [주무기]" if item is snapshot.active else "", f" · {state}" if state else "")
 
 
 def equipment(profile):
     snapshot = eq.context(profile)
+    display = getattr(profile, "equipment_display", None)
     lines = []
     for slot, label in eq.SLOT_LABELS.items():
         selected = [item for item in snapshot.items if item.slot == slot]
-        names = [_equipment_item_name(snapshot, item) for item in selected]
+        names = [_equipment_item_name(snapshot, item, display) for item in selected]
         lines.append(ft.row(label, ft.join(names, " · ") if names else "없음", 8))
     values = rules.stats(profile, snapshot)
     base = rules.stats(profile, eq.EquipmentSnapshot())
@@ -31,6 +33,7 @@ def equipment(profile):
 
 def status(name, profile):
     snapshot = eq.context(profile)
+    display = getattr(profile, "equipment_display", None)
     values = rules.stats(profile, snapshot)
     xp = (
         f"{profile['xp']}/{rules.xp_threshold(values['level'] + 1)}"
@@ -47,7 +50,7 @@ def status(name, profile):
             f"{v['name']}{profile['attributes'][k]['base'] + rules.allocated(profile, k)}"
             for k, v in ATTRIBUTES.items()
         ),
-        ft.text("장비 | ", ft.join([_equipment_item_name(snapshot, item)
+        ft.text("장비 | ", ft.join([_equipment_item_name(snapshot, item, display)
                                    for item in snapshot.items], " · ") or "없음"),
         summary=ft.text(ft.token("player", name), f" · Lv.{values['level']}"),
     )

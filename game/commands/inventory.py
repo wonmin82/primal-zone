@@ -15,7 +15,7 @@ class Inventory(GameCommand):
     aliases = ["가진", "소", "소지", "소지품"]
 
     def run(self):
-        self.caller.msg(view.inventory(self.caller.profile()))
+        self.caller.msg(view.inventory(self.caller.profile(with_equipment_display=True)))
 
 
 
@@ -39,4 +39,4 @@ class Equipment(GameCommand):
     summary = "현재 착용한 무기와 방어구만 확인합니다."
 
     def run(self):
-        self.caller.msg(view.equipment(self.caller.profile()))
+        self.caller.msg(view.equipment(self.caller.profile(with_equipment_display=True)))

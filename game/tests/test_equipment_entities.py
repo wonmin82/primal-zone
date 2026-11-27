@@ -4,6 +4,8 @@ from copy import deepcopy
 from unittest.mock import Mock, patch
 
 from django.core.exceptions import ValidationError
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from typeclasses.explorers import Explorer
 from world import equipment as eq
 from world import equipment_service as service
@@ -12,6 +14,7 @@ from world.content import ITEMS
 from world.item_entities import api
 from world.item_entities.models import ItemEntity, ItemSequence
 from world.multiplayer import world_change
+from world.selection_numbers.models import SelectionNumber
 
 from tests.base import GameCommandTest
 
@@ -119,7 +122,7 @@ class EquipmentEntityTests(GameCommandTest):
             self.assertEqual(service.resolve_item(self.char1, selector, "착용").pk, row.pk)
             service.equip_item(self.char1, row)
         self.assertEqual(service.resolve_item(self.char1, "ring 2", "벗어").pk, second.pk)
-        rows = eq.inventory_rows(self.char1.profile())
+        rows = eq.inventory_rows(self.char1.profile(with_equipment_display=True))
         self.assertEqual([row["selector"] for row in rows], ["ring 1", "ring 2"])
         with self.assertRaises(rules.RuleError):
             service.resolve_item(self.char1, str(first.pk), "벗어")
@@ -267,7 +270,7 @@ class EquipmentEntityTests(GameCommandTest):
         self.char1.execute_cmd(name + " 2 무장")
         self.char1.execute_cmd(name + " 2 주무기")
         self.assertEqual(service.active_weapon_item(self.char1).pk, second.pk)
-        profile = self.char1.profile()
+        profile = self.char1.profile(with_equipment_display=True)
         for output in (presentation.status(self.char1.key, profile),
                        presentation.equipment(profile), presentation.inventory(profile)):
             self.assertIn(name + " 2", output)
@@ -279,13 +282,45 @@ class EquipmentEntityTests(GameCommandTest):
         self.assertIn(name + " 2×1 [착용] [주무기]", presentation.inventory(profile))
         self.char1.execute_cmd(name + " 2 해제")
         self.assertEqual(service.active_weapon_item(self.char1).pk, first.pk)
-        self.assertIn(name + " 1 [주무기]", str(eq.equipment_rows(self.char1.profile())))
+        profile = self.char1.profile(with_equipment_display=True)
+        self.assertIn(name + " 1 [주무기]", str(eq.equipment_rows(profile)))
         # 단독 장비는 번호를 생략하고 명시 입력은 저장 번호만 적용한다.
         api.delete_item(first, operation="burn")
-        self.assertEqual([row["selector"] for row in eq.inventory_rows(self.char1.profile())], [name])
+        profile = self.char1.profile(with_equipment_display=True)
+        self.assertEqual([row["selector"] for row in eq.inventory_rows(profile)], [name])
         self.char1.execute_cmd(name + " 1 무장")
         second.refresh_from_db()
         self.assertEqual(second.location_kind, "inventory")
+
+    def test_profile_domain_reads_skip_display_and_match_the_observed_equipment(self):
+        weapon = service.equip_item(self.char1, self.create("explorer_machete"))
+        first, removed, last = (self.create("bandage") for _ in range(3))
+        api.delete_item(removed)
+        with (patch.object(service, "equipment_display", wraps=service.equipment_display) as project,
+              patch.object(service, "carried_items", wraps=service.carried_items) as carried):
+            with CaptureQueriesContext(connection) as domain_queries:
+                profile = self.char1.profile_snapshot()
+                values = rules.stats(profile)
+            project.assert_not_called()
+            carried.assert_called_once_with(self.char1)
+            carried.reset_mock()
+            with CaptureQueriesContext(connection) as display_queries:
+                shown = self.char1.profile_snapshot(with_equipment_display=True, observed_at=100)
+                rows = eq.inventory_rows(shown)
+            project.assert_called_once()
+            carried.assert_called_once_with(self.char1)
+
+        number_table = SelectionNumber._meta.db_table
+        self.assertFalse(any(number_table in query["sql"] for query in domain_queries))
+        self.assertEqual(sum(number_table in query["sql"] for query in display_queries), 1)
+        self.assertTrue(all(query["sql"].lstrip().upper().startswith("SELECT")
+                            for query in (*domain_queries, *display_queries)))
+        self.assertEqual(eq.context(profile), eq.context(shown))
+        self.assertEqual(eq.context(profile).active.identity, str(weapon.pk))
+        self.assertEqual(values, rules.stats(shown))
+        self.assertEqual([(row["identity"], row["selector"]) for row in rows if row["id"] == "bandage"],
+                         [(str(first.pk), "붕대 1"), (str(last.pk), "붕대 3")])
+        self.assertEqual(shown.equipment_display[str(last.pk)].selection_number, 3)
 
     def test_outer_world_change_rollback_includes_reference(self):
         self.definition("weapon")

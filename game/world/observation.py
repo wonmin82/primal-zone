@@ -53,13 +53,15 @@ def observe(environment, profile, observed_at, distance=0, lights=None):
     )
 
 
-def context_for(viewer, room=None, observed_at=None, distance=0, *, environment=None):
+def context_for(viewer, room=None, observed_at=None, distance=0, *, environment=None, profile=None):
     from world.environment_state import snapshot_for
 
     room = viewer.location if room is None else room
     now = time() if observed_at is None else observed_at
     environment = snapshot_for(room, now) if environment is None else environment
-    profile = viewer.profile_snapshot() if hasattr(viewer, "profile_snapshot") else {"inventory": {}}
+    if profile is None:
+        profile = (viewer.profile_snapshot(with_equipment_display=True, observed_at=now)
+                   if hasattr(viewer, "profile_snapshot") else {"inventory": {}})
     from world.lighting_service import lighting_snapshot
 
     lights = lighting_snapshot(viewer, profile, now)

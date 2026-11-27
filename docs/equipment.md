@@ -6,7 +6,7 @@ Phase 6 현재 상태: cutover 후 일반 gameplay는 native ItemEntity만 사�
 
 `world.equipment_service`가 ItemEntity/Explorer Attribute를 조회하고, frozen `EquipmentItem`·`EquipmentSnapshot`을 제공한다. `world.equipment`, `world.modifiers`, `world.rules`, `world.progression`, `world.recovery`는 ORM·Evennia·네트워크를 import하지 않는다. `EquipmentProfile`은 한 작업에서 같은 snapshot을 사용하는 일시적인 dict context이며 저장할 때 일반 dict로 바꾼다. 현재 profile version은 14이며 [v13 NPC 대화 이전](command-shortcuts.md#프로필-v13의-npc-대화-이전)과 [v14 일행 명령 이전](command-shortcuts.md#프로필-v14의-일행-명령-이전)을 보존한다. [v12 명령 어휘 이전](command-shortcuts.md#프로필-v12의-명령-어휘-이전)은 과거 명령 의미를 보존한다. [v11 줄임말 이전](command-shortcuts.md#프로필-v11과-구형-데이터)은 장비 저장 구조를 바꾸지 않는다. 장비 Phase 2 당시의 profile은 v10이었고 해당 단계에는 profile schema migration이 없었다. Phase 3의 ItemEntity magazine socket 제약 migration은 [영속 기반](item-entities.md)에 별도로 기록한다.
 
-현재 장비 authority는 native ItemEntity의 equipment 위치다. `equipment_snapshot()`과 active weapon UUID를 stats/combat/recovery/presentation/Web이 함께 사용한다. Archive profile equipment는 gameplay에서 읽거나 쓰지 않는다. 새 Explorer는 native로 직접 생성하고 기존 DB는 explicit maintenance migration 후에만 시작한다. Legacy adapter는 historical fixture/audit용이며 사용자 backend 전환·자동 변환·dual-write는 없다.
+현재 장비 authority는 native ItemEntity의 equipment 위치다. `equipment_snapshot()`과 active weapon UUID를 능력치·전투·회복·장비 검증에서 사용한다. 텍스트·웹 표시에 필요한 번호, 부모 경로, 잔탄·전원 문구는 `equipment_display()`에서 같은 ItemEntity 조회 결과로 읽기 전용 계산한다. Archive profile equipment는 gameplay에서 읽거나 쓰지 않는다. 새 Explorer는 native로 직접 생성하고 기존 DB는 explicit maintenance migration 후에만 시작한다. Legacy adapter는 historical fixture/audit용이며 사용자 backend 전환·자동 변환·dual-write는 없다.
 
 ## 슬롯과 손 조합
 
@@ -47,7 +47,7 @@ Historical adapter는 legacy의 단일 weapon slot에 장착한 아이템을 명
 
 ItemEntity create/move/delete의 `before_item_change`/`after_item_change`가 같은 world_change 안에서 장비·주무기 참조·자원을 정리한다. owner ID 오름차순 row lock으로 빈 슬롯 경쟁을 직렬화하고 관련 소유 아이템과 이동 트리/조상을 한 집합에 모아 UUID 정렬 lock을 얻는다. 조회와 lock 사이의 위치·소유자·parent 변경은 거절한다. move_item_tree의 선택적 expected_source는 사용자 장비 서비스가 기대하는 출발 위치·소유자를 잠근 row와 대조한다. reconcile 실패면 이동/삭제·참조·자원·회복·순번·unique scope도 rollback된다. 신규 사용자 기능은 이 API를 사용해야 하며 raw QuerySet update/delete로 domain 검증과 참조 정리를 우회하지 않는다. Phase 3은 이 경계에 inventory active light 참조 정리를 연결했다.
 
-Phase 3 firearm은 기존 equipment root이고 삽입 탄창은 inside child다. equip/unequip에서 child의 parent/socket/state/sequence를 보존하고 child의 equip/unequip permission을 요구하지 않는다. EquipmentItem의 firearm_family/state_summary는 표시·domain 정보이며 잔탄을 별도로 저장하지 않는다. active_weapon() 정보 조회와 active_weapon_item() row 조회 경계를 유지한다. 상세 reload·발사·광원 계약은 [광원·총기](lighting-firearms.md)를 따른다.
+Phase 3 firearm은 기존 equipment root이고 삽입 탄창은 inside child다. equip/unequip에서 child의 parent/socket/state/sequence를 보존하고 child의 equip/unequip permission을 요구하지 않는다. EquipmentItem의 `firearm_family`는 도메인 정보이며, 화면의 잔탄 문구는 이미 조회한 inside 탄창에서 계산한다. active_weapon() 정보 조회와 active_weapon_item() row 조회 경계를 유지한다. 상세 reload·발사·광원 계약은 [광원·총기](lighting-firearms.md)를 따른다.
 
 ## Modifier와 자원
 

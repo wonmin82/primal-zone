@@ -213,7 +213,7 @@ class LightingEntityTests(NativeItemTest):
         name = ITEMS["flashlight"]["name"]
 
         def payload():
-            with patch.object(self.char1, "msg") as output:
+            with patch.object(self.char1, "msg") as output, patch("time.time", return_value=280):
                 Explorer.push_state(self.char1, observed_at=161)
             return output.call_args.kwargs["pz_state"][0][0]
 
@@ -224,6 +224,8 @@ class LightingEntityTests(NativeItemTest):
         self.assertEqual(light["name"], labels[str(active.pk)])
         self.assertTrue(light["active"])
         self.assertEqual(light["remaining_minutes"], 29)
+        active_row = next(row for row in state["inventory"] if row["identity"] == str(active.pk))
+        self.assertEqual(active_row["state_summary"], "켜짐 · 90%")
         with patch.object(self.char1, "msg") as output:
             self.char1.execute_cmd("손전등 3 확인")
         self.assertTrue(any(f"{labels[str(active.pk)]}\n상태 켜짐" in str(call.args[0])
@@ -273,7 +275,8 @@ class LightingEntityTests(NativeItemTest):
         updated, updated_selects, updated_number_selects = read()
         self.assertEqual([row.identity for row in updated.items], [str(row.pk) for row in (spare, active, *more_lights)])
         self.assertEqual((updated_selects, updated_number_selects), (selects, 1))
-        self.assertEqual(read(self.char1.profile_snapshot()), (updated, selects, 0))
+        profile = self.char1.profile_snapshot(with_equipment_display=True, observed_at=101)
+        self.assertEqual(read(profile), (updated, selects, 0))
 
     def test_invalid_flashlight_state_rejected(self):
         row = self.create("flashlight")
