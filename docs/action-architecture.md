@@ -237,3 +237,24 @@ Loot의 Source/Subject는 같은 객체가 아니다. Corpse 또는 Ground Sourc
 이 조회는 Service 실행·비용 차감·확인 토큰 발급·번호 재할당을 하지 않는다. 기존 `봐`와 월드 갱신의 Corpse TTL·Enemy 생명주기·Door 시간 경과·광원 시간 투영은 보존한다. Corpse ALL 개요도 배열 순서 대신 영속 B-1을 읽는다. 웹의 전환 행동은 `pz_action`과 Typed Reference를 사용하고 전역 관찰·발화·이동 버튼은 승인된 입력 경로를 유지한다.
 
 대화의 개인정보·Session·Prompt 보호는 [NPC 대화 계약](npc-dialogue.md#웹-선택과-접근성)을 따른다. 이 경계와 M01~M06의 직접 회귀·독립 리뷰·최종 CI는 전환표와 PR Validation에 기록한다. G01~G05 기술 검증과 PR D Source HEAD CI 성공만으로 G06 또는 Phase 2 전체 Migration Gate를 최종 PASS로 선언하지 않는다.
+
+## Action 표현의 조회 수명
+
+웹의 `action_controls()`와 상세 텍스트의 `provider_action_rows()`는 `_presented_controls()`에서 독립적인 두 ContextVar를 열고, 중첩 호출과 예외에서도 이전 값을 복원한다. 호출자는 같은 Python 객체여야 한다. 범위 밖 Presenter는 필요할 때 로컬 조회를 사용한다. 이 범위에서 읽은 ORM 객체와 가용성은 표현 전용이다. 실행 Gateway와 도메인 Service는 현재 위치·권한·소유권·생명주기를 자체 조회와 잠금으로 다시 확인한다.
+
+| 소유자 | 키와 결과 | 로더 및 소비자 |
+| --- | --- | --- |
+| `_PresentationContext.profile` | 호출자당 최초 도메인 Profile 1개. 매 소비자에 부가 장비 Context까지 deepcopy | `caller.profile_snapshot()`. 평화 상태 검사, Actor·Shopkeeper 등의 서비스 |
+| `_PresentationContext.scoped_reads` | Room PK와 관찰 시각별 `_ScopedPresentationReads`. 시각 생략은 별도 키 | `scoped_reads()`. Provider 탐색과 Item·Storage·총기·조명 Presenter |
+| `_ScopedPresentationReads.records` | Item Scope별 또는 Scope 집합과 ReferenceKind 집합별 후보 튜플. 가시성 검사 여부, 제한 Reference 집합, 전체 Carried Inside 옵션의 의미를 보존하며 빈 결과도 기억 | `cached_item_scopes()`, `role_records()`. 여러 Inside Scope를 배치 조회하고 Role의 Definition·위치 조건을 적용 |
+| `_ScopedPresentationReads.entities` | 전체 `TargetReference`(kind, identity, scope_id)별 실물 또는 누락 `None`. Item과 Provider가 같은 맵을 사용 | `provided()`, `records_for()`의 배치 결과와 `resolve_entity()`의 단건 조회. 이 Resolver의 Role 자체 캐시에는 일반 후보 키와 필요 시 필터용 실물 키도 들어간다 |
+| 총기·탄창 값 | 장착 탄창·총기 Snapshot·탄창 Snapshot은 각각 UUID별. 장착 탄창의 `None`도 기억. 호환 탄창 튜플은 총기 family별. 장전 컨트롤은 전체 Reference와 Binding ID별 | 장착 탄창은 확인된 소지 총기의 관계를 묶어 읽고, 기존 Service에서 Snapshot과 호환 탄창을 계산한다. 장전 추천은 컨트롤을 복사해 레이블을 바꾼다 |
+| 집계 재고와 양도 관계 | 정의 ID 튜플별 Inventory digest와 UUID·수량 튜플, Root UUID 집합별 자식 관계 | `inventory_version()`은 탄창 채우기에서 사용. `ownership_transfer_children()`은 공유 보관함의 소유권 이전 후보를 깊이별로 배치 조회 |
+| `_PresentationContext.availability` | Provider 객체 ID, Room PK, 명시 관찰 시각별 `(provider, bool)`. 객체를 보존해 ID 재사용을 방지하고 False도 기억 | `provider.available()`. 표현 어댑터는 Actor·Shopkeeper에 Profile/Observation 공급 콜백을 전달한다. 시각 생략 시 가용성을 다시 확인한다 |
+| `_PresentationContext.observations` | Room PK와 관찰 시각별 환경·시야·광원 Snapshot. 생략한 시각은 별도 키에서 기존 첫 조회 시간을 사용 | `observation.context_for()`. Provider 탐색 및 가용성, Storage 검사, 명시 시각의 Room 표시에서 공유 |
+| `_DoorPresentation` | Room PK와 관찰 시각별 Door 목록 및 실제 관찰 시각. Endpoint PK별 공개 Action 레이블 집합 | `doors.current_doors()`로 대상들을 읽고 `doors.actions_for()` 결과를 Endpoint별 재사용 |
+| `_DisplayContexts` | Room PK·관찰 시각별 공개 Room Snapshot, Scope 및 전체 Typed Reference별 레이블. 번호 누락 레이블과 빈 Scope를 보존 | `room_snapshot()` 또는 호출자가 전달한 Snapshot. Carried/Inside는 전체 소지 트리와 B-1 번호를 묶어 읽으며, Storage는 권한 검사를 마친 Role의 별도 Scope에서 레이블 계산 |
+
+표현 생성 중 캐시된 실물·후보·자식 관계·컨트롤은 읽기 전용으로 취급한다. 공개 레이블 문맥은 Scope의 표시 후보 전체를 사용한다. 예를 들어 Inside 장비 표시의 부모 경로, Role 후보의 Leaf 레이블과 Storage 공개 레이블은 입력 데이터와 용도가 서로 다르다. 이 차이와 직접 레이블 조회 및 주입된 Room Snapshot의 수명을 고려해 레이블 ContextVar를 유지한다.
+
+장비 UI와 상태 명령은 표시 Projection을 명시적으로 요청한다. 도메인 Profile은 번호와 상태 문구를 계산하지 않는다. R01 조사에서 Native 표시 호출의 공급 누락 사례는 확인되지 않았다. Legacy·Maintenance와 표시 데이터 누락에 대한 기존 fallback을 유지한다. R02의 독립 관찰은 광원 UUID·전원과 번호가 포함된 표시를 제공하는 호출도 지원한다. Action 표현에서는 동일 호출자·Room·명시 시각일 때 Provider와 Room 레이블이 관찰을 재사용한다. 독립적인 시야 전용 호출, 명시 시각이 없는 Room 조회, 이미 주입된 Snapshot 및 웹 인벤토리의 벽시계 투영은 각각의 기존 공급 경계를 따른다.

@@ -6,7 +6,7 @@ from hashlib import sha256
 from itertools import count
 from json import dumps
 from statistics import median
-from time import perf_counter
+from time import perf_counter, process_time
 from unittest.mock import patch
 from uuid import UUID
 
@@ -14,7 +14,7 @@ from django.db import connection
 from django.test import override_settings
 from evennia import create_object
 from typeclasses.interactables import Container, Incinerator
-from world import firearm_service, lighting_service
+from world import firearm_service, lighting_service, observation
 from world.actions import collections, resolver
 from world.actions.manifest import get_index
 from world.actions.presentation import action_controls
@@ -47,19 +47,24 @@ class FirearmPresentationBenchmark(NativeItemTest):
 
         expected = read()
         durations = []
+        cpu = []
         for _ in range(SAMPLES):
             start = perf_counter()
+            cpu_start = process_time()
             rows = read()
+            cpu.append((process_time() - cpu_start) * 1000)
             durations.append((perf_counter() - start) * 1000)
             self.assertEqual(rows, expected)
 
         sql_counts = Counter()
         scope_reads = Counter()
+        select_reads = Counter()
 
         def count_sql(execute, sql, params, many, context):
             statement = sql.lstrip().upper()
             sql_counts["all"] += 1
             if statement.startswith("SELECT"):
+                select_reads[(sql, tuple(params or ()))] += 1
                 if SelectionNumber._meta.db_table.upper() in statement:
                     sql_counts["b1"] += 1
                     scope_reads[(sql, tuple(params or ()))] += 1
@@ -83,6 +88,9 @@ class FirearmPresentationBenchmark(NativeItemTest):
         print("FIREARM_BENCH " + dumps({
             "scenario": name, "count": size, "controls": len(expected), "payload_sha256": digest,
             "median_ms": round(median(durations), 3), "sql": sql_counts["all"],
+            "cpu_ms": round(median(cpu), 3), "warmups": 1, "samples": SAMPLES,
+            "min_ms": round(min(durations), 3), "max_ms": round(max(durations), 3),
+            "duplicate_select": sum(n - 1 for n in select_reads.values()), "writes": sql_counts["writes"],
             "b1_select": sql_counts["b1"], "item_select": sql_counts["item"],
             "repeated_b1_select": sum(repetitions - 1 for repetitions in scope_reads.values()),
             "role_records": roles.call_count, "firearm_snapshot": firearms.call_count,
@@ -182,9 +190,12 @@ class CompositePolicyBenchmark(NativeItemTest):
             prior = total
             expected = read()
             times = []
+            cpu = []
             for _ in range(SAMPLES):
                 start = perf_counter()
+                cpu_start = process_time()
                 value = read()
+                cpu.append((process_time() - cpu_start) * 1000)
                 times.append((perf_counter() - start) * 1000)
                 self.assertEqual(value, expected)
             sqls = Counter()
@@ -193,7 +204,8 @@ class CompositePolicyBenchmark(NativeItemTest):
                 sqls[(sql, tuple(params or ()))] += 1
                 return execute(sql, params, many, context)
 
-            with connection.execute_wrapper(capture):
+            with (connection.execute_wrapper(capture),
+                  patch.object(observation, "context_for", wraps=observation.context_for) as observations):
                 self.assertEqual(read(), expected)
             kinds = Counter()
             for (query, params), n in sqls.items():
@@ -216,6 +228,9 @@ class CompositePolicyBenchmark(NativeItemTest):
             self.assertEqual(kinds["writes"], 0)
             print("POLICY_COMPOSITE " + dumps({
                 "scenario": scenario, "n": total, "ms": round(median(times), 3), "controls": len(expected),
+                "cpu_ms": round(median(cpu), 3), "min_ms": round(min(times), 3), "max_ms": round(max(times), 3),
+                "duplicate_select": sum(n - 1 for (sql, _), n in sqls.items() if sql.lstrip().upper().startswith("SELECT")),
+                "writes": kinds["writes"], "observations": observations.call_count, "warmups": 1, "samples": SAMPLES,
                 "sha": sha256(dumps(expected, sort_keys=True).encode()).hexdigest(), **kinds,
             }), flush=True)
 

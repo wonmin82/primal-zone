@@ -1,7 +1,7 @@
 """M04 웹 컨트롤은 실제 UUID를 보존하며 시간·전력은 순수 투영만 한다."""
 
 from world.actions.presentation import reference_json, target_label
-from world.actions.presentation_context import item_presentation, profile_snapshot
+from world.actions.presentation_context import profile_snapshot, scoped_reads
 
 
 def item_label(item, caller=None):
@@ -13,22 +13,26 @@ def item_label(item, caller=None):
 
 
 def render(caller, index, reference, binding, observed_at=None):
-    view = item_presentation(caller, observed_at)
+    view = scoped_reads(caller, observed_at)
     return _controls(caller, index, reference, binding, observed_at, view)
 
 
 def _controls(caller, index, reference, binding, observed_at, view):
     operation = dict(binding.config)["operation"]
     if operation == "load":
-        return view.read(("load", reference, binding.id),
-                         lambda: _render(caller, index, reference, binding, observed_at, view, operation))
+        key = (reference, binding.id)
+        if key not in view.load_controls:
+            view.load_controls[key] = _render(caller, index, reference, binding, observed_at, view, operation)
+        return view.load_controls[key]
     return _render(caller, index, reference, binding, observed_at, view, operation)
 
 
 def _magazine(view, item):
     from world.firearm_service import magazine_snapshot
 
-    return view.read(("magazine", item.pk), lambda: magazine_snapshot(item))
+    if item.pk not in view.magazines:
+        view.magazines[item.pk] = magazine_snapshot(item)
+    return view.magazines[item.pk]
 
 
 def _firearm(view, item):
@@ -38,7 +42,9 @@ def _firearm(view, item):
         mounted = view.loaded_magazine_item(firearm)
         return _magazine(view, mounted) if mounted is not None else None
 
-    return view.read(("firearm", item.pk), lambda: firearm_snapshot(item, read_magazine=magazine))
+    if item.pk not in view.firearms:
+        view.firearms[item.pk] = firearm_snapshot(item, read_magazine=magazine)
+    return view.firearms[item.pk]
 
 
 def _role(caller, declaration, bindings, view):
@@ -51,7 +57,7 @@ def _render(caller, index, reference, binding, observed_at, view, operation):
     from world import firearm_service, lighting
     from world.content import ITEMS
 
-    provider = view.item(reference)
+    provider = view.resolve_entity(reference)
     target_name = target_label(caller, reference, observed_at)
     if provider is None or target_name is None:
         return []
@@ -72,9 +78,10 @@ def _render(caller, index, reference, binding, observed_at, view, operation):
 
         controls = _controls(caller, index, reference, target_binding, observed_at, view)
         snapshot = _firearm(view, provider)
-        compatible = view.read(("compatible", snapshot.family),
-                               lambda: firearm_service.compatible_magazines(caller, provider, snapshot=snapshot))
-        best = firearms.automatic_magazine(snapshot, compatible)
+        family = snapshot.family
+        if family not in view.compatible_magazines:
+            view.compatible_magazines[family] = firearm_service.compatible_magazines(caller, provider, snapshot=snapshot)
+        best = firearms.automatic_magazine(snapshot, view.compatible_magazines[family])
         if best is None:
             return []
         key = index.verbs[action.verb_id].key
@@ -102,7 +109,7 @@ def _render(caller, index, reference, binding, observed_at, view, operation):
         next_combinations = []
         for record in candidates:
             selected_label = target_label(caller, record.reference, observed_at)
-            entity = view.item(record.reference)
+            entity = view.resolve_entity(record.reference)
             if selected_label is None or entity is None:
                 continue
             if declaration.name == "source":
@@ -161,7 +168,7 @@ def fill_controls(caller, action, reference, provider, provider_label, observed_
         return []
     output = []
     for record in targets:
-        target = view.item(record.reference) if record else provider
+        target = view.resolve_entity(record.reference) if record else provider
         child_label = target_label(caller, record.reference, observed_at) if record else None
         if target is None or (record and child_label is None):
             continue
@@ -169,7 +176,9 @@ def fill_controls(caller, action, reference, provider, provider_label, observed_
         if snapshot.rounds >= snapshot.capacity:
             continue
         definitions = tuple([identity for identity, data in ITEMS.items() if data.get("ammo_type") == snapshot.ammo_type])
-        version, members = view.read(("inventory_version", definitions), lambda: inventory_version(caller, definitions))
+        if definitions not in view.inventory_versions:
+            view.inventory_versions[definitions] = inventory_version(caller, definitions)
+        version, members = view.inventory_versions[definitions]
         if not members:
             continue
         roles = {"provider": [reference_json(reference)], "source": [reference_json(sources[0].reference)]}

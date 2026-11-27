@@ -2,14 +2,17 @@
 
 from contextlib import nullcontext
 from copy import deepcopy
+from inspect import signature
 from unittest.mock import Mock, patch
 
 from typeclasses.actors import Actor
+from world import observation
 from world.actions.manifest import get_index
 from world.actions.presentation import action_controls
 from world.actions.presentation_context import available, presentation_scope, profile_snapshot
 from world.actions.room_npc_presentation import render
 from world.equipment import EquipmentProfile
+from world.selection_display import room_snapshot
 from world.selection_numbers.api import descriptor
 from world.selection_numbers.models import NumberScope, SelectionNumber
 
@@ -114,6 +117,32 @@ class ActionPresentationCacheTests(NativeItemTest, WorldCommandTest):
             self.assertNotEqual(profile_snapshot(self.char1)["hp"], profile_snapshot(self.char2)["hp"])
             self.char2.change(lambda profile: profile.update(hp=9))
             self.assertEqual(profile_snapshot(self.char2)["hp"], 9)
+
+    def test_provider_rechecks_room_in_same_scope(self):
+        with presentation_scope(self.char1):
+            self.assertTrue(available(self.manager, self.char1, 100))
+            self.char1.location = self.rooms["infirmary"]
+            self.assertFalse(available(self.manager, self.char1, 100))
+
+    def test_room_labels_and_providers_share_one_explicit_observation(self):
+        with patch.object(observation, "context_for", wraps=observation.context_for) as observe:
+            rows = action_controls(self.char1, self.index, 100)
+        self.assertTrue(rows)
+        parameters = signature(observation.context_for)
+        reads = [call for call in observe.call_args_list
+                 if parameters.bind(*call.args, **call.kwargs).arguments.get("observed_at") == 100]
+        self.assertEqual(len(reads), 1)
+
+    def test_room_snapshot_rejects_out_of_scope_observation(self):
+        observations = (
+            observation.context_for(self.char2, observed_at=100),
+            observation.context_for(self.char1, room=self.rooms["infirmary"], observed_at=100),
+            observation.context_for(self.char1, observed_at=101),
+            observation.context_for(self.char1, observed_at=100, distance=1),
+        )
+        for context in observations:
+            with self.subTest(context=context), self.assertRaises(ValueError):
+                room_snapshot(self.char1, 100, observation=context)
 
     def test_direct_presenter_outside_scope_rechecks_same_provider_and_time(self):
         reference = descriptor(self.manager).reference

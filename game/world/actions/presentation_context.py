@@ -4,34 +4,43 @@ import copy
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+from uuid import UUID
+
+from world.actions.schema import TargetReference
+
+if TYPE_CHECKING:
+    from world.firearms import FirearmSnapshot, MagazineSnapshot
+    from world.item_entities.models import ItemEntity
 
 _MISSING = object()
 
 
 @dataclass
-class _ItemPresentation:
+class _ScopedPresentationReads:
     records: dict = field(default_factory=dict)
-    entities: dict = field(default_factory=dict)
-    values: dict = field(default_factory=dict)
+    entities: dict[TargetReference, object] = field(default_factory=dict)
+    load_controls: dict[tuple[TargetReference, str], list[dict]] = field(default_factory=dict)
+    magazines: dict[UUID, "MagazineSnapshot"] = field(default_factory=dict)
+    firearms: dict[UUID, "FirearmSnapshot"] = field(default_factory=dict)
+    compatible_magazines: dict[str, tuple["MagazineSnapshot", ...]] = field(default_factory=dict)
+    inventory_versions: dict[tuple[str, ...], tuple[str, tuple[tuple[str, int], ...]]] = field(default_factory=dict)
+    transfer_children: dict[frozenset[UUID], dict[UUID, list["ItemEntity"]]] = field(default_factory=dict)
+    mounted_magazines: dict[UUID, "ItemEntity | None"] = field(default_factory=dict)
 
-    def item(self, reference):
+    def resolve_entity(self, reference):
         from world.selection_numbers.api import resolve_reference
 
         if reference not in self.entities:
             self.entities[reference] = resolve_reference(reference)
         return self.entities[reference]
 
-    def read(self, key, load):
-        if key not in self.values:
-            self.values[key] = load()
-        return self.values[key]
-
     def loaded_magazine_item(self, firearm):
         from django.db import connection
         from world.content import ITEMS
         from world.item_entities.models import ItemEntity
 
-        magazines = self.values.setdefault("mounted_magazines", {})
+        magazines = self.mounted_magazines
         if firearm.pk not in magazines:
             candidates = {row.pk for row in self.entities.values() if isinstance(row, ItemEntity)
                           and row.owner_object_id == firearm.owner_object_id and row.parent_item_id is None
@@ -62,7 +71,7 @@ class _PresentationContext:
     profile: object = _MISSING
     availability: dict = field(default_factory=dict)
     doors: dict = field(default_factory=dict)
-    items: dict = field(default_factory=dict)
+    scoped_reads: dict[tuple[int | None, float | None], _ScopedPresentationReads] = field(default_factory=dict)
     observations: dict = field(default_factory=dict)
 
 
@@ -89,15 +98,15 @@ def profile_snapshot(caller):
     return copy.deepcopy(context.profile)
 
 
-def item_presentation(caller, observed_at):
+def scoped_reads(caller, observed_at):
     """현재 표시 호출의 호출자·장소·관찰 시각에 실물과 순수 계산을 한정한다."""
     context = _current.get()
     if context is None or context.caller is not caller:
-        return _ItemPresentation()
+        return _ScopedPresentationReads()
     key = (caller.db_location_id, observed_at)
-    if key not in context.items:
-        context.items[key] = _ItemPresentation()
-    return context.items[key]
+    if key not in context.scoped_reads:
+        context.scoped_reads[key] = _ScopedPresentationReads()
+    return context.scoped_reads[key]
 
 
 def observation_snapshot(caller, observed_at):
@@ -118,7 +127,7 @@ def available(provider, caller, observed_at):
     context = _current.get()
     if context is None or context.caller is not caller or observed_at is None:
         return provider.available(caller, observed_at)
-    key = (id(provider), observed_at)
+    key = (id(provider), caller.db_location_id, observed_at)
     if key not in context.availability:
         from typeclasses.actors import Actor
         from typeclasses.interactables import Shopkeeper
